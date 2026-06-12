@@ -1,0 +1,47 @@
+# Secrets — JAMAIS committer !
+.env
+.env.local
+.env.production
+*.tfvars
+!*.tfvars.example
+
+# Terraform
+.terraform/
+.terraform.lock.hcl
+*.tfstate
+*.tfstate.backup
+terraform.tfplan
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+
+# Node.js
+node_modules/
+.next/
+.amplify/
+dist/
+build/
+
+# Docker
+*.dockerignore
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
