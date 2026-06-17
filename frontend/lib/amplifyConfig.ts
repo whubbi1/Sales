@@ -1,14 +1,14 @@
 // lib/amplifyConfig.ts
-// Configuration AWS Amplify pour Cognito
+// Configuration AWS Amplify pour Cognito - cote client uniquement
 
-export const amplifyConfig = {
+export const getAmplifyConfig = () => ({
   Auth: {
     Cognito: {
-      userPoolId: process.env.NEXT_PUBLIC_COGNITO_USER_POOL_ID!,
-      userPoolClientId: process.env.NEXT_PUBLIC_COGNITO_CLIENT_ID!,
+      userPoolId: process.env.NEXT_PUBLIC_COGNITO_USER_POOL_ID || '',
+      userPoolClientId: process.env.NEXT_PUBLIC_COGNITO_CLIENT_ID || '',
       loginWith: {
         oauth: {
-          domain: process.env.NEXT_PUBLIC_COGNITO_DOMAIN!.replace('https://', ''),
+          domain: (process.env.NEXT_PUBLIC_COGNITO_DOMAIN || '').replace('https://', ''),
           scopes: ['email', 'openid', 'profile'],
           redirectSignIn: [
             'http://localhost:3000/auth/callback',
@@ -23,4 +23,4 @@ export const amplifyConfig = {
       },
     },
   },
-}
+})
