@@ -2,9 +2,8 @@
 # Authentification AWS Cognito avec Microsoft SSO (Outlook)
 
 resource "aws_cognito_user_pool" "main" {
-  name = "wcomply-user-pool-${var.environment}"
+  name = "whubbi-user-pool-${var.environment}"
 
-  # Connexion par email
   username_attributes      = ["email"]
   auto_verified_attributes = ["email"]
 
@@ -16,7 +15,6 @@ resource "aws_cognito_user_pool" "main" {
     require_uppercase = true
   }
 
-  # Attributs utilisateur personnalisés pour Wcomply
   schema {
     name                = "company"
     attribute_data_type = "String"
@@ -37,26 +35,24 @@ resource "aws_cognito_user_pool" "main" {
     }
   }
 
-  # MFA optionnel
   mfa_configuration = "OPTIONAL"
   software_token_mfa_configuration {
     enabled = true
   }
 
-  # Tokens
   user_pool_add_ons {
     advanced_security_mode = "ENFORCED"
   }
 
-  tags = { Name = "wcomply-cognito" }
+  tags = { Name = "whubbi-cognito" }
 }
 
-# App Client pour le frontend Next.js
+# App Client frontend — sans Microsoft tant que l'IDP n'est pas configure
 resource "aws_cognito_user_pool_client" "frontend" {
-  name         = "wcomply-frontend-client"
+  name         = "whubbi-frontend-client"
   user_pool_id = aws_cognito_user_pool.main.id
 
-  generate_secret = false  # Public client (SPA)
+  generate_secret = false
 
   allowed_oauth_flows                  = ["code"]
   allowed_oauth_flows_user_pool_client = true
@@ -64,7 +60,7 @@ resource "aws_cognito_user_pool_client" "frontend" {
 
   callback_urls = [
     "https://${var.domain_name}/auth/callback",
-    "http://localhost:3000/auth/callback"  # Dev local
+    "http://localhost:3000/auth/callback"
   ]
 
   logout_urls = [
@@ -72,9 +68,10 @@ resource "aws_cognito_user_pool_client" "frontend" {
     "http://localhost:3000"
   ]
 
-  # Fédération avec Microsoft
+  # Microsoft sera ajoute apres configuration Azure AD
   supported_identity_providers = ["COGNITO", "Microsoft"]
-
+  depends_on = [aws_cognito_identity_provider.microsoft]
+  
   token_validity_units {
     access_token  = "hours"
     id_token      = "hours"
@@ -86,24 +83,39 @@ resource "aws_cognito_user_pool_client" "frontend" {
   refresh_token_validity = 30
 }
 
-# App Client pour le backend FastAPI
+# App Client backend — authentification directe sans OAuth
 resource "aws_cognito_user_pool_client" "backend" {
-  name         = "wcomply-backend-client"
+  name         = "whubbi-backend-client"
   user_pool_id = aws_cognito_user_pool.main.id
 
-  generate_secret                      = true  # Confidential client
-  allowed_oauth_flows                  = ["client_credentials"]
-  allowed_oauth_flows_user_pool_client = true
-  allowed_oauth_scopes                 = ["wcomply/read", "wcomply/write"]
+  generate_secret                      = true
+  allowed_oauth_flows_user_pool_client = false
+
+  explicit_auth_flows = [
+    "ALLOW_USER_PASSWORD_AUTH",
+    "ALLOW_REFRESH_TOKEN_AUTH"
+  ]
 }
 
 # Domaine Cognito
 resource "aws_cognito_user_pool_domain" "main" {
-  domain       = "auth-wcomply-${var.environment}"
+  domain       = "auth-whubbi-${var.environment}"
   user_pool_id = aws_cognito_user_pool.main.id
 }
 
-# ─── Fédération Microsoft (Outlook/Azure AD) ─────────────────────────────────
+# Identity Pool
+resource "aws_cognito_identity_pool" "main" {
+  identity_pool_name               = "whubbi_identity_pool_${var.environment}"
+  allow_unauthenticated_identities = false
+
+  cognito_identity_providers {
+    client_id               = aws_cognito_user_pool_client.frontend.id
+    provider_name           = aws_cognito_user_pool.main.endpoint
+    server_side_token_check = true
+  }
+}
+
+# Provider Microsoft pour SSO
 resource "aws_cognito_identity_provider" "microsoft" {
   user_pool_id  = aws_cognito_user_pool.main.id
   provider_name = "Microsoft"
@@ -114,7 +126,7 @@ resource "aws_cognito_identity_provider" "microsoft" {
     client_secret             = var.ms_client_secret
     attributes_request_method = "GET"
     oidc_issuer               = "https://login.microsoftonline.com/${var.ms_tenant_id}/v2.0"
-    authorize_scopes          = "openid email profile offline_access Calendars.Read Mail.Read"
+    authorize_scopes          = "openid email profile offline_access"
   }
 
   attribute_mapping = {
@@ -123,17 +135,5 @@ resource "aws_cognito_identity_provider" "microsoft" {
     username    = "sub"
     given_name  = "given_name"
     family_name = "family_name"
-  }
-}
-
-# Identity Pool pour accès aux ressources AWS
-resource "aws_cognito_identity_pool" "main" {
-  identity_pool_name               = "wcomply_identity_pool_${var.environment}"
-  allow_unauthenticated_identities = false
-
-  cognito_identity_providers {
-    client_id               = aws_cognito_user_pool_client.frontend.id
-    provider_name           = aws_cognito_user_pool.main.endpoint
-    server_side_token_check = true
   }
 }

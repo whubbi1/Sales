@@ -3,8 +3,8 @@
 
 # Security Group pour RDS
 resource "aws_security_group" "rds" {
-  name        = "wcomply-rds-sg"
-  description = "Accès PostgreSQL uniquement depuis ECS"
+  name        = "whubbi-rds-sg"
+  description = "Acces PostgreSQL uniquement depuis ECS"
   vpc_id      = aws_vpc.main.id
 
   ingress {
@@ -22,12 +22,12 @@ resource "aws_security_group" "rds" {
     cidr_blocks = ["0.0.0.0/0"]
   }
 
-  tags = { Name = "wcomply-rds-sg" }
+  tags = { Name = "whubbi-rds-sg" }
 }
 
 # Subnet Group pour RDS (subnets privés uniquement)
 resource "aws_db_subnet_group" "main" {
-  name       = "wcomply-db-subnet-group"
+  name       = "whubbi-db-subnet-group"
   subnet_ids = aws_subnet.private[*].id
 
   tags = { Name = "Wcomply DB Subnet Group" }
@@ -35,10 +35,10 @@ resource "aws_db_subnet_group" "main" {
 
 # Instance RDS PostgreSQL
 resource "aws_db_instance" "postgres" {
-  identifier = "wcomply-postgres-${var.environment}"
+  identifier = "whubbi-postgres-${var.environment}"
 
   engine               = "postgres"
-  engine_version       = "15.4"
+  engine_version       = "16.14"
   instance_class       = var.db_instance_class
   allocated_storage    = 20
   max_allocated_storage = 100  # Auto-scaling jusqu'à 100 GB
@@ -58,7 +58,7 @@ resource "aws_db_instance" "postgres" {
 
   deletion_protection = true       # Protection contre suppression accidentelle
   skip_final_snapshot = false
-  final_snapshot_identifier = "wcomply-final-snapshot-${var.environment}"
+  final_snapshot_identifier = "whubbi-final-snapshot-${var.environment}"
 
   # Performance Insights
   performance_insights_enabled = true
@@ -66,14 +66,14 @@ resource "aws_db_instance" "postgres" {
   # Logs
   enabled_cloudwatch_logs_exports = ["postgresql", "upgrade"]
 
-  tags = { Name = "wcomply-postgres-${var.environment}" }
+  tags = { Name = "whubbi-postgres-${var.environment}" }
 }
 
 # Paramètre SSM pour l'URL de la base de données
 resource "aws_ssm_parameter" "db_url" {
-  name  = "/wcomply/${var.environment}/database/url"
+  name  = "/whubbi/${var.environment}/database/url"
   type  = "SecureString"
   value = "postgresql://${var.db_username}:${var.db_password}@${aws_db_instance.postgres.endpoint}/${var.db_name}"
 
-  tags = { Name = "wcomply-db-url" }
+  tags = { Name = "whubbi-db-url" }
 }

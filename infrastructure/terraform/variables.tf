@@ -15,20 +15,20 @@ variable "environment" {
 variable "app_name" {
   description = "Nom de l'application"
   type        = string
-  default     = "wcomply"
+  default     = "whubbi"
 }
 
 # ─── Base de données ────────────────────────────────────────────────────────
 variable "db_name" {
   description = "Nom de la base de données PostgreSQL"
   type        = string
-  default     = "wcomply_db"
+  default     = "whubbi_db"
 }
 
 variable "db_username" {
   description = "Nom d'utilisateur PostgreSQL"
   type        = string
-  default     = "wcomply_admin"
+  default     = "whubbi_admin"
   sensitive   = true
 }
 
@@ -84,7 +84,7 @@ variable "ms_client_secret" {
 
 # ─── Domaine ────────────────────────────────────────────────────────────────
 variable "domain_name" {
-  description = "Nom de domaine principal (ex: wcomply.com)"
+  description = "Nom de domaine principal (ex: whubbi.com)"
   type        = string
-  default     = "wcomply.com"
+  default     = "whubbi.com"
 }

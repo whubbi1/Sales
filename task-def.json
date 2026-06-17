@@ -1,0 +1,1 @@
+[{"name":"whubbi-backend","image":"351007427901.dkr.ecr.eu-west-1.amazonaws.com/whubbi-backend:v3","portMappings":[{"containerPort":8000,"protocol":"tcp"}],"essential":true,"logConfiguration":{"logDriver":"awslogs","options":{"awslogs-group":"/ecs/whubbi-backend","awslogs-region":"eu-west-1","awslogs-stream-prefix":"ecs"}}}]
