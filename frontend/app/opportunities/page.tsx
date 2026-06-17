@@ -1,4 +1,9 @@
 'use client'
+# opportunities/[id]/page.tsx
+$content = Get-Content "C:\whubbi\frontend\app\opportunities\[id]\page.tsx" -Raw
+$content = $content -replace "('use client')", "`$1`n`nexport async function generateStaticParams() {`n  return []`n}`n"
+Set-Content "C:\whubbi\frontend\app\opportunities\[id]\page.tsx" $content
+
 // app/opportunities/page.tsx
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
