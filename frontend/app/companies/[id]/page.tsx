@@ -1,6 +1,4 @@
 'use client'
-
-export async function generateStaticParams() { return [] }
 // app/companies/[id]/page.tsx
 import { useState, useEffect } from 'react'
 import { useParams, useRouter } from 'next/navigation'
@@ -11,10 +9,8 @@ import { CompanyModal } from '@/components/companies/CompanyModal'
 import { CompanyNotes } from '@/components/companies/CompanyNotes'
 import { CompanyArticles } from '@/components/companies/CompanyArticles'
 import { CompanyTasks } from '@/components/companies/CompanyTasks'
-
 const LEVEL_COLORS: Record<number, string> = { 1: '#144766', 2: '#1a5a84', 3: '#219BD6', 4: '#7DD3F0' }
 const LEVEL_LABELS: Record<number, string> = { 1: 'Group', 2: 'Parent', 3: 'Child', 4: 'Sub-Child' }
-
 export default function CompanyDetailPage() {
   const { id } = useParams()
   const router = useRouter()
@@ -25,7 +21,6 @@ export default function CompanyDetailPage() {
   const [loading, setLoading] = useState(true)
   const [tab, setTab] = useState('Overview')
   const [showEdit, setShowEdit] = useState(false)
-
   const load = async () => {
     try {
       const [c, all, ctcts, opps] = await Promise.all([
@@ -41,18 +36,14 @@ export default function CompanyDetailPage() {
     } catch { router.push('/companies') }
     finally { setLoading(false) }
   }
-
   useEffect(() => { load() }, [id])
-
   if (loading) return (
     <RecordLayout
       leftColumn={<div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '200px', color: '#9B9B9B' }}>Loading...</div>}
       rightColumn={<div />}
     />
   )
-
   const color = LEVEL_COLORS[company.level] || '#144766'
-
   const leftColumn = (
     <div>
       {/* Breadcrumb */}
@@ -61,7 +52,6 @@ export default function CompanyDetailPage() {
         {company.parent && <><span>/</span><Link href={`/companies/${company.parent.id}`} style={{ color: '#219BD6', fontWeight: '600', textDecoration: 'none', fontSize: '11px' }}>{company.parent.name}</Link></>}
         <span>/</span><span style={{ color: '#3F3F3F', fontWeight: '600' }}>{company.name}</span>
       </div>
-
       {/* Header */}
       <div style={{ background: 'white', borderRadius: '10px', border: '1px solid #EDF2F7', padding: '20px', marginBottom: '16px', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
@@ -91,7 +81,6 @@ export default function CompanyDetailPage() {
           </div>
           <button onClick={() => setShowEdit(true)} style={{ background: 'white', color: '#144766', padding: '7px 14px', borderRadius: '7px', fontSize: '12px', fontWeight: '600', border: '1.5px solid #CBD5E0', cursor: 'pointer', flexShrink: 0 }}>Edit</button>
         </div>
-
         {/* Tags */}
         {(company.main_erp?.length > 0 || company.cybersecurity_solutions?.length > 0 || company.sap_hosting_partner?.length > 0 || company.domain_names?.length > 0) && (
           <div style={{ marginTop: '16px', paddingTop: '14px', borderTop: '1px solid #F1F5F9', display: 'flex', flexWrap: 'wrap', gap: '16px' }}>
@@ -130,7 +119,6 @@ export default function CompanyDetailPage() {
           </div>
         )}
       </div>
-
       {/* Tabs */}
       <div style={{ background: 'white', borderRadius: '10px', border: '1px solid #EDF2F7', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
         <div style={{ padding: '0 20px', background: '#FAFBFC', borderBottom: '2px solid #E2E8F0' }}>
@@ -152,7 +140,6 @@ export default function CompanyDetailPage() {
       </div>
     </div>
   )
-
   const rightColumn = (
     <div>
       {/* About */}
@@ -164,7 +151,6 @@ export default function CompanyDetailPage() {
         <PropertyRow label="Assigned to" value={company.assigned_to} />
         <PropertyRow label="Created" value={new Date(company.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} />
       </SidebarSection>
-
       {/* Hierarchy */}
       {(company.parent || company.children?.length > 0) && (
         <SidebarSection title="Company Hierarchy">
@@ -175,7 +161,6 @@ export default function CompanyDetailPage() {
           ))}
         </SidebarSection>
       )}
-
       {/* Contacts */}
       <SidebarSection title={`Contacts (${contacts.length})`} onAdd={() => router.push(`/contacts/new?company_id=${id}`)}>
         {contacts.length === 0
@@ -185,7 +170,6 @@ export default function CompanyDetailPage() {
           ))
         }
       </SidebarSection>
-
       {/* Deals */}
       <SidebarSection title={`Deals (${opportunities.length})`} onAdd={() => router.push(`/opportunities/new?company_id=${id}`)}>
         {opportunities.length === 0
@@ -197,7 +181,6 @@ export default function CompanyDetailPage() {
       </SidebarSection>
     </div>
   )
-
   return (
     <>
       <RecordLayout leftColumn={leftColumn} rightColumn={rightColumn} />

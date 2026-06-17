@@ -1,19 +1,15 @@
 'use client'
-
-export async function generateStaticParams() { return [] }
 // app/contacts/[id]/page.tsx
 import { useState, useEffect } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { contactsAPI } from '@/lib/api'
 import { RecordLayout, PropertyRow, SidebarSection, SidebarCard, StatusBadge, TabNav } from '@/components/shared/RecordLayout'
 import { ContactModal } from '@/components/contacts/ContactModal'
-
 const SUB_LABELS: Record<string, string> = {
   'Marketing Information': '📧',
   'Customer Service Communication': '💬',
   'One to One': '🤝'
 }
-
 export default function ContactDetailPage() {
   const { id } = useParams()
   const router = useRouter()
@@ -22,7 +18,6 @@ export default function ContactDetailPage() {
   const [loading, setLoading] = useState(true)
   const [tab, setTab] = useState('Overview')
   const [showEdit, setShowEdit] = useState(false)
-
   const load = async () => {
     try {
       const [c, opps] = await Promise.all([
@@ -34,16 +29,13 @@ export default function ContactDetailPage() {
     } catch { router.push('/contacts') }
     finally { setLoading(false) }
   }
-
   useEffect(() => { load() }, [id])
-
   if (loading) return (
     <RecordLayout
       leftColumn={<div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '200px', color: '#9B9B9B' }}>Loading...</div>}
       rightColumn={<div />}
     />
   )
-
   const leftColumn = (
     <div>
       {/* Breadcrumb */}
@@ -52,7 +44,6 @@ export default function ContactDetailPage() {
         <span>/</span>
         <span style={{ color: '#3F3F3F', fontWeight: '600' }}>{contact.first_name} {contact.last_name}</span>
       </div>
-
       {/* Header card */}
       <div style={{ background: 'white', borderRadius: '10px', border: '1px solid #EDF2F7', padding: '20px', marginBottom: '16px', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
@@ -74,7 +65,6 @@ export default function ContactDetailPage() {
                 {contact.company && ` · ${contact.company.name}`}
                 {contact.preferred_language && ` · 🌐 ${contact.preferred_language}`}
               </p>
-
               {/* Contact details */}
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '14px', marginTop: '10px', fontSize: '12px' }}>
                 {contact.email && (
@@ -88,7 +78,6 @@ export default function ContactDetailPage() {
                   <a href={contact.linkedin_url} target="_blank" rel="noopener" style={{ color: '#219BD6', textDecoration: 'none', fontWeight: '600' }}>LinkedIn ↗</a>
                 )}
               </div>
-
               {/* Subscriptions */}
               {contact.subscriptions?.length > 0 && (
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px', marginTop: '10px' }}>
@@ -104,7 +93,6 @@ export default function ContactDetailPage() {
           <button onClick={() => setShowEdit(true)} style={{ background: 'white', color: '#144766', padding: '7px 14px', borderRadius: '7px', fontSize: '12px', fontWeight: '600', border: '1.5px solid #CBD5E0', cursor: 'pointer', flexShrink: 0 }}>Edit</button>
         </div>
       </div>
-
       {/* Tabs */}
       <div style={{ background: 'white', borderRadius: '10px', border: '1px solid #EDF2F7', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
         <div style={{ padding: '0 20px', background: '#FAFBFC', borderBottom: '2px solid #E2E8F0' }}>
@@ -157,7 +145,6 @@ export default function ContactDetailPage() {
       </div>
     </div>
   )
-
   const rightColumn = (
     <div>
       {/* Contact info */}
@@ -174,7 +161,6 @@ export default function ContactDetailPage() {
         <PropertyRow label="Assigned To" value={contact.assigned_to} />
         <PropertyRow label="Created" value={new Date(contact.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} />
       </SidebarSection>
-
       {/* Company */}
       <SidebarSection title="Company">
         {contact.company ? (
@@ -188,7 +174,6 @@ export default function ContactDetailPage() {
           <p style={{ fontSize: '12px', color: '#9B9B9B' }}>No company linked.</p>
         )}
       </SidebarSection>
-
       {/* Deals */}
       <SidebarSection title={`Deals (${opportunities.length})`}>
         {opportunities.length === 0
@@ -200,7 +185,6 @@ export default function ContactDetailPage() {
       </SidebarSection>
     </div>
   )
-
   return (
     <>
       <RecordLayout leftColumn={leftColumn} rightColumn={rightColumn} />

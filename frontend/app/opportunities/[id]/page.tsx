@@ -1,13 +1,10 @@
 'use client'
-
-export async function generateStaticParams() { return [] }
 // app/opportunities/[id]/page.tsx
 import { useState, useEffect } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { opportunitiesAPI, companiesAPI } from '@/lib/api'
 import { RecordLayout, PropertyRow, SidebarSection, SidebarCard, TabNav } from '@/components/shared/RecordLayout'
 import { OpportunityModal } from '@/components/opportunities/OpportunityModal'
-
 const STATUS_COLORS: Record<string, { bg: string; color: string }> = {
   'Presentation To Be Scheduled': { bg: '#EEF2FF', color: '#4F46E5' },
   'Presentation Done':            { bg: '#FFF7ED', color: '#D97706' },
@@ -18,7 +15,6 @@ const STATUS_COLORS: Record<string, { bg: string; color: string }> = {
   'PO Received':                  { bg: '#D1FAE5', color: '#047857' },
   'Contract Lost':                { bg: '#FEF2F2', color: '#DC2626' },
 }
-
 export default function OpportunityDetailPage() {
   const { id } = useParams()
   const router = useRouter()
@@ -27,7 +23,6 @@ export default function OpportunityDetailPage() {
   const [loading, setLoading] = useState(true)
   const [tab, setTab] = useState('Overview')
   const [showEdit, setShowEdit] = useState(false)
-
   const load = async () => {
     try {
       const o = await opportunitiesAPI.get(id as string)
@@ -39,19 +34,15 @@ export default function OpportunityDetailPage() {
     } catch { router.push('/opportunities') }
     finally { setLoading(false) }
   }
-
   useEffect(() => { load() }, [id])
-
   if (loading) return (
     <RecordLayout
       leftColumn={<div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '200px', color: '#9B9B9B' }}>Loading...</div>}
       rightColumn={<div />}
     />
   )
-
   const statusStyle = STATUS_COLORS[opp.deal_status] || { bg: '#F1F5F9', color: '#475569' }
   const fmt = (d?: string) => d ? new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'
-
   const leftColumn = (
     <div>
       {/* Breadcrumb */}
@@ -60,7 +51,6 @@ export default function OpportunityDetailPage() {
         <span>/</span>
         <span style={{ color: '#3F3F3F', fontWeight: '600' }}>{opp.deal_name}</span>
       </div>
-
       {/* Header card */}
       <div style={{ background: 'white', borderRadius: '10px', border: '1px solid #EDF2F7', padding: '20px', marginBottom: '16px', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
@@ -79,7 +69,6 @@ export default function OpportunityDetailPage() {
                 {opp.company?.name || 'No company'}
                 {opp.project_name && ` · ${opp.project_name}`}
               </p>
-
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '16px', marginTop: '12px' }}>
                 {opp.deal_amount && (
                   <div>
@@ -105,7 +94,6 @@ export default function OpportunityDetailPage() {
           <button onClick={() => setShowEdit(true)} style={{ background: 'white', color: '#144766', padding: '7px 14px', borderRadius: '7px', fontSize: '12px', fontWeight: '600', border: '1.5px solid #CBD5E0', cursor: 'pointer', flexShrink: 0 }}>Edit</button>
         </div>
       </div>
-
       {/* Tabs */}
       <div style={{ background: 'white', borderRadius: '10px', border: '1px solid #EDF2F7', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
         <div style={{ padding: '0 20px', background: '#FAFBFC', borderBottom: '2px solid #E2E8F0' }}>
@@ -118,7 +106,6 @@ export default function OpportunityDetailPage() {
               <p style={{ color: opp.notes ? '#3F3F3F' : '#CBD5E0', fontSize: '13px', lineHeight: '1.8', whiteSpace: 'pre-wrap' }}>
                 {opp.notes || 'No notes. Click "Edit" to add some.'}
               </p>
-
               {opp.assigned_consultants?.length > 0 && (
                 <div style={{ marginTop: '16px', paddingTop: '14px', borderTop: '1px solid #F1F5F9' }}>
                   <p style={{ fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#9B9B9B', marginBottom: '8px' }}>Assigned Consultants</p>
@@ -165,7 +152,6 @@ export default function OpportunityDetailPage() {
       </div>
     </div>
   )
-
   const rightColumn = (
     <div>
       {/* Deal details */}
@@ -184,7 +170,6 @@ export default function OpportunityDetailPage() {
         <PropertyRow label="Assigned To" value={opp.assigned_to} />
         <PropertyRow label="Created" value={fmt(opp.created_at)} />
       </SidebarSection>
-
       {/* Company */}
       <SidebarSection title="Company">
         {opp.company ? (
@@ -193,7 +178,6 @@ export default function OpportunityDetailPage() {
           <p style={{ fontSize: '12px', color: '#9B9B9B' }}>No company linked.</p>
         )}
       </SidebarSection>
-
       {/* Linked contacts */}
       <SidebarSection title={`Contacts (${opp.contacts?.length || 0})`}>
         {(!opp.contacts || opp.contacts.length === 0)
@@ -203,7 +187,6 @@ export default function OpportunityDetailPage() {
           ))
         }
       </SidebarSection>
-
       {/* Other company deals */}
       {opp.company && (
         <SidebarSection title={`Other ${opp.company.name} Deals (${companyDeals.length})`}>
@@ -217,7 +200,6 @@ export default function OpportunityDetailPage() {
       )}
     </div>
   )
-
   return (
     <>
       <RecordLayout leftColumn={leftColumn} rightColumn={rightColumn} />
