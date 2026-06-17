@@ -1,26 +1,194 @@
-@import "tailwindcss";
+/* globals.css — WHUBBI Design System */
+@import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;600;700;800;900&display=swap');
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+html, body {
+  font-family: 'Montserrat', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  color: #3F3F3F;
+  background: #F5F7FA;
+  font-size: 13px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+/* ─── Buttons ────────────────────────────────────────────────────────────── */
+.btn-primary {
+  background: #144766;
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 7px;
+  font-family: 'Montserrat', sans-serif;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: background 0.12s, transform 0.1s;
+  letter-spacing: 0.01em;
+}
+.btn-primary:hover:not(:disabled) { background: #1a5a84; }
+.btn-primary:active:not(:disabled) { transform: scale(0.98); }
+.btn-primary:disabled { opacity: 0.55; cursor: not-allowed; }
+
+.btn-secondary {
+  background: white;
+  color: #144766;
+  border: 1.5px solid #CBD5E0;
+  padding: 7px 14px;
+  border-radius: 7px;
+  font-family: 'Montserrat', sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.12s;
+}
+.btn-secondary:hover { background: #F5F7FA; border-color: #9B9B9B; }
+
+.btn-danger {
+  background: #FEF2F2;
+  color: #DC2626;
+  border: 1.5px solid #FECACA;
+  padding: 7px 14px;
+  border-radius: 7px;
+  font-family: 'Montserrat', sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.12s;
+}
+.btn-danger:hover { background: #fee2e2; }
+
+/* ─── Forms ──────────────────────────────────────────────────────────────── */
+.form-input {
+  width: 100%;
+  padding: 8px 11px;
+  border: 1.5px solid #E2E8F0;
+  border-radius: 7px;
+  font-family: 'Montserrat', sans-serif;
+  font-size: 12px;
+  color: #3F3F3F;
+  background: white;
+  transition: border-color 0.12s, box-shadow 0.12s;
+  outline: none;
+  appearance: auto;
+}
+.form-input:focus {
+  border-color: #219BD6;
+  box-shadow: 0 0 0 3px rgba(33, 155, 214, 0.12);
+}
+.form-input::placeholder { color: #CBD5E0; }
+
+textarea.form-input { resize: vertical; min-height: 80px; }
+select.form-input { cursor: pointer; }
+
+.form-label {
+  display: block;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: #9B9B9B;
+  margin-bottom: 5px;
+  font-family: 'Montserrat', sans-serif;
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+.section-label {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: #9B9B9B;
+  margin-bottom: 10px;
+  font-family: 'Montserrat', sans-serif;
 }
+
+/* ─── Checkbox chips ─────────────────────────────────────────────────────── */
+.checkbox-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.checkbox-chip {
+  padding: 5px 11px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 600;
+  font-family: 'Montserrat', sans-serif;
+  cursor: pointer;
+  border: 1.5px solid #E2E8F0;
+  background: white;
+  color: #6B6B6B;
+  transition: all 0.12s;
+  user-select: none;
+}
+.checkbox-chip:hover { border-color: #219BD6; color: #219BD6; }
+.checkbox-chip.selected { background: #144766; color: white; border-color: #144766; }
+
+/* ─── Modal ──────────────────────────────────────────────────────────────── */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(20, 71, 102, 0.45);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  backdrop-filter: blur(2px);
+}
+.modal {
+  background: white;
+  border-radius: 14px;
+  width: 100%;
+  max-width: 560px;
+  max-height: 90vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 20px 60px rgba(20, 71, 102, 0.25);
+}
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  border-bottom: 1px solid #EDF2F7;
+  flex-shrink: 0;
+}
+.modal-body {
+  padding: 20px;
+  overflow-y: auto;
+  flex: 1;
+}
+.modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 14px 20px;
+  border-top: 1px solid #EDF2F7;
+  flex-shrink: 0;
+  background: #FAFBFC;
+}
+
+/* ─── Scrollbar ──────────────────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #CBD5E0; border-radius: 10px; }
+::-webkit-scrollbar-thumb:hover { background: #9B9B9B; }
+
+/* ─── Utility ────────────────────────────────────────────────────────────── */
+a { color: inherit; text-decoration: none; }
+button { font-family: 'Montserrat', sans-serif; }

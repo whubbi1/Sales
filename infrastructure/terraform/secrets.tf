@@ -3,29 +3,29 @@
 
 # ─── Secrets Microsoft ────────────────────────────────────────────────────────
 resource "aws_ssm_parameter" "ms_tenant_id" {
-  name  = "/wcomply/${var.environment}/microsoft/tenant_id"
+  name  = "/whubbi/${var.environment}/microsoft/tenant_id"
   type  = "SecureString"
   value = var.ms_tenant_id
 }
 
 resource "aws_ssm_parameter" "ms_client_id" {
-  name  = "/wcomply/${var.environment}/microsoft/client_id"
+  name  = "/whubbi/${var.environment}/microsoft/client_id"
   type  = "SecureString"
   value = var.ms_client_id
 }
 
 resource "aws_ssm_parameter" "ms_client_secret" {
-  name  = "/wcomply/${var.environment}/microsoft/client_secret"
+  name  = "/whubbi/${var.environment}/microsoft/client_secret"
   type  = "SecureString"
   value = var.ms_client_secret
 }
 
 # ─── Secret complet (backup Secrets Manager) ─────────────────────────────────
 resource "aws_secretsmanager_secret" "app_secrets" {
-  name                    = "wcomply/${var.environment}/app-secrets"
+  name                    = "whubbi/${var.environment}/app-secrets"
   recovery_window_in_days = 7
 
-  tags = { Name = "wcomply-app-secrets" }
+  tags = { Name = "whubbi-app-secrets" }
 }
 
 resource "aws_secretsmanager_secret_version" "app_secrets" {
@@ -48,5 +48,5 @@ resource "aws_acm_certificate" "main" {
     create_before_destroy = true
   }
 
-  tags = { Name = "wcomply-ssl-cert" }
+  tags = { Name = "whubbi-ssl-cert" }
 }

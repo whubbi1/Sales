@@ -1,52 +1,41 @@
 # backend/app/main.py
-# Application FastAPI principale — Wcomply
-
-from fastapi import FastAPI, Depends
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from contextlib import asynccontextmanager
-import os
 
-from app.database import engine, Base
-from app.routers import auth, clients, opportunities, outlook, copilot
+app = FastAPI(title="WHUBBI API", description="Commercial Management API", version="2.0.0")
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    # Démarrage : créer les tables si elles n'existent pas
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-    yield
-    # Arrêt propre
-    await engine.dispose()
-
-app = FastAPI(
-    title="Wcomply API",
-    description="API de gestion commerciale — connectée à Outlook & Microsoft Copilot",
-    version="1.0.0",
-    lifespan=lifespan,
-    docs_url="/docs" if os.getenv("ENVIRONMENT") != "prod" else None,
-)
-
-# ─── CORS ────────────────────────────────────────────────────────────────────
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "https://wcomply.com",
-        "https://www.wcomply.com",
+        "https://dev.whubbi.wcomply.com",
+        "https://whubbi.wcomply.com",
         "http://localhost:3000",
+        "http://localhost:3001",
     ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# ─── Routes ──────────────────────────────────────────────────────────────────
-app.include_router(auth.router,          prefix="/auth",          tags=["Authentification"])
-app.include_router(clients.router,       prefix="/clients",       tags=["Clients"])
-app.include_router(opportunities.router, prefix="/opportunities",  tags=["Opportunités"])
-app.include_router(outlook.router,       prefix="/outlook",       tags=["Outlook"])
-app.include_router(copilot.router,       prefix="/copilot",       tags=["Copilot IA"])
-
-# ─── Health Check ─────────────────────────────────────────────────────────────
-@app.get("/health", tags=["Système"])
+@app.get("/health")
 async def health_check():
-    return {"status": "healthy", "app": "wcomply", "version": "1.0.0"}
+    return {"status": "healthy", "app": "whubbi", "version": "2.0.0"}
+
+@app.get("/")
+async def root():
+    return {"message": "WHUBBI API", "version": "2.0.0"}
+
+try:
+    from app.routers.companies import router as companies_router
+    from app.routers.contacts import router as contacts_router
+    from app.routers.opportunities import router as opportunities_router
+    from app.routers import auth, outlook, copilot
+
+    app.include_router(companies_router,    prefix="/companies",    tags=["Companies"])
+    app.include_router(contacts_router,     prefix="/contacts",     tags=["Contacts"])
+    app.include_router(opportunities_router,prefix="/opportunities", tags=["Opportunities"])
+    app.include_router(auth.router,         prefix="/auth",         tags=["Auth"])
+    app.include_router(outlook.router,      prefix="/outlook",      tags=["Outlook"])
+    app.include_router(copilot.router,      prefix="/copilot",      tags=["Copilot"])
+except Exception as e:
+    print(f"Warning: Could not load routers: {e}")
