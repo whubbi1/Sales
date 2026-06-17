@@ -1,4 +1,6 @@
 'use client'
+
+export async function generateStaticParams() { return [] }
 // app/contacts/[id]/page.tsx
 import { useState, useEffect } from 'react'
 import { useParams, useRouter } from 'next/navigation'
