@@ -13,7 +13,6 @@ frontend:
         - cp -r .next/standalone/. .amplify-hosting/compute/default/
         - cp -r .next/static/. .amplify-hosting/static/_next/static/
         - cp -r public/. .amplify-hosting/static/
-        - node -e "const fs=require('fs');fs.writeFileSync('.amplify-hosting/deploy-manifest.json',JSON.stringify({version:1,routes:[{path:'/_next/static/*',target:{kind:'Static'},headers:{'cache-control':'public, max-age=31536000, immutable'}},{path:'/public/*',target:{kind:'Static'}},{path:'/*',target:{kind:'Compute',src:'default'}}],computeResources:[{name:'default',runtime:'nodejs18.x',entrypoint:'server.js'}]}))"
   artifacts:
     baseDirectory: frontend/.amplify-hosting
     files:
