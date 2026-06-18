@@ -13,8 +13,7 @@ frontend:
         - cp -r .next/standalone/. .amplify-hosting/compute/default/
         - cp -r .next/static/. .amplify-hosting/static/_next/static/
         - cp -r public/. .amplify-hosting/static/
-        - printf '{"version":1,"routes":[{"path":"/_next/static/*","target":{"kind":"Static"},"headers":{"cache-control":"public, max-age=31536000, immutable"}},{"path":"/*","target":{"kind":"Compute","src":"default"}}],"computeResources":[{"name":"default","runtime":"nodejs20.x","entrypoint":"server.js"}],"framework":{"name":"next","version":"16.2.9"}}' > .amplify-hosting/deploy-manifest.json
-        - cat .amplify-hosting/deploy-manifest.json
+        - cp ../.amplify-hosting/deploy-manifest.json .amplify-hosting/deploy-manifest.json
   artifacts:
     baseDirectory: frontend/.amplify-hosting
     files:
