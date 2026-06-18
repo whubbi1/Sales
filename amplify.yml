@@ -8,8 +8,12 @@ frontend:
     build:
       commands:
         - npm run build
+        - mkdir -p ../.amplify-hosting/compute/default
+        - cp -r .next/standalone/. ../.amplify-hosting/compute/default/
+        - cp -r .next/static ../.amplify-hosting/compute/default/.next/static
+        - cp -r public ../.amplify-hosting/compute/default/public
   artifacts:
-    baseDirectory: frontend/.next
+    baseDirectory: .amplify-hosting
     files:
       - '**/*'
   cache:
