@@ -17,6 +17,19 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.on_event("startup")
+async def startup():
+    try:
+        from app.database import engine, Base
+        from app.models import company, contact, opportunity
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+        print("Database tables created successfully!")
+    except Exception as e:
+        print(f"ERROR during startup: {e}")
+        import traceback
+        traceback.print_exc()
+
 @app.get("/health")
 async def health_check():
     return {"status": "healthy", "app": "whubbi", "version": "2.0.0"}
