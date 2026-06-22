@@ -11,7 +11,7 @@ import { CompanyArticles } from '@/components/companies/CompanyArticles'
 import { CompanyTasks } from '@/components/companies/CompanyTasks'
 const LEVEL_COLORS: Record<number, string> = { 1: '#144766', 2: '#1a5a84', 3: '#219BD6', 4: '#7DD3F0' }
 const LEVEL_LABELS: Record<number, string> = { 1: 'Group', 2: 'Parent', 3: 'Child', 4: 'Sub-Child' }
-export default function export default function CompanyDetailPage() {
+export default function CompanyDetailPage() {
   const { id } = useParams()
   const router = useRouter()
   const [company, setCompany] = useState<any>(null)

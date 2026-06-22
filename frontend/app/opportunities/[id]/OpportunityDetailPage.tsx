@@ -15,7 +15,7 @@ const STATUS_COLORS: Record<string, { bg: string; color: string }> = {
   'PO Received':                  { bg: '#D1FAE5', color: '#047857' },
   'Contract Lost':                { bg: '#FEF2F2', color: '#DC2626' },
 }
-export default function export default function OpportunityDetailPage() {
+export default function OpportunityDetailPage() {
   const { id } = useParams()
   const router = useRouter()
   const [opp, setOpp] = useState<any>(null)

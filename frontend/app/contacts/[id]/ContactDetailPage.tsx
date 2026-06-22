@@ -10,7 +10,7 @@ const SUB_LABELS: Record<string, string> = {
   'Customer Service Communication': '💬',
   'One to One': '🤝'
 }
-export default function export default function ContactDetailPage() {
+export default function ContactDetailPage() {
   const { id } = useParams()
   const router = useRouter()
   const [contact, setContact] = useState<any>(null)
