@@ -14,6 +14,7 @@ frontend:
         - cp -r .next/static/. .amplify-hosting/static/_next/static/
         - cp -r public/. .amplify-hosting/static/
         - cp ../.amplify-hosting/deploy-manifest.json .amplify-hosting/deploy-manifest.json
+	- cp -r public/. .amplify-hosting/static/
   artifacts:
     baseDirectory: frontend/.amplify-hosting
     files:
