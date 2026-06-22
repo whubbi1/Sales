@@ -7,6 +7,16 @@ const DEAL_STATUSES = ['Presentation To Be Scheduled','Presentation Done','Propo
 const PROJECT_STATUSES = ['Daily Invoicing','Project','Software Licenses']
 const DEAL_TYPES = ['SAP','GRC','Smart Global Governance','SecurityBridge','Onapsis','BowBridge IBM OpenPages']
 
+// FormField MUST be outside modal to avoid focus loss on re-render
+function FormField({ label, children, full }: { label: string; children: React.ReactNode; full?: boolean }) {
+  return (
+    <div style={{ gridColumn: full ? '1/-1' : undefined }}>
+      <label className="form-label">{label}</label>
+      {children}
+    </div>
+  )
+}
+
 export function OpportunityModal({ opportunity, onClose, onSave }: any) {
   const [companies, setCompanies] = useState<any[]>([])
   const [contacts, setContacts] = useState<any[]>([])
@@ -79,12 +89,6 @@ export function OpportunityModal({ opportunity, onClose, onSave }: any) {
     finally { setSaving(false) }
   }
 
-  const F = ({ label, children, full }: any) => (
-    <div style={{ gridColumn: full ? '1/-1' : undefined }}>
-      <label className="form-label">{label}</label>{children}
-    </div>
-  )
-
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '680px' }}>
@@ -92,63 +96,76 @@ export function OpportunityModal({ opportunity, onClose, onSave }: any) {
           <h2 style={{ fontSize: '15px', fontWeight: '700', color: '#144766' }}>{opportunity ? 'Edit Opportunity' : 'New Opportunity'}</h2>
           <button onClick={onClose} style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: '20px', color: '#9B9B9B', lineHeight: 1 }}>×</button>
         </div>
-
         <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
 
-          {/* Deal info */}
           <div>
             <p className="section-label">Deal Information</p>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-              <F label="Deal Name *" full><input className="form-input" value={form.deal_name} onChange={e => setForm(p => ({ ...p, deal_name: e.target.value }))} placeholder="S001 - Company - Project" /></F>
-              <F label="Deal ID"><input className="form-input" value={form.deal_id} onChange={e => setForm(p => ({ ...p, deal_id: e.target.value }))} placeholder="S001" /></F>
-              <F label="Project Name"><input className="form-input" value={form.project_name} onChange={e => setForm(p => ({ ...p, project_name: e.target.value }))} placeholder="SAP RISE Migration" /></F>
-              <F label="Company">
+              <FormField label="Deal Name *" full>
+                <input className="form-input" value={form.deal_name} onChange={e => setForm(p => ({ ...p, deal_name: e.target.value }))} placeholder="S001 - Company - Project" />
+              </FormField>
+              <FormField label="Deal ID">
+                <input className="form-input" value={form.deal_id} onChange={e => setForm(p => ({ ...p, deal_id: e.target.value }))} placeholder="S001" />
+              </FormField>
+              <FormField label="Project Name">
+                <input className="form-input" value={form.project_name} onChange={e => setForm(p => ({ ...p, project_name: e.target.value }))} placeholder="SAP RISE Migration" />
+              </FormField>
+              <FormField label="Company">
                 <select className="form-input" value={form.company_id} onChange={e => setForm(p => ({ ...p, company_id: e.target.value }))}>
                   <option value="">No company</option>
                   {companies.map((c: any) => <option key={c.id} value={c.id}>{c.name}</option>)}
                 </select>
-              </F>
-              <F label="Deal Type">
+              </FormField>
+              <FormField label="Deal Type">
                 <select className="form-input" value={form.deal_type} onChange={e => setForm(p => ({ ...p, deal_type: e.target.value }))}>
                   <option value="">Select deal type...</option>
                   {DEAL_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
                 </select>
-              </F>
-              <F label="Deal Status">
+              </FormField>
+              <FormField label="Deal Status">
                 <select className="form-input" value={form.deal_status} onChange={e => setForm(p => ({ ...p, deal_status: e.target.value }))}>
                   {DEAL_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
                 </select>
-              </F>
+              </FormField>
             </div>
           </div>
 
-          {/* Financial */}
           <div>
             <p className="section-label">Financial & Timeline</p>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-              <F label="Deal Amount (€)"><input className="form-input" type="number" value={form.deal_amount} onChange={e => setForm(p => ({ ...p, deal_amount: e.target.value }))} placeholder="50000" /></F>
-              <F label="Closing Date"><input className="form-input" type="date" value={form.closing_date} onChange={e => setForm(p => ({ ...p, closing_date: e.target.value }))} /></F>
-              <F label="Contract Start Date"><input className="form-input" type="date" value={form.contract_start_date} onChange={e => setForm(p => ({ ...p, contract_start_date: e.target.value }))} /></F>
-              <F label="Contract End Date"><input className="form-input" type="date" value={form.contract_end_date} onChange={e => setForm(p => ({ ...p, contract_end_date: e.target.value }))} /></F>
+              <FormField label="Deal Amount (EUR)">
+                <input className="form-input" type="number" value={form.deal_amount} onChange={e => setForm(p => ({ ...p, deal_amount: e.target.value }))} placeholder="50000" />
+              </FormField>
+              <FormField label="Closing Date">
+                <input className="form-input" type="date" value={form.closing_date} onChange={e => setForm(p => ({ ...p, closing_date: e.target.value }))} />
+              </FormField>
+              <FormField label="Contract Start Date">
+                <input className="form-input" type="date" value={form.contract_start_date} onChange={e => setForm(p => ({ ...p, contract_start_date: e.target.value }))} />
+              </FormField>
+              <FormField label="Contract End Date">
+                <input className="form-input" type="date" value={form.contract_end_date} onChange={e => setForm(p => ({ ...p, contract_end_date: e.target.value }))} />
+              </FormField>
             </div>
           </div>
 
-          {/* Project */}
           <div>
             <p className="section-label">Project Details</p>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-              <F label="Project Status">
+              <FormField label="Project Status">
                 <select className="form-input" value={form.project_status} onChange={e => setForm(p => ({ ...p, project_status: e.target.value }))}>
                   <option value="">Select...</option>
                   {PROJECT_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
                 </select>
-              </F>
-              <F label="Contracting Party"><input className="form-input" value={form.contracting_party} onChange={e => setForm(p => ({ ...p, contracting_party: e.target.value }))} placeholder="Company name" /></F>
-              <F label="Assigned To"><input className="form-input" value={form.assigned_to} onChange={e => setForm(p => ({ ...p, assigned_to: e.target.value }))} placeholder="Sales rep" /></F>
+              </FormField>
+              <FormField label="Contracting Party">
+                <input className="form-input" value={form.contracting_party} onChange={e => setForm(p => ({ ...p, contracting_party: e.target.value }))} placeholder="Company name" />
+              </FormField>
+              <FormField label="Assigned To">
+                <input className="form-input" value={form.assigned_to} onChange={e => setForm(p => ({ ...p, assigned_to: e.target.value }))} placeholder="Sales rep" />
+              </FormField>
             </div>
           </div>
 
-          {/* Consultants */}
           <div>
             <p className="section-label">Assigned Consultants</p>
             <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
@@ -157,7 +174,7 @@ export function OpportunityModal({ opportunity, onClose, onSave }: any) {
             </div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px' }}>
               {form.assigned_consultants.map((c: string) => (
-                <span key={c} style={{ background: '#EFF6FF', color: '#2563EB', padding: '3px 9px', borderRadius: '12px', fontSize: '11px', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                <span key={c} style={{ background: '#EFF6FF', color: '#2563EB', padding: '3px 9px', borderRadius: '12px', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '5px' }}>
                   {c}
                   <button onClick={() => setForm(p => ({ ...p, assigned_consultants: p.assigned_consultants.filter((x: string) => x !== c) }))} style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#2563EB', fontSize: '13px', lineHeight: 1, padding: 0 }}>×</button>
                 </span>
@@ -165,7 +182,6 @@ export function OpportunityModal({ opportunity, onClose, onSave }: any) {
             </div>
           </div>
 
-          {/* Contacts */}
           {contacts.length > 0 && (
             <div>
               <p className="section-label">Linked Contacts</p>
@@ -178,25 +194,21 @@ export function OpportunityModal({ opportunity, onClose, onSave }: any) {
                     </div>
                     <div>
                       <div style={{ fontSize: '12px', fontWeight: '600', color: '#144766' }}>{c.first_name} {c.last_name}</div>
-                      <div style={{ fontSize: '10px', color: '#9B9B9B' }}>{c.job_type || c.email || ''}{c.company ? ` · ${c.company.name}` : ''}</div>
+                      <div style={{ fontSize: '10px', color: '#9B9B9B' }}>{c.job_type || c.email || ''}</div>
                     </div>
                   </label>
                 ))}
               </div>
-              {form.contact_ids.length > 0 && (
-                <p style={{ fontSize: '11px', color: '#219BD6', fontWeight: '600', marginTop: '6px' }}>{form.contact_ids.length} contact{form.contact_ids.length > 1 ? 's' : ''} selected</p>
-              )}
+              {form.contact_ids.length > 0 && <p style={{ fontSize: '11px', color: '#219BD6', fontWeight: '600', marginTop: '6px' }}>{form.contact_ids.length} contact{form.contact_ids.length > 1 ? 's' : ''} selected</p>}
             </div>
           )}
 
-          {/* Notes */}
-          <F label="Notes" full>
+          <FormField label="Notes" full>
             <textarea className="form-input" value={form.notes} onChange={e => setForm(p => ({ ...p, notes: e.target.value }))} placeholder="Additional notes..." rows={3} style={{ resize: 'vertical' }} />
-          </F>
+          </FormField>
 
-          {error && <div style={{ background: '#FEF2F2', color: '#DC2626', padding: '10px 14px', borderRadius: '8px', fontSize: '12px', fontWeight: '500' }}>{error}</div>}
+          {error && <div style={{ background: '#FEF2F2', color: '#DC2626', padding: '10px 14px', borderRadius: '8px', fontSize: '12px' }}>{error}</div>}
         </div>
-
         <div className="modal-footer">
           <button className="btn-secondary" onClick={onClose}>Cancel</button>
           <button className="btn-primary" onClick={handleSave} disabled={saving}>{saving ? 'Saving...' : opportunity ? 'Save Changes' : 'Create Opportunity'}</button>

@@ -6,7 +6,17 @@ import { companiesAPI } from '@/lib/api'
 const ERP_OPTIONS     = ["SAP", "Dynamics", "IFS", "Infor", "Odoo", "Oracle", "JDE", "SAGE", "Unknown", "Other"]
 const CYBER_OPTIONS   = ["SAP ETD", "SAP GRC", "SAP Focused Run", "Cloud ALM", "SecurityBridge", "Onapsis", "Layer Seven Security", "Other"]
 const HOSTING_OPTIONS = ["RISE", "AWS", "Azure", "GXP", "BLUE", "SENS", "Scaleway", "Private Datacenter", "Other"]
-const LEVEL_LABELS    = { 1: 'Level 1 — Group', 2: 'Level 2 — Parent', 3: 'Level 3 — Child', 4: 'Level 4 — Sub-Child' }
+const LEVEL_LABELS: Record<number, string> = { 1: 'Level 1 - Group', 2: 'Level 2 - Parent', 3: 'Level 3 - Child', 4: 'Level 4 - Sub-Child' }
+
+// FormField MUST be outside the modal component to avoid re-renders
+function FormField({ label, children, full }: { label: string; children: React.ReactNode; full?: boolean }) {
+  return (
+    <div style={{ gridColumn: full ? '1/-1' : undefined }}>
+      <label className="form-label">{label}</label>
+      {children}
+    </div>
+  )
+}
 
 export function CompanyModal({ company, companies = [], onClose, onSave }: any) {
   const [form, setForm] = useState({
@@ -62,10 +72,6 @@ export function CompanyModal({ company, companies = [], onClose, onSave }: any) 
 
   const availableParents = companies.filter((c: any) => c.id !== company?.id && c.level < 4)
 
-  const Field = ({ label, children }: any) => (
-    <div><label className="form-label">{label}</label>{children}</div>
-  )
-
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal" onClick={e => e.stopPropagation()}>
@@ -76,56 +82,67 @@ export function CompanyModal({ company, companies = [], onClose, onSave }: any) 
         <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
 
           <div>
-            <p style={{ fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#9B9B9B', marginBottom: '10px' }}>Company Information</p>
+            <p className="section-label">Company Information</p>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-              <Field label="Company Name *"><input className="form-input" value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))} placeholder="Acme Corp" /></Field>
-              <Field label="Main Contact"><input className="form-input" value={form.contact_name} onChange={e => setForm(p => ({ ...p, contact_name: e.target.value }))} placeholder="John Doe" /></Field>
-              <Field label="Phone"><input className="form-input" value={form.phone} onChange={e => setForm(p => ({ ...p, phone: e.target.value }))} placeholder="+1 555 000 0000" /></Field>
-              <Field label="Sector"><input className="form-input" value={form.sector} onChange={e => setForm(p => ({ ...p, sector: e.target.value }))} placeholder="Finance, Industry..." /></Field>
-              <Field label="Country"><input className="form-input" value={form.country} onChange={e => setForm(p => ({ ...p, country: e.target.value }))} placeholder="Belgium" /></Field>
-              <Field label="Status">
+              <FormField label="Company Name *">
+                <input className="form-input" value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))} placeholder="Acme Corp" />
+              </FormField>
+              <FormField label="Main Contact">
+                <input className="form-input" value={form.contact_name} onChange={e => setForm(p => ({ ...p, contact_name: e.target.value }))} placeholder="John Doe" />
+              </FormField>
+              <FormField label="Phone">
+                <input className="form-input" value={form.phone} onChange={e => setForm(p => ({ ...p, phone: e.target.value }))} placeholder="+1 555 000 0000" />
+              </FormField>
+              <FormField label="Sector">
+                <input className="form-input" value={form.sector} onChange={e => setForm(p => ({ ...p, sector: e.target.value }))} placeholder="Finance, Industry..." />
+              </FormField>
+              <FormField label="Country">
+                <input className="form-input" value={form.country} onChange={e => setForm(p => ({ ...p, country: e.target.value }))} placeholder="Belgium" />
+              </FormField>
+              <FormField label="Status">
                 <select className="form-input" value={form.status} onChange={e => setForm(p => ({ ...p, status: e.target.value }))}>
                   <option value="lead">Lead</option><option value="prospect">Prospect</option><option value="client">Client</option><option value="partner">Partner</option>
                 </select>
-              </Field>
-              <Field label="Assigned To"><input className="form-input" value={form.assigned_to} onChange={e => setForm(p => ({ ...p, assigned_to: e.target.value }))} placeholder="Sales rep" /></Field>
+              </FormField>
+              <FormField label="Assigned To">
+                <input className="form-input" value={form.assigned_to} onChange={e => setForm(p => ({ ...p, assigned_to: e.target.value }))} placeholder="Sales rep" />
+              </FormField>
             </div>
           </div>
 
           <div>
-            <p style={{ fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#9B9B9B', marginBottom: '10px' }}>Hierarchy</p>
+            <p className="section-label">Hierarchy</p>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-              <Field label="Parent Company">
+              <FormField label="Parent Company">
                 <select className="form-input" value={form.parent_id} onChange={e => handleParentChange(e.target.value)}>
                   <option value="">No parent (Top level)</option>
-                  {availableParents.map((c: any) => <option key={c.id} value={c.id}>{'— '.repeat(c.level - 1)}{c.name} (L{c.level})</option>)}
+                  {availableParents.map((c: any) => <option key={c.id} value={c.id}>{'- '.repeat(c.level - 1)}{c.name} (L{c.level})</option>)}
                 </select>
-              </Field>
-              <Field label="Level">
-                <div className="form-input" style={{ background: '#F5F7FA', color: '#9B9B9B', cursor: 'default' }}>{(LEVEL_LABELS as any)[form.level]}</div>
-              </Field>
+              </FormField>
+              <FormField label="Level">
+                <div className="form-input" style={{ background: '#F5F7FA', color: '#9B9B9B', cursor: 'default' }}>{LEVEL_LABELS[form.level]}</div>
+              </FormField>
             </div>
           </div>
 
           <div>
-            <p style={{ fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#9B9B9B', marginBottom: '10px' }}>Domain Names</p>
+            <p className="section-label">Domain Names</p>
             <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
               <input className="form-input" value={domainInput} onChange={e => setDomainInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && addDomain()} placeholder="example.com" style={{ flex: 1 }} />
               <button className="btn-secondary" onClick={addDomain}>Add</button>
             </div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px' }}>
               {form.domain_names.map((d: string) => (
-                <span key={d} style={{ background: '#EFF6FF', color: '#2563EB', padding: '3px 9px', borderRadius: '12px', fontSize: '11px', fontWeight: '500', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                <span key={d} style={{ background: '#EFF6FF', color: '#2563EB', padding: '3px 9px', borderRadius: '12px', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '5px' }}>
                   {d}<button onClick={() => setForm(p => ({ ...p, domain_names: p.domain_names.filter((x: string) => x !== d) }))} style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#2563EB', fontSize: '13px', lineHeight: 1, padding: 0 }}>×</button>
                 </span>
               ))}
             </div>
           </div>
 
-          <div>
-            <label className="form-label">LinkedIn Company Page</label>
+          <FormField label="LinkedIn Company Page">
             <input className="form-input" value={form.linkedin_url} onChange={e => setForm(p => ({ ...p, linkedin_url: e.target.value }))} placeholder="https://linkedin.com/company/..." />
-          </div>
+          </FormField>
 
           {[
             { label: 'Main ERP', field: 'main_erp', options: ERP_OPTIONS },
@@ -133,7 +150,7 @@ export function CompanyModal({ company, companies = [], onClose, onSave }: any) 
             { label: 'SAP Hosting Partner', field: 'sap_hosting_partner', options: HOSTING_OPTIONS },
           ].map(({ label, field, options }) => (
             <div key={field}>
-              <p style={{ fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#9B9B9B', marginBottom: '8px' }}>{label}</p>
+              <p className="section-label">{label}</p>
               <div className="checkbox-group">
                 {options.map(opt => (
                   <span key={opt} className={`checkbox-chip ${(form as any)[field].includes(opt) ? 'selected' : ''}`} onClick={() => toggle(field, opt)}>{opt}</span>
@@ -142,7 +159,11 @@ export function CompanyModal({ company, companies = [], onClose, onSave }: any) 
             </div>
           ))}
 
-          {error && <div style={{ background: '#FEF2F2', color: '#DC2626', padding: '10px 14px', borderRadius: '8px', fontSize: '12px', fontWeight: '500' }}>{error}</div>}
+          <FormField label="Notes" full>
+            <textarea className="form-input" value={form.notes} onChange={e => setForm(p => ({ ...p, notes: e.target.value }))} placeholder="Additional notes..." rows={3} style={{ resize: 'vertical' }} />
+          </FormField>
+
+          {error && <div style={{ background: '#FEF2F2', color: '#DC2626', padding: '10px 14px', borderRadius: '8px', fontSize: '12px' }}>{error}</div>}
         </div>
         <div className="modal-footer">
           <button className="btn-secondary" onClick={onClose}>Cancel</button>
