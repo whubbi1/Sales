@@ -7,15 +7,13 @@ frontend:
         - npm ci
     build:
       commands:
-  - export NEXT_PUBLIC_API_URL=https://api.whubbi.wcomply.com
-  - npm run build
+        - npm run build
         - mkdir -p .amplify-hosting/compute/default
         - mkdir -p .amplify-hosting/static/_next/static
         - cp -r .next/standalone/. .amplify-hosting/compute/default/
         - cp -r .next/static/. .amplify-hosting/static/_next/static/
         - cp -r public/. .amplify-hosting/static/
         - cp ../.amplify-hosting/deploy-manifest.json .amplify-hosting/deploy-manifest.json
-        - cp -r public/. .amplify-hosting/static/
   artifacts:
     baseDirectory: frontend/.amplify-hosting
     files:
