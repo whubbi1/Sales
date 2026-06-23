@@ -1,5 +1,5 @@
 // lib/api.ts
-const API_URL = process.env.NEXT_PUBLIC_API_URL?.replace('http://', 'https://') || 'https://api.whubbi.wcomply.com'
+const API_URL = 'https://api.whubbi.wcomply.com'
 
 async function fetchAPI(path: string, options: RequestInit = {}) {
   const res = await fetch(`${API_URL}${path}`, {
