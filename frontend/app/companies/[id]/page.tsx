@@ -1,4 +1,4 @@
-'use client' 
-import dynamic from 'next/dynamic' 
-const CompanyDetail = dynamic(() =, { ssr: false }) 
-export default function Page() { return <CompanyDetail /> } 
+'use client'
+import dynamic from 'next/dynamic'
+const CompanyDetail = dynamic(() => import('./CompanyDetail'), { ssr: false })
+export default function Page() { return <CompanyDetail /> }
