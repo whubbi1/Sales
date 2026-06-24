@@ -1,0 +1,17 @@
+Add these 3 action buttons to the ECS Backend service card in the AWS Health tab:
+
+In the card for svc.type === 'ecs', add below the details:
+
+{svc.type === 'ecs' && (
+  <div style={{ marginTop: '14px', paddingTop: '12px', borderTop: '1px solid #EDF2F7', display: 'flex', gap: '8px' }}>
+    <button onClick={() => controlECS('restart')} disabled={ecsAction !== null} style={{ flex: 1, padding: '7px', borderRadius: '6px', border: 'none', background: '#45B6E4', color: 'white', fontSize: '11px', fontWeight: '700', cursor: 'pointer', fontFamily: 'Montserrat, sans-serif' }}>
+      ↻ Restart
+    </button>
+    <button onClick={() => controlECS('stop')} disabled={ecsAction !== null || svc.status === 'down'} style={{ flex: 1, padding: '7px', borderRadius: '6px', border: 'none', background: '#FEF2F2', color: '#DC2626', fontSize: '11px', fontWeight: '700', cursor: 'pointer', fontFamily: 'Montserrat, sans-serif' }}>
+      ⏹ Stop
+    </button>
+    <button onClick={() => controlECS('start')} disabled={ecsAction !== null || svc.status === 'healthy'} style={{ flex: 1, padding: '7px', borderRadius: '6px', border: 'none', background: '#ECFDF5', color: '#059669', fontSize: '11px', fontWeight: '700', cursor: 'pointer', fontFamily: 'Montserrat, sans-serif' }}>
+      ▶ Start
+    </button>
+  </div>
+)}

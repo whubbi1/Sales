@@ -40,12 +40,12 @@ const KPI = ({ label, value, sub, color = '#156082' }: any) => (
 )
 
 const TABS = [
-  { id: 'aws-health',  label: 'AWS Health',        icon: '☁️' },
-  { id: 'ms-health',   label: 'Microsoft 365',      icon: '🏢' },
-  { id: 'aws-costs',   label: 'AWS Costs',          icon: '💰' },
-  { id: 'ms-costs',    label: 'Microsoft Costs',    icon: '💳' },
-  { id: 'urls',        label: 'URL Monitoring',     icon: '🌐' },
-  { id: 'logs',        label: 'Error Logs',         icon: '🔍' },
+  { id: 'aws-health',  label: 'AWS Health',       icon: '☁️' },
+  { id: 'ms-health',   label: 'Microsoft 365',    icon: '🏢' },
+  { id: 'aws-costs',   label: 'AWS Costs',        icon: '💰' },
+  { id: 'ms-costs',    label: 'Microsoft Costs',  icon: '💳' },
+  { id: 'urls',        label: 'URL Monitoring',   icon: '🌐' },
+  { id: 'logs',        label: 'Error Logs',       icon: '🔍' },
 ]
 
 export default function AdminCockpitPage() {
@@ -57,9 +57,11 @@ export default function AdminCockpitPage() {
   const [lastRefresh, setLastRefresh] = useState(new Date())
   const [newUrl, setNewUrl] = useState({ name: '', url: '' })
   const [showAddUrl, setShowAddUrl] = useState(false)
+  const [ecsAction, setEcsAction] = useState<string | null>(null)
+  const [ecsMessage, setEcsMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null)
 
-  const loadTab = useCallback(async (t: string) => {
-    if (data[t]) return // cached
+  const loadTab = useCallback(async (t: string, force = false) => {
+    if (data[t] && !force) return
     setLoading(true)
     try {
       let result: any = null
@@ -67,7 +69,10 @@ export default function AdminCockpitPage() {
       if (t === 'aws-costs')   result = await adminAPI.getCosts()
       if (t === 'logs')        result = await adminAPI.getLogs()
       if (t === 'urls')        result = await adminAPI.getURLs()
-      if (t === 'ms-health')   result = await Promise.all([microsoftAPI.getHealth(), microsoftAPI.getIncidents(), microsoftAPI.getLicenses()]).then(([h,i,l]) => ({health:h,incidents:i,licenses:l}))
+      if (t === 'ms-health')   {
+        const [h, i, l] = await Promise.all([microsoftAPI.getHealth(), microsoftAPI.getIncidents(), microsoftAPI.getLicenses()])
+        result = { health: h, incidents: i, licenses: l }
+      }
       if (t === 'ms-costs')    result = await microsoftAPI.getCosts()
       if (result) setData(p => ({ ...p, [t]: result }))
     } catch (e) { console.error(e) }
@@ -78,16 +83,41 @@ export default function AdminCockpitPage() {
   const refresh = useCallback(async () => {
     setData({})
     setLoading(true)
-    await loadTab(tab)
-  }, [tab, loadTab])
+    setTimeout(() => loadTab(tab, true), 100)
+  }, [tab])
 
   useEffect(() => { loadTab(tab) }, [tab])
+
+  // ECS Control
+  const controlECS = async (action: 'start' | 'stop' | 'restart') => {
+    const confirm_msgs: Record<string, string> = {
+      stop: '⚠️ This will stop the WHUBBI backend. All users will lose access. Confirm?',
+      restart: 'Restart the WHUBBI backend? It will be unavailable for ~2 minutes.',
+      start: 'Start the WHUBBI backend?',
+    }
+    if (!window.confirm(confirm_msgs[action])) return
+    setEcsAction(action)
+    setEcsMessage(null)
+    try {
+      const res = await fetch(`https://api.whubbi.wcomply.com/ecs/${action}`, { method: 'POST' })
+      const data = await res.json()
+      if (data.status === 'ok') {
+        setEcsMessage({ text: data.message, type: 'success' })
+        setTimeout(() => { loadTab('aws-health', true); setEcsMessage(null) }, 5000)
+      } else {
+        setEcsMessage({ text: data.message || 'Action failed', type: 'error' })
+      }
+    } catch (e: any) {
+      setEcsMessage({ text: e.message, type: 'error' })
+    }
+    setEcsAction(null)
+  }
 
   const runChecks = async () => {
     setChecking(true)
     await adminAPI.runChecks()
     setData(p => ({ ...p, urls: undefined }))
-    await loadTab('urls')
+    await loadTab('urls', true)
     setChecking(false)
   }
 
@@ -97,13 +127,14 @@ export default function AdminCockpitPage() {
     setNewUrl({ name: '', url: '' })
     setShowAddUrl(false)
     setData(p => ({ ...p, urls: undefined }))
-    await loadTab('urls')
+    await loadTab('urls', true)
   }
 
   const deleteURL = async (id: string) => {
+    if (!window.confirm('Delete this URL from monitoring?')) return
     await adminAPI.deleteURL(id)
     setData(p => ({ ...p, urls: undefined }))
-    await loadTab('urls')
+    await loadTab('urls', true)
   }
 
   const d = data[tab]
@@ -123,7 +154,7 @@ export default function AdminCockpitPage() {
         </div>
       </div>
 
-      {/* Summary */}
+      {/* Summary bar */}
       {awsHealth && (
         <div style={{ background: 'white', borderBottom: '1px solid #EDF2F7', padding: '10px 32px', display: 'flex', gap: '24px', alignItems: 'center' }}>
           <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
@@ -146,6 +177,13 @@ export default function AdminCockpitPage() {
           ))}
         </div>
 
+        {/* ECS action feedback */}
+        {ecsMessage && (
+          <div style={{ marginBottom: '16px', padding: '12px 16px', borderRadius: '10px', background: ecsMessage.type === 'success' ? '#ECFDF5' : '#FEF2F2', color: ecsMessage.type === 'success' ? '#059669' : '#DC2626', fontSize: '13px', fontWeight: '600', border: `1px solid ${ecsMessage.type === 'success' ? '#A7F3D0' : '#FECACA'}` }}>
+            {ecsMessage.type === 'success' ? '✅' : '❌'} {ecsMessage.text}
+          </div>
+        )}
+
         {loading && <div style={{ textAlign: 'center', padding: '48px', color: '#45B6E4', fontSize: '13px' }}>Loading...</div>}
 
         {/* ── AWS Health ── */}
@@ -163,6 +201,36 @@ export default function AdminCockpitPage() {
                 <p style={{ fontSize: '12px', color: '#45B6E4', margin: 0 }}>{svc.details}</p>
                 {svc.taskDef && <p style={{ fontSize: '11px', color: '#45B6E4', marginTop: '4px' }}>Task: {svc.taskDef}</p>}
                 {svc.engine && <p style={{ fontSize: '11px', color: '#45B6E4', marginTop: '4px' }}>{svc.engine}</p>}
+
+                {/* ECS Control Buttons — only for ECS Backend */}
+                {svc.type === 'ecs' && (
+                  <div style={{ marginTop: '14px', paddingTop: '12px', borderTop: '1px solid #EDF2F7' }}>
+                    <div style={{ fontSize: '9px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#45B6E4', marginBottom: '8px' }}>Application Control</div>
+                    <div style={{ display: 'flex', gap: '6px' }}>
+                      <button
+                        onClick={() => controlECS('restart')}
+                        disabled={ecsAction !== null}
+                        title="Force a new deployment — replaces running containers"
+                        style={{ flex: 1, padding: '7px 4px', borderRadius: '6px', border: 'none', background: '#EFF6FF', color: '#156082', fontSize: '11px', fontWeight: '700', cursor: ecsAction ? 'not-allowed' : 'pointer', fontFamily: 'Montserrat, sans-serif', opacity: ecsAction ? 0.6 : 1 }}>
+                        {ecsAction === 'restart' ? '⏳' : '↻'} Restart
+                      </button>
+                      <button
+                        onClick={() => controlECS('stop')}
+                        disabled={ecsAction !== null || svc.status === 'down'}
+                        title="Stop all containers — desiredCount = 0"
+                        style={{ flex: 1, padding: '7px 4px', borderRadius: '6px', border: 'none', background: '#FEF2F2', color: '#DC2626', fontSize: '11px', fontWeight: '700', cursor: (ecsAction || svc.status === 'down') ? 'not-allowed' : 'pointer', fontFamily: 'Montserrat, sans-serif', opacity: (ecsAction || svc.status === 'down') ? 0.6 : 1 }}>
+                        {ecsAction === 'stop' ? '⏳' : '⏹'} Stop
+                      </button>
+                      <button
+                        onClick={() => controlECS('start')}
+                        disabled={ecsAction !== null || svc.status === 'healthy'}
+                        title="Start containers — desiredCount = 1"
+                        style={{ flex: 1, padding: '7px 4px', borderRadius: '6px', border: 'none', background: '#ECFDF5', color: '#059669', fontSize: '11px', fontWeight: '700', cursor: (ecsAction || svc.status === 'healthy') ? 'not-allowed' : 'pointer', fontFamily: 'Montserrat, sans-serif', opacity: (ecsAction || svc.status === 'healthy') ? 0.6 : 1 }}>
+                        {ecsAction === 'start' ? '⏳' : '▶'} Start
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             ))}
           </div>
@@ -206,7 +274,7 @@ export default function AdminCockpitPage() {
                     </div>
                   </>
                 )}
-                <h2 style={{ fontSize: '13px', fontWeight: '700', color: '#156082', marginBottom: '16px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Microsoft 365 Licenses</h2>
+                <h2 style={{ fontSize: '13px', fontWeight: '700', color: '#156082', marginBottom: '16px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Licenses</h2>
                 {d.licenses?.error ? <p style={{ color: '#45B6E4', fontSize: '13px' }}>License data unavailable.</p> : (
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '14px' }}>
                     {d.licenses?.licenses?.map((lic: any) => (
@@ -238,7 +306,7 @@ export default function AdminCockpitPage() {
                 { label: 'Estimated Month', value: `$${d.estimated_month?.toFixed(2)||'0.00'}`, color: '#e97132', sub: 'Projected total' },
                 { label: 'Daily Average', value: `$${d.daily?.length > 0 ? (d.current_month / d.daily.length).toFixed(2) : '0.00'}`, color: '#45B6E4', sub: 'Last 30 days' },
               ].map(stat => (
-                <div key={stat.label} style={{ background: 'white', borderRadius: '12px', border: '1px solid #EDF2F7', padding: '20px', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
+                <div key={stat.label} style={{ background: 'white', borderRadius: '12px', border: '1px solid #EDF2F7', padding: '20px' }}>
                   <div style={{ fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#45B6E4', marginBottom: '8px' }}>{stat.label}</div>
                   <div style={{ fontSize: '28px', fontWeight: '800', color: stat.color }}>{stat.value}</div>
                   <div style={{ fontSize: '11px', color: '#45B6E4', marginTop: '4px' }}>{stat.sub}</div>
@@ -246,7 +314,7 @@ export default function AdminCockpitPage() {
               ))}
             </div>
             <div style={{ background: 'white', borderRadius: '12px', border: '1px solid #EDF2F7', padding: '20px' }}>
-              <h3 style={{ fontSize: '13px', fontWeight: '700', color: '#156082', marginBottom: '16px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>AWS Cost by Service</h3>
+              <h3 style={{ fontSize: '13px', fontWeight: '700', color: '#156082', marginBottom: '16px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Cost by Service</h3>
               {d.by_service?.length === 0 ? <p style={{ color: '#45B6E4' }}>No data.{d.error && ` ${d.error}`}</p> : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                   {d.by_service?.map((item: any) => {
@@ -281,7 +349,7 @@ export default function AdminCockpitPage() {
                   <div style={{ background: 'white', borderRadius: '12px', border: '1px solid #EDF2F7', padding: '20px' }}>
                     <div style={{ fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', color: '#45B6E4', marginBottom: '8px' }}>Total This Month</div>
                     <div style={{ fontSize: '28px', fontWeight: '800', color: '#156082' }}>${d.total?.toFixed(2)}</div>
-                    <div style={{ fontSize: '11px', color: '#45B6E4', marginTop: '4px' }}>Subscription: {d.subscription}</div>
+                    <div style={{ fontSize: '11px', color: '#45B6E4', marginTop: '4px' }}>{d.subscription}</div>
                   </div>
                   <div style={{ background: 'white', borderRadius: '12px', border: '1px solid #EDF2F7', padding: '20px' }}>
                     <div style={{ fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', color: '#45B6E4', marginBottom: '8px' }}>Period</div>
@@ -290,24 +358,20 @@ export default function AdminCockpitPage() {
                 </div>
                 <div style={{ background: 'white', borderRadius: '12px', border: '1px solid #EDF2F7', padding: '20px' }}>
                   <h3 style={{ fontSize: '13px', fontWeight: '700', color: '#156082', marginBottom: '16px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Azure Cost by Service</h3>
-                  {d.costs?.length === 0 ? <p style={{ color: '#45B6E4' }}>No cost data available.</p> : (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                      {d.costs?.map((item: any) => {
-                        const pct = d.total > 0 ? (item.cost / d.total) * 100 : 0
-                        return (
-                          <div key={item.service}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-                              <span style={{ fontSize: '13px', fontWeight: '600', color: '#3F3F3F' }}>{item.service}</span>
-                              <span style={{ fontSize: '13px', fontWeight: '700', color: '#156082' }}>${item.cost.toFixed(2)}</span>
-                            </div>
-                            <div style={{ height: '6px', background: '#F1F5F9', borderRadius: '3px', overflow: 'hidden' }}>
-                              <div style={{ height: '100%', width: `${pct}%`, background: '#e97132', borderRadius: '3px' }} />
-                            </div>
-                          </div>
-                        )
-                      })}
-                    </div>
-                  )}
+                  {d.costs?.length === 0 ? <p style={{ color: '#45B6E4' }}>No cost data.</p> : d.costs?.map((item: any) => {
+                    const pct = d.total > 0 ? (item.cost / d.total) * 100 : 0
+                    return (
+                      <div key={item.service} style={{ marginBottom: '10px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                          <span style={{ fontSize: '13px', fontWeight: '600', color: '#3F3F3F' }}>{item.service}</span>
+                          <span style={{ fontSize: '13px', fontWeight: '700', color: '#156082' }}>${item.cost.toFixed(2)}</span>
+                        </div>
+                        <div style={{ height: '6px', background: '#F1F5F9', borderRadius: '3px', overflow: 'hidden' }}>
+                          <div style={{ height: '100%', width: `${pct}%`, background: '#e97132', borderRadius: '3px' }} />
+                        </div>
+                      </div>
+                    )
+                  })}
                 </div>
               </>
             )}
@@ -320,7 +384,7 @@ export default function AdminCockpitPage() {
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
               <div>
                 <h2 style={{ fontSize: '15px', fontWeight: '700', color: '#156082', margin: 0 }}>URL Monitoring</h2>
-                <p style={{ fontSize: '12px', color: '#45B6E4', margin: '4px 0 0' }}>Auto-checks every hour · Click a URL to open in new tab</p>
+                <p style={{ fontSize: '12px', color: '#45B6E4', margin: '4px 0 0' }}>Auto-checks every hour · Click URL to open</p>
               </div>
               <div style={{ display: 'flex', gap: '10px' }}>
                 <button onClick={runChecks} disabled={checking} style={{ background: '#45B6E4', color: 'white', border: 'none', padding: '8px 16px', borderRadius: '7px', fontSize: '12px', fontWeight: '700', cursor: 'pointer', fontFamily: 'Montserrat, sans-serif' }}>
@@ -329,10 +393,8 @@ export default function AdminCockpitPage() {
                 <button onClick={() => setShowAddUrl(!showAddUrl)} style={{ background: '#156082', color: 'white', border: 'none', padding: '8px 16px', borderRadius: '7px', fontSize: '12px', fontWeight: '700', cursor: 'pointer', fontFamily: 'Montserrat, sans-serif' }}>+ Add URL</button>
               </div>
             </div>
-
             {showAddUrl && (
               <div style={{ background: 'white', borderRadius: '12px', border: '1px solid #EDF2F7', padding: '20px', marginBottom: '20px' }}>
-                <h3 style={{ fontSize: '13px', fontWeight: '700', color: '#156082', marginBottom: '14px' }}>Add URL to Monitor</h3>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr auto', gap: '10px', alignItems: 'end' }}>
                   <div><label className="form-label">Name</label><input className="form-input" value={newUrl.name} onChange={e => setNewUrl(p => ({...p, name: e.target.value}))} placeholder="My Website" /></div>
                   <div><label className="form-label">URL</label><input className="form-input" value={newUrl.url} onChange={e => setNewUrl(p => ({...p, url: e.target.value}))} placeholder="https://example.com" /></div>
@@ -340,7 +402,6 @@ export default function AdminCockpitPage() {
                 </div>
               </div>
             )}
-
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '16px' }}>
               {(d.urls || []).map((u: any, i: number) => {
                 const s = STATUS_STYLE[u.status] || STATUS_STYLE.unknown
@@ -349,33 +410,26 @@ export default function AdminCockpitPage() {
                 return (
                   <div key={u.id || i} style={{ background: 'white', borderRadius: '12px', border: '1px solid #EDF2F7', padding: '20px', boxShadow: '0 1px 3px rgba(0,0,0,0.06)', position: 'relative' }}>
                     <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '3px', background: s.dot, borderRadius: '12px 12px 0 0' }} />
-
-                    {/* Header */}
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '14px' }}>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <h3 style={{ fontSize: '14px', fontWeight: '700', color: '#156082', margin: '0 0 4px' }}>{u.name}</h3>
-                        <a href={u.url} target="_blank" rel="noopener noreferrer" style={{ fontSize: '11px', color: '#45B6E4', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '4px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
-                          onClick={e => e.stopPropagation()}>
+                        <a href={u.url} target="_blank" rel="noopener noreferrer" style={{ fontSize: '11px', color: '#45B6E4', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
                           🔗 {u.url}
                           <svg width="10" height="10" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
                         </a>
                       </div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0, marginLeft: '12px' }}>
                         <StatusBadge status={u.status} />
-                        {u.id && u.id !== 'default' && !u.id.startsWith('default-') && (
-                          <button onClick={() => deleteURL(u.id)} title="Delete" style={{ border: 'none', background: '#FEF2F2', cursor: 'pointer', color: '#DC2626', fontSize: '12px', padding: '4px 8px', borderRadius: '6px', fontWeight: '700' }}>✕</button>
+                        {u.id && !u.id.startsWith('default') && (
+                          <button onClick={() => deleteURL(u.id)} title="Delete" style={{ border: 'none', background: '#FEF2F2', cursor: 'pointer', color: '#DC2626', fontSize: '11px', padding: '4px 8px', borderRadius: '6px', fontWeight: '700', fontFamily: 'Montserrat, sans-serif' }}>✕ Delete</button>
                         )}
                       </div>
                     </div>
-
-                    {/* KPIs */}
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px', padding: '14px', background: '#F8FAFC', borderRadius: '8px', marginBottom: '12px' }}>
                       <KPI label="Availability" value={`${avail}%`} color={availColor} sub="Last 24h" />
                       <KPI label="Avg Response" value={u.avg_response_time ? `${u.avg_response_time}ms` : '—'} color={u.avg_response_time > 2000 ? '#D97706' : '#059669'} sub="Last 24h" />
-                      <KPI label="HTTP Code" value={u.status_code || '—'} color={u.status_code < 400 ? '#059669' : '#DC2626'} sub="Latest" />
+                      <KPI label="HTTP" value={u.status_code || '—'} color={!u.status_code || u.status_code < 400 ? '#059669' : '#DC2626'} sub="Latest" />
                     </div>
-
-                    {/* Meta */}
                     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: '#45B6E4' }}>
                       <span>Last check: {u.last_checked ? new Date(u.last_checked).toLocaleString() : 'Never'}</span>
                       <span>{u.checks_count || 0} checks</span>

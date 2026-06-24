@@ -16,7 +16,6 @@ async def startup():
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         print("Database tables created successfully!")
-
         from sqlalchemy.ext.asyncio import AsyncSession
         from sqlalchemy.orm import sessionmaker
         from sqlalchemy import text
@@ -27,14 +26,13 @@ async def startup():
             if count == 0:
                 for item in [
                     ("WHUBBI Frontend", "https://dev.whubbi.wcomply.com"),
-                    ("Wcomply Website", "https://wcomply.com"),
+                    ("WCOMPLY Website", "https://wcomply.com"),
                     ("SharePoint", "https://wcomply.sharepoint.com"),
                 ]:
                     await session.execute(text(
                         "INSERT INTO monitored_urls (id, name, url, active, created_at) VALUES (gen_random_uuid(), :name, :url, true, NOW())"
                     ), {"name": item[0], "url": item[1]})
                 await session.commit()
-                print("Default URLs seeded!")
     except Exception as e:
         print(f"ERROR during startup: {e}")
         import traceback; traceback.print_exc()
@@ -53,6 +51,7 @@ try:
     from app.routers.opportunities import router as opportunities_router
     from app.routers.admin import router as admin_router
     from app.routers.microsoft import router as microsoft_router
+    from app.routers.ecs_control import router as ecs_router
     from app.routers import auth, outlook, copilot
 
     app.include_router(companies_router,    prefix="/companies",    tags=["Companies"])
@@ -60,6 +59,7 @@ try:
     app.include_router(opportunities_router,prefix="/opportunities", tags=["Opportunities"])
     app.include_router(admin_router,        prefix="/admin",        tags=["Admin"])
     app.include_router(microsoft_router,    prefix="/microsoft",    tags=["Microsoft"])
+    app.include_router(ecs_router,          prefix="/ecs",          tags=["ECS Control"])
     app.include_router(auth.router,         prefix="/auth",         tags=["Auth"])
     app.include_router(outlook.router,      prefix="/outlook",      tags=["Outlook"])
     app.include_router(copilot.router,      prefix="/copilot",      tags=["Copilot"])
