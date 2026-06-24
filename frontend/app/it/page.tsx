@@ -1,0 +1,20 @@
+'use client'
+import { useRouter } from 'next/navigation'
+export default function ITPage() {
+  const router = useRouter()
+  return (
+    <div style={{ minHeight: '100vh', background: '#F5F7FA', display: 'flex', flexDirection: 'column', fontFamily: 'Montserrat, sans-serif' }}>
+      <div style={{ background: '#144766', padding: '0 40px', height: '64px', display: 'flex', alignItems: 'center', gap: '16px' }}>
+        <button onClick={() => router.push('/home')} style={{ border: 'none', background: 'rgba(255,255,255,0.1)', color: 'white', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', fontFamily: 'Montserrat, sans-serif' }}>← Back</button>
+        <span style={{ color: 'white', fontSize: '14px', fontWeight: '700' }}>WHUBBI — IT</span>
+      </div>
+      <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ textAlign: 'center' }}>
+          <div style={{ fontSize: '64px', marginBottom: '20px' }}>🖥️</div>
+          <h1 style={{ fontSize: '24px', fontWeight: '800', color: '#144766', marginBottom: '12px' }}>IT</h1>
+          <p style={{ fontSize: '14px', color: '#9B9B9B' }}>This module is coming soon.</p>
+        </div>
+      </div>
+    </div>
+  )
+}
