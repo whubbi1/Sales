@@ -6,6 +6,10 @@ import { adminAPI, microsoftAPI } from '@/lib/adminApi'
 const SERVICE_ICONS: Record<string, string> = {
   ecs: '🐳', rds: '🗄️', amplify: '⚡', alb: '⚖️', cognito: '🔐', ecr: '📦', cloudwatch: '📊',
 }
+const MS_ICONS: Record<string, string> = {
+  "Microsoft Teams": "👥", "Exchange Online": "📧", "SharePoint Online": "📁",
+  "Microsoft 365 suite": "🏢", "Azure Active Directory": "🔐", "OneDrive for Business": "☁️",
+}
 const STATUS_STYLE: Record<string, { bg: string; color: string; dot: string; label: string }> = {
   healthy:  { bg: '#ECFDF5', color: '#059669', dot: '#10B981', label: 'Healthy' },
   up:       { bg: '#ECFDF5', color: '#059669', dot: '#10B981', label: 'Up' },
@@ -18,61 +22,72 @@ const STATUS_STYLE: Record<string, { bg: string; color: string; dot: string; lab
   full:     { bg: '#FEF2F2', color: '#DC2626', dot: '#EF4444', label: 'Full' },
 }
 
-const MS_SERVICE_ICONS: Record<string, string> = {
-  "Microsoft Teams": "👥", "Exchange Online": "📧", "SharePoint Online": "📁",
-  "Microsoft 365 suite": "🏢", "Azure Active Directory": "🔐", "OneDrive for Business": "☁️",
+const StatusBadge = ({ status }: { status: string }) => {
+  const s = STATUS_STYLE[status] || STATUS_STYLE.unknown
+  return (
+    <span style={{ background: s.bg, color: s.color, padding: '3px 10px', borderRadius: '20px', fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
+      <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: s.dot, display: 'inline-block' }} />{s.label}
+    </span>
+  )
 }
+
+const KPI = ({ label, value, sub, color = '#156082' }: any) => (
+  <div style={{ textAlign: 'center' }}>
+    <div style={{ fontSize: '9px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#45B6E4', marginBottom: '4px' }}>{label}</div>
+    <div style={{ fontSize: '20px', fontWeight: '800', color }}>{value}</div>
+    {sub && <div style={{ fontSize: '10px', color: '#45B6E4', marginTop: '2px' }}>{sub}</div>}
+  </div>
+)
+
+const TABS = [
+  { id: 'aws-health',  label: 'AWS Health',        icon: '☁️' },
+  { id: 'ms-health',   label: 'Microsoft 365',      icon: '🏢' },
+  { id: 'aws-costs',   label: 'AWS Costs',          icon: '💰' },
+  { id: 'ms-costs',    label: 'Microsoft Costs',    icon: '💳' },
+  { id: 'urls',        label: 'URL Monitoring',     icon: '🌐' },
+  { id: 'logs',        label: 'Error Logs',         icon: '🔍' },
+]
 
 export default function AdminCockpitPage() {
   const router = useRouter()
-  const [tab, setTab] = useState<'health' | 'urls' | 'costs' | 'microsoft' | 'logs'>('health')
-  const [health, setHealth]     = useState<any>(null)
-  const [costs, setCosts]       = useState<any>(null)
-  const [logs, setLogs]         = useState<any>(null)
-  const [urls, setUrls]         = useState<any>(null)
-  const [msHealth, setMsHealth] = useState<any>(null)
-  const [msIncidents, setMsIncidents] = useState<any>(null)
-  const [msCosts, setMsCosts]   = useState<any>(null)
-  const [msLicenses, setMsLicenses] = useState<any>(null)
-  const [loading, setLoading]   = useState(true)
+  const [tab, setTab] = useState('aws-health')
+  const [data, setData] = useState<Record<string, any>>({})
+  const [loading, setLoading] = useState(true)
   const [checking, setChecking] = useState(false)
   const [lastRefresh, setLastRefresh] = useState(new Date())
-  const [newUrl, setNewUrl]     = useState({ name: '', url: '' })
+  const [newUrl, setNewUrl] = useState({ name: '', url: '' })
   const [showAddUrl, setShowAddUrl] = useState(false)
 
-  const loadData = useCallback(async () => {
+  const loadTab = useCallback(async (t: string) => {
+    if (data[t]) return // cached
     setLoading(true)
     try {
-      if (tab === 'health') setHealth(await adminAPI.getHealth())
-      else if (tab === 'costs') setCosts(await adminAPI.getCosts())
-      else if (tab === 'logs') setLogs(await adminAPI.getLogs())
-      else if (tab === 'urls') setUrls(await adminAPI.getURLs())
-      else if (tab === 'microsoft') {
-        const [h, i, c, l] = await Promise.all([
-          microsoftAPI.getHealth(),
-          microsoftAPI.getIncidents(),
-          microsoftAPI.getCosts(),
-          microsoftAPI.getLicenses(),
-        ])
-        setMsHealth(h); setMsIncidents(i); setMsCosts(c); setMsLicenses(l)
-      }
+      let result: any = null
+      if (t === 'aws-health')  result = await adminAPI.getHealth()
+      if (t === 'aws-costs')   result = await adminAPI.getCosts()
+      if (t === 'logs')        result = await adminAPI.getLogs()
+      if (t === 'urls')        result = await adminAPI.getURLs()
+      if (t === 'ms-health')   result = await Promise.all([microsoftAPI.getHealth(), microsoftAPI.getIncidents(), microsoftAPI.getLicenses()]).then(([h,i,l]) => ({health:h,incidents:i,licenses:l}))
+      if (t === 'ms-costs')    result = await microsoftAPI.getCosts()
+      if (result) setData(p => ({ ...p, [t]: result }))
     } catch (e) { console.error(e) }
     setLoading(false)
     setLastRefresh(new Date())
-  }, [tab])
+  }, [data])
 
-  useEffect(() => { loadData() }, [loadData])
+  const refresh = useCallback(async () => {
+    setData({})
+    setLoading(true)
+    await loadTab(tab)
+  }, [tab, loadTab])
 
-  useEffect(() => {
-    if (tab !== 'urls') return
-    const interval = setInterval(() => { adminAPI.runChecks().then(() => loadData()) }, 60 * 60 * 1000)
-    return () => clearInterval(interval)
-  }, [tab, loadData])
+  useEffect(() => { loadTab(tab) }, [tab])
 
-  const runChecksNow = async () => {
+  const runChecks = async () => {
     setChecking(true)
     await adminAPI.runChecks()
-    await loadData()
+    setData(p => ({ ...p, urls: undefined }))
+    await loadTab('urls')
     setChecking(false)
   }
 
@@ -81,25 +96,18 @@ export default function AdminCockpitPage() {
     await adminAPI.addURL(newUrl)
     setNewUrl({ name: '', url: '' })
     setShowAddUrl(false)
-    await loadData()
+    setData(p => ({ ...p, urls: undefined }))
+    await loadTab('urls')
   }
 
-  const tabs = [
-    { id: 'health',    label: 'AWS Health',       icon: '☁️' },
-    { id: 'urls',      label: 'URL Monitoring',   icon: '🌐' },
-    { id: 'costs',     label: 'AWS Costs',        icon: '💰' },
-    { id: 'microsoft', label: 'Microsoft 365',    icon: '🏢' },
-    { id: 'logs',      label: 'Error Logs',       icon: '🔍' },
-  ]
-
-  const StatusBadge = ({ status }: { status: string }) => {
-    const s = STATUS_STYLE[status] || STATUS_STYLE.unknown
-    return (
-      <span style={{ background: s.bg, color: s.color, padding: '3px 10px', borderRadius: '20px', fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
-        <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: s.dot, display: 'inline-block' }} />{s.label}
-      </span>
-    )
+  const deleteURL = async (id: string) => {
+    await adminAPI.deleteURL(id)
+    setData(p => ({ ...p, urls: undefined }))
+    await loadTab('urls')
   }
+
+  const d = data[tab]
+  const awsHealth = data['aws-health']
 
   return (
     <div style={{ minHeight: '100vh', background: '#F5F7FA', fontFamily: 'Montserrat, sans-serif' }}>
@@ -110,40 +118,29 @@ export default function AdminCockpitPage() {
           <span style={{ color: 'white', fontSize: '15px', fontWeight: '800' }}>🔧 Admin Cockpit</span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <span style={{ color: 'rgba(255,255,255,0.5)', fontSize: '11px' }}>Refreshed: {lastRefresh.toLocaleTimeString()}</span>
-          <button onClick={loadData} style={{ border: '1px solid rgba(255,255,255,0.3)', background: 'transparent', color: 'white', padding: '6px 14px', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', fontFamily: 'Montserrat, sans-serif', fontWeight: '600' }}>↻ Refresh</button>
+          <span style={{ color: 'rgba(255,255,255,0.5)', fontSize: '11px' }}>{lastRefresh.toLocaleTimeString()}</span>
+          <button onClick={refresh} style={{ border: '1px solid rgba(255,255,255,0.3)', background: 'transparent', color: 'white', padding: '6px 14px', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', fontFamily: 'Montserrat, sans-serif', fontWeight: '600' }}>↻ Refresh</button>
         </div>
       </div>
 
-      {/* Summary bar */}
-      {health && tab === 'health' && (
+      {/* Summary */}
+      {awsHealth && (
         <div style={{ background: 'white', borderBottom: '1px solid #EDF2F7', padding: '10px 32px', display: 'flex', gap: '24px', alignItems: 'center' }}>
           <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-            <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: health.summary?.healthy === health.summary?.total ? '#10B981' : '#F59E0B' }} />
+            <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: awsHealth.summary?.healthy === awsHealth.summary?.total ? '#10B981' : '#F59E0B' }} />
             <span style={{ fontSize: '13px', fontWeight: '700', color: '#156082' }}>
-              {health.summary?.healthy === health.summary?.total ? 'All AWS Systems Operational' : `${health.summary?.degraded} Service(s) Degraded`}
+              {awsHealth.summary?.healthy === awsHealth.summary?.total ? 'All AWS Systems Operational' : `${awsHealth.summary?.degraded} Service(s) Degraded`}
             </span>
           </div>
-          <span style={{ color: '#45B6E4', fontSize: '12px' }}>{health.summary?.healthy}/{health.summary?.total} services healthy</span>
-        </div>
-      )}
-      {msHealth && tab === 'microsoft' && (
-        <div style={{ background: 'white', borderBottom: '1px solid #EDF2F7', padding: '10px 32px', display: 'flex', gap: '24px', alignItems: 'center' }}>
-          <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-            <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: msHealth.summary?.healthy === msHealth.summary?.total ? '#10B981' : '#F59E0B' }} />
-            <span style={{ fontSize: '13px', fontWeight: '700', color: '#156082' }}>
-              Microsoft 365 — {msHealth.summary?.healthy === msHealth.summary?.total ? 'All Services Operational' : `${msHealth.summary?.degraded} Issue(s) Detected`}
-            </span>
-          </div>
-          {msIncidents?.total > 0 && <span style={{ background: '#FEF2F2', color: '#DC2626', padding: '3px 10px', borderRadius: '20px', fontSize: '11px', fontWeight: '700' }}>⚠️ {msIncidents.total} Active Incident(s)</span>}
+          <span style={{ color: '#45B6E4', fontSize: '12px' }}>{awsHealth.summary?.healthy}/{awsHealth.summary?.total} healthy</span>
         </div>
       )}
 
       <div style={{ padding: '24px 32px' }}>
         {/* Tabs */}
-        <div style={{ display: 'flex', gap: '4px', marginBottom: '24px', background: 'white', padding: '4px', borderRadius: '10px', border: '1px solid #EDF2F7', width: 'fit-content' }}>
-          {tabs.map(t => (
-            <button key={t.id} onClick={() => setTab(t.id as any)} style={{ padding: '8px 16px', borderRadius: '7px', border: 'none', background: tab === t.id ? '#156082' : 'transparent', color: tab === t.id ? 'white' : '#45B6E4', fontSize: '12px', fontWeight: '600', cursor: 'pointer', fontFamily: 'Montserrat, sans-serif', display: 'flex', alignItems: 'center', gap: '6px', transition: 'all 0.12s' }}>
+        <div style={{ display: 'flex', gap: '3px', marginBottom: '24px', background: 'white', padding: '4px', borderRadius: '10px', border: '1px solid #EDF2F7', width: 'fit-content', flexWrap: 'wrap' }}>
+          {TABS.map(t => (
+            <button key={t.id} onClick={() => setTab(t.id)} style={{ padding: '7px 14px', borderRadius: '7px', border: 'none', background: tab === t.id ? '#156082' : 'transparent', color: tab === t.id ? 'white' : '#45B6E4', fontSize: '12px', fontWeight: '600', cursor: 'pointer', fontFamily: 'Montserrat, sans-serif', display: 'flex', alignItems: 'center', gap: '5px', transition: 'all 0.12s' }}>
               {t.icon} {t.label}
             </button>
           ))}
@@ -152,18 +149,18 @@ export default function AdminCockpitPage() {
         {loading && <div style={{ textAlign: 'center', padding: '48px', color: '#45B6E4', fontSize: '13px' }}>Loading...</div>}
 
         {/* ── AWS Health ── */}
-        {!loading && tab === 'health' && health && (
+        {!loading && tab === 'aws-health' && d && (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px' }}>
-            {health.services?.map((svc: any) => (
+            {d.services?.map((svc: any) => (
               <div key={svc.name} style={{ background: 'white', borderRadius: '12px', border: '1px solid #EDF2F7', padding: '20px', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                     <span style={{ fontSize: '24px' }}>{SERVICE_ICONS[svc.type] || '⚙️'}</span>
-                    <span style={{ fontSize: '14px', fontWeight: '700', color: '#156082' }}>{svc.name}</span>
+                    <span style={{ fontSize: '13px', fontWeight: '700', color: '#156082' }}>{svc.name}</span>
                   </div>
                   <StatusBadge status={svc.status} />
                 </div>
-                <p style={{ fontSize: '12px', color: '#45B6E4', margin: 0, lineHeight: '1.5' }}>{svc.details}</p>
+                <p style={{ fontSize: '12px', color: '#45B6E4', margin: 0 }}>{svc.details}</p>
                 {svc.taskDef && <p style={{ fontSize: '11px', color: '#45B6E4', marginTop: '4px' }}>Task: {svc.taskDef}</p>}
                 {svc.engine && <p style={{ fontSize: '11px', color: '#45B6E4', marginTop: '4px' }}>{svc.engine}</p>}
               </div>
@@ -171,66 +168,75 @@ export default function AdminCockpitPage() {
           </div>
         )}
 
-        {/* ── URL Monitoring ── */}
-        {!loading && tab === 'urls' && urls && (
+        {/* ── Microsoft 365 ── */}
+        {!loading && tab === 'ms-health' && d && (
           <div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-              <div>
-                <h2 style={{ fontSize: '15px', fontWeight: '700', color: '#156082', margin: 0 }}>URL Monitoring</h2>
-                <p style={{ fontSize: '12px', color: '#45B6E4', margin: '4px 0 0' }}>Auto-checks every hour</p>
-              </div>
-              <div style={{ display: 'flex', gap: '10px' }}>
-                <button onClick={runChecksNow} disabled={checking} style={{ background: '#45B6E4', color: 'white', border: 'none', padding: '8px 16px', borderRadius: '7px', fontSize: '12px', fontWeight: '700', cursor: 'pointer', fontFamily: 'Montserrat, sans-serif' }}>
-                  {checking ? '⏳ Checking...' : '▶ Run Now'}
-                </button>
-                <button onClick={() => setShowAddUrl(!showAddUrl)} style={{ background: '#156082', color: 'white', border: 'none', padding: '8px 16px', borderRadius: '7px', fontSize: '12px', fontWeight: '700', cursor: 'pointer', fontFamily: 'Montserrat, sans-serif' }}>+ Add URL</button>
-              </div>
-            </div>
-            {showAddUrl && (
-              <div style={{ background: 'white', borderRadius: '12px', border: '1px solid #EDF2F7', padding: '20px', marginBottom: '20px' }}>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr auto', gap: '10px', alignItems: 'end' }}>
-                  <div><label className="form-label">Name</label><input className="form-input" value={newUrl.name} onChange={e => setNewUrl(p => ({...p, name: e.target.value}))} placeholder="My Website" /></div>
-                  <div><label className="form-label">URL</label><input className="form-input" value={newUrl.url} onChange={e => setNewUrl(p => ({...p, url: e.target.value}))} placeholder="https://example.com" /></div>
-                  <button onClick={addURL} style={{ background: '#156082', color: 'white', border: 'none', padding: '8px 16px', borderRadius: '7px', fontSize: '12px', fontWeight: '700', cursor: 'pointer', fontFamily: 'Montserrat, sans-serif', height: '36px' }}>Add</button>
-                </div>
-              </div>
-            )}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px' }}>
-              {(urls.urls || []).map((u: any, i: number) => {
-                const s = STATUS_STYLE[u.status] || STATUS_STYLE.unknown
-                return (
-                  <div key={u.id || i} style={{ background: 'white', borderRadius: '12px', border: '1px solid #EDF2F7', padding: '20px', boxShadow: '0 1px 3px rgba(0,0,0,0.06)', position: 'relative' }}>
-                    <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '3px', background: s.dot, borderRadius: '12px 12px 0 0' }} />
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' }}>
-                      <span style={{ fontSize: '22px' }}>🌐</span>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <StatusBadge status={u.status} />
-                        {u.id && u.id !== 'default' && <button onClick={() => adminAPI.deleteURL(u.id).then(loadData)} style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#45B6E4', fontSize: '16px', padding: 0 }}>×</button>}
+            {d.health?.error ? (
+              <div style={{ background: '#FEF2F2', border: '1px solid #FECACA', color: '#DC2626', padding: '16px', borderRadius: '10px', fontSize: '13px' }}>⚠️ {d.health.error}</div>
+            ) : (
+              <>
+                <h2 style={{ fontSize: '13px', fontWeight: '700', color: '#156082', marginBottom: '16px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Service Health</h2>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '14px', marginBottom: '24px' }}>
+                  {d.health?.services?.map((svc: any) => (
+                    <div key={svc.name} style={{ background: 'white', borderRadius: '12px', border: '1px solid #EDF2F7', padding: '18px', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <span style={{ fontSize: '20px' }}>{MS_ICONS[svc.name] || '📦'}</span>
+                          <span style={{ fontSize: '13px', fontWeight: '700', color: '#156082' }}>{svc.name}</span>
+                        </div>
+                        <StatusBadge status={svc.status} />
                       </div>
+                      <p style={{ fontSize: '11px', color: '#45B6E4', margin: 0 }}>{svc.ms_status?.replace(/([A-Z])/g, ' $1').trim()}</p>
                     </div>
-                    <h3 style={{ fontSize: '14px', fontWeight: '700', color: '#156082', margin: '0 0 4px' }}>{u.name}</h3>
-                    <p style={{ fontSize: '11px', color: '#45B6E4', margin: '0 0 12px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{u.url}</p>
-                    <div style={{ display: 'flex', gap: '16px' }}>
-                      {u.status_code && <div><div style={{ fontSize: '9px', fontWeight: '700', textTransform: 'uppercase', color: '#45B6E4', marginBottom: '2px' }}>HTTP</div><div style={{ fontSize: '14px', fontWeight: '700', color: '#3F3F3F' }}>{u.status_code}</div></div>}
-                      {u.response_time && <div><div style={{ fontSize: '9px', fontWeight: '700', textTransform: 'uppercase', color: '#45B6E4', marginBottom: '2px' }}>Response</div><div style={{ fontSize: '14px', fontWeight: '700', color: u.response_time > 3000 ? '#D97706' : '#059669' }}>{u.response_time}ms</div></div>}
+                  ))}
+                </div>
+                {d.incidents?.total > 0 && (
+                  <>
+                    <h2 style={{ fontSize: '13px', fontWeight: '700', color: '#DC2626', marginBottom: '16px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>⚠️ Active Incidents ({d.incidents.total})</h2>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '24px' }}>
+                      {d.incidents?.incidents?.map((inc: any) => (
+                        <div key={inc.id} style={{ background: 'white', borderRadius: '10px', border: '1px solid #FECACA', padding: '16px' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
+                            <div><span style={{ fontSize: '13px', fontWeight: '700', color: '#DC2626' }}>{inc.title}</span><span style={{ fontSize: '11px', color: '#45B6E4', marginLeft: '8px' }}>{inc.service}</span></div>
+                            <span style={{ fontSize: '10px', color: '#45B6E4' }}>{new Date(inc.start).toLocaleString()}</span>
+                          </div>
+                          {inc.impact_description && <p style={{ fontSize: '12px', color: '#3F3F3F', margin: 0 }}>{inc.impact_description}</p>}
+                        </div>
+                      ))}
                     </div>
-                    {u.last_checked && <p style={{ fontSize: '10px', color: '#45B6E4', marginTop: '10px' }}>Checked: {new Date(u.last_checked).toLocaleString()}</p>}
-                    {u.error && <p style={{ fontSize: '11px', color: '#DC2626', marginTop: '8px', background: '#FEF2F2', padding: '6px 8px', borderRadius: '6px' }}>{u.error}</p>}
+                  </>
+                )}
+                <h2 style={{ fontSize: '13px', fontWeight: '700', color: '#156082', marginBottom: '16px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Microsoft 365 Licenses</h2>
+                {d.licenses?.error ? <p style={{ color: '#45B6E4', fontSize: '13px' }}>License data unavailable.</p> : (
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '14px' }}>
+                    {d.licenses?.licenses?.map((lic: any) => (
+                      <div key={lic.name} style={{ background: 'white', borderRadius: '12px', border: '1px solid #EDF2F7', padding: '16px' }}>
+                        <div style={{ fontSize: '11px', fontWeight: '700', color: '#45B6E4', marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{lic.name}</div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
+                          <span style={{ fontSize: '13px', fontWeight: '600', color: '#3F3F3F' }}>{lic.consumed}/{lic.total}</span>
+                          <StatusBadge status={lic.status} />
+                        </div>
+                        <div style={{ height: '6px', background: '#F1F5F9', borderRadius: '3px', overflow: 'hidden' }}>
+                          <div style={{ height: '100%', width: `${lic.total > 0 ? (lic.consumed/lic.total)*100 : 0}%`, background: lic.status === 'full' ? '#DC2626' : '#156082', borderRadius: '3px' }} />
+                        </div>
+                        <p style={{ fontSize: '11px', color: '#45B6E4', marginTop: '4px' }}>{lic.available} available</p>
+                      </div>
+                    ))}
                   </div>
-                )
-              })}
-            </div>
+                )}
+              </>
+            )}
           </div>
         )}
 
         {/* ── AWS Costs ── */}
-        {!loading && tab === 'costs' && costs && (
+        {!loading && tab === 'aws-costs' && d && (
           <div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px', marginBottom: '24px' }}>
               {[
-                { label: 'Current Month', value: `$${costs.current_month?.toFixed(2)||'0.00'}`, color: '#156082', sub: `${costs.period?.start} → today` },
-                { label: 'Estimated Month', value: `$${costs.estimated_month?.toFixed(2)||'0.00'}`, color: '#e97132', sub: 'Projected total' },
-                { label: 'Daily Average', value: `$${costs.daily?.length > 0 ? (costs.current_month / costs.daily.length).toFixed(2) : '0.00'}`, color: '#45B6E4', sub: 'Last 30 days' },
+                { label: 'Current Month', value: `$${d.current_month?.toFixed(2)||'0.00'}`, color: '#156082', sub: `${d.period?.start} → today` },
+                { label: 'Estimated Month', value: `$${d.estimated_month?.toFixed(2)||'0.00'}`, color: '#e97132', sub: 'Projected total' },
+                { label: 'Daily Average', value: `$${d.daily?.length > 0 ? (d.current_month / d.daily.length).toFixed(2) : '0.00'}`, color: '#45B6E4', sub: 'Last 30 days' },
               ].map(stat => (
                 <div key={stat.label} style={{ background: 'white', borderRadius: '12px', border: '1px solid #EDF2F7', padding: '20px', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
                   <div style={{ fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#45B6E4', marginBottom: '8px' }}>{stat.label}</div>
@@ -241,10 +247,10 @@ export default function AdminCockpitPage() {
             </div>
             <div style={{ background: 'white', borderRadius: '12px', border: '1px solid #EDF2F7', padding: '20px' }}>
               <h3 style={{ fontSize: '13px', fontWeight: '700', color: '#156082', marginBottom: '16px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>AWS Cost by Service</h3>
-              {costs.by_service?.length === 0 ? <p style={{ color: '#45B6E4' }}>No data.{costs.error && ` ${costs.error}`}</p> : (
+              {d.by_service?.length === 0 ? <p style={{ color: '#45B6E4' }}>No data.{d.error && ` ${d.error}`}</p> : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                  {costs.by_service?.map((item: any) => {
-                    const pct = costs.current_month > 0 ? (item.cost / costs.current_month) * 100 : 0
+                  {d.by_service?.map((item: any) => {
+                    const pct = d.current_month > 0 ? (item.cost / d.current_month) * 100 : 0
                     return (
                       <div key={item.service}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
@@ -264,126 +270,132 @@ export default function AdminCockpitPage() {
           </div>
         )}
 
-        {/* ── Microsoft 365 ── */}
-        {!loading && tab === 'microsoft' && (
+        {/* ── Microsoft Costs ── */}
+        {!loading && tab === 'ms-costs' && d && (
           <div>
-            {/* Service Health */}
-            {msHealth && (
-              <div style={{ marginBottom: '24px' }}>
-                <h2 style={{ fontSize: '14px', fontWeight: '700', color: '#156082', marginBottom: '16px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Microsoft 365 Service Health</h2>
-                {msHealth.error ? (
-                  <div style={{ background: '#FEF2F2', border: '1px solid #FECACA', color: '#DC2626', padding: '14px', borderRadius: '10px', fontSize: '13px' }}>
-                    ⚠️ {msHealth.error}
-                  </div>
-                ) : (
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '14px' }}>
-                    {msHealth.services?.map((svc: any) => (
-                      <div key={svc.name} style={{ background: 'white', borderRadius: '12px', border: '1px solid #EDF2F7', padding: '18px', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <span style={{ fontSize: '20px' }}>{MS_SERVICE_ICONS[svc.name] || '📦'}</span>
-                            <span style={{ fontSize: '13px', fontWeight: '700', color: '#156082' }}>{svc.name}</span>
-                          </div>
-                          <StatusBadge status={svc.status} />
-                        </div>
-                        <p style={{ fontSize: '11px', color: '#45B6E4', margin: 0 }}>{svc.ms_status?.replace(/([A-Z])/g, ' $1').trim()}</p>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Active Incidents */}
-            {msIncidents && msIncidents.total > 0 && (
-              <div style={{ marginBottom: '24px' }}>
-                <h2 style={{ fontSize: '14px', fontWeight: '700', color: '#DC2626', marginBottom: '16px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>⚠️ Active Incidents ({msIncidents.total})</h2>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                  {msIncidents.incidents?.map((inc: any) => (
-                    <div key={inc.id} style={{ background: 'white', borderRadius: '10px', border: '1px solid #FECACA', padding: '16px' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
-                        <div>
-                          <span style={{ fontSize: '13px', fontWeight: '700', color: '#DC2626' }}>{inc.title}</span>
-                          <span style={{ fontSize: '11px', color: '#45B6E4', marginLeft: '8px' }}>{inc.service}</span>
-                        </div>
-                        <span style={{ fontSize: '10px', color: '#45B6E4' }}>{new Date(inc.start).toLocaleString()}</span>
-                      </div>
-                      {inc.impact_description && <p style={{ fontSize: '12px', color: '#3F3F3F', margin: 0 }}>{inc.impact_description}</p>}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Licenses */}
-            {msLicenses && (
-              <div style={{ marginBottom: '24px' }}>
-                <h2 style={{ fontSize: '14px', fontWeight: '700', color: '#156082', marginBottom: '16px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Microsoft 365 Licenses</h2>
-                {msLicenses.error ? (
-                  <p style={{ color: '#45B6E4', fontSize: '13px' }}>License data unavailable: {msLicenses.error}</p>
-                ) : (
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '14px' }}>
-                    {msLicenses.licenses?.map((lic: any) => (
-                      <div key={lic.name} style={{ background: 'white', borderRadius: '12px', border: '1px solid #EDF2F7', padding: '16px' }}>
-                        <div style={{ fontSize: '11px', fontWeight: '700', color: '#45B6E4', marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{lic.name}</div>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
-                          <span style={{ fontSize: '13px', fontWeight: '600', color: '#3F3F3F' }}>{lic.consumed} / {lic.total} used</span>
-                          <StatusBadge status={lic.status} />
-                        </div>
-                        <div style={{ height: '6px', background: '#F1F5F9', borderRadius: '3px', overflow: 'hidden' }}>
-                          <div style={{ height: '100%', width: `${lic.total > 0 ? (lic.consumed/lic.total)*100 : 0}%`, background: lic.status === 'full' ? '#DC2626' : '#156082', borderRadius: '3px' }} />
-                        </div>
-                        <p style={{ fontSize: '11px', color: '#45B6E4', marginTop: '4px' }}>{lic.available} available</p>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Azure Costs */}
-            {msCosts && (
-              <div>
-                <h2 style={{ fontSize: '14px', fontWeight: '700', color: '#156082', marginBottom: '16px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Azure Costs</h2>
-                {msCosts.error ? (
-                  <div style={{ background: '#F5F7FA', border: '1px solid #EDF2F7', padding: '14px', borderRadius: '10px', fontSize: '13px', color: '#45B6E4' }}>
-                    ℹ️ {msCosts.error}
-                  </div>
-                ) : (
+            {d.error ? (
+              <div style={{ background: '#F5F7FA', border: '1px solid #EDF2F7', padding: '16px', borderRadius: '10px', fontSize: '13px', color: '#45B6E4' }}>ℹ️ {d.error}</div>
+            ) : (
+              <>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '16px', marginBottom: '24px' }}>
                   <div style={{ background: 'white', borderRadius: '12px', border: '1px solid #EDF2F7', padding: '20px' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-                      <span style={{ fontSize: '13px', color: '#45B6E4' }}>Subscription: {msCosts.subscription}</span>
-                      <span style={{ fontSize: '20px', fontWeight: '800', color: '#156082' }}>Total: ${msCosts.total?.toFixed(2)}</span>
-                    </div>
-                    {msCosts.costs?.map((item: any) => {
-                      const pct = msCosts.total > 0 ? (item.cost / msCosts.total) * 100 : 0
-                      return (
-                        <div key={item.service} style={{ marginBottom: '10px' }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-                            <span style={{ fontSize: '13px', fontWeight: '600', color: '#3F3F3F' }}>{item.service}</span>
-                            <span style={{ fontSize: '13px', fontWeight: '700', color: '#156082' }}>${item.cost.toFixed(2)}</span>
-                          </div>
-                          <div style={{ height: '6px', background: '#F1F5F9', borderRadius: '3px', overflow: 'hidden' }}>
-                            <div style={{ height: '100%', width: `${pct}%`, background: '#e97132', borderRadius: '3px' }} />
-                          </div>
-                        </div>
-                      )
-                    })}
+                    <div style={{ fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', color: '#45B6E4', marginBottom: '8px' }}>Total This Month</div>
+                    <div style={{ fontSize: '28px', fontWeight: '800', color: '#156082' }}>${d.total?.toFixed(2)}</div>
+                    <div style={{ fontSize: '11px', color: '#45B6E4', marginTop: '4px' }}>Subscription: {d.subscription}</div>
                   </div>
-                )}
-              </div>
+                  <div style={{ background: 'white', borderRadius: '12px', border: '1px solid #EDF2F7', padding: '20px' }}>
+                    <div style={{ fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', color: '#45B6E4', marginBottom: '8px' }}>Period</div>
+                    <div style={{ fontSize: '14px', fontWeight: '700', color: '#156082' }}>{d.period?.start} → {d.period?.end}</div>
+                  </div>
+                </div>
+                <div style={{ background: 'white', borderRadius: '12px', border: '1px solid #EDF2F7', padding: '20px' }}>
+                  <h3 style={{ fontSize: '13px', fontWeight: '700', color: '#156082', marginBottom: '16px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Azure Cost by Service</h3>
+                  {d.costs?.length === 0 ? <p style={{ color: '#45B6E4' }}>No cost data available.</p> : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                      {d.costs?.map((item: any) => {
+                        const pct = d.total > 0 ? (item.cost / d.total) * 100 : 0
+                        return (
+                          <div key={item.service}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                              <span style={{ fontSize: '13px', fontWeight: '600', color: '#3F3F3F' }}>{item.service}</span>
+                              <span style={{ fontSize: '13px', fontWeight: '700', color: '#156082' }}>${item.cost.toFixed(2)}</span>
+                            </div>
+                            <div style={{ height: '6px', background: '#F1F5F9', borderRadius: '3px', overflow: 'hidden' }}>
+                              <div style={{ height: '100%', width: `${pct}%`, background: '#e97132', borderRadius: '3px' }} />
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
+              </>
             )}
           </div>
         )}
 
+        {/* ── URL Monitoring ── */}
+        {!loading && tab === 'urls' && d && (
+          <div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+              <div>
+                <h2 style={{ fontSize: '15px', fontWeight: '700', color: '#156082', margin: 0 }}>URL Monitoring</h2>
+                <p style={{ fontSize: '12px', color: '#45B6E4', margin: '4px 0 0' }}>Auto-checks every hour · Click a URL to open in new tab</p>
+              </div>
+              <div style={{ display: 'flex', gap: '10px' }}>
+                <button onClick={runChecks} disabled={checking} style={{ background: '#45B6E4', color: 'white', border: 'none', padding: '8px 16px', borderRadius: '7px', fontSize: '12px', fontWeight: '700', cursor: 'pointer', fontFamily: 'Montserrat, sans-serif' }}>
+                  {checking ? '⏳ Checking...' : '▶ Run Now'}
+                </button>
+                <button onClick={() => setShowAddUrl(!showAddUrl)} style={{ background: '#156082', color: 'white', border: 'none', padding: '8px 16px', borderRadius: '7px', fontSize: '12px', fontWeight: '700', cursor: 'pointer', fontFamily: 'Montserrat, sans-serif' }}>+ Add URL</button>
+              </div>
+            </div>
+
+            {showAddUrl && (
+              <div style={{ background: 'white', borderRadius: '12px', border: '1px solid #EDF2F7', padding: '20px', marginBottom: '20px' }}>
+                <h3 style={{ fontSize: '13px', fontWeight: '700', color: '#156082', marginBottom: '14px' }}>Add URL to Monitor</h3>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr auto', gap: '10px', alignItems: 'end' }}>
+                  <div><label className="form-label">Name</label><input className="form-input" value={newUrl.name} onChange={e => setNewUrl(p => ({...p, name: e.target.value}))} placeholder="My Website" /></div>
+                  <div><label className="form-label">URL</label><input className="form-input" value={newUrl.url} onChange={e => setNewUrl(p => ({...p, url: e.target.value}))} placeholder="https://example.com" /></div>
+                  <button onClick={addURL} style={{ background: '#156082', color: 'white', border: 'none', padding: '8px 16px', borderRadius: '7px', fontSize: '12px', fontWeight: '700', cursor: 'pointer', fontFamily: 'Montserrat, sans-serif', height: '36px' }}>Add</button>
+                </div>
+              </div>
+            )}
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '16px' }}>
+              {(d.urls || []).map((u: any, i: number) => {
+                const s = STATUS_STYLE[u.status] || STATUS_STYLE.unknown
+                const avail = u.availability ?? 100
+                const availColor = avail >= 99 ? '#059669' : avail >= 95 ? '#D97706' : '#DC2626'
+                return (
+                  <div key={u.id || i} style={{ background: 'white', borderRadius: '12px', border: '1px solid #EDF2F7', padding: '20px', boxShadow: '0 1px 3px rgba(0,0,0,0.06)', position: 'relative' }}>
+                    <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '3px', background: s.dot, borderRadius: '12px 12px 0 0' }} />
+
+                    {/* Header */}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '14px' }}>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <h3 style={{ fontSize: '14px', fontWeight: '700', color: '#156082', margin: '0 0 4px' }}>{u.name}</h3>
+                        <a href={u.url} target="_blank" rel="noopener noreferrer" style={{ fontSize: '11px', color: '#45B6E4', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '4px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                          onClick={e => e.stopPropagation()}>
+                          🔗 {u.url}
+                          <svg width="10" height="10" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                        </a>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0, marginLeft: '12px' }}>
+                        <StatusBadge status={u.status} />
+                        {u.id && u.id !== 'default' && !u.id.startsWith('default-') && (
+                          <button onClick={() => deleteURL(u.id)} title="Delete" style={{ border: 'none', background: '#FEF2F2', cursor: 'pointer', color: '#DC2626', fontSize: '12px', padding: '4px 8px', borderRadius: '6px', fontWeight: '700' }}>✕</button>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* KPIs */}
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px', padding: '14px', background: '#F8FAFC', borderRadius: '8px', marginBottom: '12px' }}>
+                      <KPI label="Availability" value={`${avail}%`} color={availColor} sub="Last 24h" />
+                      <KPI label="Avg Response" value={u.avg_response_time ? `${u.avg_response_time}ms` : '—'} color={u.avg_response_time > 2000 ? '#D97706' : '#059669'} sub="Last 24h" />
+                      <KPI label="HTTP Code" value={u.status_code || '—'} color={u.status_code < 400 ? '#059669' : '#DC2626'} sub="Latest" />
+                    </div>
+
+                    {/* Meta */}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: '#45B6E4' }}>
+                      <span>Last check: {u.last_checked ? new Date(u.last_checked).toLocaleString() : 'Never'}</span>
+                      <span>{u.checks_count || 0} checks</span>
+                    </div>
+                    {u.error && <p style={{ fontSize: '11px', color: '#DC2626', marginTop: '8px', background: '#FEF2F2', padding: '6px 8px', borderRadius: '6px', margin: '8px 0 0' }}>{u.error}</p>}
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
+
         {/* ── Error Logs ── */}
-        {!loading && tab === 'logs' && logs && (
+        {!loading && tab === 'logs' && d && (
           <div style={{ background: 'white', borderRadius: '12px', border: '1px solid #EDF2F7', overflow: 'hidden' }}>
             <div style={{ padding: '16px 20px', borderBottom: '1px solid #EDF2F7', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <span style={{ fontSize: '13px', fontWeight: '700', color: '#156082' }}>Error Logs</span>
-              <span style={{ fontSize: '12px', color: '#45B6E4' }}>{logs.total} entries</span>
+              <span style={{ fontSize: '12px', color: '#45B6E4' }}>{d.total} entries</span>
             </div>
-            {logs.logs?.length === 0 ? (
+            {d.logs?.length === 0 ? (
               <div style={{ padding: '48px', textAlign: 'center', color: '#45B6E4' }}>No errors. 🎉</div>
             ) : (
               <div style={{ overflow: 'auto', maxHeight: '600px' }}>
@@ -394,7 +406,7 @@ export default function AdminCockpitPage() {
                     ))}</tr>
                   </thead>
                   <tbody>
-                    {logs.logs?.map((log: any, i: number) => (
+                    {d.logs?.map((log: any, i: number) => (
                       <tr key={i} style={{ borderBottom: '1px solid #F1F5F9' }}>
                         <td style={{ padding: '10px 16px', color: '#45B6E4', whiteSpace: 'nowrap' }}>{new Date(log.timestamp).toLocaleString()}</td>
                         <td style={{ padding: '10px 16px' }}><span style={{ background: log.level === 'ERROR' ? '#FEF2F2' : '#FFF7ED', color: log.level === 'ERROR' ? '#DC2626' : '#D97706', padding: '2px 8px', borderRadius: '10px', fontSize: '10px', fontWeight: '700' }}>{log.level}</span></td>
