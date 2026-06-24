@@ -11,7 +11,7 @@ export default function CallbackPage() {
   return (
     <div style={{ minHeight: '100vh', background: '#F5F7FA', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Montserrat, sans-serif' }}>
       <div style={{ textAlign: 'center' }}>
-        <p style={{ color: '#9B9B9B', fontSize: '13px' }}>Signing in to WHUBBI...</p>
+        <p style={{ color: '#848EA5', fontSize: '13px', fontWeight: '500' }}>Signing in to WHUBBI...</p>
       </div>
     </div>
   )
