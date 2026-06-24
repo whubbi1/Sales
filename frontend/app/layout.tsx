@@ -15,8 +15,8 @@ const geistMono = Geist_Mono({
 })
 
 export const metadata: Metadata = {
-  title: 'Whubbi — Gestion Commerciale',
-  description: 'Application de gestion commerciale connectée à Microsoft Outlook',
+  title: 'WHUBBI — Business Platform',
+  description: 'Your all-in-one business management platform',
 }
 
 export default function RootLayout({
