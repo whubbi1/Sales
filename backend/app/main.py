@@ -17,7 +17,6 @@ async def startup():
             await conn.run_sync(Base.metadata.create_all)
         print("Database tables created successfully!")
 
-        # Seed default URLs if empty
         from sqlalchemy.ext.asyncio import AsyncSession
         from sqlalchemy.orm import sessionmaker
         from sqlalchemy import text
@@ -53,12 +52,14 @@ try:
     from app.routers.contacts import router as contacts_router
     from app.routers.opportunities import router as opportunities_router
     from app.routers.admin import router as admin_router
+    from app.routers.microsoft import router as microsoft_router
     from app.routers import auth, outlook, copilot
 
     app.include_router(companies_router,    prefix="/companies",    tags=["Companies"])
     app.include_router(contacts_router,     prefix="/contacts",     tags=["Contacts"])
     app.include_router(opportunities_router,prefix="/opportunities", tags=["Opportunities"])
     app.include_router(admin_router,        prefix="/admin",        tags=["Admin"])
+    app.include_router(microsoft_router,    prefix="/microsoft",    tags=["Microsoft"])
     app.include_router(auth.router,         prefix="/auth",         tags=["Auth"])
     app.include_router(outlook.router,      prefix="/outlook",      tags=["Outlook"])
     app.include_router(copilot.router,      prefix="/copilot",      tags=["Copilot"])
