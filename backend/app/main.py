@@ -14,15 +14,43 @@ async def startup():
         from app.models import company, contact, opportunity, error_log, url_monitor, user_profile, helpdesk
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
+
         from sqlalchemy.ext.asyncio import AsyncSession
         from sqlalchemy.orm import sessionmaker
         from sqlalchemy import text
         S = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
         async with S() as session:
-            # Migrations
-            await session.execute(text("ALTER TABLE tickets ADD COLUMN IF NOT EXISTS teams_chat_id TEXT"))
-            await session.execute(text("""
-                CREATE TABLE IF NOT EXISTS teams_subscriptions (
+            # ── Migrations ────────────────────────────────────────────────
+            migrations = [
+                # Helpdesk groups table
+                """CREATE TABLE IF NOT EXISTS helpdesk_groups (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    name VARCHAR(100) NOT NULL,
+                    description TEXT,
+                    responsible_email VARCHAR(255),
+                    responsible_name VARCHAR(255),
+                    active BOOLEAN DEFAULT true,
+                    created_at TIMESTAMP DEFAULT NOW()
+                )""",
+                # Helpdesk group members
+                """CREATE TABLE IF NOT EXISTS helpdesk_group_members (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    group_id UUID REFERENCES helpdesk_groups(id),
+                    user_email VARCHAR(255) NOT NULL,
+                    user_name VARCHAR(255),
+                    is_responsible BOOLEAN DEFAULT false,
+                    created_at TIMESTAMP DEFAULT NOW()
+                )""",
+                # Helpdesk users
+                """CREATE TABLE IF NOT EXISTS helpdesk_users (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    user_email VARCHAR(255) UNIQUE NOT NULL,
+                    user_name VARCHAR(255),
+                    role VARCHAR(20) DEFAULT 'end_user',
+                    created_at TIMESTAMP DEFAULT NOW()
+                )""",
+                # Teams subscriptions
+                """CREATE TABLE IF NOT EXISTS teams_subscriptions (
                     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                     ticket_id UUID REFERENCES tickets(id) ON DELETE CASCADE,
                     chat_id TEXT NOT NULL,
@@ -30,16 +58,38 @@ async def startup():
                     expires_at TIMESTAMP,
                     created_at TIMESTAMP DEFAULT NOW(),
                     CONSTRAINT uq_teams_chat UNIQUE (chat_id)
-                )
-            """))
+                )""",
+                # Add columns to ticket_categories
+                "ALTER TABLE ticket_categories ADD COLUMN IF NOT EXISTS parent_id UUID REFERENCES ticket_categories(id)",
+                "ALTER TABLE ticket_categories ADD COLUMN IF NOT EXISTS group_id UUID",
+                # Add columns to tickets
+                "ALTER TABLE tickets ADD COLUMN IF NOT EXISTS subcategory_id UUID",
+                "ALTER TABLE tickets ADD COLUMN IF NOT EXISTS group_id UUID",
+                "ALTER TABLE tickets ADD COLUMN IF NOT EXISTS teams_chat_id TEXT",
+            ]
+
+            for sql in migrations:
+                try:
+                    await session.execute(text(sql))
+                    await session.commit()
+                    print(f"Migration OK: {sql[:60]}...")
+                except Exception as e:
+                    await session.rollback()
+                    print(f"Migration skip (already exists?): {e}")
+
+            # Permissions index
             try:
                 await session.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS idx_whubbi_perm ON whubbi_permissions(user_email,module,submodule)"))
+                await session.commit()
             except Exception: pass
+
+            # Seed monitored URLs
             r = await session.execute(text("SELECT COUNT(*) FROM monitored_urls"))
             if r.scalar() == 0:
                 for item in [("WHUBBI Frontend","https://dev.whubbi.wcomply.com"),("WCOMPLY Website","https://wcomply.com"),("SharePoint","https://wcomply.sharepoint.com")]:
                     await session.execute(text("INSERT INTO monitored_urls (id,name,url,active,created_at) VALUES (gen_random_uuid(),:name,:url,true,NOW())"),{"name":item[0],"url":item[1]})
-            await session.commit()
+                await session.commit()
+
         print("Database ready!")
     except Exception as e:
         print(f"ERROR: {e}"); import traceback; traceback.print_exc()
