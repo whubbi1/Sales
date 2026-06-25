@@ -20,9 +20,9 @@ async def startup():
         from sqlalchemy import text
         S = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
         async with S() as session:
-            # ── Migrations ────────────────────────────────────────────────
-            migrations = [
-                # Helpdesk groups table
+
+            # Run each migration separately with individual try/except
+            sqls = [
                 """CREATE TABLE IF NOT EXISTS helpdesk_groups (
                     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                     name VARCHAR(100) NOT NULL,
@@ -32,16 +32,14 @@ async def startup():
                     active BOOLEAN DEFAULT true,
                     created_at TIMESTAMP DEFAULT NOW()
                 )""",
-                # Helpdesk group members
                 """CREATE TABLE IF NOT EXISTS helpdesk_group_members (
                     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-                    group_id UUID REFERENCES helpdesk_groups(id),
+                    group_id UUID,
                     user_email VARCHAR(255) NOT NULL,
                     user_name VARCHAR(255),
                     is_responsible BOOLEAN DEFAULT false,
                     created_at TIMESTAMP DEFAULT NOW()
                 )""",
-                # Helpdesk users
                 """CREATE TABLE IF NOT EXISTS helpdesk_users (
                     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                     user_email VARCHAR(255) UNIQUE NOT NULL,
@@ -49,41 +47,35 @@ async def startup():
                     role VARCHAR(20) DEFAULT 'end_user',
                     created_at TIMESTAMP DEFAULT NOW()
                 )""",
-                # Teams subscriptions
                 """CREATE TABLE IF NOT EXISTS teams_subscriptions (
                     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-                    ticket_id UUID REFERENCES tickets(id) ON DELETE CASCADE,
+                    ticket_id UUID,
                     chat_id TEXT NOT NULL,
                     subscription_id TEXT,
                     expires_at TIMESTAMP,
-                    created_at TIMESTAMP DEFAULT NOW(),
-                    CONSTRAINT uq_teams_chat UNIQUE (chat_id)
+                    created_at TIMESTAMP DEFAULT NOW()
                 )""",
-                # Add columns to ticket_categories
-                "ALTER TABLE ticket_categories ADD COLUMN IF NOT EXISTS parent_id UUID REFERENCES ticket_categories(id)",
+                "ALTER TABLE ticket_categories ADD COLUMN IF NOT EXISTS parent_id UUID",
                 "ALTER TABLE ticket_categories ADD COLUMN IF NOT EXISTS group_id UUID",
-                # Add columns to tickets
                 "ALTER TABLE tickets ADD COLUMN IF NOT EXISTS subcategory_id UUID",
                 "ALTER TABLE tickets ADD COLUMN IF NOT EXISTS group_id UUID",
                 "ALTER TABLE tickets ADD COLUMN IF NOT EXISTS teams_chat_id TEXT",
             ]
 
-            for sql in migrations:
+            for sql in sqls:
                 try:
                     await session.execute(text(sql))
                     await session.commit()
-                    print(f"Migration OK: {sql[:60]}...")
+                    print(f"OK: {sql[:50]}")
                 except Exception as e:
                     await session.rollback()
-                    print(f"Migration skip (already exists?): {e}")
+                    print(f"Skip: {str(e)[:80]}")
 
-            # Permissions index
             try:
                 await session.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS idx_whubbi_perm ON whubbi_permissions(user_email,module,submodule)"))
                 await session.commit()
             except Exception: pass
 
-            # Seed monitored URLs
             r = await session.execute(text("SELECT COUNT(*) FROM monitored_urls"))
             if r.scalar() == 0:
                 for item in [("WHUBBI Frontend","https://dev.whubbi.wcomply.com"),("WCOMPLY Website","https://wcomply.com"),("SharePoint","https://wcomply.sharepoint.com")]:
@@ -92,7 +84,8 @@ async def startup():
 
         print("Database ready!")
     except Exception as e:
-        print(f"ERROR: {e}"); import traceback; traceback.print_exc()
+        print(f"STARTUP ERROR: {e}")
+        import traceback; traceback.print_exc()
 
 @app.get("/health")
 async def health(): return {"status":"healthy","app":"whubbi","version":"2.0.0"}

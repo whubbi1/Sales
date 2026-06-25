@@ -171,7 +171,7 @@ async def create_ticket(data:dict,db:AsyncSession=Depends(get_db)):
             priority,status,requester_email,requester_name,requester_type,
             assignee_email,assignee_name,sla_deadline,created_at,updated_at)
         VALUES (CAST(:id AS uuid),:tn,:title,:desc,
-            CAST(NULLIF(:cat_id,'') AS uuid),CAST(NULLIF(:sub_id,'') AS uuid),CAST(NULLIF(:group_id,'') AS uuid),
+            NULLIF(:cat_id,'')::uuid,NULLIF(:sub_id,'')::uuid,CAST(NULLIF(:group_id,'') AS uuid),
             :prio,'new',:req_email,:req_name,:req_type,
             NULLIF(:ass_email,''),NULLIF(:ass_name,''),
             :sla,NOW(),NOW())
@@ -269,7 +269,7 @@ async def get_categories(db:AsyncSession=Depends(get_db)):
 
 @router.post("/categories")
 async def create_category(data:dict,db:AsyncSession=Depends(get_db)):
-    await db.execute(text("INSERT INTO ticket_categories (id,name,description,color,icon,parent_id,group_id,active,created_at) VALUES (gen_random_uuid(),:name,:desc,:color,:icon,CAST(NULLIF(:parent_id,'') AS uuid),CAST(NULLIF(:group_id,'') AS uuid),true,NOW())"),
+    await db.execute(text("INSERT INTO ticket_categories (id,name,description,color,icon,parent_id,group_id,active,created_at) VALUES (gen_random_uuid(),:name,:desc,:color,:icon,NULLIF(:parent_id,'')::uuid,CAST(NULLIF(:group_id,'') AS uuid),true,NOW())"),
                      {"name":data.get("name"),"desc":data.get("description",""),"color":data.get("color","#45B6E4"),"icon":data.get("icon","🎫"),"parent_id":data.get("parent_id",""),"group_id":data.get("group_id","")})
     await db.commit()
     return {"status":"ok"}
