@@ -1,8 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-app = FastAPI(title="WHUBBI API", description="Commercial Management API", version="2.0.0")
-
+app = FastAPI(title="WHUBBI API", version="2.0.0")
 app.add_middleware(CORSMiddleware,
     allow_origins=["https://dev.whubbi.wcomply.com","https://whubbi.wcomply.com","http://localhost:3000","http://localhost:3001"],
     allow_credentials=True, allow_methods=["*"], allow_headers=["*"],
@@ -12,44 +11,32 @@ app.add_middleware(CORSMiddleware,
 async def startup():
     try:
         from app.database import engine, Base
-        from app.models import company, contact, opportunity, error_log, url_monitor, user_profile
+        from app.models import company, contact, opportunity, error_log, url_monitor, user_profile, helpdesk
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
-
-        # Add unique constraint for permissions if not exists
         from sqlalchemy.ext.asyncio import AsyncSession
         from sqlalchemy.orm import sessionmaker
         from sqlalchemy import text
-        AsyncSessionLocal = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
-        async with AsyncSessionLocal() as session:
+        S = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+        async with S() as session:
             try:
-                await session.execute(text("""
-                    CREATE UNIQUE INDEX IF NOT EXISTS idx_whubbi_permissions_user_module_sub
-                    ON whubbi_permissions(user_email, module, submodule)
-                """))
+                await session.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS idx_whubbi_perm ON whubbi_permissions(user_email,module,submodule)"))
                 await session.commit()
-            except Exception:
-                pass
-
-            # Seed monitored URLs
-            result = await session.execute(text("SELECT COUNT(*) FROM monitored_urls"))
-            if result.scalar() == 0:
+            except Exception: pass
+            r = await session.execute(text("SELECT COUNT(*) FROM monitored_urls"))
+            if r.scalar() == 0:
                 for item in [("WHUBBI Frontend","https://dev.whubbi.wcomply.com"),("WCOMPLY Website","https://wcomply.com"),("SharePoint","https://wcomply.sharepoint.com")]:
-                    await session.execute(text("INSERT INTO monitored_urls (id,name,url,active,created_at) VALUES (gen_random_uuid(),:name,:url,true,NOW())"), {"name":item[0],"url":item[1]})
+                    await session.execute(text("INSERT INTO monitored_urls (id,name,url,active,created_at) VALUES (gen_random_uuid(),:name,:url,true,NOW())"),{"name":item[0],"url":item[1]})
                 await session.commit()
-
         print("Database ready!")
     except Exception as e:
-        print(f"ERROR: {e}")
-        import traceback; traceback.print_exc()
+        print(f"ERROR: {e}"); import traceback; traceback.print_exc()
 
 @app.get("/health")
-async def health_check():
-    return {"status": "healthy", "app": "whubbi", "version": "2.0.0"}
+async def health(): return {"status":"healthy","app":"whubbi","version":"2.0.0"}
 
 @app.get("/")
-async def root():
-    return {"message": "WHUBBI API", "version": "2.0.0"}
+async def root(): return {"message":"WHUBBI API","version":"2.0.0"}
 
 try:
     from app.routers.companies import router as companies_router
@@ -59,17 +46,17 @@ try:
     from app.routers.microsoft import router as microsoft_router
     from app.routers.ecs_control import router as ecs_router
     from app.routers.settings import router as settings_router
+    from app.routers.helpdesk import router as helpdesk_router
     from app.routers import auth, outlook, copilot
-
     app.include_router(companies_router,    prefix="/companies",    tags=["Companies"])
     app.include_router(contacts_router,     prefix="/contacts",     tags=["Contacts"])
     app.include_router(opportunities_router,prefix="/opportunities", tags=["Opportunities"])
     app.include_router(admin_router,        prefix="/admin",        tags=["Admin"])
     app.include_router(microsoft_router,    prefix="/microsoft",    tags=["Microsoft"])
-    app.include_router(ecs_router,          prefix="/ecs",          tags=["ECS Control"])
+    app.include_router(ecs_router,          prefix="/ecs",          tags=["ECS"])
     app.include_router(settings_router,     prefix="/settings",     tags=["Settings"])
+    app.include_router(helpdesk_router,     prefix="/helpdesk",     tags=["Helpdesk"])
     app.include_router(auth.router,         prefix="/auth",         tags=["Auth"])
     app.include_router(outlook.router,      prefix="/outlook",      tags=["Outlook"])
     app.include_router(copilot.router,      prefix="/copilot",      tags=["Copilot"])
-except Exception as e:
-    print(f"Warning: {e}")
+except Exception as e: print(f"Warning: {e}")
