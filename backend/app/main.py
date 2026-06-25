@@ -19,15 +19,27 @@ async def startup():
         from sqlalchemy import text
         S = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
         async with S() as session:
+            # Migrations
+            await session.execute(text("ALTER TABLE tickets ADD COLUMN IF NOT EXISTS teams_chat_id TEXT"))
+            await session.execute(text("""
+                CREATE TABLE IF NOT EXISTS teams_subscriptions (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    ticket_id UUID REFERENCES tickets(id) ON DELETE CASCADE,
+                    chat_id TEXT NOT NULL,
+                    subscription_id TEXT,
+                    expires_at TIMESTAMP,
+                    created_at TIMESTAMP DEFAULT NOW(),
+                    CONSTRAINT uq_teams_chat UNIQUE (chat_id)
+                )
+            """))
             try:
                 await session.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS idx_whubbi_perm ON whubbi_permissions(user_email,module,submodule)"))
-                await session.commit()
             except Exception: pass
             r = await session.execute(text("SELECT COUNT(*) FROM monitored_urls"))
             if r.scalar() == 0:
                 for item in [("WHUBBI Frontend","https://dev.whubbi.wcomply.com"),("WCOMPLY Website","https://wcomply.com"),("SharePoint","https://wcomply.sharepoint.com")]:
                     await session.execute(text("INSERT INTO monitored_urls (id,name,url,active,created_at) VALUES (gen_random_uuid(),:name,:url,true,NOW())"),{"name":item[0],"url":item[1]})
-                await session.commit()
+            await session.commit()
         print("Database ready!")
     except Exception as e:
         print(f"ERROR: {e}"); import traceback; traceback.print_exc()
@@ -47,6 +59,7 @@ try:
     from app.routers.ecs_control import router as ecs_router
     from app.routers.settings import router as settings_router
     from app.routers.helpdesk import router as helpdesk_router
+    from app.routers.helpdesk_teams import router as teams_router
     from app.routers import auth, outlook, copilot
     app.include_router(companies_router,    prefix="/companies",    tags=["Companies"])
     app.include_router(contacts_router,     prefix="/contacts",     tags=["Contacts"])
@@ -56,6 +69,7 @@ try:
     app.include_router(ecs_router,          prefix="/ecs",          tags=["ECS"])
     app.include_router(settings_router,     prefix="/settings",     tags=["Settings"])
     app.include_router(helpdesk_router,     prefix="/helpdesk",     tags=["Helpdesk"])
+    app.include_router(teams_router,        prefix="/helpdesk",     tags=["Teams"])
     app.include_router(auth.router,         prefix="/auth",         tags=["Auth"])
     app.include_router(outlook.router,      prefix="/outlook",      tags=["Outlook"])
     app.include_router(copilot.router,      prefix="/copilot",      tags=["Copilot"])
