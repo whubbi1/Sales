@@ -11,7 +11,7 @@ app.add_middleware(CORSMiddleware,
 async def startup():
     try:
         from app.database import engine, Base
-        from app.models import company, contact, opportunity, error_log, url_monitor, user_profile, helpdesk
+        from app.models import company, contact, opportunity, error_log, url_monitor, user_profile, helpdesk, background_jobs
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
 
@@ -20,39 +20,30 @@ async def startup():
         from sqlalchemy import text
         S = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
         async with S() as session:
-
-            # Run each migration separately with individual try/except
             sqls = [
+                # Helpdesk migrations
                 """CREATE TABLE IF NOT EXISTS helpdesk_groups (
                     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-                    name VARCHAR(100) NOT NULL,
-                    description TEXT,
-                    responsible_email VARCHAR(255),
-                    responsible_name VARCHAR(255),
-                    active BOOLEAN DEFAULT true,
-                    created_at TIMESTAMP DEFAULT NOW()
+                    name VARCHAR(100) NOT NULL, description TEXT,
+                    responsible_email VARCHAR(255), responsible_name VARCHAR(255),
+                    active BOOLEAN DEFAULT true, created_at TIMESTAMP DEFAULT NOW()
                 )""",
                 """CREATE TABLE IF NOT EXISTS helpdesk_group_members (
                     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-                    group_id UUID,
-                    user_email VARCHAR(255) NOT NULL,
-                    user_name VARCHAR(255),
-                    is_responsible BOOLEAN DEFAULT false,
+                    group_id UUID, user_email VARCHAR(255) NOT NULL,
+                    user_name VARCHAR(255), is_responsible BOOLEAN DEFAULT false,
                     created_at TIMESTAMP DEFAULT NOW()
                 )""",
                 """CREATE TABLE IF NOT EXISTS helpdesk_users (
                     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                     user_email VARCHAR(255) UNIQUE NOT NULL,
-                    user_name VARCHAR(255),
-                    role VARCHAR(20) DEFAULT 'end_user',
+                    user_name VARCHAR(255), role VARCHAR(20) DEFAULT 'end_user',
                     created_at TIMESTAMP DEFAULT NOW()
                 )""",
                 """CREATE TABLE IF NOT EXISTS teams_subscriptions (
                     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-                    ticket_id UUID,
-                    chat_id TEXT NOT NULL,
-                    subscription_id TEXT,
-                    expires_at TIMESTAMP,
+                    ticket_id UUID, chat_id TEXT NOT NULL,
+                    subscription_id TEXT, expires_at TIMESTAMP,
                     created_at TIMESTAMP DEFAULT NOW()
                 )""",
                 "ALTER TABLE ticket_categories ADD COLUMN IF NOT EXISTS parent_id UUID",
@@ -60,8 +51,39 @@ async def startup():
                 "ALTER TABLE tickets ADD COLUMN IF NOT EXISTS subcategory_id UUID",
                 "ALTER TABLE tickets ADD COLUMN IF NOT EXISTS group_id UUID",
                 "ALTER TABLE tickets ADD COLUMN IF NOT EXISTS teams_chat_id TEXT",
+                # Admin ops migrations
+                """CREATE TABLE IF NOT EXISTS background_jobs (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    job_id VARCHAR(50) UNIQUE NOT NULL,
+                    name VARCHAR(255) NOT NULL, description TEXT,
+                    job_type VARCHAR(20) DEFAULT 'lambda',
+                    script_url VARCHAR(500), script_content TEXT,
+                    status VARCHAR(20) DEFAULT 'active',
+                    schedule VARCHAR(100),
+                    last_run_at TIMESTAMP, last_run_status VARCHAR(20),
+                    created_at TIMESTAMP DEFAULT NOW(),
+                    updated_at TIMESTAMP DEFAULT NOW()
+                )""",
+                """CREATE TABLE IF NOT EXISTS job_executions (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    job_id VARCHAR(50) NOT NULL,
+                    status VARCHAR(20) NOT NULL,
+                    started_at TIMESTAMP DEFAULT NOW(),
+                    ended_at TIMESTAMP, duration_ms INTEGER,
+                    output TEXT, error TEXT,
+                    triggered_by VARCHAR(100) DEFAULT 'schedule'
+                )""",
+                """CREATE TABLE IF NOT EXISTS backup_records (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    application VARCHAR(100) NOT NULL,
+                    backup_type VARCHAR(50),
+                    status VARCHAR(20) DEFAULT 'unknown',
+                    backup_date TIMESTAMP, size_mb INTEGER,
+                    location VARCHAR(500), notes TEXT,
+                    created_by VARCHAR(255),
+                    created_at TIMESTAMP DEFAULT NOW()
+                )""",
             ]
-
             for sql in sqls:
                 try:
                     await session.execute(text(sql))
@@ -69,7 +91,7 @@ async def startup():
                     print(f"OK: {sql[:50]}")
                 except Exception as e:
                     await session.rollback()
-                    print(f"Skip: {str(e)[:80]}")
+                    print(f"Skip: {str(e)[:60]}")
 
             try:
                 await session.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS idx_whubbi_perm ON whubbi_permissions(user_email,module,submodule)"))
@@ -98,6 +120,7 @@ try:
     from app.routers.contacts import router as contacts_router
     from app.routers.opportunities import router as opportunities_router
     from app.routers.admin import router as admin_router
+    from app.routers.admin_ops import router as admin_ops_router
     from app.routers.microsoft import router as microsoft_router
     from app.routers.ecs_control import router as ecs_router
     from app.routers.settings import router as settings_router
@@ -108,6 +131,7 @@ try:
     app.include_router(contacts_router,     prefix="/contacts",     tags=["Contacts"])
     app.include_router(opportunities_router,prefix="/opportunities", tags=["Opportunities"])
     app.include_router(admin_router,        prefix="/admin",        tags=["Admin"])
+    app.include_router(admin_ops_router,    prefix="/admin",        tags=["AdminOps"])
     app.include_router(microsoft_router,    prefix="/microsoft",    tags=["Microsoft"])
     app.include_router(ecs_router,          prefix="/ecs",          tags=["ECS"])
     app.include_router(settings_router,     prefix="/settings",     tags=["Settings"])
