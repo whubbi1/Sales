@@ -52,6 +52,7 @@ const QUICK_LINKS = [
   {href:'/admin/backup',   icon:'💾', label:'Backup',           desc:'Backup status & management'},
   {href:'/admin/jobs',     icon:'⚙️', label:'Background Jobs',  desc:'Scheduled tasks & execution logs'},
   {href:'/admin/licenses', icon:'📋', label:'License Mgmt',     desc:'Software licenses — coming soon'},
+  {href:'/admin/costs',    icon:'💰', label:'AWS Costs',        desc:'Multi-account cost breakdown'},
 ]
 
 export default function AdminCockpitPage() {
@@ -153,7 +154,7 @@ export default function AdminCockpitPage() {
 
       <div style={{padding:'24px 32px'}}>
         {/* Quick links */}
-        <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:'12px',marginBottom:'24px'}}>
+        <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:'12px',marginBottom:'24px'}}>
           {QUICK_LINKS.map(link=>(
             <div key={link.href} onClick={()=>router.push(link.href)}
               style={{background:'white',borderRadius:'10px',border:'1px solid #EDF2F7',padding:'16px',cursor:'pointer',display:'flex',alignItems:'center',gap:'14px',boxShadow:'0 1px 3px rgba(0,0,0,0.06)',transition:'all 0.15s'}}
@@ -189,7 +190,7 @@ export default function AdminCockpitPage() {
 
         {/* AWS Health */}
         {!loading&&tab==='aws-health'&&d&&(
-          <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:'16px'}}>
+          <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:'16px'}}>
             {d.services?.map((svc:any)=>(
               <div key={svc.name} style={{background:'white',borderRadius:'12px',border:'1px solid #EDF2F7',padding:'20px',boxShadow:'0 1px 3px rgba(0,0,0,0.06)'}}>
                 <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:'12px'}}>
@@ -230,7 +231,7 @@ export default function AdminCockpitPage() {
               <div style={{background:'#FEF2F2',border:'1px solid #FECACA',color:'#DC2626',padding:'16px',borderRadius:'10px',fontSize:'13px'}}>⚠️ {d.health.error}</div>
             ):(<>
               <h2 style={{fontSize:'13px',fontWeight:'700',color:'#156082',marginBottom:'16px',textTransform:'uppercase',letterSpacing:'0.05em'}}>Service Health</h2>
-              <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:'14px',marginBottom:'24px'}}>
+              <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:'14px',marginBottom:'24px'}}>
                 {d.health?.services?.map((svc:any)=>(
                   <div key={svc.name} style={{background:'white',borderRadius:'12px',border:'1px solid #EDF2F7',padding:'18px',boxShadow:'0 1px 3px rgba(0,0,0,0.06)'}}>
                     <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'8px'}}>
@@ -259,7 +260,7 @@ export default function AdminCockpitPage() {
                 </div>
               </>)}
               <h2 style={{fontSize:'13px',fontWeight:'700',color:'#156082',marginBottom:'16px',textTransform:'uppercase',letterSpacing:'0.05em'}}>Licenses</h2>
-              <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:'14px'}}>
+              <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:'14px'}}>
                 {d.licenses?.licenses?.map((lic:any)=>(
                   <div key={lic.name} style={{background:'white',borderRadius:'12px',border:'1px solid #EDF2F7',padding:'16px'}}>
                     <div style={{fontSize:'11px',fontWeight:'700',color:'#45B6E4',marginBottom:'6px',textTransform:'uppercase',letterSpacing:'0.05em'}}>{lic.name}</div>
@@ -281,7 +282,7 @@ export default function AdminCockpitPage() {
         {/* AWS Costs */}
         {!loading&&tab==='aws-costs'&&d&&(
           <div>
-            <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:'16px',marginBottom:'24px'}}>
+            <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:'16px',marginBottom:'24px'}}>
               {[
                 {label:'Current Month',value:`$${d.current_month?.toFixed(2)||'0.00'}`,color:'#156082',sub:`${d.period?.start} → today`},
                 {label:'Estimated Month',value:`$${d.estimated_month?.toFixed(2)||'0.00'}`,color:'#e97132',sub:'Projected total'},
@@ -404,7 +405,7 @@ export default function AdminCockpitPage() {
                         )}
                       </div>
                     </div>
-                    <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:'12px',padding:'14px',background:'#F8FAFC',borderRadius:'8px',marginBottom:'12px'}}>
+                    <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:'12px',padding:'14px',background:'#F8FAFC',borderRadius:'8px',marginBottom:'12px'}}>
                       <KPI label="Availability" value={`${avail}%`} color={availColor} sub="Last 24h"/>
                       <KPI label="Avg Response" value={u.avg_response_time?`${u.avg_response_time}ms`:'—'} color={u.avg_response_time>2000?'#D97706':'#059669'} sub="Last 24h"/>
                       <KPI label="HTTP" value={u.status_code||'—'} color={!u.status_code||u.status_code<400?'#059669':'#DC2626'} sub="Latest"/>
