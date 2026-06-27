@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import HelpdeskLayout from '@/components/HelpdeskLayout'
 import { fetchUserAttributes } from 'aws-amplify/auth'
-import { API } from '../constants'
+const API = 'https://api.whubbi.wcomply.com'
 
 const PRIO_COLOR: Record<string,string> = { critical:'#DC2626', high:'#D97706', medium:'#156082', low:'#45B6E4' }
 const STATUS_COLOR: Record<string,{bg:string;color:string}> = {

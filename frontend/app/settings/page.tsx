@@ -16,14 +16,8 @@ const MODULES_META: Record<string, { label: string; icon: string; color: string 
   admin:    { label: 'Admin',            icon: '🔧', color: '#45B6E4' },
 }
 
-const DATA_SCOPES  = ['none', 'own', 'team', 'company']
-const ACCESS_MODES = ['none', 'view', 'edit']
 
-const SCOPE_LABEL: Record<string, string> = { none: 'No Access', own: 'Own Data', team: 'Team Data', company: 'All Company' }
-const MODE_LABEL:  Record<string, string> = { none: 'None', view: 'View Only', edit: 'View & Edit' }
 
-const SCOPE_COLOR: Record<string, string> = { none: '#F1F5F9', own: '#EFF6FF', team: '#FFF7ED', company: '#ECFDF5' }
-const SCOPE_TEXT:  Record<string, string> = { none: '#848EA5', own: '#156082', team: '#D97706', company: '#059669' }
 
 export default function SettingsPage() {
   const router = useRouter()
@@ -50,23 +44,7 @@ export default function SettingsPage() {
     setLoading(false)
   }
 
-  const loadUsers = async () => {
-    try {
-      const res = await fetch(`${API}/settings/users`)
-      const data = await res.json()
-      setUsers(data.users || [])
-    } catch (e) {}
-  }
 
-  const loadPermissions = async (email: string) => {
-    setLoading(true)
-    try {
-      const res = await fetch(`${API}/settings/permissions/${email}`)
-      const data = await res.json()
-      setPermissions(data)
-    } catch (e) { console.error(e) }
-    setLoading(false)
-  }
 
   const syncProfile = async () => {
     setSyncing(true)
@@ -84,35 +62,7 @@ export default function SettingsPage() {
     setTimeout(() => setMessage(null), 4000)
   }
 
-  const updatePermission = (module: string, submodule: string, field: string, value: string) => {
-    setPermissions((p: any) => ({
-      ...p,
-      permissions: {
-        ...p.permissions,
-        [module]: {
-          ...p.permissions[module],
-          [submodule]: { ...p.permissions[module][submodule], [field]: value }
-        }
-      }
-    }))
-  }
 
-  const savePermissions = async () => {
-    setSaving(true)
-    try {
-      const res = await fetch(`${API}/settings/permissions/${selectedUser}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ permissions: permissions.permissions, granted_by: currentEmail })
-      })
-      const data = await res.json()
-      if (data.status === 'ok') {
-        setMessage({ text: `${data.updated} permissions saved!`, type: 'success' })
-      }
-    } catch (e: any) { setMessage({ text: e.message, type: 'error' }) }
-    setSaving(false)
-    setTimeout(() => setMessage(null), 4000)
-  }
 
   const TABS = [
     { id: 'profile',     label: 'My Profile',        icon: '👤' },
@@ -269,80 +219,6 @@ export default function SettingsPage() {
                   </div>
                 )}
               </div>
-            </div>
-          )}
-{users.length === 0 && <option value={currentEmail}>{currentEmail}</option>}
-                  </select>
-                </div>
-                <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-                  <div style={{ fontSize: '11px', color: '#45B6E4' }}>
-                    <span style={{ background: SCOPE_COLOR.own, color: SCOPE_TEXT.own, padding: '2px 6px', borderRadius: '4px', marginRight: '4px' }}>Own</span>
-                    <span style={{ background: SCOPE_COLOR.team, color: SCOPE_TEXT.team, padding: '2px 6px', borderRadius: '4px', marginRight: '4px' }}>Team</span>
-                    <span style={{ background: SCOPE_COLOR.company, color: SCOPE_TEXT.company, padding: '2px 6px', borderRadius: '4px' }}>Company</span>
-                  </div>
-                  <button onClick={savePermissions} disabled={saving || !permissions} style={{ background: '#156082', color: 'white', border: 'none', padding: '8px 20px', borderRadius: '7px', fontSize: '12px', fontWeight: '700', cursor: 'pointer', fontFamily: 'Montserrat, sans-serif' }}>
-                    {saving ? '⏳ Saving...' : '💾 Save Permissions'}
-                  </button>
-                </div>
-              </div>
-
-              {!loading && permissions && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                  {Object.entries(permissions.permissions || {}).map(([module, submodules]: [string, any]) => {
-                    const meta = MODULES_META[module] || { label: module, icon: '📦', color: '#45B6E4' }
-                    return (
-                      <div key={module} style={{ background: 'white', borderRadius: '12px', border: '1px solid #EDF2F7', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
-                        {/* Module header */}
-                        <div style={{ padding: '14px 20px', background: meta.color + '10', borderBottom: '1px solid #EDF2F7', display: 'flex', alignItems: 'center', gap: '10px' }}>
-                          <span style={{ fontSize: '18px' }}>{meta.icon}</span>
-                          <span style={{ fontSize: '13px', fontWeight: '800', color: meta.color }}>{meta.label}</span>
-                          <span style={{ fontSize: '11px', color: '#45B6E4' }}>({Object.keys(submodules).length} submodules)</span>
-                        </div>
-                        {/* Submodules table */}
-                        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                          <thead>
-                            <tr style={{ background: '#FAFBFC' }}>
-                              <th style={{ padding: '10px 20px', textAlign: 'left', fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#45B6E4', width: '30%' }}>Submodule</th>
-                              <th style={{ padding: '10px 20px', textAlign: 'left', fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#45B6E4', width: '35%' }}>Data Scope</th>
-                              <th style={{ padding: '10px 20px', textAlign: 'left', fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#45B6E4', width: '35%' }}>Access Mode</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {Object.entries(submodules).map(([sub, perm]: [string, any]) => (
-                              <tr key={sub} style={{ borderTop: '1px solid #F1F5F9' }}>
-                                <td style={{ padding: '12px 20px', fontSize: '13px', fontWeight: '600', color: '#3F3F3F', textTransform: 'capitalize' }}>{sub}</td>
-                                <td style={{ padding: '12px 20px' }}>
-                                  <div style={{ display: 'flex', gap: '6px' }}>
-                                    {DATA_SCOPES.map(scope => (
-                                      <button key={scope} onClick={() => updatePermission(module, sub, 'data_scope', scope)}
-                                        style={{ padding: '4px 10px', borderRadius: '6px', border: 'none', cursor: 'pointer', fontSize: '11px', fontWeight: '700', fontFamily: 'Montserrat, sans-serif', background: perm.data_scope === scope ? SCOPE_COLOR[scope] : '#F1F5F9', color: perm.data_scope === scope ? SCOPE_TEXT[scope] : '#848EA5', transition: 'all 0.12s' }}>
-                                        {SCOPE_LABEL[scope]}
-                                      </button>
-                                    ))}
-                                  </div>
-                                </td>
-                                <td style={{ padding: '12px 20px' }}>
-                                  <div style={{ display: 'flex', gap: '6px' }}>
-                                    {ACCESS_MODES.map(mode => (
-                                      <button key={mode} onClick={() => updatePermission(module, sub, 'access_mode', mode)}
-                                        style={{ padding: '4px 10px', borderRadius: '6px', border: 'none', cursor: 'pointer', fontSize: '11px', fontWeight: '700', fontFamily: 'Montserrat, sans-serif', background: perm.access_mode === mode ? (mode === 'none' ? '#F1F5F9' : mode === 'view' ? '#EFF6FF' : '#ECFDF5') : '#F1F5F9', color: perm.access_mode === mode ? (mode === 'none' ? '#848EA5' : mode === 'view' ? '#156082' : '#059669') : '#848EA5', transition: 'all 0.12s' }}>
-                                        {MODE_LABEL[mode]}
-                                      </button>
-                                    ))}
-                                  </div>
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    )
-                  })}
-                </div>
-              )}
-              {!loading && !permissions && selectedUser && (
-                <div style={{ textAlign: 'center', padding: '48px', color: '#45B6E4' }}>No permissions found. Select a user above.</div>
-              )}
             </div>
           )}
         </div>
