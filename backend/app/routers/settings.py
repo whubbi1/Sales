@@ -209,13 +209,41 @@ async def update_permissions(email: str, data: dict, db: AsyncSession = Depends(
 
 @router.get("/users")
 async def list_users(db: AsyncSession = Depends(get_db)):
-    """List all users with profiles."""
+    """List all wcomply users — tries MS AD first, falls back to DB cache."""
+    try:
+        token = await get_ms_token()
+        async with httpx.AsyncClient(timeout=15) as client:
+            resp = await client.get(
+                "https://graph.microsoft.com/v1.0/users"
+                "?$select=id,displayName,givenName,surname,mail,jobTitle,department"
+                "&$filter=accountEnabled eq true"
+                "&$top=100",
+                headers={"Authorization": f"Bearer {token}"}
+            )
+            if resp.status_code == 200:
+                ms_users = resp.json().get("value", [])
+                users = [
+                    {
+                        "email": u.get("mail", ""),
+                        "first_name": u.get("givenName", ""),
+                        "last_name": u.get("surname", ""),
+                        "display_name": u.get("displayName", ""),
+                        "job_title": u.get("jobTitle", ""),
+                        "department": u.get("department", ""),
+                    }
+                    for u in ms_users if u.get("mail")
+                ]
+                return {"users": users, "source": "ms_ad"}
+    except Exception:
+        pass
+
+    # Fallback: return cached DB users
     result = await db.execute(text("""
         SELECT email, first_name, last_name, display_name, job_title, department, last_sync
         FROM user_profiles ORDER BY last_name, first_name
     """))
     rows = result.fetchall()
-    return {"users": [dict(r._mapping) for r in rows]}
+    return {"users": [dict(r._mapping) for r in rows], "source": "db_cache"}
 
 
 # ─── Company Links (admin only) ────────────────────────────────────────────────

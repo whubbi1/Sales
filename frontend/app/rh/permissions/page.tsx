@@ -30,9 +30,13 @@ export default function PermissionsPage() {
   const [message, setMessage] = useState<{text:string;type:'success'|'error'}|null>(null)
   const [search, setSearch] = useState('')
 
-  useEffect(() => {
+  const [syncing, setSyncing] = useState(false)
+
+  const loadUsers = () => {
     fetch(`${API}/settings/users`).then(r=>r.json()).then(d=>setUsers(d.users||[])).catch(()=>{})
-  }, [])
+  }
+
+  useEffect(() => { loadUsers() }, [])
 
   useEffect(() => {
     if (selectedUser) loadPermissions(selectedUser)
@@ -80,9 +84,17 @@ export default function PermissionsPage() {
   return (
     <HRLayout>
       <div style={{ padding:'28px 32px' }}>
-        <div style={{ marginBottom:'20px' }}>
-          <h1 style={{ fontSize:'20px', fontWeight:'800', color:'#156082', marginBottom:'4px' }}>🔐 WHUBBI Permissions</h1>
-          <p style={{ fontSize:'12px', color:'#45B6E4' }}>Manage user access rights across all modules — HR Manager only</p>
+        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:'20px' }}>
+          <div>
+            <h1 style={{ fontSize:'20px', fontWeight:'800', color:'#156082', marginBottom:'4px' }}>🔐 WHUBBI Permissions</h1>
+            <p style={{ fontSize:'12px', color:'#45B6E4' }}>Manage user access rights across all modules — HR Manager only</p>
+          </div>
+          <button
+            onClick={async () => { setSyncing(true); await fetch(`${API}/settings/users`); loadUsers(); setSyncing(false) }}
+            disabled={syncing}
+            style={{ background:'#156082', color:'white', border:'none', padding:'8px 16px', borderRadius:'8px', fontSize:'12px', fontWeight:'700', cursor: syncing ? 'not-allowed' : 'pointer', fontFamily:'Montserrat, sans-serif', opacity: syncing ? 0.7 : 1 }}>
+            {syncing ? '⏳ Syncing...' : '🔄 Sync MS AD Users'}
+          </button>
         </div>
 
         <div style={{ display:'grid', gridTemplateColumns:'280px 1fr', gap:'20px' }}>
@@ -111,7 +123,7 @@ export default function PermissionsPage() {
                   </div>
                   <div style={{ overflow:'hidden' }}>
                     <div style={{ fontSize:'12px', fontWeight:'700', color:'#3F3F3F', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{u.display_name||`${u.first_name} ${u.last_name}`}</div>
-                    <div style={{ fontSize:'10px', color:'#45B6E4', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{u.job_title||u.email}</div>
+                    <div style={{ fontSize:'10px', color:'#45B6E4', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{u.job_title || u.department || u.email}</div>
                   </div>
                 </div>
               </div>

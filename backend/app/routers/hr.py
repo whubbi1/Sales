@@ -16,6 +16,10 @@ DOCUSIGN_ACCOUNT = os.getenv("DOCUSIGN_ACCOUNT_ID", "")
 DOCUSIGN_KEY = os.getenv("DOCUSIGN_INTEGRATION_KEY", "")
 WHUBBI_API_URL = os.getenv("WHUBBI_API_URL", "https://api.whubbi.wcomply.com")
 
+# SharePoint folder sharing URLs for CV/document storage
+SHAREPOINT_RECRUITMENT_URL = "https://wcomply.sharepoint.com/:f:/s/wcomply-HR/IgDsWu6K4lhqSIBLpu5eKpX4AThfbi029iqbHgDb_IQhoVY?e=sCToFw"
+SHAREPOINT_FREELANCER_URL  = "https://wcomply.sharepoint.com/:f:/s/wcomply-HR/IgDuttxAz2gOQJWIokbuzzmVAVdr92slh5OLUsqO_IkQGiA?e=ox55oP"
+
 # ─── Country config ────────────────────────────────────────────────────────────
 COUNTRY_CONFIG = {
     "france": {
@@ -107,14 +111,37 @@ async def get_ms_token():
         )
         return r.json().get("access_token")
 
+def _encode_share_url(url: str) -> str:
+    encoded = base64.b64encode(url.encode()).decode().rstrip("=").replace("+", "-").replace("/", "_")
+    return f"u!{encoded}"
+
 async def upload_to_sharepoint(token: str, filename: str, content: bytes, folder: str = "HR/CVs"):
+    """Legacy path-based upload (used by onboarding)."""
     headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/octet-stream"}
     url = f"https://graph.microsoft.com/v1.0/sites/{SHAREPOINT_SITE}/drive/root:/{folder}/{filename}:/content"
     async with httpx.AsyncClient() as client:
         r = await client.put(url, headers=headers, content=content)
         if r.status_code in [200, 201]:
-            data = r.json()
-            return data.get("webUrl", "")
+            return r.json().get("webUrl", "")
+    return ""
+
+async def upload_to_sharepoint_folder(token: str, share_url: str, subfolder: str, filename: str, content: bytes) -> str:
+    """Upload a file into a named subfolder under a SharePoint sharing URL."""
+    encoded = _encode_share_url(share_url)
+    auth = {"Authorization": f"Bearer {token}"}
+    async with httpx.AsyncClient(timeout=30) as client:
+        # Get the parent folder's drive item
+        pr = await client.get(f"https://graph.microsoft.com/v1.0/shares/{encoded}/driveItem", headers=auth)
+        if pr.status_code != 200:
+            return ""
+        p = pr.json()
+        drive_id = p["parentReference"]["driveId"]
+        parent_id = p["id"]
+        # Upload — Graph API navigates path segments via :/path/to/file: notation
+        upload_url = f"https://graph.microsoft.com/v1.0/drives/{drive_id}/items/{parent_id}:/{subfolder}/{filename}:/content"
+        r = await client.put(upload_url, headers={**auth, "Content-Type": "application/octet-stream"}, content=content)
+        if r.status_code in [200, 201]:
+            return r.json().get("webUrl", "")
     return ""
 
 # ─── CV Extraction via Claude API ───────────────────────────────────────────────
@@ -204,7 +231,28 @@ async def extract_cv(file: UploadFile = File(...)):
 async def upload_cv(profile_id: str, file: UploadFile = File(...), db: AsyncSession = Depends(get_db)):
     content = await file.read()
     token = await get_ms_token()
-    url = await upload_to_sharepoint(token, f"{profile_id}_{file.filename}", content, "HR/CVs")
+
+    # Get profile info to determine folder routing
+    row = await db.execute(
+        text("SELECT profile_type, first_name, last_name, country FROM hr_profiles WHERE id=:id::uuid"),
+        {"id": profile_id}
+    )
+    profile = row.fetchone()
+
+    url = ""
+    if profile:
+        name_folder = f"{profile.first_name} {profile.last_name}".strip() or profile_id
+        if profile.profile_type == "freelancer":
+            url = await upload_to_sharepoint_folder(token, SHAREPOINT_FREELANCER_URL, name_folder, file.filename, content)
+        else:
+            country = (profile.country or "unknown").replace(" ", "_")
+            subfolder = f"{country}/{name_folder}"
+            url = await upload_to_sharepoint_folder(token, SHAREPOINT_RECRUITMENT_URL, subfolder, file.filename, content)
+
+    # Fallback to legacy path if share URL upload failed
+    if not url:
+        url = await upload_to_sharepoint(token, f"{profile_id}_{file.filename}", content, "HR/CVs")
+
     await db.execute(text("""
         UPDATE hr_profiles SET cv_sharepoint_url=:url, cv_filename=:fn, updated_at=NOW()
         WHERE id=:id::uuid
@@ -370,6 +418,38 @@ async def create_candidate(data: dict, db: AsyncSession = Depends(get_db)):
 async def update_status(profile_id: str, data: dict, db: AsyncSession = Depends(get_db)):
     await db.execute(text("UPDATE hr_profiles SET recruitment_status=:status, updated_at=NOW() WHERE id=:id::uuid"),
                      {"status": data["status"], "id": profile_id})
+    await db.commit()
+    return {"status": "ok"}
+
+@router.put("/recruitment/{profile_id}")
+async def update_candidate(profile_id: str, data: dict, db: AsyncSession = Depends(get_db)):
+    await db.execute(text("""
+        UPDATE hr_profiles SET
+            first_name=COALESCE(:first_name, first_name),
+            last_name=COALESCE(:last_name, last_name),
+            email=COALESCE(:email, email),
+            phone=COALESCE(:phone, phone),
+            linkedin_url=COALESCE(:linkedin_url, linkedin_url),
+            country=COALESCE(:country, country),
+            language=COALESCE(:language, language),
+            current_title=COALESCE(:current_title, current_title),
+            skills=COALESCE(:skills::json, skills),
+            years_experience=COALESCE(:years_experience, years_experience),
+            updated_at=NOW()
+        WHERE id=:id::uuid AND profile_type='internal'
+    """), {
+        "id": profile_id,
+        "first_name": data.get("first_name"),
+        "last_name": data.get("last_name"),
+        "email": data.get("email"),
+        "phone": data.get("phone"),
+        "linkedin_url": data.get("linkedin_url"),
+        "country": data.get("country"),
+        "language": data.get("language"),
+        "current_title": data.get("current_title"),
+        "skills": json.dumps(data["skills"]) if data.get("skills") is not None else None,
+        "years_experience": data.get("years_experience"),
+    })
     await db.commit()
     return {"status": "ok"}
 
@@ -566,11 +646,20 @@ async def create_job(data: dict, db: AsyncSession = Depends(get_db)):
 @router.put("/jobs/{job_id}")
 async def update_job(job_id: str, data: dict, db: AsyncSession = Depends(get_db)):
     await db.execute(text("""
-        UPDATE hr_job_descriptions SET title=COALESCE(:title,title), department=COALESCE(:department,department),
-            location=COALESCE(:location,location), contract_type=COALESCE(:contract_type,contract_type),
-            status=COALESCE(:status,status), description=COALESCE(:description,description), updated_at=NOW()
+        UPDATE hr_job_descriptions SET
+            title=COALESCE(:title, title),
+            description=COALESCE(:description, description),
+            responsibilities=COALESCE(:resp::json, responsibilities),
+            requirements=COALESCE(:req::json, requirements),
+            updated_at=NOW()
         WHERE id=:id::uuid
-    """), {**data, "id": job_id})
+    """), {
+        "id": job_id,
+        "title": data.get("title"),
+        "description": data.get("description"),
+        "resp": json.dumps(data.get("responsibilities")) if data.get("responsibilities") is not None else None,
+        "req": json.dumps(data.get("requirements")) if data.get("requirements") is not None else None,
+    })
     await db.commit()
     return {"status": "ok"}
 
