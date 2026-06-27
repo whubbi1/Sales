@@ -142,10 +142,10 @@ function FreelancerForm({ extracted, cvFile, extracting, onCvUpload, fileRef, on
         {/* CV Upload */}
         <div style={{ border:'2px dashed #EDF2F7', borderRadius:'10px', padding:'16px', textAlign:'center', cursor:'pointer', background:'#FAFBFC' }}
           onClick={() => fileRef.current?.click()}>
-          <input ref={fileRef} type="file" accept=".pdf" style={{ display:'none' }} onChange={e => e.target.files?.[0] && onCvUpload(e.target.files[0])}/>
+          <input ref={fileRef} type="file" accept=".pdf,.doc,.docx,.odt,.rtf" style={{ display:'none' }} onChange={e => e.target.files?.[0] && onCvUpload(e.target.files[0])}/>
           {extracting ? <div style={{ color:'#45B6E4', fontSize:'13px' }}>⏳ Extracting CV data with Claude AI...</div>
           : cvFile ? <div style={{ color:'#059669', fontSize:'13px' }}>✅ {cvFile.name} — data extracted</div>
-          : <div style={{ color:'#45B6E4', fontSize:'13px' }}>📄 Upload CV (PDF) — data will be auto-extracted by Claude AI</div>}
+          : <div style={{ color:'#45B6E4', fontSize:'13px' }}>📄 Upload CV (PDF, Word, ODT) — fields will be auto-filled by Claude AI</div>}
         </div>
 
         <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'12px' }}>
