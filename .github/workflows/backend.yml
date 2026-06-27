@@ -14,12 +14,12 @@ env:
   ECS_CLUSTER: wcomply-cluster-prod
   ECS_SERVICE: wcomply-backend-service
   CONTAINER_NAME: wcomply-backend
+  TASK_DEFINITION_FAMILY: wcomply-backend
 
 jobs:
   deploy:
     name: Build & Deploy
     runs-on: ubuntu-latest
-    if: github.event_name == 'push'
 
     steps:
       - name: Checkout
@@ -49,11 +49,18 @@ jobs:
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
           echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> $GITHUB_OUTPUT
 
+      - name: Fetch current ECS task definition
+        run: |
+          aws ecs describe-task-definition \
+            --task-definition ${{ env.TASK_DEFINITION_FAMILY }} \
+            --query taskDefinition \
+            > /tmp/task-definition.json
+
       - name: Mettre à jour la task definition ECS
         id: task-def
         uses: aws-actions/amazon-ecs-render-task-definition@v1
         with:
-          task-definition: backend/task-definition.json
+          task-definition: /tmp/task-definition.json
           container-name: ${{ env.CONTAINER_NAME }}
           image: ${{ steps.build-image.outputs.image }}
 
@@ -67,4 +74,4 @@ jobs:
 
       - name: Notification succès
         if: success()
-        run: echo "✅ Backend déployé avec succès — commit ${{ github.sha }}"
+        run: echo "✅ Backend déployé — commit ${{ github.sha }}"
