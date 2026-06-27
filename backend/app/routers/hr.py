@@ -145,7 +145,18 @@ async def upload_to_sharepoint_folder(token: str, share_url: str, subfolder: str
     return ""
 
 # ─── CV Extraction via Claude API ───────────────────────────────────────────────
+COUNTRY_MAP = {
+    "france": "france", "french": "france", "fr": "france",
+    "portugal": "portugal", "portuguese": "portugal", "pt": "portugal",
+    "czech republic": "czech_republic", "czech": "czech_republic", "czechia": "czech_republic", "cs": "czech_republic",
+    "romania": "romania", "romanian": "romania", "ro": "romania",
+    "spain": "spain", "spanish": "spain", "es": "spain",
+}
+
 async def extract_cv_with_claude(pdf_bytes: bytes, filename: str) -> dict:
+    if not API_KEY:
+        raise ValueError("ANTHROPIC_API_KEY not configured")
+
     b64 = base64.standard_b64encode(pdf_bytes).decode("utf-8")
     prompt = """Extract ALL information from this CV and return ONLY a valid JSON object with this exact structure:
 {
@@ -156,7 +167,7 @@ async def extract_cv_with_claude(pdf_bytes: bytes, filename: str) -> dict:
   "linkedin_url": "",
   "current_title": "",
   "years_experience": 0,
-  "country": "",
+  "country": "france",
   "skills": ["skill1", "skill2"],
   "daily_rate": null,
   "projects": [
@@ -170,12 +181,18 @@ async def extract_cv_with_claude(pdf_bytes: bytes, filename: str) -> dict:
     }
   ]
 }
+For country, use one of: france, portugal, czech_republic, romania, spain. Default to france if unknown.
 Return ONLY the JSON, no markdown, no explanation."""
 
     async with httpx.AsyncClient(timeout=60) as client:
         r = await client.post(
             "https://api.anthropic.com/v1/messages",
-            headers={"x-api-key": API_KEY, "anthropic-version": "2023-06-01", "content-type": "application/json"},
+            headers={
+                "x-api-key": API_KEY,
+                "anthropic-version": "2023-06-01",
+                "anthropic-beta": "pdfs-2024-09-25",
+                "content-type": "application/json",
+            },
             json={
                 "model": "claude-sonnet-4-6",
                 "max_tokens": 4000,
@@ -188,11 +205,15 @@ Return ONLY the JSON, no markdown, no explanation."""
                 }]
             }
         )
-        if r.status_code == 200:
-            text = r.json()["content"][0]["text"].strip()
-            text = text.replace("```json", "").replace("```", "").strip()
-            return json.loads(text)
-    return {}
+        if r.status_code != 200:
+            raise ValueError(f"Claude API error {r.status_code}: {r.text[:200]}")
+        text_content = r.json()["content"][0]["text"].strip()
+        text_content = text_content.replace("```json", "").replace("```", "").strip()
+        data = json.loads(text_content)
+        # Normalize country to dropdown values
+        raw_country = str(data.get("country", "")).lower().strip()
+        data["country"] = COUNTRY_MAP.get(raw_country, "france")
+        return data
 
 # ─── Dashboard ─────────────────────────────────────────────────────────────────
 @router.get("/dashboard")
@@ -224,8 +245,12 @@ async def hr_dashboard(db: AsyncSession = Depends(get_db)):
 @router.post("/cv/extract")
 async def extract_cv(file: UploadFile = File(...)):
     content = await file.read()
-    extracted = await extract_cv_with_claude(content, file.filename)
-    return {"extracted": extracted, "filename": file.filename, "size": len(content)}
+    try:
+        extracted = await extract_cv_with_claude(content, file.filename)
+        return {"extracted": extracted, "filename": file.filename, "size": len(content)}
+    except Exception as e:
+        print(f"CV extraction error: {e}")
+        return {"extracted": {}, "error": str(e), "filename": file.filename}
 
 @router.post("/cv/upload/{profile_id}")
 async def upload_cv(profile_id: str, file: UploadFile = File(...), db: AsyncSession = Depends(get_db)):

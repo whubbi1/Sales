@@ -16,6 +16,7 @@ export default function FreelancersPage() {
   const [search, setSearch] = useState('')
   const [extracting, setExtracting] = useState(false)
   const [extracted, setExtracted] = useState<any>(null)
+  const [extractError, setExtractError] = useState('')
   const [cvFile, setCvFile] = useState<File|null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
 
@@ -27,12 +28,24 @@ export default function FreelancersPage() {
   const handleCvUpload = async (file: File) => {
     setCvFile(file)
     setExtracting(true)
-    const fd = new FormData()
-    fd.append('file', file)
-    const r = await fetch(`${API}/hr/cv/extract`, { method:'POST', body:fd })
-    const d = await r.json()
-    setExtracted(d.extracted || {})
-    setExtracting(false)
+    setExtractError('')
+    try {
+      const fd = new FormData()
+      fd.append('file', file)
+      const r = await fetch(`${API}/hr/cv/extract`, { method:'POST', body:fd })
+      const d = await r.json()
+      if (d.error) {
+        setExtractError(d.error)
+        setExtracted({})
+      } else {
+        setExtracted(d.extracted || {})
+      }
+    } catch (e: any) {
+      setExtractError('Extraction failed — fill fields manually')
+      setExtracted({})
+    } finally {
+      setExtracting(false)
+    }
   }
 
   const filtered = freelancers.filter(f =>
@@ -105,18 +118,23 @@ export default function FreelancersPage() {
                 <button onClick={() => { setShowModal(false); setExtracted(null); setCvFile(null) }} style={{ background:'none', border:'none', fontSize:'20px', cursor:'pointer', color:'#45B6E4' }}>×</button>
               </div>
               <FreelancerForm
-                extracted={extracted} cvFile={cvFile} extracting={extracting}
+                extracted={extracted} cvFile={cvFile} extracting={extracting} extractError={extractError}
                 onCvUpload={handleCvUpload} fileRef={fileRef}
                 onSave={async (data:any) => {
-                  const r = await fetch(`${API}/hr/freelancers`, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(data) })
-                  const d = await r.json()
-                  if (cvFile && d.id) {
-                    const fd = new FormData(); fd.append('file', cvFile)
-                    await fetch(`${API}/hr/cv/upload/${d.id}`, { method:'POST', body:fd })
+                  try {
+                    const r = await fetch(`${API}/hr/freelancers`, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(data) })
+                    if (!r.ok) throw new Error(`Server error ${r.status}`)
+                    const d = await r.json()
+                    if (cvFile && d.id) {
+                      const fd = new FormData(); fd.append('file', cvFile)
+                      await fetch(`${API}/hr/cv/upload/${d.id}`, { method:'POST', body:fd })
+                    }
+                    setShowModal(false); setExtracted(null); setCvFile(null); setExtractError(''); load()
+                  } catch (e: any) {
+                    alert(`Save failed: ${e.message}`)
                   }
-                  setShowModal(false); setExtracted(null); setCvFile(null); load()
                 }}
-                onCancel={() => { setShowModal(false); setExtracted(null); setCvFile(null) }}
+                onCancel={() => { setShowModal(false); setExtracted(null); setCvFile(null); setExtractError('') }}
               />
             </div>
           </div>
@@ -126,7 +144,7 @@ export default function FreelancersPage() {
   )
 }
 
-function FreelancerForm({ extracted, cvFile, extracting, onCvUpload, fileRef, onSave, onCancel }: any) {
+function FreelancerForm({ extracted, cvFile, extracting, extractError, onCvUpload, fileRef, onSave, onCancel }: any) {
   const [form, setForm] = useState({ first_name:'', last_name:'', email:'', phone:'', linkedin_url:'', country:'france', current_title:'', skills:[] as string[], years_experience:0, daily_rate:'', availability_date:'', projects:[] as any[] })
   const [skillInput, setSkillInput] = useState('')
 
@@ -144,8 +162,10 @@ function FreelancerForm({ extracted, cvFile, extracting, onCvUpload, fileRef, on
           onClick={() => fileRef.current?.click()}>
           <input ref={fileRef} type="file" accept=".pdf,.doc,.docx,.odt,.rtf" style={{ display:'none' }} onChange={e => e.target.files?.[0] && onCvUpload(e.target.files[0])}/>
           {extracting ? <div style={{ color:'#45B6E4', fontSize:'13px' }}>⏳ Extracting CV data with Claude AI...</div>
-          : cvFile ? <div style={{ color:'#059669', fontSize:'13px' }}>✅ {cvFile.name} — data extracted</div>
-          : <div style={{ color:'#45B6E4', fontSize:'13px' }}>📄 Upload CV (PDF, Word, ODT) — fields will be auto-filled by Claude AI</div>}
+          : extractError ? <div style={{ color:'#D97706', fontSize:'13px' }}>⚠️ {extractError} — fill fields manually below</div>
+          : cvFile && extracted && Object.keys(extracted).length > 0 ? <div style={{ color:'#059669', fontSize:'13px' }}>✅ {cvFile.name} — fields auto-filled</div>
+          : cvFile ? <div style={{ color:'#45B6E4', fontSize:'13px' }}>📎 {cvFile.name} — fill fields manually</div>
+          : <div style={{ color:'#45B6E4', fontSize:'13px' }}>📄 Upload CV (PDF) — fields will be auto-filled by Claude AI</div>}
         </div>
 
         <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'12px' }}>
