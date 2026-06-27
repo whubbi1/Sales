@@ -1,6 +1,6 @@
 'use client'
-import { useState, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
+import { useState, useEffect, Suspense } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { GRCLayout } from '@/components/GRCLayout'
 
 const API = 'https://api.whubbi.wcomply.com'
@@ -9,124 +9,193 @@ const FW_COLORS: Record<string, string> = {
   'ISO 27001': '#156082', 'GDPR': '#e97132', 'SOC 2': '#059669', 'NIS2': '#7C3AED'
 }
 
-const RISK_COLOR = (score: number) =>
-  score >= 15 ? '#DC2626' : score >= 9 ? '#D97706' : score >= 4 ? '#2563EB' : '#059669'
+const STATUS_CONFIG: Record<string, {bg:string;color:string;label:string}> = {
+  not_started:    {bg:'#F1F5F9', color:'#45B6E4', label:'Not Started'},
+  in_progress:    {bg:'#FFF7ED', color:'#D97706', label:'In Progress'},
+  compliant:      {bg:'#ECFDF5', color:'#059669', label:'Compliant'},
+  not_applicable: {bg:'#F8FAFC', color:'#94A3B8', label:'N/A'},
+}
 
-const RISK_LABEL = (score: number) =>
-  score >= 15 ? 'Critical' : score >= 9 ? 'High' : score >= 4 ? 'Medium' : 'Low'
-
-export default function GRCDashboard() {
-  const router = useRouter()
-  const [data, setData] = useState<any>(null)
+function FrameworksContent() {
+  const searchParams = useSearchParams()
+  const [frameworks, setFrameworks] = useState<any[]>([])
+  const [selected, setSelected] = useState<string|null>(searchParams.get('id'))
+  const [controls, setControls] = useState<any[]>([])
+  const [fw, setFw] = useState<any>(null)
   const [loading, setLoading] = useState(true)
+  const [editControl, setEditControl] = useState<any>(null)
+  const [filter, setFilter] = useState('all')
 
   useEffect(() => {
-    fetch(`${API}/grc/dashboard`).then(r => r.json()).then(setData).finally(() => setLoading(false))
+    fetch(`${API}/grc/frameworks`).then(r => r.json()).then(d => {
+      setFrameworks(d.frameworks || [])
+      if (!selected && d.frameworks?.length > 0) setSelected(d.frameworks[0].id)
+    }).finally(() => setLoading(false))
   }, [])
+
+  useEffect(() => {
+    if (!selected) return
+    fetch(`${API}/grc/frameworks/${selected}/controls`).then(r => r.json()).then(d => {
+      setControls(d.controls || [])
+      setFw(d.framework)
+    })
+  }, [selected])
+
+  const updateControl = async (controlId: string, status: string, evidence: string) => {
+    await fetch(`${API}/grc/controls/${controlId}`, {
+      method: 'PUT', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({status, evidence})
+    })
+    setControls(prev => prev.map(c => c.id === controlId ? {...c, status, evidence} : c))
+    setEditControl(null)
+  }
+
+  const filtered = filter === 'all' ? controls : controls.filter(c => c.status === filter)
+  const grouped = filtered.reduce((acc: any, c) => {
+    const cat = c.category || 'Other'
+    if (!acc[cat]) acc[cat] = []
+    acc[cat].push(c)
+    return acc
+  }, {})
+
+  const fwColor = (name: string) => FW_COLORS[name] || '#156082'
 
   return (
     <GRCLayout>
       <div style={{ padding: '28px 32px' }}>
-        <div style={{ marginBottom: '24px' }}>
-          <h1 style={{ fontSize: '20px', fontWeight: '800', color: '#156082', marginBottom: '4px' }}>GRC Dashboard</h1>
-          <p style={{ fontSize: '12px', color: '#45B6E4' }}>Governance, Risk & Compliance overview</p>
+        <div style={{ marginBottom: '20px' }}>
+          <h1 style={{ fontSize: '20px', fontWeight: '800', color: '#156082', marginBottom: '4px' }}>📋 Frameworks</h1>
+          <p style={{ fontSize: '12px', color: '#45B6E4' }}>Regulatory compliance tracking</p>
         </div>
 
         {loading && <div style={{ textAlign: 'center', padding: '48px', color: '#45B6E4' }}>Loading...</div>}
 
-        {!loading && data && (<>
-          {/* KPIs */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '14px', marginBottom: '24px' }}>
-            {[
-              { label: 'Frameworks', value: data.frameworks?.length || 0, icon: '📋', color: '#156082' },
-              { label: 'Total Risks', value: data.risks?.total || 0, icon: '⚠️', color: '#D97706' },
-              { label: 'High Risks', value: data.risks?.high_risks?.length || 0, icon: '🔴', color: '#DC2626' },
-              { label: 'Active Audits', value: (data.audits?.summary?.in_progress || 0) + (data.audits?.summary?.planned || 0), icon: '🔍', color: '#059669' },
-            ].map(kpi => (
-              <div key={kpi.label} style={{ background: 'white', borderRadius: '12px', border: '1px solid #EDF2F7', padding: '18px', boxShadow: '0 1px 3px rgba(0,0,0,0.06)', borderTop: `3px solid ${kpi.color}` }}>
-                <div style={{ fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#45B6E4', marginBottom: '8px' }}>{kpi.icon} {kpi.label}</div>
-                <div style={{ fontSize: '28px', fontWeight: '900', color: kpi.color }}>{kpi.value}</div>
-              </div>
-            ))}
-          </div>
-
-          {/* Frameworks compliance */}
-          <div style={{ background: 'white', borderRadius: '12px', border: '1px solid #EDF2F7', padding: '20px', marginBottom: '20px', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-              <h3 style={{ fontSize: '12px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#45B6E4' }}>📋 Frameworks Compliance</h3>
-              <button onClick={() => router.push('/grc/frameworks')} style={{ fontSize: '11px', color: '#156082', fontWeight: '700', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'Montserrat, sans-serif' }}>View all →</button>
+        {!loading && (
+          <div style={{ display: 'grid', gridTemplateColumns: '240px 1fr', gap: '20px' }}>
+            <div>
+              {frameworks.map(f => (
+                <div key={f.id} onClick={() => setSelected(f.id)}
+                  style={{ background: selected === f.id ? 'white' : 'transparent', borderRadius: '10px', border: `1px solid ${selected === f.id ? fwColor(f.name) : 'transparent'}`, padding: '14px', cursor: 'pointer', marginBottom: '8px' }}>
+                  <div style={{ fontSize: '13px', fontWeight: '800', color: fwColor(f.name), marginBottom: '4px' }}>{f.name}</div>
+                  <div style={{ fontSize: '10px', color: '#45B6E4', marginBottom: '8px' }}>v{f.version} · {f.total_controls} controls</div>
+                  <div style={{ height: '5px', background: '#F1F5F9', borderRadius: '3px', overflow: 'hidden' }}>
+                    <div style={{ height: '100%', width: `${f.compliance_pct}%`, background: fwColor(f.name), borderRadius: '3px' }} />
+                  </div>
+                  <div style={{ fontSize: '11px', fontWeight: '700', color: fwColor(f.name), marginTop: '4px' }}>{f.compliance_pct}% compliant</div>
+                </div>
+              ))}
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '12px' }}>
-              {data.frameworks?.map((fw: any) => (
-                <div key={fw.id} onClick={() => router.push(`/grc/frameworks?id=${fw.id}`)}
-                  style={{ padding: '16px', borderRadius: '10px', border: `1px solid ${FW_COLORS[fw.name] || '#EDF2F7'}20`, background: `${FW_COLORS[fw.name] || '#156082'}06`, cursor: 'pointer' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+
+            {selected && fw && (
+              <div>
+                <div style={{ background: 'white', borderRadius: '12px', border: '1px solid #EDF2F7', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
+                  <div style={{ padding: '16px 20px', borderBottom: '1px solid #EDF2F7', background: `${fwColor(fw.name)}08`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <div>
-                      <div style={{ fontSize: '13px', fontWeight: '800', color: FW_COLORS[fw.name] || '#156082' }}>{fw.name}</div>
-                      <div style={{ fontSize: '10px', color: '#45B6E4' }}>v{fw.version} · {fw.total_controls} controls</div>
+                      <div style={{ fontSize: '15px', fontWeight: '800', color: fwColor(fw.name) }}>{fw.name}</div>
+                      <div style={{ fontSize: '11px', color: '#45B6E4' }}>{fw.description}</div>
                     </div>
-                    <div style={{ fontSize: '22px', fontWeight: '900', color: FW_COLORS[fw.name] || '#156082' }}>{fw.compliance_pct}%</div>
+                    <div style={{ display: 'flex', gap: '6px' }}>
+                      {['all','not_started','in_progress','compliant'].map(f => (
+                        <button key={f} onClick={() => setFilter(f)}
+                          style={{ padding: '4px 10px', borderRadius: '20px', border: 'none', cursor: 'pointer', fontSize: '10px', fontWeight: '700', fontFamily: 'Montserrat, sans-serif',
+                            background: filter === f ? fwColor(fw.name) : '#F1F5F9',
+                            color: filter === f ? 'white' : '#45B6E4' }}>
+                          {f === 'all' ? 'All' : STATUS_CONFIG[f]?.label}
+                        </button>
+                      ))}
+                    </div>
                   </div>
-                  <div style={{ height: '6px', background: '#F1F5F9', borderRadius: '3px', overflow: 'hidden' }}>
-                    <div style={{ height: '100%', width: `${fw.compliance_pct}%`, background: FW_COLORS[fw.name] || '#156082', borderRadius: '3px', transition: 'width 0.5s' }} />
-                  </div>
-                  <div style={{ display: 'flex', gap: '12px', marginTop: '8px', fontSize: '10px', fontWeight: '600' }}>
-                    <span style={{ color: '#059669' }}>✓ {fw.compliant} compliant</span>
-                    <span style={{ color: '#D97706' }}>⟳ {fw.in_progress} in progress</span>
-                    <span style={{ color: '#45B6E4' }}>○ {fw.not_started} pending</span>
+                  <div style={{ maxHeight: 'calc(100vh - 280px)', overflowY: 'auto', padding: '16px' }}>
+                    {Object.entries(grouped).map(([cat, ctls]: any) => (
+                      <div key={cat} style={{ marginBottom: '20px' }}>
+                        <div style={{ fontSize: '11px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#45B6E4', marginBottom: '8px', paddingBottom: '6px', borderBottom: '1px solid #F1F5F9' }}>{cat}</div>
+                        {ctls.map((ctrl: any) => {
+                          const sc = STATUS_CONFIG[ctrl.status] || STATUS_CONFIG.not_started
+                          return (
+                            <div key={ctrl.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 12px', borderRadius: '8px', border: '1px solid #F1F5F9', marginBottom: '6px', background: 'white' }}>
+                              <div style={{ flex: 1 }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                  <span style={{ fontSize: '10px', fontWeight: '700', color: fwColor(fw.name), background: `${fwColor(fw.name)}15`, padding: '2px 6px', borderRadius: '4px' }}>{ctrl.control_id}</span>
+                                  <span style={{ fontSize: '12px', fontWeight: '600', color: '#3F3F3F' }}>{ctrl.title}</span>
+                                </div>
+                                {ctrl.evidence && <div style={{ fontSize: '10px', color: '#45B6E4', marginTop: '4px' }}>📎 {ctrl.evidence}</div>}
+                              </div>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginLeft: '12px' }}>
+                                <span style={{ background: sc.bg, color: sc.color, padding: '3px 8px', borderRadius: '12px', fontSize: '10px', fontWeight: '700', whiteSpace: 'nowrap' }}>{sc.label}</span>
+                                <button onClick={() => setEditControl(ctrl)}
+                                  style={{ padding: '4px 10px', background: '#F5F7FA', border: '1px solid #EDF2F7', borderRadius: '6px', fontSize: '10px', fontWeight: '600', cursor: 'pointer', fontFamily: 'Montserrat, sans-serif', color: '#156082' }}>
+                                  Edit
+                                </button>
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    ))}
                   </div>
                 </div>
-              ))}
-            </div>
+              </div>
+            )}
           </div>
+        )}
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
-            {/* High Risks */}
-            <div style={{ background: 'white', borderRadius: '12px', border: '1px solid #EDF2F7', padding: '20px', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
-                <h3 style={{ fontSize: '12px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#45B6E4' }}>⚠️ High Priority Risks</h3>
-                <button onClick={() => router.push('/grc/risks')} style={{ fontSize: '11px', color: '#156082', fontWeight: '700', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'Montserrat, sans-serif' }}>View all →</button>
-              </div>
-              {data.risks?.high_risks?.length === 0 && <p style={{ color: '#45B6E4', fontSize: '13px' }}>No high priority risks.</p>}
-              {data.risks?.high_risks?.map((risk: any) => {
-                const score = risk.probability * risk.impact
-                return (
-                  <div key={risk.id} style={{ padding: '12px', borderRadius: '8px', border: `1px solid ${RISK_COLOR(score)}20`, marginBottom: '8px', background: `${RISK_COLOR(score)}06` }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span style={{ fontSize: '12px', fontWeight: '700', color: '#3F3F3F' }}>{risk.title}</span>
-                      <span style={{ background: RISK_COLOR(score), color: 'white', padding: '2px 8px', borderRadius: '12px', fontSize: '10px', fontWeight: '700' }}>{RISK_LABEL(score)} ({score})</span>
-                    </div>
-                    <div style={{ fontSize: '10px', color: '#45B6E4', marginTop: '4px' }}>{risk.category} · {risk.owner_name || 'Unassigned'}</div>
-                  </div>
-                )
-              })}
-            </div>
-
-            {/* Upcoming Audits */}
-            <div style={{ background: 'white', borderRadius: '12px', border: '1px solid #EDF2F7', padding: '20px', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
-                <h3 style={{ fontSize: '12px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#45B6E4' }}>🔍 Upcoming Audits</h3>
-                <button onClick={() => router.push('/grc/audits')} style={{ fontSize: '11px', color: '#156082', fontWeight: '700', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'Montserrat, sans-serif' }}>View all →</button>
-              </div>
-              {data.audits?.upcoming?.length === 0 && <p style={{ color: '#45B6E4', fontSize: '13px' }}>No upcoming audits.</p>}
-              {data.audits?.upcoming?.map((audit: any) => (
-                <div key={audit.id} style={{ padding: '12px', borderRadius: '8px', border: '1px solid #EDF2F7', marginBottom: '8px' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ fontSize: '12px', fontWeight: '700', color: '#3F3F3F' }}>{audit.title}</span>
-                    <span style={{ background: audit.status === 'in_progress' ? '#059669' : '#D97706', color: 'white', padding: '2px 8px', borderRadius: '12px', fontSize: '10px', fontWeight: '700' }}>
-                      {audit.status === 'in_progress' ? 'In Progress' : 'Planned'}
-                    </span>
-                  </div>
-                  <div style={{ fontSize: '10px', color: '#45B6E4', marginTop: '4px' }}>{audit.audit_type} · {audit.auditor_name || 'TBD'}</div>
+        {editControl && (
+          <div style={{ position: 'fixed', inset: 0, background: 'rgba(21,96,130,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, backdropFilter: 'blur(2px)' }}>
+            <div style={{ background: 'white', borderRadius: '14px', width: '500px', overflow: 'hidden', boxShadow: '0 20px 60px rgba(21,96,130,0.25)' }}>
+              <div style={{ padding: '16px 20px', borderBottom: '1px solid #EDF2F7', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div>
+                  <div style={{ fontSize: '13px', fontWeight: '800', color: '#156082' }}>{editControl.control_id} — {editControl.title}</div>
+                  <div style={{ fontSize: '11px', color: '#45B6E4' }}>{editControl.category}</div>
                 </div>
-              ))}
-              <button onClick={() => router.push('/grc/audits')} style={{ width: '100%', marginTop: '8px', padding: '8px', background: '#F5F7FA', border: '1px dashed #45B6E4', borderRadius: '8px', color: '#156082', fontSize: '12px', fontWeight: '700', cursor: 'pointer', fontFamily: 'Montserrat, sans-serif' }}>
-                + New Audit
-              </button>
+                <button onClick={() => setEditControl(null)} style={{ background: 'none', border: 'none', fontSize: '18px', cursor: 'pointer', color: '#45B6E4' }}>×</button>
+              </div>
+              <EditControlForm control={editControl} onSave={updateControl} onCancel={() => setEditControl(null)} />
             </div>
           </div>
-        </>)}
+        )}
       </div>
     </GRCLayout>
+  )
+}
+
+function EditControlForm({ control, onSave, onCancel }: any) {
+  const [status, setStatus] = useState(control.status)
+  const [evidence, setEvidence] = useState(control.evidence || '')
+  return (
+    <div>
+      <div style={{ padding: '20px' }}>
+        <div style={{ marginBottom: '16px' }}>
+          <label style={{ display: 'block', fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#45B6E4', marginBottom: '6px' }}>Status</label>
+          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+            {Object.entries({not_started:'Not Started', in_progress:'In Progress', compliant:'Compliant', not_applicable:'N/A'}).map(([val, label]) => (
+              <button key={val} onClick={() => setStatus(val)}
+                style={{ padding: '6px 12px', borderRadius: '20px', border: 'none', cursor: 'pointer', fontSize: '11px', fontWeight: '700', fontFamily: 'Montserrat, sans-serif',
+                  background: status === val ? '#156082' : '#F1F5F9',
+                  color: status === val ? 'white' : '#45B6E4' }}>
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div>
+          <label style={{ display: 'block', fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#45B6E4', marginBottom: '6px' }}>Evidence / Notes</label>
+          <textarea value={evidence} onChange={e => setEvidence(e.target.value)}
+            placeholder="Describe evidence, documentation, or notes..."
+            style={{ width: '100%', padding: '10px', border: '1.5px solid #EDF2F7', borderRadius: '8px', fontFamily: 'Montserrat, sans-serif', fontSize: '12px', resize: 'vertical', minHeight: '80px', outline: 'none', color: '#3F3F3F' }} />
+        </div>
+      </div>
+      <div style={{ padding: '14px 20px', borderTop: '1px solid #EDF2F7', background: '#FAFBFC', display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+        <button onClick={onCancel} style={{ padding: '8px 16px', background: 'white', border: '1.5px solid #EDF2F7', borderRadius: '8px', fontSize: '12px', fontWeight: '600', cursor: 'pointer', fontFamily: 'Montserrat, sans-serif', color: '#45B6E4' }}>Cancel</button>
+        <button onClick={() => onSave(control.id, status, evidence)} style={{ padding: '8px 16px', background: '#156082', border: 'none', borderRadius: '8px', fontSize: '12px', fontWeight: '700', cursor: 'pointer', fontFamily: 'Montserrat, sans-serif', color: 'white' }}>Save</button>
+      </div>
+    </div>
+  )
+}
+
+export default function FrameworksPage() {
+  return (
+    <Suspense fallback={<GRCLayout><div style={{ padding: '48px', textAlign: 'center', color: '#45B6E4' }}>Loading...</div></GRCLayout>}>
+      <FrameworksContent />
+    </Suspense>
   )
 }

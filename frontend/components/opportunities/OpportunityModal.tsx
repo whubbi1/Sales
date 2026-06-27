@@ -74,7 +74,7 @@ export function OpportunityModal({ opportunity, onClose, onSave }: any) {
     try {
       const payload = {
         ...form,
-        company_id: form.company_id || null,
+        company_id: form.company_id && form.company_id.trim() !== '' ? form.company_id : null,
         deal_amount: form.deal_amount ? Number(form.deal_amount) : null,
         closing_date: form.closing_date || null,
         contract_start_date: form.contract_start_date || null,
