@@ -2,10 +2,11 @@
 import { useRouter, usePathname } from 'next/navigation'
 
 const NAV = [
-  { href: '/rh',              icon: '📊', label: 'Dashboard' },
-  { href: '/rh/freelancers',  icon: '🔗', label: 'Freelancers' },
-  { href: '/rh/recrutement',  icon: '👥', label: 'Recrutement' },
-  { href: '/rh/jobs',         icon: '📋', label: 'Job Descriptions' },
+  { href: '/rh',               icon: '📊', label: 'Dashboard' },
+  { href: '/rh/freelancers',   icon: '🔗', label: 'Freelancers' },
+  { href: '/rh/recrutement',   icon: '👥', label: 'Recrutement' },
+  { href: '/rh/jobs',          icon: '📋', label: 'Job Descriptions' },
+  { href: '/rh/permissions',   icon: '🔐', label: 'Permissions' },
 ]
 
 export function HRLayout({ children }: { children: React.ReactNode }) {
