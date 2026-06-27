@@ -10,11 +10,11 @@ on:
 
 env:
   AWS_REGION: eu-west-1
-  ECR_REPOSITORY: wcomply-backend
-  ECS_CLUSTER: wcomply-cluster-prod
-  ECS_SERVICE: wcomply-backend-service
-  CONTAINER_NAME: wcomply-backend
-  TASK_DEFINITION_FAMILY: wcomply-backend
+  ECR_REPOSITORY: whubbi-backend
+  ECS_CLUSTER: whubbi-cluster-dev
+  ECS_SERVICE: whubbi-backend-service
+  CONTAINER_NAME: whubbi-backend
+  TASK_DEFINITION_FAMILY: whubbi-backend
 
 jobs:
   deploy:
