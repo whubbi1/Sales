@@ -14,7 +14,7 @@ app.add_middleware(CORSMiddleware,
 async def global_exception_handler(request: Request, exc: Exception):
     import traceback
     traceback.print_exc()
-    return JSONResponse({"detail": str(exc), "type": type(exc).__name__}, status_code=500)
+    return JSONResponse({"detail": "Internal server error"}, status_code=500)
 
 @app.on_event("startup")
 async def startup():
@@ -247,7 +247,7 @@ async def startup():
         import traceback; traceback.print_exc()
 
 @app.get("/health")
-async def health(): return {"status":"healthy","app":"whubbi","version":"2.0.3"}
+async def health(): return {"status":"healthy","app":"whubbi","version":"2.0.4"}
 
 @app.get("/")
 async def root(): return {"message":"WHUBBI API","version":"2.0.0"}
