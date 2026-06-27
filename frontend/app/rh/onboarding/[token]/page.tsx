@@ -97,7 +97,7 @@ export default function OnboardingPage() {
                   {uploads[doc]&&<div style={{ fontSize:'11px', color:'#059669', marginTop:'2px' }}>✅ {uploads[doc]}</div>}
                 </div>
                 <div>
-                  <input ref={el=>fileRefs.current[doc]=el} type="file" accept=".pdf,.jpg,.jpeg,.png" style={{ display:'none' }}
+                  <input ref={el=>{fileRefs.current[doc]=el}} type="file" accept=".pdf,.jpg,.jpeg,.png" style={{ display:'none' }}
                     onChange={e=>e.target.files?.[0]&&uploadDoc(doc,e.target.files[0])}/>
                   <button onClick={()=>fileRefs.current[doc]?.click()} disabled={uploading[doc]}
                     style={{ padding:'7px 16px', background:uploads[doc]?'#ECFDF5':'#EFF6FF', color:uploads[doc]?'#059669':'#156082', border:`1px solid ${uploads[doc]?'#059669':'#156082'}`, borderRadius:'8px', fontSize:'11px', fontWeight:'700', cursor:'pointer', fontFamily:'Montserrat, sans-serif' }}>

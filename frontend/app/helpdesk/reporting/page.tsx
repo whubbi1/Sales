@@ -5,15 +5,35 @@ import { API } from '../constants'
 
 const PRIO_COLOR: Record<string,string> = {critical:'#DC2626',high:'#D97706',medium:'#156082',low:'#45B6E4'}
 
+const DEFAULT_CONFIG = {
+  showVolume: true, showCategory: true, showPriority: true, showSLA: true,
+  showResolutionTime: true, chartType: 'bar', days: 30
+}
+
 export default function ReportingPage() {
   const [data, setData] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [days, setDays] = useState(30)
+  const [showConfig, setShowConfig] = useState(false)
+  const [config, setConfig] = useState(() => {
+    if (typeof window !== 'undefined') {
+      try { return JSON.parse(localStorage.getItem('helpdesk_report_config') || 'null') || DEFAULT_CONFIG }
+      catch { return DEFAULT_CONFIG }
+    }
+    return DEFAULT_CONFIG
+  })
+  const [savedMsg, setSavedMsg] = useState(false)
 
   useEffect(() => {
     setLoading(true)
     fetch(`${API}/helpdesk/reporting?days=${days}`).then(r => r.json()).then(setData).finally(() => setLoading(false))
   }, [days])
+
+  const saveConfig = () => {
+    localStorage.setItem('helpdesk_report_config', JSON.stringify({...config, days}))
+    setSavedMsg(true)
+    setTimeout(() => setSavedMsg(false), 2000)
+  }
 
   const btnStyle = (active: boolean): React.CSSProperties => ({
     padding: '7px 14px', borderRadius: '7px',
@@ -23,90 +43,137 @@ export default function ReportingPage() {
     fontSize: '12px', fontWeight: 600, cursor: 'pointer', fontFamily: 'Montserrat, sans-serif',
   })
 
+  const toggle = (key: keyof typeof config) => setConfig((c:any) => ({...c, [key]: !c[key]}))
+
   return (
     <HelpdeskLayout>
       <div style={{ padding: '24px 28px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
           <h1 style={{ fontSize: '20px', fontWeight: '800', color: '#156082', margin: 0 }}>📊 Reports & Analytics</h1>
-          <div style={{ display: 'flex', gap: '6px' }}>
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
             {[7,30,90].map(d => <button key={d} onClick={() => setDays(d)} style={btnStyle(days===d)}>{d}d</button>)}
+            <button onClick={() => setShowConfig(!showConfig)}
+              style={{ padding:'7px 14px', borderRadius:'7px', border:'1.5px solid #e97132', background: showConfig?'#e97132':'white', color: showConfig?'white':'#e97132', fontSize:'12px', fontWeight:600, cursor:'pointer', fontFamily:'Montserrat, sans-serif' }}>
+              ⚙️ Customize
+            </button>
           </div>
         </div>
+
+        {/* Config panel */}
+        {showConfig && (
+          <div style={{ background:'white', borderRadius:'12px', border:'1.5px solid #e97132', padding:'20px', marginBottom:'20px', boxShadow:'0 2px 8px rgba(0,0,0,0.08)' }}>
+            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'14px' }}>
+              <h3 style={{ fontSize:'13px', fontWeight:'700', color:'#e97132', margin:0, textTransform:'uppercase', letterSpacing:'0.07em' }}>Report Configuration</h3>
+              <div style={{ display:'flex', gap:'8px' }}>
+                <button onClick={saveConfig} style={{ padding:'6px 14px', background:'#059669', color:'white', border:'none', borderRadius:'7px', fontSize:'12px', fontWeight:'700', cursor:'pointer', fontFamily:'Montserrat, sans-serif' }}>
+                  {savedMsg ? '✅ Saved!' : '💾 Save as default'}
+                </button>
+                <button onClick={() => { setConfig(DEFAULT_CONFIG); setDays(30) }} style={{ padding:'6px 14px', background:'#F1F5F9', color:'#45B6E4', border:'none', borderRadius:'7px', fontSize:'12px', fontWeight:'600', cursor:'pointer', fontFamily:'Montserrat, sans-serif' }}>Reset</button>
+              </div>
+            </div>
+            <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:'10px' }}>
+              {[
+                ['showSLA', 'SLA Overview KPIs'],
+                ['showVolume', 'Volume Chart'],
+                ['showCategory', 'By Category'],
+                ['showPriority', 'By Priority'],
+                ['showResolutionTime', 'Resolution Time'],
+              ].map(([key, label]) => (
+                <label key={key} style={{ display:'flex', alignItems:'center', gap:'8px', cursor:'pointer', padding:'8px 12px', borderRadius:'8px', border:`1.5px solid ${(config as any)[key]?'#156082':'#EDF2F7'}`, background:(config as any)[key]?'#EFF6FF':'white' }}>
+                  <input type="checkbox" checked={(config as any)[key]} onChange={() => toggle(key as any)} style={{ accentColor:'#156082' }}/>
+                  <span style={{ fontSize:'12px', fontWeight:'600', color:(config as any)[key]?'#156082':'#45B6E4' }}>{label}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+        )}
 
         {loading && <div style={{ textAlign:'center',padding:'48px',color:'#45B6E4' }}>Loading...</div>}
 
         {!loading && data && (<>
-          <div style={{ display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:'14px',marginBottom:'24px' }}>
-            {[
-              { label:'Total Tickets',   value:data.sla?.total||0,        color:'#156082' },
-              { label:'SLA Compliant',   value:data.sla?.compliant||0,    color:'#059669' },
-              { label:'SLA Breached',    value:data.sla?.breached||0,     color:'#DC2626' },
-              { label:'Compliance Rate', value:`${data.sla?.rate||100}%`, color:(data.sla?.rate??100)>=95?'#059669':(data.sla?.rate??100)>=80?'#D97706':'#DC2626' },
-            ].map(k => (
-              <div key={k.label} style={{ background:'white',borderRadius:'12px',border:'1px solid #EDF2F7',padding:'18px',boxShadow:'0 1px 3px rgba(0,0,0,0.06)',borderTop:`3px solid ${k.color}` }}>
-                <div style={{ fontSize:'10px',fontWeight:'700',textTransform:'uppercase',letterSpacing:'0.07em',color:'#45B6E4',marginBottom:'8px' }}>{k.label}</div>
-                <div style={{ fontSize:'24px',fontWeight:'800',color:k.color }}>{k.value}</div>
-              </div>
-            ))}
-          </div>
+          {/* SLA KPIs */}
+          {config.showSLA && (
+            <div style={{ display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:'14px',marginBottom:'24px' }}>
+              {[
+                { label:'Total Tickets',   value:data.sla?.total||0,        color:'#156082' },
+                { label:'SLA Compliant',   value:data.sla?.compliant||0,    color:'#059669' },
+                { label:'SLA Breached',    value:data.sla?.breached||0,     color:'#DC2626' },
+                { label:'Compliance Rate', value:`${data.sla?.rate||100}%`, color:(data.sla?.rate??100)>=95?'#059669':(data.sla?.rate??100)>=80?'#D97706':'#DC2626' },
+              ].map(k => (
+                <div key={k.label} style={{ background:'white',borderRadius:'12px',border:'1px solid #EDF2F7',padding:'18px',boxShadow:'0 1px 3px rgba(0,0,0,0.06)',borderTop:`3px solid ${k.color}` }}>
+                  <div style={{ fontSize:'10px',fontWeight:'700',textTransform:'uppercase',letterSpacing:'0.07em',color:'#45B6E4',marginBottom:'8px' }}>{k.label}</div>
+                  <div style={{ fontSize:'24px',fontWeight:'800',color:k.color }}>{k.value}</div>
+                </div>
+              ))}
+            </div>
+          )}
 
           <div style={{ display:'grid',gridTemplateColumns:'1fr 1fr',gap:'20px',marginBottom:'20px' }}>
-            <div style={{ background:'white',borderRadius:'12px',border:'1px solid #EDF2F7',padding:'20px',boxShadow:'0 1px 3px rgba(0,0,0,0.06)' }}>
-              <h3 style={{ fontSize:'12px',fontWeight:'700',textTransform:'uppercase',letterSpacing:'0.07em',color:'#45B6E4',marginBottom:'16px' }}>Volume — Last {days} days</h3>
-              {data.volume_by_day?.length === 0 ? <p style={{ color:'#45B6E4',fontSize:'13px' }}>No data yet.</p> : (
-                <div style={{ display:'flex',alignItems:'flex-end',gap:'3px',height:'120px' }}>
-                  {data.volume_by_day?.map((d:any) => {
-                    const max = Math.max(...(data.volume_by_day||[]).map((x:any)=>x.count),1)
-                    return (
-                      <div key={d.date} style={{ flex:1,display:'flex',flexDirection:'column',alignItems:'center' }} title={`${d.date}: ${d.count}`}>
-                        <div style={{ width:'100%',height:`${Math.max((d.count/max)*100,4)}%`,background:'#156082',borderRadius:'3px 3px 0 0',minHeight:'4px' }}/>
-                      </div>
-                    )
-                  })}
-                </div>
-              )}
-            </div>
-
-            <div style={{ background:'white',borderRadius:'12px',border:'1px solid #EDF2F7',padding:'20px',boxShadow:'0 1px 3px rgba(0,0,0,0.06)' }}>
-              <h3 style={{ fontSize:'12px',fontWeight:'700',textTransform:'uppercase',letterSpacing:'0.07em',color:'#45B6E4',marginBottom:'16px' }}>By Category</h3>
-              {data.by_category?.length === 0 ? <p style={{ color:'#45B6E4',fontSize:'13px' }}>No data yet.</p> : (
-                <div style={{ display:'flex',flexDirection:'column',gap:'10px' }}>
-                  {data.by_category?.map((c:any) => {
-                    const pct = Math.round((c.c/(data.sla?.total||1))*100)
-                    return (
-                      <div key={c.name}>
-                        <div style={{ display:'flex',justifyContent:'space-between',marginBottom:'4px' }}>
-                          <span style={{ fontSize:'12px',fontWeight:'600',color:'#3F3F3F' }}>{c.icon} {c.name||'Uncategorized'}</span>
-                          <span style={{ fontSize:'12px',fontWeight:'700',color:'#156082' }}>{c.c}</span>
+            {/* Volume chart */}
+            {config.showVolume && (
+              <div style={{ background:'white',borderRadius:'12px',border:'1px solid #EDF2F7',padding:'20px',boxShadow:'0 1px 3px rgba(0,0,0,0.06)' }}>
+                <h3 style={{ fontSize:'12px',fontWeight:'700',textTransform:'uppercase',letterSpacing:'0.07em',color:'#45B6E4',marginBottom:'16px' }}>Volume — Last {days} days</h3>
+                {data.volume_by_day?.length === 0 ? <p style={{ color:'#45B6E4',fontSize:'13px' }}>No data yet.</p> : (
+                  <div style={{ display:'flex',alignItems:'flex-end',gap:'3px',height:'120px' }}>
+                    {data.volume_by_day?.map((d:any) => {
+                      const max = Math.max(...(data.volume_by_day||[]).map((x:any)=>x.count),1)
+                      return (
+                        <div key={d.date} style={{ flex:1,display:'flex',flexDirection:'column',alignItems:'center' }} title={`${d.date}: ${d.count}`}>
+                          <div style={{ width:'100%',height:`${Math.max((d.count/max)*100,4)}%`,background:'#156082',borderRadius:'3px 3px 0 0',minHeight:'4px' }}/>
                         </div>
-                        <div style={{ height:'6px',background:'#F1F5F9',borderRadius:'3px',overflow:'hidden' }}>
-                          <div style={{ height:'100%',width:`${pct}%`,background:c.color||'#45B6E4',borderRadius:'3px' }}/>
-                        </div>
-                      </div>
-                    )
-                  })}
-                </div>
-              )}
-            </div>
-          </div>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
 
-          <div style={{ background:'white',borderRadius:'12px',border:'1px solid #EDF2F7',padding:'20px',boxShadow:'0 1px 3px rgba(0,0,0,0.06)' }}>
-            <h3 style={{ fontSize:'12px',fontWeight:'700',textTransform:'uppercase',letterSpacing:'0.07em',color:'#45B6E4',marginBottom:'16px' }}>Avg Resolution Time by Priority</h3>
-            {data.by_priority?.length === 0 ? <p style={{ color:'#45B6E4',fontSize:'13px' }}>No resolved tickets yet.</p> : (
-              <div style={{ display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:'14px' }}>
-                {['critical','high','medium','low'].map(p => {
-                  const row = data.by_priority?.find((r:any) => r.priority===p)
-                  return (
-                    <div key={p} style={{ background:'#F8FAFC',borderRadius:'10px',padding:'16px',textAlign:'center',borderTop:`3px solid ${PRIO_COLOR[p]}` }}>
-                      <div style={{ fontSize:'10px',fontWeight:'700',color:'#45B6E4',marginBottom:'8px',textTransform:'capitalize' }}>{p}</div>
-                      <div style={{ fontSize:'22px',fontWeight:'800',color:PRIO_COLOR[p] }}>{row?`${row.avg_hours}h`:'—'}</div>
-                      <div style={{ fontSize:'11px',color:'#45B6E4',marginTop:'4px' }}>{row?`${row.count} resolved`:'no data'}</div>
-                    </div>
-                  )
-                })}
+            {/* By category */}
+            {config.showCategory && (
+              <div style={{ background:'white',borderRadius:'12px',border:'1px solid #EDF2F7',padding:'20px',boxShadow:'0 1px 3px rgba(0,0,0,0.06)' }}>
+                <h3 style={{ fontSize:'12px',fontWeight:'700',textTransform:'uppercase',letterSpacing:'0.07em',color:'#45B6E4',marginBottom:'16px' }}>By Category</h3>
+                {data.by_category?.length === 0 ? <p style={{ color:'#45B6E4',fontSize:'13px' }}>No data yet.</p> : (
+                  <div style={{ display:'flex',flexDirection:'column',gap:'10px' }}>
+                    {data.by_category?.map((c:any) => {
+                      const pct = Math.round((c.c/(data.sla?.total||1))*100)
+                      return (
+                        <div key={c.name}>
+                          <div style={{ display:'flex',justifyContent:'space-between',marginBottom:'4px' }}>
+                            <span style={{ fontSize:'12px',fontWeight:'600',color:'#3F3F3F' }}>{c.icon} {c.name||'Uncategorized'}</span>
+                            <span style={{ fontSize:'12px',fontWeight:'700',color:'#156082' }}>{c.c}</span>
+                          </div>
+                          <div style={{ height:'6px',background:'#F1F5F9',borderRadius:'3px',overflow:'hidden' }}>
+                            <div style={{ height:'100%',width:`${pct}%`,background:c.color||'#45B6E4',borderRadius:'3px' }}/>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
               </div>
             )}
           </div>
+
+          {/* Resolution time by priority */}
+          {config.showResolutionTime && (
+            <div style={{ background:'white',borderRadius:'12px',border:'1px solid #EDF2F7',padding:'20px',boxShadow:'0 1px 3px rgba(0,0,0,0.06)' }}>
+              <h3 style={{ fontSize:'12px',fontWeight:'700',textTransform:'uppercase',letterSpacing:'0.07em',color:'#45B6E4',marginBottom:'16px' }}>Avg Resolution Time by Priority</h3>
+              {data.by_priority?.length === 0 ? <p style={{ color:'#45B6E4',fontSize:'13px' }}>No resolved tickets yet.</p> : (
+                <div style={{ display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:'14px' }}>
+                  {['critical','high','medium','low'].map(p => {
+                    const row = data.by_priority?.find((r:any) => r.priority===p)
+                    return (
+                      <div key={p} style={{ background:'#F8FAFC',borderRadius:'10px',padding:'16px',textAlign:'center',borderTop:`3px solid ${PRIO_COLOR[p]}` }}>
+                        <div style={{ fontSize:'10px',fontWeight:'700',color:'#45B6E4',marginBottom:'8px',textTransform:'capitalize' }}>{p}</div>
+                        <div style={{ fontSize:'22px',fontWeight:'800',color:PRIO_COLOR[p] }}>{row?`${row.avg_hours}h`:'—'}</div>
+                        <div style={{ fontSize:'11px',color:'#45B6E4',marginTop:'4px' }}>{row?`${row.count} resolved`:'no data'}</div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          )}
         </>)}
       </div>
     </HelpdeskLayout>

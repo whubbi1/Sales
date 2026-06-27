@@ -15,7 +15,6 @@ interface NavItem {
 
 const NAV_ITEMS: NavItem[] = [
   { href: '/helpdesk',                label: 'Dashboard',       icon: '📊', roles: ['end_user','helpdesk_user','administrator'] },
-  { href: '/helpdesk/tickets/new',    label: 'Create Ticket',   icon: '✏️', roles: ['end_user','helpdesk_user','administrator'] },
   { href: '/helpdesk/tickets/mine',   label: 'My Tickets',      icon: '🎫', roles: ['end_user','helpdesk_user','administrator'] },
   { href: '/helpdesk/tickets',        label: 'All Tickets',     icon: '📂', roles: ['helpdesk_user','administrator'] },
   { href: '/helpdesk/tickets/assigned', label: 'Assigned to Me', icon: '👤', roles: ['helpdesk_user','administrator'] },

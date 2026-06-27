@@ -179,6 +179,17 @@ async def startup():
                     filename VARCHAR(255), sharepoint_url VARCHAR(1000),
                     uploaded_at TIMESTAMP DEFAULT NOW(), personal_data JSON
                 )""",
+
+                # Company Links migration
+                """CREATE TABLE IF NOT EXISTS company_links (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    label VARCHAR(100) NOT NULL,
+                    url VARCHAR(1000) NOT NULL,
+                    icon VARCHAR(10) DEFAULT '🔗',
+                    active BOOLEAN DEFAULT true,
+                    sort_order INTEGER DEFAULT 0,
+                    created_at TIMESTAMP DEFAULT NOW()
+                )""",
             ]
             for sql in sqls:
                 try:

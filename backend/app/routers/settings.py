@@ -89,8 +89,8 @@ async def sync_user_from_ms(email: str, db: AsyncSession) -> dict:
         licenses = [l.get("skuPartNumber", "") for l in licenses_data.get("value", [])]
 
         # Get groups
-        groups_data = await graph_get(f"/users/{email}/memberOf?$select=displayName,@odata.type", token)
-        groups = [g.get("displayName", "") for g in groups_data.get("value", []) if g.get("@odata.type") == "#microsoft.graph.group"]
+        groups_data = await graph_get(f"/users/{email}/memberOf?$select=displayName,id", token)
+        groups = [g.get("displayName", "") for g in groups_data.get("value", []) if g.get("@odata.type") in ["#microsoft.graph.group", None]]
         roles = [g.get("displayName", "") for g in groups_data.get("value", []) if g.get("@odata.type") == "#microsoft.graph.directoryRole"]
 
         profile = {
@@ -216,3 +216,60 @@ async def list_users(db: AsyncSession = Depends(get_db)):
     """))
     rows = result.fetchall()
     return {"users": [dict(r._mapping) for r in rows]}
+
+
+# ─── Company Links (admin only) ────────────────────────────────────────────────
+@router.get("/company-links")
+async def get_company_links(db: AsyncSession = Depends(get_db)):
+    try:
+        result = await db.execute(text("""
+            SELECT id, label, url, icon, sort_order
+            FROM company_links WHERE active = true
+            ORDER BY sort_order ASC, label ASC
+        """))
+        links = [dict(r._mapping) for r in result.fetchall()]
+        for l in links: l["id"] = str(l["id"])
+        return {"links": links}
+    except Exception:
+        return {"links": []}
+
+@router.get("/company-links/all")
+async def get_all_company_links(db: AsyncSession = Depends(get_db)):
+    result = await db.execute(text("""
+        SELECT id, label, url, icon, active, sort_order
+        FROM company_links ORDER BY sort_order ASC, label ASC
+    """))
+    links = [dict(r._mapping) for r in result.fetchall()]
+    for l in links: l["id"] = str(l["id"])
+    return {"links": links}
+
+@router.post("/company-links")
+async def create_company_link(data: dict, db: AsyncSession = Depends(get_db)):
+    import uuid
+    link_id = str(uuid.uuid4())
+    await db.execute(text("""
+        INSERT INTO company_links (id, label, url, icon, active, sort_order, created_at)
+        VALUES (:id::uuid, :label, :url, :icon, :active, :sort_order, NOW())
+    """), {"id": link_id, "label": data.get("label",""), "url": data.get("url",""),
+           "icon": data.get("icon","🔗"), "active": data.get("active", True),
+           "sort_order": data.get("sort_order", 0)})
+    await db.commit()
+    return {"status": "ok", "id": link_id}
+
+@router.put("/company-links/{link_id}")
+async def update_company_link(link_id: str, data: dict, db: AsyncSession = Depends(get_db)):
+    await db.execute(text("""
+        UPDATE company_links SET
+            label = COALESCE(:label, label), url = COALESCE(:url, url),
+            icon = COALESCE(:icon, icon), active = COALESCE(:active, active),
+            sort_order = COALESCE(:sort_order, sort_order)
+        WHERE id = :id::uuid
+    """), {**data, "id": link_id})
+    await db.commit()
+    return {"status": "ok"}
+
+@router.delete("/company-links/{link_id}")
+async def delete_company_link(link_id: str, db: AsyncSession = Depends(get_db)):
+    await db.execute(text("DELETE FROM company_links WHERE id = :id::uuid"), {"id": link_id})
+    await db.commit()
+    return {"status": "ok"}

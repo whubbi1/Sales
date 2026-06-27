@@ -27,14 +27,10 @@ const SCOPE_TEXT:  Record<string, string> = { none: '#848EA5', own: '#156082', t
 
 export default function SettingsPage() {
   const router = useRouter()
-  const [tab, setTab] = useState<'profile' | 'licenses' | 'permissions'>('profile')
+  const [tab, setTab] = useState<'profile' | 'licenses'>('profile')
   const [profile, setProfile] = useState<any>(null)
-  const [permissions, setPermissions] = useState<any>(null)
-  const [users, setUsers] = useState<any[]>([])
-  const [selectedUser, setSelectedUser] = useState<string>('')
   const [loading, setLoading] = useState(false)
   const [syncing, setSyncing] = useState(false)
-  const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null)
 
   // For demo — use a hardcoded email (in production, get from Cognito session)
@@ -42,20 +38,7 @@ export default function SettingsPage() {
 
   useEffect(() => {
     loadProfile(currentEmail)
-    loadUsers()
   }, [])
-
-  useEffect(() => {
-    if (tab === 'permissions' && selectedUser) {
-      loadPermissions(selectedUser)
-    }
-  }, [tab, selectedUser])
-
-  useEffect(() => {
-    if (users.length > 0 && !selectedUser) {
-      setSelectedUser(currentEmail)
-    }
-  }, [users])
 
   const loadProfile = async (email: string) => {
     setLoading(true)
@@ -134,7 +117,6 @@ export default function SettingsPage() {
   const TABS = [
     { id: 'profile',     label: 'My Profile',        icon: '👤' },
     { id: 'licenses',    label: 'Licenses & Groups',  icon: '📋' },
-    { id: 'permissions', label: 'WHUBBI Permissions', icon: '🔐' },
   ]
 
   return (
@@ -147,7 +129,7 @@ export default function SettingsPage() {
           {/* Header */}
           <div style={{ marginBottom: '24px' }}>
             <h1 style={{ fontSize: '20px', fontWeight: '800', color: '#156082', margin: '0 0 4px' }}>Personal Settings</h1>
-            <p style={{ fontSize: '13px', color: '#45B6E4', margin: 0 }}>Manage your profile and WHUBBI permissions</p>
+            <p style={{ fontSize: '13px', color: '#45B6E4', margin: 0 }}>Manage your profile and preferences</p>
           </div>
 
           {/* Message */}
@@ -289,21 +271,7 @@ export default function SettingsPage() {
               </div>
             </div>
           )}
-
-          {/* ── Permissions Tab ── */}
-          {tab === 'permissions' && (
-            <div>
-              {/* User selector */}
-              <div style={{ background: 'white', borderRadius: '12px', border: '1px solid #EDF2F7', padding: '20px', marginBottom: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                  <span style={{ fontSize: '13px', fontWeight: '600', color: '#156082' }}>Managing permissions for:</span>
-                  <select value={selectedUser} onChange={e => { setSelectedUser(e.target.value); loadPermissions(e.target.value) }}
-                    style={{ padding: '7px 12px', borderRadius: '7px', border: '1.5px solid #45B6E4', fontSize: '13px', fontFamily: 'Montserrat, sans-serif', color: '#3F3F3F', outline: 'none', minWidth: '250px' }}>
-                    <option value="">Select a user...</option>
-                    {users.map(u => (
-                      <option key={u.email} value={u.email}>{u.display_name || `${u.first_name} ${u.last_name}`} ({u.email})</option>
-                    ))}
-                    {users.length === 0 && <option value={currentEmail}>{currentEmail}</option>}
+{users.length === 0 && <option value={currentEmail}>{currentEmail}</option>}
                   </select>
                 </div>
                 <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
