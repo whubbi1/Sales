@@ -3,7 +3,8 @@ from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI(title="WHUBBI API", version="2.0.0")
 app.add_middleware(CORSMiddleware,
-    allow_origins=["https://dev.whubbi.wcomply.com","https://whubbi.wcomply.com","http://localhost:3000","http://localhost:3001","https://master.da3cm8ewfvjqw.amplifyapp.com"],
+    allow_origins=["https://dev.whubbi.wcomply.com","https://whubbi.wcomply.com","http://localhost:3000","http://localhost:3001"],
+    allow_origin_regex=r"https://.*\.amplifyapp\.com",
     allow_credentials=True, allow_methods=["*"], allow_headers=["*"],
 )
 
@@ -180,16 +181,37 @@ async def startup():
                     uploaded_at TIMESTAMP DEFAULT NOW(), personal_data JSON
                 )""",
 
-                # Company Links migration
-                """CREATE TABLE IF NOT EXISTS company_links (
+                # GRC Extended migrations
+                """CREATE TABLE IF NOT EXISTS grc_documents (
                     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-                    label VARCHAR(100) NOT NULL,
-                    url VARCHAR(1000) NOT NULL,
-                    icon VARCHAR(10) DEFAULT '🔗',
-                    active BOOLEAN DEFAULT true,
-                    sort_order INTEGER DEFAULT 0,
+                    name VARCHAR(500) NOT NULL,
+                    description TEXT,
                     created_at TIMESTAMP DEFAULT NOW()
                 )""",
+                """CREATE TABLE IF NOT EXISTS grc_requirements (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    framework_id UUID NOT NULL,
+                    document_id UUID,
+                    requirement_text TEXT NOT NULL,
+                    reference_code VARCHAR(100),
+                    status VARCHAR(20) DEFAULT 'not_started',
+                    evidence TEXT,
+                    owner_email VARCHAR(255),
+                    due_date TIMESTAMP,
+                    created_at TIMESTAMP DEFAULT NOW(),
+                    updated_at TIMESTAMP DEFAULT NOW()
+                )""",
+                """CREATE TABLE IF NOT EXISTS grc_requirement_mappings (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    source_req_id UUID NOT NULL,
+                    target_req_id UUID NOT NULL,
+                    mapping_type VARCHAR(30) DEFAULT 'related',
+                    notes TEXT,
+                    created_at TIMESTAMP DEFAULT NOW()
+                )""",
+                "ALTER TABLE grc_frameworks ADD COLUMN IF NOT EXISTS color VARCHAR(20) DEFAULT '#156082'",
+                """CREATE UNIQUE INDEX IF NOT EXISTS idx_grc_mapping_unique 
+                   ON grc_requirement_mappings(source_req_id, target_req_id)""",
             ]
             for sql in sqls:
                 try:
@@ -233,6 +255,7 @@ try:
     from app.routers.settings import router as settings_router
     from app.routers.hr import router as hr_router
     from app.routers.grc import router as grc_router
+    from app.routers.grc_extended import router as grc_ext_router
     from app.routers.helpdesk import router as helpdesk_router
     from app.routers.helpdesk_teams import router as teams_router
     from app.routers import auth, outlook, copilot
@@ -246,6 +269,7 @@ try:
     app.include_router(settings_router,     prefix="/settings",     tags=["Settings"])
     app.include_router(hr_router,             prefix="/hr",           tags=["HR"])
     app.include_router(grc_router,           prefix="/grc",          tags=["GRC"])
+    app.include_router(grc_ext_router,        prefix="/grc",          tags=["GRCExt"])
     app.include_router(helpdesk_router,     prefix="/helpdesk",     tags=["Helpdesk"])
     app.include_router(teams_router,        prefix="/helpdesk",     tags=["Teams"])
     app.include_router(auth.router,         prefix="/auth",         tags=["Auth"])
