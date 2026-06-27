@@ -3,9 +3,10 @@ from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI(title="WHUBBI API", version="2.0.0")
 app.add_middleware(CORSMiddleware,
-    allow_origins=["https://dev.whubbi.wcomply.com","https://whubbi.wcomply.com","http://localhost:3000","http://localhost:3001"],
-    allow_origin_regex=r"https://.*\.amplifyapp\.com",
-    allow_credentials=True, allow_methods=["*"], allow_headers=["*"],
+    allow_origins=["*"],
+    allow_credentials=False,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 @app.on_event("startup")
@@ -243,6 +244,14 @@ async def health(): return {"status":"healthy","app":"whubbi","version":"2.0.0"}
 
 @app.get("/")
 async def root(): return {"message":"WHUBBI API","version":"2.0.0"}
+
+@app.get("/debug/routes")
+async def debug_routes():
+    routes = []
+    for route in app.routes:
+        if hasattr(route, "path") and hasattr(route, "methods"):
+            routes.append({"path": route.path, "methods": sorted(route.methods)})
+    return {"total": len(routes), "routes": sorted(routes, key=lambda r: r["path"])}
 
 def _include(module_path: str, prefix: str, tag: str):
     try:
