@@ -94,7 +94,7 @@ async def create_teams_chat(
 
         # Check if chat already exists for this ticket
         existing = await db.execute(text(
-            "SELECT teams_chat_id FROM tickets WHERE id = :id::uuid"
+            "SELECT teams_chat_id FROM tickets WHERE id = CAST(:id AS UUID)"
         ), {"id": ticket_id})
         existing_row = existing.fetchone()
 
@@ -144,7 +144,7 @@ async def create_teams_chat(
                 "ALTER TABLE tickets ADD COLUMN IF NOT EXISTS teams_chat_id TEXT"
             ))
             await db.execute(text(
-                "UPDATE tickets SET teams_chat_id = :chat_id WHERE id = :id::uuid"
+                "UPDATE tickets SET teams_chat_id = :chat_id WHERE id = CAST(:id AS UUID)"
             ), {"chat_id": chat_id, "id": ticket_id})
             await db.commit()
 
@@ -217,7 +217,7 @@ async def register_teams_webhook(chat_id: str, ticket_id: str, token: str, db: A
                 # Store subscription ID
                 await db.execute(text("""
                     INSERT INTO teams_subscriptions (id, ticket_id, chat_id, subscription_id, expires_at, created_at)
-                    VALUES (gen_random_uuid(), :ticket_id::uuid, :chat_id, :sub_id, :expires, NOW())
+                    VALUES (gen_random_uuid(), CAST(:ticket_id AS UUID), :chat_id, :sub_id, :expires, NOW())
                     ON CONFLICT (chat_id) DO UPDATE SET subscription_id = EXCLUDED.subscription_id, expires_at = EXCLUDED.expires_at
                 """), {"ticket_id": ticket_id, "chat_id": chat_id, "sub_id": sub_id, "expires": expiry_str})
                 await db.commit()
@@ -275,14 +275,14 @@ async def teams_webhook(request: Request, db: AsyncSession = Depends(get_db)):
                 # Add as ticket comment
                 await db.execute(text("""
                     INSERT INTO ticket_comments (id, ticket_id, author_email, author_name, content, is_internal, created_at)
-                    VALUES (gen_random_uuid(), :tid::uuid, :email, :name, :content, false, NOW())
+                    VALUES (gen_random_uuid(), CAST(:tid AS UUID), :email, :name, :content, false, NOW())
                 """), {
                     "tid": ticket_id,
                     "email": author_email,
                     "name": f"[Teams] {author_name}",
                     "content": clean
                 })
-                await db.execute(text("UPDATE tickets SET updated_at = NOW() WHERE id = :id::uuid"), {"id": ticket_id})
+                await db.execute(text("UPDATE tickets SET updated_at = NOW() WHERE id = CAST(:id AS UUID)"), {"id": ticket_id})
                 await db.commit()
 
     except Exception as e:
@@ -296,7 +296,7 @@ async def teams_webhook(request: Request, db: AsyncSession = Depends(get_db)):
 async def sync_teams_messages(tid: str, db: AsyncSession = Depends(get_db)):
     """Manually sync Teams chat messages to ticket comments."""
     try:
-        t = await db.execute(text("SELECT teams_chat_id, ticket_number FROM tickets WHERE id = :id::uuid"), {"id": tid})
+        t = await db.execute(text("SELECT teams_chat_id, ticket_number FROM tickets WHERE id = CAST(:id AS UUID)"), {"id": tid})
         row = t.fetchone()
         if not row or not row.teams_chat_id:
             return {"status": "error", "message": "No Teams chat linked to this ticket"}
@@ -327,12 +327,12 @@ async def sync_teams_messages(tid: str, db: AsyncSession = Depends(get_db)):
                 # Check not already synced
                 exists = await db.execute(text("""
                     SELECT id FROM ticket_comments
-                    WHERE ticket_id = :tid::uuid AND content = :content AND author_name LIKE '[Teams]%'
+                    WHERE ticket_id = CAST(:tid AS UUID) AND content = :content AND author_name LIKE '[Teams]%'
                 """), {"tid": tid, "content": content})
                 if not exists.fetchone():
                     await db.execute(text("""
                         INSERT INTO ticket_comments (id, ticket_id, author_email, author_name, content, is_internal, created_at)
-                        VALUES (gen_random_uuid(), :tid::uuid, :email, :name, :content, false, :ts)
+                        VALUES (gen_random_uuid(), CAST(:tid AS UUID), :email, :name, :content, false, :ts)
                     """), {"tid": tid, "email": "teams@sync", "name": f"[Teams] {author_name}", "content": content, "ts": msg_time})
                     synced += 1
 
@@ -346,7 +346,7 @@ async def sync_teams_messages(tid: str, db: AsyncSession = Depends(get_db)):
 # ─── Get Teams chat link ───────────────────────────────────────────────────────
 @router.get("/tickets/{tid}/teams")
 async def get_teams_info(tid: str, db: AsyncSession = Depends(get_db)):
-    t = await db.execute(text("SELECT teams_chat_id, ticket_number, title FROM tickets WHERE id = :id::uuid"), {"id": tid})
+    t = await db.execute(text("SELECT teams_chat_id, ticket_number, title FROM tickets WHERE id = CAST(:id AS UUID)"), {"id": tid})
     row = t.fetchone()
     if not row or not row.teams_chat_id:
         return {"has_chat": False}

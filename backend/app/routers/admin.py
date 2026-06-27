@@ -174,7 +174,7 @@ async def run_checks(db: AsyncSession = Depends(get_db)):
             try:
                 await db.execute(text("""
                     INSERT INTO health_checks (id, url_id, url, name, status, status_code, response_time, error, checked_at)
-                    VALUES (gen_random_uuid(), :url_id::uuid, :url, :name, :status, :status_code, :response_time, :error, NOW())
+                    VALUES (gen_random_uuid(), CAST(:url_id AS UUID), :url, :name, :status, :status_code, :response_time, :error, NOW())
                 """), {**check, "url_id": check["url_id"]})
             except Exception:
                 pass
@@ -252,8 +252,8 @@ async def add_url(data: dict, db: AsyncSession = Depends(get_db)):
 @router.delete("/urls/{url_id}")
 async def delete_url(url_id: str, db: AsyncSession = Depends(get_db)):
     try:
-        await db.execute(text("DELETE FROM health_checks WHERE url_id = :id::uuid"), {"id": url_id})
-        await db.execute(text("DELETE FROM monitored_urls WHERE id = :id::uuid"), {"id": url_id})
+        await db.execute(text("DELETE FROM health_checks WHERE url_id = CAST(:id AS UUID)"), {"id": url_id})
+        await db.execute(text("DELETE FROM monitored_urls WHERE id = CAST(:id AS UUID)"), {"id": url_id})
         await db.commit()
         return {"status": "ok"}
     except Exception as e:

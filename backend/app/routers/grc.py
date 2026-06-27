@@ -108,14 +108,14 @@ async def seed_grc(db: AsyncSession):
         fw_id = str(uuid.uuid4())
         await db.execute(text("""
             INSERT INTO grc_frameworks (id, name, description, category, version, active, created_at)
-            VALUES (:id::uuid, :name, :description, :category, :version, true, NOW())
+            VALUES (CAST(:id AS UUID), :name, :description, :category, :version, true, NOW())
         """), {"id": fw_id, "name": fw["name"], "description": fw["description"],
                "category": fw["category"], "version": fw["version"]})
         for section_id, section_name, controls in fw["controls"]:
             for ctrl_id, ctrl_title in controls:
                 await db.execute(text("""
                     INSERT INTO grc_controls (id, framework_id, control_id, title, category, status, created_at, updated_at)
-                    VALUES (gen_random_uuid(), :fw_id::uuid, :ctrl_id, :title, :category, 'not_started', NOW(), NOW())
+                    VALUES (gen_random_uuid(), CAST(:fw_id AS UUID), :ctrl_id, :title, :category, 'not_started', NOW(), NOW())
                 """), {"fw_id": fw_id, "ctrl_id": ctrl_id, "title": ctrl_title, "category": section_name})
     await db.commit()
 
@@ -206,13 +206,13 @@ async def list_frameworks(db: AsyncSession = Depends(get_db)):
 @router.get("/frameworks/{framework_id}/controls")
 async def get_framework_controls(framework_id: str, db: AsyncSession = Depends(get_db)):
     result = await db.execute(text("""
-        SELECT * FROM grc_controls WHERE framework_id = :id::uuid ORDER BY control_id
+        SELECT * FROM grc_controls WHERE framework_id = CAST(:id AS UUID) ORDER BY control_id
     """), {"id": framework_id})
     controls = [dict(r._mapping) for r in result.fetchall()]
     for c in controls:
         c["id"] = str(c["id"])
         c["framework_id"] = str(c["framework_id"])
-    fw = await db.execute(text("SELECT * FROM grc_frameworks WHERE id = :id::uuid"), {"id": framework_id})
+    fw = await db.execute(text("SELECT * FROM grc_frameworks WHERE id = CAST(:id AS UUID)"), {"id": framework_id})
     fw_row = fw.fetchone()
     return {"framework": dict(fw_row._mapping) if fw_row else {}, "controls": controls}
 
@@ -225,7 +225,7 @@ async def update_control(control_id: str, data: dict, db: AsyncSession = Depends
             owner_email = COALESCE(:owner_email, owner_email),
             owner_name = COALESCE(:owner_name, owner_name),
             updated_at = NOW()
-        WHERE id = :id::uuid
+        WHERE id = CAST(:id AS UUID)
     """), {**data, "id": control_id})
     await db.commit()
     return {"status": "ok"}
@@ -247,7 +247,7 @@ async def create_risk(data: dict, db: AsyncSession = Depends(get_db)):
     try:
         await db.execute(text("""
             INSERT INTO grc_risks (id, title, description, category, probability, impact, status, mitigation, owner_email, owner_name, created_at, updated_at)
-            VALUES (:id::uuid, :title, :description, :category, :probability, :impact, :status, :mitigation, :owner_email, :owner_name, NOW(), NOW())
+            VALUES (CAST(:id AS UUID), :title, :description, :category, :probability, :impact, :status, :mitigation, :owner_email, :owner_name, NOW(), NOW())
         """), {
             "id": risk_id, "title": data.get("title"), "description": data.get("description", ""),
             "category": data.get("category", "operational"), "probability": data.get("probability", 3),
@@ -270,14 +270,14 @@ async def update_risk(risk_id: str, data: dict, db: AsyncSession = Depends(get_d
             impact = COALESCE(:impact, impact), status = COALESCE(:status, status),
             mitigation = COALESCE(:mitigation, mitigation), owner_name = COALESCE(:owner_name, owner_name),
             updated_at = NOW()
-        WHERE id = :id::uuid
+        WHERE id = CAST(:id AS UUID)
     """), {**data, "id": risk_id})
     await db.commit()
     return {"status": "ok"}
 
 @router.delete("/risks/{risk_id}")
 async def delete_risk(risk_id: str, db: AsyncSession = Depends(get_db)):
-    await db.execute(text("DELETE FROM grc_risks WHERE id = :id::uuid"), {"id": risk_id})
+    await db.execute(text("DELETE FROM grc_risks WHERE id = CAST(:id AS UUID)"), {"id": risk_id})
     await db.commit()
     return {"status": "ok"}
 
@@ -299,7 +299,7 @@ async def create_audit(data: dict, db: AsyncSession = Depends(get_db)):
     audit_id = str(uuid.uuid4())
     await db.execute(text("""
         INSERT INTO grc_audits (id, title, audit_type, status, start_date, end_date, auditor_name, scope, created_at, updated_at)
-        VALUES (:id::uuid, :title, :audit_type, :status, :start_date, :end_date, :auditor_name, :scope, NOW(), NOW())
+        VALUES (CAST(:id AS UUID), :title, :audit_type, :status, :start_date, :end_date, :auditor_name, :scope, NOW(), NOW())
     """), {
         "id": audit_id, "title": data.get("title"), "audit_type": data.get("audit_type", "internal"),
         "status": data.get("status", "planned"), "start_date": data.get("start_date"),
@@ -311,8 +311,8 @@ async def create_audit(data: dict, db: AsyncSession = Depends(get_db)):
 
 @router.get("/audits/{audit_id}")
 async def get_audit(audit_id: str, db: AsyncSession = Depends(get_db)):
-    audit = await db.execute(text("SELECT * FROM grc_audits WHERE id = :id::uuid"), {"id": audit_id})
-    findings = await db.execute(text("SELECT * FROM grc_findings WHERE audit_id = :id::uuid ORDER BY created_at DESC"), {"id": audit_id})
+    audit = await db.execute(text("SELECT * FROM grc_audits WHERE id = CAST(:id AS UUID)"), {"id": audit_id})
+    findings = await db.execute(text("SELECT * FROM grc_findings WHERE audit_id = CAST(:id AS UUID) ORDER BY created_at DESC"), {"id": audit_id})
     audit_row = audit.fetchone()
     return {"audit": dict(audit_row._mapping) if audit_row else {}, "findings": [dict(r._mapping) for r in findings.fetchall()]}
 
@@ -320,7 +320,7 @@ async def get_audit(audit_id: str, db: AsyncSession = Depends(get_db)):
 async def add_finding(audit_id: str, data: dict, db: AsyncSession = Depends(get_db)):
     await db.execute(text("""
         INSERT INTO grc_findings (id, audit_id, title, description, severity, status, corrective_action, owner_email, created_at)
-        VALUES (gen_random_uuid(), :audit_id::uuid, :title, :description, :severity, 'open', :corrective_action, :owner_email, NOW())
+        VALUES (gen_random_uuid(), CAST(:audit_id AS UUID), :title, :description, :severity, 'open', :corrective_action, :owner_email, NOW())
     """), {
         "audit_id": audit_id, "title": data.get("title"), "description": data.get("description", ""),
         "severity": data.get("severity", "medium"), "corrective_action": data.get("corrective_action", ""),

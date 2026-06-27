@@ -234,7 +234,7 @@ async def upload_cv(profile_id: str, file: UploadFile = File(...), db: AsyncSess
 
     # Get profile info to determine folder routing
     row = await db.execute(
-        text("SELECT profile_type, first_name, last_name, country FROM hr_profiles WHERE id=:id::uuid"),
+        text("SELECT profile_type, first_name, last_name, country FROM hr_profiles WHERE id=CAST(:id AS UUID)"),
         {"id": profile_id}
     )
     profile = row.fetchone()
@@ -255,7 +255,7 @@ async def upload_cv(profile_id: str, file: UploadFile = File(...), db: AsyncSess
 
     await db.execute(text("""
         UPDATE hr_profiles SET cv_sharepoint_url=:url, cv_filename=:fn, updated_at=NOW()
-        WHERE id=:id::uuid
+        WHERE id=CAST(:id AS UUID)
     """), {"url": url, "fn": file.filename, "id": profile_id})
     await db.commit()
     return {"status": "ok", "sharepoint_url": url}
@@ -280,12 +280,12 @@ async def list_freelancers(db: AsyncSession = Depends(get_db)):
 
 @router.get("/freelancers/{profile_id}")
 async def get_freelancer(profile_id: str, db: AsyncSession = Depends(get_db)):
-    p = await db.execute(text("SELECT * FROM hr_profiles WHERE id=:id::uuid AND profile_type='freelancer'"), {"id": profile_id})
+    p = await db.execute(text("SELECT * FROM hr_profiles WHERE id=CAST(:id AS UUID) AND profile_type='freelancer'"), {"id": profile_id})
     row = p.fetchone()
     if not row: raise HTTPException(404, "Not found")
     profile = dict(row._mapping)
     profile["id"] = str(profile["id"])
-    projs = await db.execute(text("SELECT * FROM hr_projects WHERE profile_id=:id::uuid ORDER BY start_date DESC"), {"id": profile_id})
+    projs = await db.execute(text("SELECT * FROM hr_projects WHERE profile_id=CAST(:id AS UUID) ORDER BY start_date DESC"), {"id": profile_id})
     profile["projects"] = [dict(r._mapping) for r in projs.fetchall()]
     for pr in profile["projects"]:
         pr["id"] = str(pr["id"]); pr["profile_id"] = str(pr["profile_id"])
@@ -298,8 +298,8 @@ async def create_freelancer(data: dict, db: AsyncSession = Depends(get_db)):
         INSERT INTO hr_profiles (id, profile_type, first_name, last_name, email, phone, linkedin_url,
             country, language, current_title, skills, years_experience, daily_rate, availability_date,
             cv_filename, cv_sharepoint_url, cv_extracted, created_at, updated_at, created_by)
-        VALUES (:id::uuid, 'freelancer', :first_name, :last_name, :email, :phone, :linkedin_url,
-            :country, :language, :current_title, :skills::json, :years_experience, :daily_rate, :availability_date,
+        VALUES (CAST(:id AS UUID), 'freelancer', :first_name, :last_name, :email, :phone, :linkedin_url,
+            :country, :language, :current_title, CAST(:skills AS JSON), :years_experience, :daily_rate, :availability_date,
             :cv_filename, :cv_sharepoint_url, :cv_extracted, NOW(), NOW(), :created_by)
     """), {
         "id": pid, "first_name": data.get("first_name",""), "last_name": data.get("last_name",""),
@@ -316,7 +316,7 @@ async def create_freelancer(data: dict, db: AsyncSession = Depends(get_db)):
     for proj in data.get("projects", []):
         await db.execute(text("""
             INSERT INTO hr_projects (id, profile_id, title, company, start_date, end_date, description, technologies)
-            VALUES (gen_random_uuid(), :pid::uuid, :title, :company, :start_date, :end_date, :description, :tech::json)
+            VALUES (gen_random_uuid(), CAST(:pid AS UUID), :title, :company, :start_date, :end_date, :description, CAST(:tech AS JSON))
         """), {"pid": pid, "title": proj.get("title",""), "company": proj.get("company",""),
                "start_date": proj.get("start_date",""), "end_date": proj.get("end_date",""),
                "description": proj.get("description",""), "tech": json.dumps(proj.get("technologies",[]))})
@@ -331,16 +331,16 @@ async def update_freelancer(profile_id: str, data: dict, db: AsyncSession = Depe
             email=COALESCE(:email,email), phone=COALESCE(:phone,phone),
             linkedin_url=COALESCE(:linkedin_url,linkedin_url), country=COALESCE(:country,country),
             current_title=COALESCE(:current_title,current_title),
-            skills=COALESCE(:skills::json,skills), years_experience=COALESCE(:years_experience,years_experience),
+            skills=COALESCE(CAST(:skills AS JSON),skills), years_experience=COALESCE(:years_experience,years_experience),
             daily_rate=COALESCE(:daily_rate,daily_rate), updated_at=NOW()
-        WHERE id=:id::uuid
+        WHERE id=CAST(:id AS UUID)
     """), {**data, "id": profile_id, "skills": json.dumps(data.get("skills")) if data.get("skills") else None})
     await db.commit()
     return {"status": "ok"}
 
 @router.delete("/freelancers/{profile_id}")
 async def delete_freelancer(profile_id: str, db: AsyncSession = Depends(get_db)):
-    await db.execute(text("DELETE FROM hr_profiles WHERE id=:id::uuid"), {"id": profile_id})
+    await db.execute(text("DELETE FROM hr_profiles WHERE id=CAST(:id AS UUID)"), {"id": profile_id})
     await db.commit()
     return {"status": "ok"}
 
@@ -368,16 +368,16 @@ async def list_internal(status: str = None, db: AsyncSession = Depends(get_db)):
 
 @router.get("/recruitment/{profile_id}")
 async def get_candidate(profile_id: str, db: AsyncSession = Depends(get_db)):
-    p = await db.execute(text("SELECT * FROM hr_profiles WHERE id=:id::uuid AND profile_type='internal'"), {"id": profile_id})
+    p = await db.execute(text("SELECT * FROM hr_profiles WHERE id=CAST(:id AS UUID) AND profile_type='internal'"), {"id": profile_id})
     row = p.fetchone()
     if not row: raise HTTPException(404, "Not found")
     profile = dict(row._mapping)
     profile["id"] = str(profile["id"])
-    projs = await db.execute(text("SELECT * FROM hr_projects WHERE profile_id=:id::uuid ORDER BY start_date DESC"), {"id": profile_id})
+    projs = await db.execute(text("SELECT * FROM hr_projects WHERE profile_id=CAST(:id AS UUID) ORDER BY start_date DESC"), {"id": profile_id})
     profile["projects"] = [dict(r._mapping) for r in projs.fetchall()]
-    comments = await db.execute(text("SELECT * FROM hr_comments WHERE profile_id=:id::uuid ORDER BY created_at DESC"), {"id": profile_id})
+    comments = await db.execute(text("SELECT * FROM hr_comments WHERE profile_id=CAST(:id AS UUID) ORDER BY created_at DESC"), {"id": profile_id})
     profile["comments"] = [dict(r._mapping) for r in comments.fetchall()]
-    proposals = await db.execute(text("SELECT * FROM hr_proposals WHERE profile_id=:id::uuid ORDER BY created_at DESC"), {"id": profile_id})
+    proposals = await db.execute(text("SELECT * FROM hr_proposals WHERE profile_id=CAST(:id AS UUID) ORDER BY created_at DESC"), {"id": profile_id})
     profile["proposals"] = [dict(r._mapping) for r in proposals.fetchall()]
     for pr in profile.get("projects",[]): pr["id"] = str(pr["id"]); pr["profile_id"] = str(pr["profile_id"])
     for c in profile.get("comments",[]): c["id"] = str(c["id"]); c["profile_id"] = str(c["profile_id"])
@@ -391,8 +391,8 @@ async def create_candidate(data: dict, db: AsyncSession = Depends(get_db)):
         INSERT INTO hr_profiles (id, profile_type, first_name, last_name, email, phone, linkedin_url,
             country, language, current_title, skills, years_experience, recruitment_status,
             cv_filename, cv_sharepoint_url, cv_extracted, created_at, updated_at, created_by)
-        VALUES (:id::uuid, 'internal', :first_name, :last_name, :email, :phone, :linkedin_url,
-            :country, :language, :current_title, :skills::json, :years_experience, :recruitment_status,
+        VALUES (CAST(:id AS UUID), 'internal', :first_name, :last_name, :email, :phone, :linkedin_url,
+            :country, :language, :current_title, CAST(:skills AS JSON), :years_experience, :recruitment_status,
             :cv_filename, :cv_sharepoint_url, :cv_extracted, NOW(), NOW(), :created_by)
     """), {
         "id": pid, "first_name": data.get("first_name",""), "last_name": data.get("last_name",""),
@@ -407,7 +407,7 @@ async def create_candidate(data: dict, db: AsyncSession = Depends(get_db)):
     for proj in data.get("projects",[]):
         await db.execute(text("""
             INSERT INTO hr_projects (id, profile_id, title, company, start_date, end_date, description, technologies)
-            VALUES (gen_random_uuid(), :pid::uuid, :title, :company, :start_date, :end_date, :description, :tech::json)
+            VALUES (gen_random_uuid(), CAST(:pid AS UUID), :title, :company, :start_date, :end_date, :description, CAST(:tech AS JSON))
         """), {"pid": pid, "title": proj.get("title",""), "company": proj.get("company",""),
                "start_date": proj.get("start_date",""), "end_date": proj.get("end_date",""),
                "description": proj.get("description",""), "tech": json.dumps(proj.get("technologies",[]))})
@@ -416,7 +416,7 @@ async def create_candidate(data: dict, db: AsyncSession = Depends(get_db)):
 
 @router.put("/recruitment/{profile_id}/status")
 async def update_status(profile_id: str, data: dict, db: AsyncSession = Depends(get_db)):
-    await db.execute(text("UPDATE hr_profiles SET recruitment_status=:status, updated_at=NOW() WHERE id=:id::uuid"),
+    await db.execute(text("UPDATE hr_profiles SET recruitment_status=:status, updated_at=NOW() WHERE id=CAST(:id AS UUID)"),
                      {"status": data["status"], "id": profile_id})
     await db.commit()
     return {"status": "ok"}
@@ -433,10 +433,10 @@ async def update_candidate(profile_id: str, data: dict, db: AsyncSession = Depen
             country=COALESCE(:country, country),
             language=COALESCE(:language, language),
             current_title=COALESCE(:current_title, current_title),
-            skills=COALESCE(:skills::json, skills),
+            skills=COALESCE(CAST(:skills AS JSON), skills),
             years_experience=COALESCE(:years_experience, years_experience),
             updated_at=NOW()
-        WHERE id=:id::uuid AND profile_type='internal'
+        WHERE id=CAST(:id AS UUID) AND profile_type='internal'
     """), {
         "id": profile_id,
         "first_name": data.get("first_name"),
@@ -457,7 +457,7 @@ async def update_candidate(profile_id: str, data: dict, db: AsyncSession = Depen
 async def add_comment(profile_id: str, data: dict, db: AsyncSession = Depends(get_db)):
     await db.execute(text("""
         INSERT INTO hr_comments (id, profile_id, author_email, author_name, content, comment_type, created_at)
-        VALUES (gen_random_uuid(), :pid::uuid, :author_email, :author_name, :content, :comment_type, NOW())
+        VALUES (gen_random_uuid(), CAST(:pid AS UUID), :author_email, :author_name, :content, :comment_type, NOW())
     """), {"pid": profile_id, "author_email": data.get("author_email",""),
            "author_name": data.get("author_name",""), "content": data.get("content",""),
            "comment_type": data.get("comment_type","note")})
@@ -476,7 +476,7 @@ async def create_proposal(profile_id: str, data: dict, db: AsyncSession = Depend
     await db.execute(text("""
         INSERT INTO hr_proposals (id, profile_id, role, responsibilities, salary, advantages,
             start_date, country, language, status, onboarding_token, created_at)
-        VALUES (:id::uuid, :pid::uuid, :role, :resp::json, :salary, :adv::json,
+        VALUES (CAST(:id AS UUID), CAST(:pid AS UUID), :role, CAST(:resp AS JSON), :salary, CAST(:adv AS JSON),
             :start_date, :country, :lang, 'draft', :token, NOW())
     """), {"id": proposal_id, "pid": profile_id, "role": data.get("role",""),
            "resp": json.dumps(data.get("responsibilities",[])),
@@ -491,7 +491,7 @@ async def preview_proposal(proposal_id: str, db: AsyncSession = Depends(get_db))
     p = await db.execute(text("""
         SELECT pr.*, prof.first_name, prof.last_name, prof.email
         FROM hr_proposals pr JOIN hr_profiles prof ON prof.id = pr.profile_id
-        WHERE pr.id=:id::uuid
+        WHERE pr.id=CAST(:id AS UUID)
     """), {"id": proposal_id})
     row = p.fetchone()
     if not row: raise HTTPException(404)
@@ -554,7 +554,7 @@ async def send_proposal(proposal_id: str, db: AsyncSession = Depends(get_db)):
                     env_id = r.json().get("envelopeId","")
                     await db.execute(text("""
                         UPDATE hr_proposals SET status='sent', docusign_envelope_id=:env_id, sent_at=NOW()
-                        WHERE id=:id::uuid
+                        WHERE id=CAST(:id AS UUID)
                     """), {"env_id": env_id, "id": proposal_id})
                     await db.commit()
                     return {"status": "sent", "envelope_id": env_id}
@@ -562,7 +562,7 @@ async def send_proposal(proposal_id: str, db: AsyncSession = Depends(get_db)):
             print(f"DocuSign error: {e}")
 
     # Fallback: mark as sent without DocuSign
-    await db.execute(text("UPDATE hr_proposals SET status='sent', sent_at=NOW() WHERE id=:id::uuid"), {"id": proposal_id})
+    await db.execute(text("UPDATE hr_proposals SET status='sent', sent_at=NOW() WHERE id=CAST(:id AS UUID)"), {"id": proposal_id})
     await db.commit()
     return {"status": "sent", "note": "DocuSign not configured — marked as sent manually"}
 
@@ -592,9 +592,9 @@ async def submit_onboarding(token: str, data: dict, db: AsyncSession = Depends(g
     # Save personal data
     await db.execute(text("""
         INSERT INTO hr_onboarding_documents (id, proposal_id, document_type, personal_data, uploaded_at)
-        VALUES (gen_random_uuid(), :pid::uuid, 'personal_info', :data::json, NOW())
+        VALUES (gen_random_uuid(), CAST(:pid AS UUID), 'personal_info', CAST(:data AS JSON), NOW())
     """), {"pid": proposal_id, "data": json.dumps(data.get("personal_info",{}))})
-    await db.execute(text("UPDATE hr_proposals SET onboarding_completed_at=NOW() WHERE id=:id::uuid"), {"id": proposal_id})
+    await db.execute(text("UPDATE hr_proposals SET onboarding_completed_at=NOW() WHERE id=CAST(:id AS UUID)"), {"id": proposal_id})
     await db.commit()
     return {"status": "ok", "message": "Information received — HR team will contact you shortly"}
 
@@ -609,7 +609,7 @@ async def upload_onboarding_doc(token: str, doc_type: str, file: UploadFile = Fi
     url = await upload_to_sharepoint(ms_token, f"{doc_type}_{file.filename}", content, folder)
     await db.execute(text("""
         INSERT INTO hr_onboarding_documents (id, proposal_id, document_type, filename, sharepoint_url, uploaded_at)
-        VALUES (gen_random_uuid(), :pid::uuid, :doc_type, :filename, :url, NOW())
+        VALUES (gen_random_uuid(), CAST(:pid AS UUID), :doc_type, :filename, :url, NOW())
     """), {"pid": str(row.id), "doc_type": doc_type, "filename": file.filename, "url": url})
     await db.commit()
     return {"status": "ok", "sharepoint_url": url}
@@ -633,8 +633,8 @@ async def create_job(data: dict, db: AsyncSession = Depends(get_db)):
     await db.execute(text("""
         INSERT INTO hr_job_descriptions (id, title, department, location, contract_type, status,
             description, responsibilities, requirements, salary_min, salary_max, created_at, updated_at)
-        VALUES (:id::uuid, :title, :department, :location, :contract_type, :status,
-            :description, :resp::json, :req::json, :salary_min, :salary_max, NOW(), NOW())
+        VALUES (CAST(:id AS UUID), :title, :department, :location, :contract_type, :status,
+            :description, CAST(:resp AS JSON), CAST(:req AS JSON), :salary_min, :salary_max, NOW(), NOW())
     """), {"id": job_id, "title": data.get("title",""), "department": data.get("department",""),
            "location": data.get("location",""), "contract_type": data.get("contract_type","CDI"),
            "status": data.get("status","open"), "description": data.get("description",""),
@@ -649,10 +649,10 @@ async def update_job(job_id: str, data: dict, db: AsyncSession = Depends(get_db)
         UPDATE hr_job_descriptions SET
             title=COALESCE(:title, title),
             description=COALESCE(:description, description),
-            responsibilities=COALESCE(:resp::json, responsibilities),
-            requirements=COALESCE(:req::json, requirements),
+            responsibilities=COALESCE(CAST(:resp AS JSON), responsibilities),
+            requirements=COALESCE(CAST(:req AS JSON), requirements),
             updated_at=NOW()
-        WHERE id=:id::uuid
+        WHERE id=CAST(:id AS UUID)
     """), {
         "id": job_id,
         "title": data.get("title"),
@@ -665,7 +665,7 @@ async def update_job(job_id: str, data: dict, db: AsyncSession = Depends(get_db)
 
 @router.delete("/jobs/{job_id}")
 async def delete_job(job_id: str, db: AsyncSession = Depends(get_db)):
-    await db.execute(text("DELETE FROM hr_job_descriptions WHERE id=:id::uuid"), {"id": job_id})
+    await db.execute(text("DELETE FROM hr_job_descriptions WHERE id=CAST(:id AS UUID)"), {"id": job_id})
     await db.commit()
     return {"status": "ok"}
 

@@ -44,7 +44,7 @@ async def list_frameworks(db: AsyncSession = Depends(get_db)):
 
 @router.get("/frameworks/{fw_id}/requirements")
 async def get_framework_requirements(fw_id: str, db: AsyncSession = Depends(get_db)):
-    fw = await db.execute(text("SELECT * FROM grc_frameworks WHERE id=:id::uuid"), {"id": fw_id})
+    fw = await db.execute(text("SELECT * FROM grc_frameworks WHERE id=CAST(:id AS UUID)"), {"id": fw_id})
     fw_row = fw.fetchone()
     if not fw_row: raise HTTPException(404)
     
@@ -52,7 +52,7 @@ async def get_framework_requirements(fw_id: str, db: AsyncSession = Depends(get_
         SELECT r.*, d.name as document_name
         FROM grc_requirements r
         LEFT JOIN grc_documents d ON d.id = r.document_id
-        WHERE r.framework_id = :fw_id::uuid
+        WHERE r.framework_id = CAST(:fw_id AS UUID)
         ORDER BY d.name, r.requirement_text
     """), {"fw_id": fw_id})
     requirements = [dict(r._mapping) for r in reqs.fetchall()]
@@ -67,7 +67,7 @@ async def add_requirement(fw_id: str, data: dict, db: AsyncSession = Depends(get
     req_id = str(uuid.uuid4())
     await db.execute(text("""
         INSERT INTO grc_requirements (id, framework_id, document_id, requirement_text, reference_code, status, evidence, owner_email, created_at, updated_at)
-        VALUES (:id::uuid, :fw_id::uuid, :doc_id, :text, :ref, :status, :evidence, :owner, NOW(), NOW())
+        VALUES (CAST(:id AS UUID), CAST(:fw_id AS UUID), :doc_id, :text, :ref, :status, :evidence, :owner, NOW(), NOW())
     """), {
         "id": req_id, "fw_id": fw_id,
         "doc_id": data.get("document_id") or None,
@@ -90,7 +90,7 @@ async def update_requirement(req_id: str, data: dict, db: AsyncSession = Depends
             evidence = COALESCE(:evidence, evidence),
             owner_email = COALESCE(:owner, owner_email),
             updated_at = NOW()
-        WHERE id = :id::uuid
+        WHERE id = CAST(:id AS UUID)
     """), {
         "id": req_id,
         "text": data.get("requirement_text"),
@@ -104,8 +104,8 @@ async def update_requirement(req_id: str, data: dict, db: AsyncSession = Depends
 
 @router.delete("/requirements/{req_id}")
 async def delete_requirement(req_id: str, db: AsyncSession = Depends(get_db)):
-    await db.execute(text("DELETE FROM grc_requirement_mappings WHERE source_req_id=:id::uuid OR target_req_id=:id::uuid"), {"id": req_id})
-    await db.execute(text("DELETE FROM grc_requirements WHERE id=:id::uuid"), {"id": req_id})
+    await db.execute(text("DELETE FROM grc_requirement_mappings WHERE source_req_id=CAST(:id AS UUID) OR target_req_id=CAST(:id AS UUID)"), {"id": req_id})
+    await db.execute(text("DELETE FROM grc_requirements WHERE id=CAST(:id AS UUID)"), {"id": req_id})
     await db.commit()
     return {"status": "ok"}
 
@@ -128,7 +128,7 @@ async def get_document_requirements(doc_id: str, db: AsyncSession = Depends(get_
         SELECT r.*, f.name as framework_name, f.color as framework_color
         FROM grc_requirements r
         JOIN grc_frameworks f ON f.id = r.framework_id
-        WHERE r.document_id = :doc_id::uuid
+        WHERE r.document_id = CAST(:doc_id AS UUID)
         ORDER BY f.name
     """), {"doc_id": doc_id})
     reqs = [dict(r._mapping) for r in result.fetchall()]
@@ -172,7 +172,7 @@ async def get_document_mapping(doc_id: str, db: AsyncSession = Depends(get_db)):
                r.id as req_id, r.requirement_text, r.reference_code, r.status
         FROM grc_requirements r
         JOIN grc_frameworks f ON f.id = r.framework_id
-        WHERE r.document_id = :doc_id::uuid
+        WHERE r.document_id = CAST(:doc_id AS UUID)
         ORDER BY f.name
     """), {"doc_id": doc_id})
     rows = [dict(r._mapping) for r in result.fetchall()]
@@ -184,7 +184,7 @@ async def create_mapping(data: dict, db: AsyncSession = Depends(get_db)):
     mapping_id = str(uuid.uuid4())
     await db.execute(text("""
         INSERT INTO grc_requirement_mappings (id, source_req_id, target_req_id, mapping_type, notes, created_at)
-        VALUES (:id::uuid, :src::uuid, :tgt::uuid, :mtype, :notes, NOW())
+        VALUES (CAST(:id AS UUID), CAST(:src AS UUID), CAST(:tgt AS UUID), :mtype, :notes, NOW())
         ON CONFLICT (source_req_id, target_req_id) DO UPDATE SET
             mapping_type = EXCLUDED.mapping_type, notes = EXCLUDED.notes
     """), {
@@ -199,7 +199,7 @@ async def create_mapping(data: dict, db: AsyncSession = Depends(get_db)):
 
 @router.delete("/mapping/{mapping_id}")
 async def delete_mapping(mapping_id: str, db: AsyncSession = Depends(get_db)):
-    await db.execute(text("DELETE FROM grc_requirement_mappings WHERE id=:id::uuid"), {"id": mapping_id})
+    await db.execute(text("DELETE FROM grc_requirement_mappings WHERE id=CAST(:id AS UUID)"), {"id": mapping_id})
     await db.commit()
     return {"status": "ok"}
 
@@ -235,7 +235,7 @@ async def seed_frameworks(db: AsyncSession = Depends(get_db)):
         fw_id = str(uuid.uuid4())
         await db.execute(text("""
             INSERT INTO grc_frameworks (id, name, description, category, version, color, active, created_at)
-            VALUES (:id::uuid, :name, :desc, :cat, :ver, :color, true, NOW())
+            VALUES (CAST(:id AS UUID), :name, :desc, :cat, :ver, :color, true, NOW())
             ON CONFLICT DO NOTHING
         """), {"id": fw_id, "name": fw_name, "desc": meta["description"],
                "cat": meta["category"], "ver": meta["version"], "color": meta["color"]})
@@ -259,7 +259,7 @@ async def seed_frameworks(db: AsyncSession = Depends(get_db)):
             doc_id = str(uuid.uuid4())
             await db.execute(text("""
                 INSERT INTO grc_documents (id, name, created_at)
-                VALUES (:id::uuid, :name, NOW()) ON CONFLICT DO NOTHING
+                VALUES (CAST(:id AS UUID), :name, NOW()) ON CONFLICT DO NOTHING
             """), {"id": doc_id, "name": doc_name})
             doc_ids[doc_name] = doc_id
         
@@ -275,7 +275,7 @@ async def seed_frameworks(db: AsyncSession = Depends(get_db)):
             req_id = str(uuid.uuid4())
             await db.execute(text("""
                 INSERT INTO grc_requirements (id, framework_id, document_id, requirement_text, status, created_at, updated_at)
-                VALUES (:id::uuid, :fw_id::uuid, :doc_id::uuid, :text, 'not_started', NOW(), NOW())
+                VALUES (CAST(:id AS UUID), CAST(:fw_id AS UUID), CAST(:doc_id AS UUID), :text, 'not_started', NOW(), NOW())
             """), {"id": req_id, "fw_id": fw_ids[fw_name], "doc_id": doc_id, "text": req_text})
             req_count += 1
 
@@ -288,7 +288,7 @@ async def seed_frameworks_only(db: AsyncSession):
         fw_id = str(uuid.uuid4())
         await db.execute(text("""
             INSERT INTO grc_frameworks (id, name, description, category, version, color, active, created_at)
-            VALUES (:id::uuid, :name, :desc, :cat, :ver, :color, true, NOW())
+            VALUES (CAST(:id AS UUID), :name, :desc, :cat, :ver, :color, true, NOW())
             ON CONFLICT DO NOTHING
         """), {"id": fw_id, "name": fw_name, "desc": meta["description"],
                "cat": meta["category"], "ver": meta["version"], "color": meta["color"]})

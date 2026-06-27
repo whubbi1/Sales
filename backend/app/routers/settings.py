@@ -277,7 +277,7 @@ async def create_company_link(data: dict, db: AsyncSession = Depends(get_db)):
     link_id = str(uuid.uuid4())
     await db.execute(text("""
         INSERT INTO company_links (id, label, url, icon, active, sort_order, created_at)
-        VALUES (:id::uuid, :label, :url, :icon, :active, :sort_order, NOW())
+        VALUES (CAST(:id AS UUID), :label, :url, :icon, :active, :sort_order, NOW())
     """), {"id": link_id, "label": data.get("label",""), "url": data.get("url",""),
            "icon": data.get("icon","🔗"), "active": data.get("active", True),
            "sort_order": data.get("sort_order", 0)})
@@ -291,13 +291,13 @@ async def update_company_link(link_id: str, data: dict, db: AsyncSession = Depen
             label = COALESCE(:label, label), url = COALESCE(:url, url),
             icon = COALESCE(:icon, icon), active = COALESCE(:active, active),
             sort_order = COALESCE(:sort_order, sort_order)
-        WHERE id = :id::uuid
+        WHERE id = CAST(:id AS UUID)
     """), {**data, "id": link_id})
     await db.commit()
     return {"status": "ok"}
 
 @router.delete("/company-links/{link_id}")
 async def delete_company_link(link_id: str, db: AsyncSession = Depends(get_db)):
-    await db.execute(text("DELETE FROM company_links WHERE id = :id::uuid"), {"id": link_id})
+    await db.execute(text("DELETE FROM company_links WHERE id = CAST(:id AS UUID)"), {"id": link_id})
     await db.commit()
     return {"status": "ok"}

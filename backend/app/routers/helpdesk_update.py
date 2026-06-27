@@ -10,7 +10,7 @@ async def update_ticket_with_teams(tid: str, data: dict, db):
         SELECT t.*, c.name as category_name, t.teams_chat_id
         FROM tickets t
         LEFT JOIN ticket_categories c ON t.category_id = c.id
-        WHERE t.id = :id::uuid
+        WHERE t.id = CAST(:id AS UUID)
     """), {"id": tid})
     ticket = current.fetchone()
     if not ticket:
@@ -26,11 +26,11 @@ async def update_ticket_with_teams(tid: str, data: dict, db):
             priority       = COALESCE(NULLIF(:priority,''), priority),
             assignee_email = COALESCE(NULLIF(:assignee_email,''), assignee_email),
             assignee_name  = COALESCE(NULLIF(:assignee_name,''), assignee_name),
-            group_id       = CASE WHEN :group_id = '' THEN group_id ELSE :group_id::uuid END,
+            group_id       = CASE WHEN :group_id = '' THEN group_id ELSE CAST(:group_id AS UUID) END,
             resolution     = COALESCE(NULLIF(:resolution,''), resolution),
             resolved_at    = CASE WHEN :status IN ('resolved','closed') AND resolved_at IS NULL THEN NOW() ELSE resolved_at END,
             updated_at     = NOW()
-        WHERE id = :id::uuid
+        WHERE id = CAST(:id AS UUID)
     """), {**{k: v or '' for k, v in data.items()}, "id": tid, "group_id": data.get("group_id", "")})
     await db.commit()
 
