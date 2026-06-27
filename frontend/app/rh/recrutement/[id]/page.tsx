@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import { HRLayout } from '@/components/HRLayout'
 
@@ -12,6 +12,7 @@ const COMMENT_TYPES = ['note','call','email','interview']
 const COMMENT_ICONS: Record<string,string> = { note:'📝', call:'📞', email:'✉️', interview:'🎤' }
 const COUNTRIES = ['france','portugal','czech_republic','romania','spain']
 const CURRENCY: Record<string,string> = { france:'EUR', portugal:'EUR', czech_republic:'CZK', romania:'RON', spain:'EUR' }
+const LANGS: Record<string,string> = { france:'fr', portugal:'pt', czech_republic:'cs', romania:'ro', spain:'es' }
 
 export default function CandidateDetail() {
   const router = useRouter()
@@ -24,12 +25,61 @@ export default function CandidateDetail() {
   const [proposal, setProposal] = useState({ role:'', responsibilities:[] as string[], salary:'', advantages:[] as string[], start_date:'', country:'', resp_input:'', adv_input:'' })
   const [sending, setSending] = useState(false)
   const [proposalPreview, setProposalPreview] = useState<any>(null)
+  // Edit mode
+  const [editing, setEditing] = useState(false)
+  const [form, setForm] = useState<any>({})
+  const [skillInput, setSkillInput] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [saveError, setSaveError] = useState('')
+  const [cvFile, setCvFile] = useState<File|null>(null)
+  const [extracting, setExtracting] = useState(false)
+  const fileRef = useRef<HTMLInputElement>(null)
 
   const load = () => {
-    fetch(`${API}/hr/recruitment/${id}`).then(r=>r.json()).then(setProfile).finally(()=>setLoading(false))
+    fetch(`${API}/hr/recruitment/${id}`).then(r=>r.json()).then(d=>{ setProfile(d); setForm(d) }).finally(()=>setLoading(false))
   }
   useEffect(() => { load() }, [id])
   useEffect(() => { if (profile) setProposal(p=>({...p, country:profile.country||'france'})) }, [profile])
+
+  const handleCvUpload = async (file: File) => {
+    setCvFile(file); setExtracting(true)
+    const fd = new FormData(); fd.append('file', file)
+    try {
+      const r = await fetch(`${API}/hr/cv/extract`, { method:'POST', body:fd })
+      const d = await r.json()
+      const ex = d.extracted || {}
+      setForm((f: any) => ({
+        ...f,
+        ...(ex.first_name    ? { first_name: ex.first_name }       : {}),
+        ...(ex.last_name     ? { last_name: ex.last_name }         : {}),
+        ...(ex.email         ? { email: ex.email }                 : {}),
+        ...(ex.phone         ? { phone: ex.phone }                 : {}),
+        ...(ex.linkedin_url  ? { linkedin_url: ex.linkedin_url }   : {}),
+        ...(ex.current_title ? { current_title: ex.current_title } : {}),
+        ...(ex.years_experience ? { years_experience: ex.years_experience } : {}),
+        ...(ex.skills?.length   ? { skills: ex.skills }           : {}),
+        ...(ex.projects?.length ? { projects: ex.projects }       : {}),
+      }))
+    } catch {}
+    setExtracting(false)
+  }
+
+  const saveProfile = async () => {
+    setSaving(true); setSaveError('')
+    try {
+      const r = await fetch(`${API}/hr/recruitment/${id}`, {
+        method:'PUT', headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({ ...form, language: LANGS[form.country]||'fr' })
+      })
+      if (!r.ok) throw new Error(`Server error ${r.status}`)
+      if (cvFile) {
+        const fd = new FormData(); fd.append('file', cvFile)
+        await fetch(`${API}/hr/cv/upload/${id}`, { method:'POST', body:fd })
+      }
+      setProfile({ ...profile, ...form }); setEditing(false); setCvFile(null)
+    } catch (e: any) { setSaveError(e.message || 'Failed to save') }
+    finally { setSaving(false) }
+  }
 
   const updateStatus = async (status: string) => {
     await fetch(`${API}/hr/recruitment/${id}/status`, { method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify({status}) })
@@ -72,9 +122,9 @@ export default function CandidateDetail() {
 
         {/* Header */}
         <div style={{ background:'white', borderRadius:'12px', border:'1px solid #EDF2F7', padding:'24px', marginBottom:'20px', boxShadow:'0 1px 3px rgba(0,0,0,0.06)' }}>
-          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start' }}>
+          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom: editing ? '20px' : '0' }}>
             <div style={{ display:'flex', alignItems:'center', gap:'16px' }}>
-              <div style={{ width:'56px', height:'56px', borderRadius:'50%', background:'#7C3AED', display:'flex', alignItems:'center', justifyContent:'center', color:'white', fontSize:'20px', fontWeight:'800' }}>
+              <div style={{ width:'56px', height:'56px', borderRadius:'50%', background:'#7C3AED', display:'flex', alignItems:'center', justifyContent:'center', color:'white', fontSize:'20px', fontWeight:'800', flexShrink:0 }}>
                 {(profile.first_name||'?')[0]}{(profile.last_name||'?')[0]}
               </div>
               <div>
@@ -84,9 +134,70 @@ export default function CandidateDetail() {
             </div>
             <div style={{ display:'flex', gap:'8px', alignItems:'center' }}>
               {profile.cv_sharepoint_url && <a href={profile.cv_sharepoint_url} target="_blank" style={{ padding:'7px 14px', background:'#EFF6FF', color:'#156082', borderRadius:'8px', fontSize:'12px', fontWeight:'700', textDecoration:'none' }}>📄 CV</a>}
-              <button onClick={() => setShowProposal(true)} style={{ padding:'7px 14px', background:'#059669', color:'white', border:'none', borderRadius:'8px', fontSize:'12px', fontWeight:'700', cursor:'pointer', fontFamily:'Montserrat, sans-serif' }}>📄 Send Proposal</button>
+              {!editing && <button onClick={() => setShowProposal(true)} style={{ padding:'7px 14px', background:'#059669', color:'white', border:'none', borderRadius:'8px', fontSize:'12px', fontWeight:'700', cursor:'pointer', fontFamily:'Montserrat, sans-serif' }}>📄 Send Proposal</button>}
+              {editing
+                ? <>
+                    <button onClick={saveProfile} disabled={saving} style={{ padding:'7px 14px', background: saving ? '#F1F5F9' : '#059669', color: saving ? '#45B6E4' : 'white', border:'none', borderRadius:'8px', fontSize:'12px', fontWeight:'700', cursor: saving ? 'not-allowed' : 'pointer', fontFamily:'Montserrat, sans-serif' }}>{saving ? 'Saving...' : 'Save'}</button>
+                    <button onClick={() => { setEditing(false); setForm(profile); setCvFile(null); setSaveError('') }} style={{ padding:'7px 14px', background:'#F1F5F9', color:'#45B6E4', border:'none', borderRadius:'8px', fontSize:'12px', fontWeight:'600', cursor:'pointer', fontFamily:'Montserrat, sans-serif' }}>Cancel</button>
+                  </>
+                : <button onClick={() => setEditing(true)} style={{ padding:'7px 14px', background:'#7C3AED', color:'white', border:'none', borderRadius:'8px', fontSize:'12px', fontWeight:'700', cursor:'pointer', fontFamily:'Montserrat, sans-serif' }}>Edit</button>}
             </div>
           </div>
+
+          {/* Edit form */}
+          {editing && (
+            <div style={{ display:'flex', flexDirection:'column', gap:'14px' }}>
+              {/* CV re-upload */}
+              <div style={{ border:'2px dashed #EDF2F7', borderRadius:'10px', padding:'12px 16px', textAlign:'center', cursor:'pointer', background:'#FAFBFC' }}
+                onClick={() => fileRef.current?.click()}>
+                <input ref={fileRef} type="file" accept=".pdf,.doc,.docx,.odt,.rtf" style={{ display:'none' }} onChange={e => e.target.files?.[0] && handleCvUpload(e.target.files[0])}/>
+                {extracting ? <span style={{ color:'#45B6E4', fontSize:'12px' }}>⏳ Extracting CV data...</span>
+                : cvFile ? <span style={{ color:'#059669', fontSize:'12px' }}>✅ {cvFile.name} — fields updated from CV</span>
+                : <span style={{ color:'#45B6E4', fontSize:'12px' }}>📄 Upload new CV (PDF, Word, ODT) to auto-fill fields</span>}
+              </div>
+
+              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'10px' }}>
+                {([['first_name','First Name'],['last_name','Last Name'],['email','Email'],['phone','Phone'],['linkedin_url','LinkedIn URL'],['current_title','Current Title']] as [string,string][]).map(([key,label]) => (
+                  <div key={key}>
+                    <label style={{ display:'block', fontSize:'10px', fontWeight:'700', textTransform:'uppercase' as const, letterSpacing:'0.07em', color:'#45B6E4', marginBottom:'4px' }}>{label}</label>
+                    <input value={form[key]||''} onChange={e=>setForm((f:any)=>({...f,[key]:e.target.value}))}
+                      style={{ width:'100%', padding:'7px 10px', border:'1.5px solid #EDF2F7', borderRadius:'7px', fontFamily:'Montserrat, sans-serif', fontSize:'12px', outline:'none', boxSizing:'border-box' as const }}/>
+                  </div>
+                ))}
+                <div>
+                  <label style={{ display:'block', fontSize:'10px', fontWeight:'700', textTransform:'uppercase' as const, letterSpacing:'0.07em', color:'#45B6E4', marginBottom:'4px' }}>Country</label>
+                  <select value={form.country||'france'} onChange={e=>setForm((f:any)=>({...f,country:e.target.value}))}
+                    style={{ width:'100%', padding:'7px 10px', border:'1.5px solid #EDF2F7', borderRadius:'7px', fontFamily:'Montserrat, sans-serif', fontSize:'12px', outline:'none' }}>
+                    {COUNTRIES.map(c=><option key={c} value={c}>{FLAG[c]} {c}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label style={{ display:'block', fontSize:'10px', fontWeight:'700', textTransform:'uppercase' as const, letterSpacing:'0.07em', color:'#45B6E4', marginBottom:'4px' }}>Years Experience</label>
+                  <input type="number" value={form.years_experience||0} onChange={e=>setForm((f:any)=>({...f,years_experience:parseInt(e.target.value)||0}))}
+                    style={{ width:'100%', padding:'7px 10px', border:'1.5px solid #EDF2F7', borderRadius:'7px', fontFamily:'Montserrat, sans-serif', fontSize:'12px', outline:'none', boxSizing:'border-box' as const }}/>
+                </div>
+              </div>
+
+              {/* Skills */}
+              <div>
+                <label style={{ display:'block', fontSize:'10px', fontWeight:'700', textTransform:'uppercase' as const, letterSpacing:'0.07em', color:'#45B6E4', marginBottom:'6px' }}>Skills</label>
+                <div style={{ display:'flex', gap:'5px', flexWrap:'wrap', marginBottom:'6px' }}>
+                  {(form.skills||[]).map((s:string, i:number) => (
+                    <span key={i} style={{ background:'#F3F4F6', color:'#7C3AED', padding:'3px 10px', borderRadius:'12px', fontSize:'11px', fontWeight:'600', display:'flex', alignItems:'center', gap:'4px' }}>
+                      {s}<span style={{ cursor:'pointer' }} onClick={()=>setForm((f:any)=>({...f,skills:f.skills.filter((_:any,j:number)=>j!==i)}))}>×</span>
+                    </span>
+                  ))}
+                </div>
+                <div style={{ display:'flex', gap:'6px' }}>
+                  <input value={skillInput} onChange={e=>setSkillInput(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&skillInput.trim()){setForm((f:any)=>({...f,skills:[...(f.skills||[]),skillInput.trim()]}));setSkillInput('')}}}
+                    placeholder="Add skill..." style={{ flex:1, padding:'7px 10px', border:'1.5px solid #EDF2F7', borderRadius:'7px', fontFamily:'Montserrat, sans-serif', fontSize:'12px', outline:'none' }}/>
+                  <button onClick={()=>{if(skillInput.trim()){setForm((f:any)=>({...f,skills:[...(f.skills||[]),skillInput.trim()]}));setSkillInput('')}}} style={{ padding:'7px 14px', background:'#7C3AED', color:'white', border:'none', borderRadius:'7px', fontSize:'12px', cursor:'pointer', fontFamily:'Montserrat, sans-serif' }}>+</button>
+                </div>
+              </div>
+
+              {saveError && <div style={{ background:'#FEF2F2', color:'#DC2626', padding:'10px 14px', borderRadius:'8px', fontSize:'12px' }}>{saveError}</div>}
+            </div>
+          )}
 
           {/* Status pipeline */}
           <div style={{ marginTop:'20px', paddingTop:'20px', borderTop:'1px solid #F1F5F9' }}>
@@ -103,18 +214,22 @@ export default function CandidateDetail() {
             </div>
           </div>
 
-          {/* Contact */}
-          <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:'12px', marginTop:'16px', paddingTop:'16px', borderTop:'1px solid #F1F5F9' }}>
-            {[{label:'Email',v:profile.email,href:`mailto:${profile.email}`},{label:'Phone',v:profile.phone,href:`tel:${profile.phone}`},{label:'LinkedIn',v:profile.linkedin_url?'Profile':null,href:profile.linkedin_url},{label:'Experience',v:`${profile.years_experience||0} years`}].map(i=>(
-              <div key={i.label}>
-                <div style={{ fontSize:'10px', fontWeight:'700', textTransform:'uppercase', letterSpacing:'0.07em', color:'#45B6E4', marginBottom:'3px' }}>{i.label}</div>
-                {i.href&&i.v?<a href={i.href} target="_blank" style={{ fontSize:'12px', fontWeight:'600', color:'#156082', textDecoration:'none' }}>{i.v}</a>:<div style={{ fontSize:'12px', fontWeight:'600', color:'#3F3F3F' }}>{i.v||'—'}</div>}
+          {/* Read-only contact info */}
+          {!editing && (
+            <>
+              <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:'12px', marginTop:'16px', paddingTop:'16px', borderTop:'1px solid #F1F5F9' }}>
+                {[{label:'Email',v:profile.email,href:`mailto:${profile.email}`},{label:'Phone',v:profile.phone,href:`tel:${profile.phone}`},{label:'LinkedIn',v:profile.linkedin_url?'Profile':null,href:profile.linkedin_url},{label:'Experience',v:`${profile.years_experience||0} years`}].map(i=>(
+                  <div key={i.label}>
+                    <div style={{ fontSize:'10px', fontWeight:'700', textTransform:'uppercase', letterSpacing:'0.07em', color:'#45B6E4', marginBottom:'3px' }}>{i.label}</div>
+                    {i.href&&i.v?<a href={i.href} target="_blank" style={{ fontSize:'12px', fontWeight:'600', color:'#156082', textDecoration:'none' }}>{i.v}</a>:<div style={{ fontSize:'12px', fontWeight:'600', color:'#3F3F3F' }}>{i.v||'—'}</div>}
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
-          <div style={{ display:'flex', gap:'5px', flexWrap:'wrap', marginTop:'12px' }}>
-            {(profile.skills||[]).map((s:string)=><span key={s} style={{ background:'#F3F4F6', color:'#7C3AED', padding:'2px 8px', borderRadius:'12px', fontSize:'10px', fontWeight:'600' }}>{s}</span>)}
-          </div>
+              <div style={{ display:'flex', gap:'5px', flexWrap:'wrap', marginTop:'12px' }}>
+                {(profile.skills||[]).map((s:string)=><span key={s} style={{ background:'#F3F4F6', color:'#7C3AED', padding:'2px 8px', borderRadius:'12px', fontSize:'10px', fontWeight:'600' }}>{s}</span>)}
+              </div>
+            </>
+          )}
         </div>
 
         {/* Tabs */}
