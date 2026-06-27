@@ -16,7 +16,9 @@ const STATUS_CONFIG: Record<string, {bg:string;color:string;label:string}> = {
   not_applicable: {bg:'#F8FAFC', color:'#94A3B8', label:'N/A'},
 }
 
-export default function FrameworksPage() {
+import { Suspense } from 'react'
+
+function FrameworksContent() {
   const searchParams = useSearchParams()
   const [frameworks, setFrameworks] = useState<any[]>([])
   const [selected, setSelected] = useState<string|null>(searchParams.get('id'))
@@ -164,6 +166,14 @@ export default function FrameworksPage() {
         )}
       </div>
     </GRCLayout>
+  )
+}
+
+export default function FrameworksPage() {
+  return (
+    <Suspense fallback={<div style={{ textAlign: 'center', padding: '48px', color: '#45B6E4' }}>Loading...</div>}>
+      <FrameworksContent />
+    </Suspense>
   )
 }
 
