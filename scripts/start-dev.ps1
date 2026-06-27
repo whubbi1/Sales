@@ -1,15 +1,18 @@
 # start-dev.ps1
-# Demarre toutes les ressources AWS de l'environnement DEV
+# Demarre toutes les ressources AWS de l'environnement DEV (compte WCOMPLY-WHUBBI)
 # Utilisation : .\start-dev.ps1
 
 $CLUSTER    = "whubbi-cluster-dev"
 $SERVICE    = "whubbi-backend-service"
 $DB_ID      = "whubbi-postgres-dev"
 $REGION     = "eu-west-1"
+$PROFILE    = "whubbi-new"
+$IMAGE      = "882321772619.dkr.ecr.eu-west-1.amazonaws.com/whubbi-backend:v27"
 
 Write-Host ""
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host "   WHUBBI DEV - Demarrage des services" -ForegroundColor Cyan
+Write-Host "   Compte : WCOMPLY-WHUBBI (882321772619)" -ForegroundColor Gray
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host ""
 
@@ -19,13 +22,15 @@ Write-Host "1/3 Demarrage de la base de donnees RDS..." -ForegroundColor Yellow
 $dbStatus = aws rds describe-db-instances `
     --db-instance-identifier $DB_ID `
     --region $REGION `
+    --profile $PROFILE `
     --query "DBInstances[0].DBInstanceStatus" `
     --output text 2>$null
 
 if ($dbStatus -eq "stopped") {
     aws rds start-db-instance `
         --db-instance-identifier $DB_ID `
-        --region $REGION | Out-Null
+        --region $REGION `
+        --profile $PROFILE | Out-Null
     Write-Host "   [OK] RDS en cours de demarrage (3-5 minutes)..." -ForegroundColor Green
 } elseif ($dbStatus -eq "available") {
     Write-Host "   [OK] RDS deja demarree" -ForegroundColor Green
@@ -40,7 +45,8 @@ aws ecs update-service `
     --cluster $CLUSTER `
     --service $SERVICE `
     --desired-count 1 `
-    --region $REGION | Out-Null
+    --region $REGION `
+    --profile $PROFILE | Out-Null
 
 Write-Host "   [OK] ECS backend demarre (1 tache)" -ForegroundColor Green
 
@@ -56,6 +62,7 @@ do {
     $dbStatus = aws rds describe-db-instances `
         --db-instance-identifier $DB_ID `
         --region $REGION `
+        --profile $PROFILE `
         --query "DBInstances[0].DBInstanceStatus" `
         --output text 2>$null
     Write-Host "   Statut RDS : $dbStatus ($attempt/$maxAttempts)" -ForegroundColor Gray
@@ -73,8 +80,9 @@ Write-Host "========================================" -ForegroundColor Cyan
 Write-Host "   [OK] Environnement DEV demarre !" -ForegroundColor Green
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host ""
-Write-Host "   Frontend : https://dev.whubbi.wcomply.com" -ForegroundColor White
-Write-Host "   API      : https://api.dev.whubbi.wcomply.com" -ForegroundColor White
+Write-Host "   Frontend : https://master.da3cm8ewfvjqw.amplifyapp.com" -ForegroundColor White
+Write-Host "   API      : https://api.whubbi.wcomply.com" -ForegroundColor White
+Write-Host "   Admin    : https://master.da3cm8ewfvjqw.amplifyapp.com/admin" -ForegroundColor White
 Write-Host ""
 Write-Host "   Pour arreter : .\stop-dev.ps1" -ForegroundColor Gray
 Write-Host ""

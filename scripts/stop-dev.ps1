@@ -1,15 +1,17 @@
 # stop-dev.ps1
-# Arrete toutes les ressources AWS de l'environnement DEV
+# Arrete toutes les ressources AWS de l'environnement DEV (compte WCOMPLY-WHUBBI)
 # Utilisation : .\stop-dev.ps1
 
 $CLUSTER    = "whubbi-cluster-dev"
 $SERVICE    = "whubbi-backend-service"
 $DB_ID      = "whubbi-postgres-dev"
 $REGION     = "eu-west-1"
+$PROFILE    = "whubbi-new"
 
 Write-Host ""
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host "   WHUBBI DEV - Arret des services" -ForegroundColor Cyan
+Write-Host "   Compte : WCOMPLY-WHUBBI (882321772619)" -ForegroundColor Gray
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host ""
 
@@ -20,7 +22,8 @@ aws ecs update-service `
     --cluster $CLUSTER `
     --service $SERVICE `
     --desired-count 0 `
-    --region $REGION | Out-Null
+    --region $REGION `
+    --profile $PROFILE | Out-Null
 
 Write-Host "   [OK] ECS arrete (0 taches)" -ForegroundColor Green
 
@@ -30,13 +33,15 @@ Write-Host "2/2 Arret de la base de donnees RDS..." -ForegroundColor Yellow
 $dbStatus = aws rds describe-db-instances `
     --db-instance-identifier $DB_ID `
     --region $REGION `
+    --profile $PROFILE `
     --query "DBInstances[0].DBInstanceStatus" `
     --output text 2>$null
 
 if ($dbStatus -eq "available") {
     aws rds stop-db-instance `
         --db-instance-identifier $DB_ID `
-        --region $REGION | Out-Null
+        --region $REGION `
+        --profile $PROFILE | Out-Null
     Write-Host "   [OK] RDS en cours d'arret..." -ForegroundColor Green
 } elseif ($dbStatus -eq "stopped") {
     Write-Host "   [OK] RDS deja arretee" -ForegroundColor Green

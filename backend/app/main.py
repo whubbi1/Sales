@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI(title="WHUBBI API", version="2.0.0")
 app.add_middleware(CORSMiddleware,
-    allow_origins=["https://dev.whubbi.wcomply.com","https://whubbi.wcomply.com","http://localhost:3000","http://localhost:3001"],
+    allow_origins=["https://dev.whubbi.wcomply.com","https://whubbi.wcomply.com","http://localhost:3000","http://localhost:3001","https://master.da3cm8ewfvjqw.amplifyapp.com"],
     allow_credentials=True, allow_methods=["*"], allow_headers=["*"],
 )
 
@@ -11,7 +11,7 @@ app.add_middleware(CORSMiddleware,
 async def startup():
     try:
         from app.database import engine, Base
-        from app.models import company, contact, opportunity, error_log, url_monitor, user_profile, helpdesk, background_jobs
+        from app.models import company, contact, opportunity, error_log, url_monitor, user_profile, helpdesk, background_jobs, grc, hr
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
 
@@ -83,6 +83,102 @@ async def startup():
                     created_by VARCHAR(255),
                     created_at TIMESTAMP DEFAULT NOW()
                 )""",
+
+                # GRC migrations
+                """CREATE TABLE IF NOT EXISTS grc_frameworks (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    name VARCHAR(100) NOT NULL, description TEXT,
+                    category VARCHAR(50), version VARCHAR(20),
+                    active BOOLEAN DEFAULT true, created_at TIMESTAMP DEFAULT NOW()
+                )""",
+                """CREATE TABLE IF NOT EXISTS grc_controls (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    framework_id UUID, control_id VARCHAR(50),
+                    title VARCHAR(255) NOT NULL, description TEXT,
+                    category VARCHAR(100), status VARCHAR(20) DEFAULT 'not_started',
+                    evidence TEXT, owner_email VARCHAR(255), owner_name VARCHAR(255),
+                    due_date TIMESTAMP, updated_at TIMESTAMP, created_at TIMESTAMP DEFAULT NOW()
+                )""",
+                """CREATE TABLE IF NOT EXISTS grc_risks (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    title VARCHAR(255) NOT NULL, description TEXT,
+                    category VARCHAR(100), probability INTEGER, impact INTEGER,
+                    status VARCHAR(20) DEFAULT 'open', mitigation TEXT,
+                    owner_email VARCHAR(255), owner_name VARCHAR(255),
+                    due_date TIMESTAMP, created_at TIMESTAMP DEFAULT NOW(),
+                    updated_at TIMESTAMP DEFAULT NOW()
+                )""",
+                """CREATE TABLE IF NOT EXISTS grc_audits (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    title VARCHAR(255) NOT NULL, framework_id UUID,
+                    audit_type VARCHAR(50), status VARCHAR(20) DEFAULT 'planned',
+                    start_date TIMESTAMP, end_date TIMESTAMP,
+                    auditor_name VARCHAR(255), scope TEXT,
+                    findings_count INTEGER DEFAULT 0,
+                    created_at TIMESTAMP DEFAULT NOW(), updated_at TIMESTAMP DEFAULT NOW()
+                )""",
+                """CREATE TABLE IF NOT EXISTS grc_findings (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    audit_id UUID, title VARCHAR(255) NOT NULL,
+                    description TEXT, severity VARCHAR(20),
+                    status VARCHAR(20) DEFAULT 'open',
+                    corrective_action TEXT, owner_email VARCHAR(255),
+                    due_date TIMESTAMP, created_at TIMESTAMP DEFAULT NOW()
+                )""",
+
+                # HR migrations
+                """CREATE TABLE IF NOT EXISTS hr_profiles (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    profile_type VARCHAR(20) NOT NULL,
+                    first_name VARCHAR(100), last_name VARCHAR(100),
+                    email VARCHAR(255), phone VARCHAR(50),
+                    linkedin_url VARCHAR(500), country VARCHAR(50), language VARCHAR(10),
+                    current_title VARCHAR(255), skills JSON, years_experience INTEGER,
+                    cv_sharepoint_url VARCHAR(1000), cv_filename VARCHAR(255),
+                    cv_extracted BOOLEAN DEFAULT false,
+                    recruitment_status VARCHAR(30) DEFAULT 'new',
+                    daily_rate INTEGER, availability_date TIMESTAMP,
+                    created_at TIMESTAMP DEFAULT NOW(), updated_at TIMESTAMP DEFAULT NOW(),
+                    created_by VARCHAR(255)
+                )""",
+                """CREATE TABLE IF NOT EXISTS hr_projects (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    profile_id UUID, title VARCHAR(255), company VARCHAR(255),
+                    start_date VARCHAR(20), end_date VARCHAR(20),
+                    description TEXT, technologies JSON
+                )""",
+                """CREATE TABLE IF NOT EXISTS hr_comments (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    profile_id UUID, author_email VARCHAR(255), author_name VARCHAR(255),
+                    content TEXT, comment_type VARCHAR(20) DEFAULT 'note',
+                    created_at TIMESTAMP DEFAULT NOW()
+                )""",
+                """CREATE TABLE IF NOT EXISTS hr_job_descriptions (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    title VARCHAR(255) NOT NULL, department VARCHAR(100),
+                    location VARCHAR(100), contract_type VARCHAR(50),
+                    status VARCHAR(20) DEFAULT 'open', description TEXT,
+                    responsibilities JSON, requirements JSON,
+                    salary_min INTEGER, salary_max INTEGER,
+                    created_at TIMESTAMP DEFAULT NOW(), updated_at TIMESTAMP DEFAULT NOW()
+                )""",
+                """CREATE TABLE IF NOT EXISTS hr_proposals (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    profile_id UUID, role VARCHAR(255),
+                    responsibilities JSON, salary INTEGER, advantages JSON,
+                    start_date VARCHAR(50), country VARCHAR(50), language VARCHAR(10),
+                    status VARCHAR(20) DEFAULT 'draft',
+                    docusign_envelope_id VARCHAR(255), docusign_status VARCHAR(50),
+                    signed_at TIMESTAMP, onboarding_token VARCHAR(100) UNIQUE,
+                    onboarding_sent_at TIMESTAMP, onboarding_completed_at TIMESTAMP,
+                    created_at TIMESTAMP DEFAULT NOW(), sent_at TIMESTAMP
+                )""",
+                """CREATE TABLE IF NOT EXISTS hr_onboarding_documents (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    proposal_id UUID, document_type VARCHAR(100),
+                    filename VARCHAR(255), sharepoint_url VARCHAR(1000),
+                    uploaded_at TIMESTAMP DEFAULT NOW(), personal_data JSON
+                )""",
             ]
             for sql in sqls:
                 try:
@@ -124,6 +220,8 @@ try:
     from app.routers.microsoft import router as microsoft_router
     from app.routers.ecs_control import router as ecs_router
     from app.routers.settings import router as settings_router
+    from app.routers.hr import router as hr_router
+    from app.routers.grc import router as grc_router
     from app.routers.helpdesk import router as helpdesk_router
     from app.routers.helpdesk_teams import router as teams_router
     from app.routers import auth, outlook, copilot
@@ -135,6 +233,8 @@ try:
     app.include_router(microsoft_router,    prefix="/microsoft",    tags=["Microsoft"])
     app.include_router(ecs_router,          prefix="/ecs",          tags=["ECS"])
     app.include_router(settings_router,     prefix="/settings",     tags=["Settings"])
+    app.include_router(hr_router,             prefix="/hr",           tags=["HR"])
+    app.include_router(grc_router,           prefix="/grc",          tags=["GRC"])
     app.include_router(helpdesk_router,     prefix="/helpdesk",     tags=["Helpdesk"])
     app.include_router(teams_router,        prefix="/helpdesk",     tags=["Teams"])
     app.include_router(auth.router,         prefix="/auth",         tags=["Auth"])

@@ -302,7 +302,18 @@ async def create_error_log(data: dict, db: AsyncSession = Depends(get_db)):
         return {"status": "error", "detail": str(e)}
 
 
-# ─── Multi-account AWS Costs ───────────────────────────────────────────────────
+# ─── Multi-account AWS Costs (cross-account via AssumeRole) ──────────────────
+COST_READER_ROLE = "arn:aws:iam::351007427901:role/whubbi-cost-reader"
+
+def get_ce_client():
+    """Get Cost Explorer client using cross-account role from main account."""
+    sts = boto3.client("sts")
+    creds = sts.assume_role(RoleArn=COST_READER_ROLE, RoleSessionName="whubbi-cost-reader")["Credentials"]
+    return boto3.client("ce", region_name="us-east-1",
+        aws_access_key_id=creds["AccessKeyId"],
+        aws_secret_access_key=creds["SecretAccessKey"],
+        aws_session_token=creds["SessionToken"])
+
 ACCOUNT_NAMES = {
     "351007427901": {"name": "WCOMPLY Main",   "color": "#156082", "icon": "🏢"},
     "607025226712": {"name": "WCOMPLY Prod",   "color": "#e97132", "icon": "🚀"},
@@ -314,7 +325,7 @@ async def get_multi_account_costs():
     """Get AWS costs broken down by account."""
     try:
         from datetime import datetime, timedelta
-        ce = boto3.client("ce", region_name="us-east-1")
+        ce = get_ce_client()
         now = datetime.utcnow()
         start = now.replace(day=1).strftime("%Y-%m-%d")
         end = now.strftime("%Y-%m-%d")
@@ -366,7 +377,7 @@ async def get_account_costs(account_id: str):
     """Get detailed costs for a specific account."""
     try:
         from datetime import datetime, timedelta
-        ce = boto3.client("ce", region_name="us-east-1")
+        ce = get_ce_client()
         now = datetime.utcnow()
         start = now.replace(day=1).strftime("%Y-%m-%d")
         end = now.strftime("%Y-%m-%d")
