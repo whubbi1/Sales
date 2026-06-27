@@ -275,7 +275,3 @@ function FindingForm({ onSave, onCancel }: any) {
     </div>
   )
 }
-
-const SEVERITY_COLORS: Record<string, string> = {
-  critical:'#DC2626', high:'#D97706', medium:'#2563EB', low:'#059669'
-}

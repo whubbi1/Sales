@@ -220,4 +220,3 @@ function FreelancerForm({ extracted, cvFile, extracting, onCvUpload, fileRef, on
   )
 }
 
-const LANGS: Record<string,string> = { france:'fr', portugal:'pt', czech_republic:'cs', romania:'ro', spain:'es' }

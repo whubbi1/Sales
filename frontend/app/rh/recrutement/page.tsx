@@ -224,6 +224,3 @@ function CandidateForm({ extracted, cvFile, extracting, onCvUpload, fileRef, onS
     </div>
   )
 }
-
-const STATUS_LABEL: Record<string,string> = { new:'New', screening:'Screening', interview_1:'Interview 1', interview_2:'Interview 2', technical_test:'Tech Test', offer:'Offer', hired:'Hired', rejected:'Rejected', on_hold:'On Hold' }
-const STATUS_COLOR: Record<string,string> = { new:'#45B6E4', screening:'#D97706', interview_1:'#7C3AED', interview_2:'#059669', technical_test:'#e97132', offer:'#156082', hired:'#059669', rejected:'#DC2626', on_hold:'#94A3B8' }
