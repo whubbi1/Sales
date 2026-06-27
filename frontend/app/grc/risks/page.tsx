@@ -18,6 +18,8 @@ export default function RisksPage() {
   const [showModal, setShowModal] = useState(false)
   const [editRisk, setEditRisk] = useState<any>(null)
   const [filter, setFilter] = useState('all')
+  const [saving, setSaving] = useState(false)
+  const [saveError, setSaveError] = useState('')
 
   const load = () => {
     fetch(`${API}/grc/risks`).then(r => r.json()).then(d => setRisks(d.risks || [])).finally(() => setLoading(false))
@@ -26,12 +28,18 @@ export default function RisksPage() {
   useEffect(() => { load() }, [])
 
   const save = async (data: any) => {
-    if (editRisk) {
-      await fetch(`${API}/grc/risks/${editRisk.id}`, { method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify(data) })
-    } else {
-      await fetch(`${API}/grc/risks`, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(data) })
+    setSaving(true); setSaveError('')
+    try {
+      const url = editRisk ? `${API}/grc/risks/${editRisk.id}` : `${API}/grc/risks`
+      const method = editRisk ? 'PUT' : 'POST'
+      const r = await fetch(url, { method, headers: {'Content-Type':'application/json'}, body: JSON.stringify(data) })
+      if (!r.ok) throw new Error(`Server error ${r.status}`)
+      setShowModal(false); setEditRisk(null); load()
+    } catch (e: any) {
+      setSaveError(e.message || 'Failed to save risk')
+    } finally {
+      setSaving(false)
     }
-    setShowModal(false); setEditRisk(null); load()
   }
 
   const del = async (id: string) => {
@@ -130,7 +138,7 @@ export default function RisksPage() {
                 <span style={{ fontSize: '14px', fontWeight: '800', color: '#156082' }}>{editRisk ? 'Edit Risk' : 'New Risk'}</span>
                 <button onClick={() => { setShowModal(false); setEditRisk(null) }} style={{ background: 'none', border: 'none', fontSize: '20px', cursor: 'pointer', color: '#45B6E4' }}>×</button>
               </div>
-              <RiskForm risk={editRisk} onSave={save} onCancel={() => { setShowModal(false); setEditRisk(null) }} />
+              <RiskForm risk={editRisk} onSave={save} onCancel={() => { setShowModal(false); setEditRisk(null); setSaveError('') }} saving={saving} saveError={saveError} />
             </div>
           </div>
         )}
@@ -139,7 +147,10 @@ export default function RisksPage() {
   )
 }
 
-function RiskForm({ risk, onSave, onCancel }: any) {
+const INP: React.CSSProperties = { width:'100%', padding:'8px 10px', border:'1.5px solid #EDF2F7', borderRadius:'7px', fontFamily:'Montserrat, sans-serif', fontSize:'12px', outline:'none', boxSizing:'border-box' }
+const LBL: React.CSSProperties = { display:'block', fontSize:'10px', fontWeight:'700', textTransform:'uppercase', letterSpacing:'0.07em', color:'#45B6E4', marginBottom:'5px' }
+
+function RiskForm({ risk, onSave, onCancel, saving, saveError }: any) {
   const [form, setForm] = useState({
     title: risk?.title || '', description: risk?.description || '',
     category: risk?.category || 'operational', probability: risk?.probability || 3,
@@ -147,41 +158,42 @@ function RiskForm({ risk, onSave, onCancel }: any) {
     mitigation: risk?.mitigation || '', owner_name: risk?.owner_name || '',
   })
 
-  const score = form.probability * form.impact
+  const score = (form.probability || 1) * (form.impact || 1)
+  const canSave = !!form.title.trim() && !saving
 
   return (
     <div style={{ overflowY: 'auto', flex: 1 }}>
       <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
         <div>
-          <label className="form-label">Title *</label>
-          <input value={form.title} onChange={e => setForm({...form, title: e.target.value})} className="form-input" placeholder="Risk title" />
+          <label style={LBL}>Title *</label>
+          <input value={form.title} onChange={e => setForm({...form, title: e.target.value})} style={INP} placeholder="Risk title" />
         </div>
         <div>
-          <label className="form-label">Description</label>
-          <textarea value={form.description} onChange={e => setForm({...form, description: e.target.value})} className="form-input" placeholder="Describe the risk..." />
+          <label style={LBL}>Description</label>
+          <textarea value={form.description} onChange={e => setForm({...form, description: e.target.value})} style={{...INP, resize:'vertical', minHeight:'60px'}} placeholder="Describe the risk..." />
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
           <div>
-            <label className="form-label">Category</label>
-            <select value={form.category} onChange={e => setForm({...form, category: e.target.value})} className="form-input">
+            <label style={LBL}>Category</label>
+            <select value={form.category} onChange={e => setForm({...form, category: e.target.value})} style={INP}>
               {CATEGORIES.map(c => <option key={c} value={c}>{c.charAt(0).toUpperCase() + c.slice(1)}</option>)}
             </select>
           </div>
           <div>
-            <label className="form-label">Status</label>
-            <select value={form.status} onChange={e => setForm({...form, status: e.target.value})} className="form-input">
+            <label style={LBL}>Status</label>
+            <select value={form.status} onChange={e => setForm({...form, status: e.target.value})} style={INP}>
               {STATUSES.map(s => <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>)}
             </select>
           </div>
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px', alignItems: 'center' }}>
           <div>
-            <label className="form-label">Probability (1-5)</label>
-            <input type="number" min="1" max="5" value={form.probability} onChange={e => setForm({...form, probability: parseInt(e.target.value)})} className="form-input" />
+            <label style={LBL}>Probability (1-5)</label>
+            <input type="number" min="1" max="5" value={form.probability} onChange={e => setForm({...form, probability: parseInt(e.target.value) || 1})} style={INP} />
           </div>
           <div>
-            <label className="form-label">Impact (1-5)</label>
-            <input type="number" min="1" max="5" value={form.impact} onChange={e => setForm({...form, impact: parseInt(e.target.value)})} className="form-input" />
+            <label style={LBL}>Impact (1-5)</label>
+            <input type="number" min="1" max="5" value={form.impact} onChange={e => setForm({...form, impact: parseInt(e.target.value) || 1})} style={INP} />
           </div>
           <div style={{ textAlign: 'center', padding: '10px', borderRadius: '10px', background: RISK_COLOR(score) + '15' }}>
             <div style={{ fontSize: '24px', fontWeight: '900', color: RISK_COLOR(score) }}>{score}</div>
@@ -189,19 +201,20 @@ function RiskForm({ risk, onSave, onCancel }: any) {
           </div>
         </div>
         <div>
-          <label className="form-label">Mitigation Plan</label>
-          <textarea value={form.mitigation} onChange={e => setForm({...form, mitigation: e.target.value})} className="form-input" placeholder="How to mitigate this risk..." />
+          <label style={LBL}>Mitigation Plan</label>
+          <textarea value={form.mitigation} onChange={e => setForm({...form, mitigation: e.target.value})} style={{...INP, resize:'vertical', minHeight:'60px'}} placeholder="How to mitigate this risk..." />
         </div>
         <div>
-          <label className="form-label">Risk Owner</label>
-          <input value={form.owner_name} onChange={e => setForm({...form, owner_name: e.target.value})} className="form-input" placeholder="Owner name" />
+          <label style={LBL}>Risk Owner</label>
+          <input value={form.owner_name} onChange={e => setForm({...form, owner_name: e.target.value})} style={INP} placeholder="Owner name" />
         </div>
+        {saveError && <div style={{ background:'#FEF2F2', color:'#DC2626', padding:'10px 12px', borderRadius:'8px', fontSize:'12px', fontWeight:'600' }}>⚠️ {saveError}</div>}
       </div>
       <div style={{ padding: '14px 20px', borderTop: '1px solid #EDF2F7', background: '#FAFBFC', display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
         <button onClick={onCancel} style={{ padding: '8px 16px', background: 'white', border: '1.5px solid #EDF2F7', borderRadius: '8px', fontSize: '12px', fontWeight: '600', cursor: 'pointer', fontFamily: 'Montserrat, sans-serif', color: '#45B6E4' }}>Cancel</button>
-        <button onClick={() => onSave(form)} disabled={!form.title}
-          style={{ padding: '8px 16px', background: form.title ? '#156082' : '#F1F5F9', border: 'none', borderRadius: '8px', fontSize: '12px', fontWeight: '700', cursor: form.title ? 'pointer' : 'not-allowed', fontFamily: 'Montserrat, sans-serif', color: form.title ? 'white' : '#45B6E4' }}>
-          {risk ? 'Update Risk' : 'Add Risk'}
+        <button onClick={() => onSave(form)} disabled={!canSave}
+          style={{ padding: '8px 16px', background: canSave ? '#156082' : '#F1F5F9', border: 'none', borderRadius: '8px', fontSize: '12px', fontWeight: '700', cursor: canSave ? 'pointer' : 'not-allowed', fontFamily: 'Montserrat, sans-serif', color: canSave ? 'white' : '#45B6E4' }}>
+          {saving ? 'Saving...' : risk ? 'Update Risk' : 'Add Risk'}
         </button>
       </div>
     </div>
