@@ -244,35 +244,35 @@ async def health(): return {"status":"healthy","app":"whubbi","version":"2.0.0"}
 @app.get("/")
 async def root(): return {"message":"WHUBBI API","version":"2.0.0"}
 
+def _include(module_path: str, prefix: str, tag: str):
+    try:
+        import importlib
+        mod = importlib.import_module(module_path)
+        app.include_router(mod.router, prefix=prefix, tags=[tag])
+        print(f"✓ {tag}")
+    except Exception as e:
+        import traceback
+        print(f"✗ ROUTER FAILED [{tag}]: {e}")
+        traceback.print_exc()
+
+_include("app.routers.companies",      "/companies",    "Companies")
+_include("app.routers.contacts",       "/contacts",     "Contacts")
+_include("app.routers.opportunities",  "/opportunities","Opportunities")
+_include("app.routers.admin",          "/admin",        "Admin")
+_include("app.routers.admin_ops",      "/admin",        "AdminOps")
+_include("app.routers.microsoft",      "/microsoft",    "Microsoft")
+_include("app.routers.ecs_control",    "/ecs",          "ECS")
+_include("app.routers.settings",       "/settings",     "Settings")
+_include("app.routers.hr",             "/hr",           "HR")
+_include("app.routers.grc",            "/grc",          "GRC")
+_include("app.routers.grc_extended",   "/grc",          "GRCExt")
+_include("app.routers.helpdesk",       "/helpdesk",     "Helpdesk")
+_include("app.routers.helpdesk_teams", "/helpdesk",     "Teams")
+
 try:
-    from app.routers.companies import router as companies_router
-    from app.routers.contacts import router as contacts_router
-    from app.routers.opportunities import router as opportunities_router
-    from app.routers.admin import router as admin_router
-    from app.routers.admin_ops import router as admin_ops_router
-    from app.routers.microsoft import router as microsoft_router
-    from app.routers.ecs_control import router as ecs_router
-    from app.routers.settings import router as settings_router
-    from app.routers.hr import router as hr_router
-    from app.routers.grc import router as grc_router
-    from app.routers.grc_extended import router as grc_ext_router
-    from app.routers.helpdesk import router as helpdesk_router
-    from app.routers.helpdesk_teams import router as teams_router
     from app.routers import auth, outlook, copilot
-    app.include_router(companies_router,    prefix="/companies",    tags=["Companies"])
-    app.include_router(contacts_router,     prefix="/contacts",     tags=["Contacts"])
-    app.include_router(opportunities_router,prefix="/opportunities", tags=["Opportunities"])
-    app.include_router(admin_router,        prefix="/admin",        tags=["Admin"])
-    app.include_router(admin_ops_router,    prefix="/admin",        tags=["AdminOps"])
-    app.include_router(microsoft_router,    prefix="/microsoft",    tags=["Microsoft"])
-    app.include_router(ecs_router,          prefix="/ecs",          tags=["ECS"])
-    app.include_router(settings_router,     prefix="/settings",     tags=["Settings"])
-    app.include_router(hr_router,             prefix="/hr",           tags=["HR"])
-    app.include_router(grc_router,           prefix="/grc",          tags=["GRC"])
-    app.include_router(grc_ext_router,        prefix="/grc",          tags=["GRCExt"])
-    app.include_router(helpdesk_router,     prefix="/helpdesk",     tags=["Helpdesk"])
-    app.include_router(teams_router,        prefix="/helpdesk",     tags=["Teams"])
-    app.include_router(auth.router,         prefix="/auth",         tags=["Auth"])
-    app.include_router(outlook.router,      prefix="/outlook",      tags=["Outlook"])
-    app.include_router(copilot.router,      prefix="/copilot",      tags=["Copilot"])
-except Exception as e: print(f"Warning: {e}")
+    app.include_router(auth.router,    prefix="/auth",    tags=["Auth"])
+    app.include_router(outlook.router, prefix="/outlook", tags=["Outlook"])
+    app.include_router(copilot.router, prefix="/copilot", tags=["Copilot"])
+except Exception as e:
+    print(f"✗ ROUTER FAILED [auth/outlook/copilot]: {e}")
