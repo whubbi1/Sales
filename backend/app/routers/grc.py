@@ -244,17 +244,21 @@ async def list_risks(db: AsyncSession = Depends(get_db)):
 @router.post("/risks")
 async def create_risk(data: dict, db: AsyncSession = Depends(get_db)):
     risk_id = str(uuid.uuid4())
-    await db.execute(text("""
-        INSERT INTO grc_risks (id, title, description, category, probability, impact, status, mitigation, owner_email, owner_name, created_at, updated_at)
-        VALUES (:id::uuid, :title, :description, :category, :probability, :impact, :status, :mitigation, :owner_email, :owner_name, NOW(), NOW())
-    """), {
-        "id": risk_id, "title": data.get("title"), "description": data.get("description", ""),
-        "category": data.get("category", "operational"), "probability": data.get("probability", 3),
-        "impact": data.get("impact", 3), "status": data.get("status", "open"),
-        "mitigation": data.get("mitigation", ""), "owner_email": data.get("owner_email", ""),
-        "owner_name": data.get("owner_name", ""),
-    })
-    await db.commit()
+    try:
+        await db.execute(text("""
+            INSERT INTO grc_risks (id, title, description, category, probability, impact, status, mitigation, owner_email, owner_name, created_at, updated_at)
+            VALUES (:id::uuid, :title, :description, :category, :probability, :impact, :status, :mitigation, :owner_email, :owner_name, NOW(), NOW())
+        """), {
+            "id": risk_id, "title": data.get("title"), "description": data.get("description", ""),
+            "category": data.get("category", "operational"), "probability": data.get("probability", 3),
+            "impact": data.get("impact", 3), "status": data.get("status", "open"),
+            "mitigation": data.get("mitigation", ""), "owner_email": data.get("owner_email", ""),
+            "owner_name": data.get("owner_name", ""),
+        })
+        await db.commit()
+    except Exception as e:
+        await db.rollback()
+        raise
     return {"status": "ok", "id": risk_id}
 
 @router.put("/risks/{risk_id}")

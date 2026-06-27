@@ -1,5 +1,6 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 app = FastAPI(title="WHUBBI API", version="2.0.0")
 app.add_middleware(CORSMiddleware,
@@ -8,6 +9,12 @@ app.add_middleware(CORSMiddleware,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    import traceback
+    traceback.print_exc()
+    return JSONResponse({"detail": str(exc), "type": type(exc).__name__}, status_code=500)
 
 @app.on_event("startup")
 async def startup():
@@ -240,7 +247,7 @@ async def startup():
         import traceback; traceback.print_exc()
 
 @app.get("/health")
-async def health(): return {"status":"healthy","app":"whubbi","version":"2.0.1"}
+async def health(): return {"status":"healthy","app":"whubbi","version":"2.0.2"}
 
 @app.get("/")
 async def root(): return {"message":"WHUBBI API","version":"2.0.0"}
