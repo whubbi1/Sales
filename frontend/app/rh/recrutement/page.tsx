@@ -11,6 +11,55 @@ const STATUSES = ['new','screening','interview_1','technical_test','offer','hire
 const STATUS_COLOR: Record<string,string> = { new:'#45B6E4', screening:'#45B6E4', interview_1:'#45B6E4', technical_test:'#45B6E4', offer:'#45B6E4', hired:'#059669', rejected:'#DC2626', on_hold:'#94A3B8' }
 const STATUS_LABEL: Record<string,string> = { new:'New', screening:'Screening', interview_1:'Interview', technical_test:'Tech Test', offer:'Offer', hired:'Hired', rejected:'Rejected', on_hold:'On Hold' }
 
+const ALL_REPORT_COLUMNS = [
+  { key:'first_name',         label:'First Name' },
+  { key:'last_name',          label:'Last Name' },
+  { key:'country',            label:'Country' },
+  { key:'current_title',      label:'Profile / Title' },
+  { key:'recruitment_status', label:'Status' },
+  { key:'email',              label:'Email' },
+  { key:'phone',              label:'Phone' },
+  { key:'linkedin_url',       label:'LinkedIn' },
+  { key:'years_experience',   label:'Experience' },
+  { key:'skills',             label:'Skills' },
+  { key:'cv_filename',        label:'CV' },
+  { key:'comment_count',      label:'Notes' },
+]
+const DEFAULT_REPORT_COLS = ['first_name','last_name','country','current_title']
+const REPORT_STORAGE_KEY = 'whubbi_recruitment_columns_v1'
+
+function reportCell(col: string, c: any) {
+  switch (col) {
+    case 'country':
+      return <span style={{ whiteSpace:'nowrap' }}>{FLAG[c.country]||'🌍'} {c.country||'—'}</span>
+    case 'recruitment_status': {
+      const color = STATUS_COLOR[c.recruitment_status] || '#94A3B8'
+      return <span style={{ padding:'2px 8px', borderRadius:'10px', fontSize:'10px', fontWeight:'700', background:`${color}18`, color }}>{STATUS_LABEL[c.recruitment_status]||c.recruitment_status||'—'}</span>
+    }
+    case 'linkedin_url':
+      return c.linkedin_url ? <a href={c.linkedin_url} target="_blank" onClick={e=>e.stopPropagation()} style={{ color:'#156082', textDecoration:'none', fontWeight:'600' }}>Profile ↗</a> : <span style={{ color:'#CBD5E1' }}>—</span>
+    case 'cv_filename':
+      return c.cv_sharepoint_url ? <a href={c.cv_sharepoint_url} target="_blank" onClick={e=>e.stopPropagation()} style={{ color:'#156082', textDecoration:'none', fontWeight:'600' }}>📎 {c.cv_filename||'CV'}</a> : <span style={{ color:'#CBD5E1' }}>—</span>
+    case 'email':
+      return c.email ? <a href={`mailto:${c.email}`} onClick={e=>e.stopPropagation()} style={{ color:'#156082', textDecoration:'none' }}>{c.email}</a> : <span style={{ color:'#CBD5E1' }}>—</span>
+    case 'phone':
+      return c.phone ? <a href={`tel:${c.phone}`} onClick={e=>e.stopPropagation()} style={{ color:'#3F3F3F', textDecoration:'none' }}>{c.phone}</a> : <span style={{ color:'#CBD5E1' }}>—</span>
+    case 'years_experience':
+      return <span>{c.years_experience||0} yrs</span>
+    case 'skills':
+      return (
+        <div style={{ display:'flex', gap:'3px', flexWrap:'wrap', maxWidth:'200px' }}>
+          {(c.skills||[]).slice(0,3).map((s:string) => <span key={s} style={{ background:'#F3F4F6', color:'#7C3AED', padding:'1px 7px', borderRadius:'10px', fontSize:'10px', fontWeight:'600', whiteSpace:'nowrap' }}>{s}</span>)}
+          {(c.skills||[]).length > 3 && <span style={{ fontSize:'10px', color:'#45B6E4', fontWeight:'600' }}>+{(c.skills||[]).length-3}</span>}
+        </div>
+      )
+    case 'comment_count':
+      return <span>{c.comment_count||0}</span>
+    default:
+      return <span>{c[col] || <span style={{ color:'#CBD5E1' }}>—</span>}</span>
+  }
+}
+
 export default function RecruitmentPage() {
   const router = useRouter()
   const [candidates, setCandidates] = useState<any[]>([])
@@ -24,6 +73,30 @@ export default function RecruitmentPage() {
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState('')
   const fileRef = useRef<HTMLInputElement>(null)
+  const [reportCols, setReportCols] = useState<string[]>(DEFAULT_REPORT_COLS)
+  const [showReportCustomize, setShowReportCustomize] = useState(false)
+  const [dragCol, setDragCol] = useState<string|null>(null)
+  const [dragOver, setDragOver] = useState<string|null>(null)
+
+  useEffect(() => {
+    try { const s = localStorage.getItem(REPORT_STORAGE_KEY); if (s) setReportCols(JSON.parse(s)) } catch {}
+  }, [])
+
+  const saveReportCols = (cols: string[]) => {
+    setReportCols(cols)
+    try { localStorage.setItem(REPORT_STORAGE_KEY, JSON.stringify(cols)) } catch {}
+  }
+  const toggleReportCol = (key: string) => saveReportCols(reportCols.includes(key) ? reportCols.filter(c=>c!==key) : [...reportCols, key])
+  const handleDragStart = (col: string) => setDragCol(col)
+  const handleDragOver = (e: React.DragEvent, col: string) => {
+    e.preventDefault(); setDragOver(col)
+    if (!dragCol || dragCol === col) return
+    const from = reportCols.indexOf(dragCol), to = reportCols.indexOf(col)
+    if (from === -1 || to === -1) return
+    const next = [...reportCols]; next.splice(from, 1); next.splice(to, 0, dragCol)
+    setReportCols(next)
+  }
+  const handleDrop = () => { setDragCol(null); setDragOver(null); try { localStorage.setItem(REPORT_STORAGE_KEY, JSON.stringify(reportCols)) } catch {} }
 
   const load = () => {
     const url = filterStatus !== 'all' ? `${API}/hr/recruitment?status=${filterStatus}` : `${API}/hr/recruitment`
@@ -151,6 +224,92 @@ export default function RecruitmentPage() {
                 </div>
               </div>
             ))}
+          </div>
+        )}
+
+        {/* Report section */}
+        {!loading && (
+          <div style={{ marginTop:'28px' }}>
+            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'12px' }}>
+              <div>
+                <span style={{ fontSize:'13px', fontWeight:'800', color:'#156082' }}>Report</span>
+                <span style={{ fontSize:'12px', color:'#45B6E4', marginLeft:'8px' }}>{filtered.length} candidate{filtered.length!==1?'s':''}</span>
+              </div>
+              <button onClick={() => setShowReportCustomize(v=>!v)}
+                style={{ background: showReportCustomize?'#EFF6FF':'white', color:'#156082', border:`1.5px solid ${showReportCustomize?'#156082':'#EDF2F7'}`, padding:'6px 14px', borderRadius:'8px', fontSize:'12px', fontWeight:'700', cursor:'pointer', fontFamily:'Montserrat, sans-serif' }}>
+                ⚙ Columns ({reportCols.length})
+              </button>
+            </div>
+
+            {/* Column customizer */}
+            {showReportCustomize && (
+              <div style={{ background:'white', border:'1px solid #EDF2F7', borderRadius:'12px', padding:'16px 20px', marginBottom:'12px', boxShadow:'0 2px 8px rgba(0,0,0,0.06)' }}>
+                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'10px' }}>
+                  <span style={{ fontSize:'11px', fontWeight:'700', textTransform:'uppercase', letterSpacing:'0.07em', color:'#45B6E4' }}>Customize Columns</span>
+                  <span style={{ fontSize:'11px', color:'#94A3B8' }}>Click to toggle · Drag to reorder · Saved automatically</span>
+                </div>
+                <div style={{ display:'flex', gap:'8px', flexWrap:'wrap' }}>
+                  {ALL_REPORT_COLUMNS.map(col => {
+                    const active = reportCols.includes(col.key)
+                    const pos = reportCols.indexOf(col.key)
+                    const isDraggingOver = dragOver === col.key && dragCol !== col.key
+                    return (
+                      <div key={col.key}
+                        draggable={active}
+                        onDragStart={() => handleDragStart(col.key)}
+                        onDragOver={e => active && handleDragOver(e, col.key)}
+                        onDrop={handleDrop}
+                        onDragEnd={handleDrop}
+                        onClick={() => toggleReportCol(col.key)}
+                        style={{ display:'flex', alignItems:'center', gap:'5px', padding:'6px 12px', borderRadius:'20px', border:`1.5px solid ${isDraggingOver?'#156082':active?'#45B6E4':'#EDF2F7'}`, background:isDraggingOver?'#EFF6FF':active?'#F0F9FF':'white', cursor:active?'grab':'pointer', fontSize:'11px', fontWeight:'700', color:active?'#156082':'#94A3B8', userSelect:'none' as const, opacity:dragCol===col.key?0.5:1, transition:'all 0.1s' }}>
+                        {active && <span style={{ fontSize:'9px', color:'#94A3B8', minWidth:'12px', textAlign:'center' }}>{pos+1}</span>}
+                        {active && <span style={{ color:'#CBD5E1', fontSize:'11px', letterSpacing:'-1px' }}>⋮⋮</span>}
+                        {col.label}
+                        {active && <span style={{ color:'#45B6E4', fontSize:'12px' }}>✓</span>}
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Table */}
+            <div style={{ background:'white', borderRadius:'12px', border:'1px solid #EDF2F7', overflow:'hidden', boxShadow:'0 1px 3px rgba(0,0,0,0.06)' }}>
+              <div style={{ overflowX:'auto' }}>
+                <table style={{ width:'100%', borderCollapse:'collapse', fontFamily:'Montserrat, sans-serif' }}>
+                  <thead>
+                    <tr style={{ background:'#FAFBFC', borderBottom:'2px solid #EDF2F7' }}>
+                      {reportCols.map(col => (
+                        <th key={col} style={{ padding:'10px 16px', textAlign:'left', fontSize:'10px', fontWeight:'700', textTransform:'uppercase', letterSpacing:'0.07em', color:'#45B6E4', whiteSpace:'nowrap' }}>
+                          {ALL_REPORT_COLUMNS.find(c=>c.key===col)?.label||col}
+                        </th>
+                      ))}
+                      <th style={{ padding:'10px 16px', width:'40px' }}/>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filtered.map((c, i) => (
+                      <tr key={c.id} onClick={() => router.push(`/rh/recrutement/${c.id}`)}
+                        style={{ borderBottom:'1px solid #F9FAFB', cursor:'pointer', background:i%2===0?'white':'#FAFBFC' }}
+                        onMouseEnter={e=>(e.currentTarget as HTMLTableRowElement).style.background='#EFF6FF'}
+                        onMouseLeave={e=>(e.currentTarget as HTMLTableRowElement).style.background=i%2===0?'white':'#FAFBFC'}>
+                        {reportCols.map(col => (
+                          <td key={col} style={{ padding:'11px 16px', fontSize:'12px', color:'#3F3F3F', fontWeight:(col==='first_name'||col==='last_name')?'700':'500', whiteSpace:col==='skills'?'normal':'nowrap', maxWidth:col==='current_title'?'200px':undefined, overflow:'hidden', textOverflow:'ellipsis' }}>
+                            {reportCell(col, c)}
+                          </td>
+                        ))}
+                        <td style={{ padding:'11px 16px', textAlign:'right' }}>
+                          <span style={{ color:'#CBD5E1', fontSize:'16px' }}>›</span>
+                        </td>
+                      </tr>
+                    ))}
+                    {filtered.length === 0 && (
+                      <tr><td colSpan={reportCols.length+1} style={{ padding:'48px', textAlign:'center', color:'#45B6E4', fontSize:'13px' }}>No candidates found.</td></tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
           </div>
         )}
 
