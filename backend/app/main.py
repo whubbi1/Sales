@@ -255,6 +255,14 @@ async def startup():
                     assigned_by VARCHAR(255)
                 )""",
                 "ALTER TABLE hr_profiles ADD COLUMN IF NOT EXISTS job_position_id UUID",
+                "ALTER TABLE hr_job_descriptions ADD COLUMN IF NOT EXISTS qualifications TEXT",
+                "ALTER TABLE hr_job_descriptions ADD COLUMN IF NOT EXISTS must_have JSON DEFAULT '[]'",
+                "ALTER TABLE hr_job_descriptions ADD COLUMN IF NOT EXISTS nice_to_have JSON DEFAULT '[]'",
+                """CREATE TABLE IF NOT EXISTS hr_settings (
+                    key VARCHAR(100) PRIMARY KEY,
+                    value TEXT,
+                    updated_at TIMESTAMP DEFAULT NOW()
+                )""",
 
                 # Merge interview_2 into interview_1
                 "UPDATE hr_profiles SET recruitment_status = 'interview_1' WHERE recruitment_status = 'interview_2'",

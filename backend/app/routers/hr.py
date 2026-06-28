@@ -689,30 +689,41 @@ async def upload_onboarding_doc(token: str, doc_type: str, file: UploadFile = Fi
     return {"status": "ok", "sharepoint_url": url}
 
 # ─── Job Descriptions ───────────────────────────────────────────────────────────
+def _parse_job(j: dict) -> dict:
+    j["id"] = str(j["id"])
+    for f in ["responsibilities", "requirements", "must_have", "nice_to_have"]:
+        v = j.get(f)
+        if isinstance(v, str):
+            try: j[f] = json.loads(v)
+            except: j[f] = []
+        elif v is None:
+            j[f] = []
+    return j
+
 @router.get("/jobs")
 async def list_jobs(db: AsyncSession = Depends(get_db)):
     result = await db.execute(text("SELECT * FROM hr_job_descriptions ORDER BY created_at DESC"))
-    jobs = [dict(r._mapping) for r in result.fetchall()]
-    for j in jobs:
-        j["id"] = str(j["id"])
-        for f in ["responsibilities","requirements"]:
-            if isinstance(j.get(f), str):
-                try: j[f] = json.loads(j[f])
-                except: j[f] = []
-    return {"jobs": jobs}
+    return {"jobs": [_parse_job(dict(r._mapping)) for r in result.fetchall()]}
 
 @router.post("/jobs")
 async def create_job(data: dict, db: AsyncSession = Depends(get_db)):
     job_id = str(uuid.uuid4())
     await db.execute(text("""
         INSERT INTO hr_job_descriptions (id, title, department, location, contract_type, status,
-            description, responsibilities, requirements, salary_min, salary_max, created_at, updated_at)
+            description, qualifications, responsibilities, requirements, must_have, nice_to_have,
+            salary_min, salary_max, created_at, updated_at)
         VALUES (CAST(:id AS UUID), :title, :department, :location, :contract_type, :status,
-            :description, CAST(:resp AS JSON), CAST(:req AS JSON), :salary_min, :salary_max, NOW(), NOW())
+            :description, :qualifications, CAST(:resp AS JSON), CAST(:req AS JSON),
+            CAST(:must_have AS JSON), CAST(:nice_to_have AS JSON),
+            :salary_min, :salary_max, NOW(), NOW())
     """), {"id": job_id, "title": data.get("title",""), "department": data.get("department",""),
            "location": data.get("location",""), "contract_type": data.get("contract_type","CDI"),
            "status": data.get("status","open"), "description": data.get("description",""),
-           "resp": json.dumps(data.get("responsibilities",[])), "req": json.dumps(data.get("requirements",[])),
+           "qualifications": data.get("qualifications",""),
+           "resp": json.dumps(data.get("responsibilities",[])),
+           "req": json.dumps(data.get("requirements",[])),
+           "must_have": json.dumps(data.get("must_have",[])),
+           "nice_to_have": json.dumps(data.get("nice_to_have",[])),
            "salary_min": data.get("salary_min"), "salary_max": data.get("salary_max")})
     await db.commit()
     return {"status": "ok", "id": job_id}
@@ -723,16 +734,22 @@ async def update_job(job_id: str, data: dict, db: AsyncSession = Depends(get_db)
         UPDATE hr_job_descriptions SET
             title=COALESCE(:title, title),
             description=COALESCE(:description, description),
+            qualifications=COALESCE(:qualifications, qualifications),
             responsibilities=COALESCE(CAST(:resp AS JSON), responsibilities),
             requirements=COALESCE(CAST(:req AS JSON), requirements),
+            must_have=COALESCE(CAST(:must_have AS JSON), must_have),
+            nice_to_have=COALESCE(CAST(:nice_to_have AS JSON), nice_to_have),
             updated_at=NOW()
         WHERE id=CAST(:id AS UUID)
     """), {
         "id": job_id,
         "title": data.get("title"),
         "description": data.get("description"),
+        "qualifications": data.get("qualifications"),
         "resp": json.dumps(data.get("responsibilities")) if data.get("responsibilities") is not None else None,
         "req": json.dumps(data.get("requirements")) if data.get("requirements") is not None else None,
+        "must_have": json.dumps(data.get("must_have")) if data.get("must_have") is not None else None,
+        "nice_to_have": json.dumps(data.get("nice_to_have")) if data.get("nice_to_have") is not None else None,
     })
     await db.commit()
     return {"status": "ok"}
@@ -740,6 +757,138 @@ async def update_job(job_id: str, data: dict, db: AsyncSession = Depends(get_db)
 @router.delete("/jobs/{job_id}")
 async def delete_job(job_id: str, db: AsyncSession = Depends(get_db)):
     await db.execute(text("DELETE FROM hr_job_descriptions WHERE id=CAST(:id AS UUID)"), {"id": job_id})
+    await db.commit()
+    return {"status": "ok"}
+
+@router.get("/jobs/{job_id}/export")
+async def export_job(job_id: str, format: str = "pdf", db: AsyncSession = Depends(get_db)):
+    from fastapi.responses import StreamingResponse
+    from io import BytesIO
+    result = await db.execute(text("SELECT * FROM hr_job_descriptions WHERE id=CAST(:id AS UUID)"), {"id": job_id})
+    row = result.fetchone()
+    if not row:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Job not found")
+    job = _parse_job(dict(row._mapping))
+    cd = await db.execute(text("SELECT value FROM hr_settings WHERE key='company_description'"))
+    cd_row = cd.fetchone()
+    company_desc = cd_row[0] if cd_row else ""
+    if format == "docx":
+        content = _generate_docx(job, company_desc)
+        fname = f"{job['title'].replace(' ','_')}_job_description.docx"
+        media = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    else:
+        content = _generate_pdf(job, company_desc)
+        fname = f"{job['title'].replace(' ','_')}_job_description.pdf"
+        media = "application/pdf"
+    return StreamingResponse(BytesIO(content), media_type=media,
+        headers={"Content-Disposition": f'attachment; filename="{fname}"'})
+
+def _generate_pdf(job: dict, company_desc: str) -> bytes:
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.styles import ParagraphStyle
+    from reportlab.lib.units import cm
+    from reportlab.lib import colors
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, HRFlowable, Table, TableStyle
+    from io import BytesIO as BIO
+    C_PRI = colors.HexColor('#156082')
+    C_SEC = colors.HexColor('#45B6E4')
+    C_TXT = colors.HexColor('#3F3F3F')
+    buf = BIO()
+    pw = A4[0] - 5*cm
+    doc = SimpleDocTemplate(buf, pagesize=A4, topMargin=2*cm, bottomMargin=2.5*cm, leftMargin=2.5*cm, rightMargin=2.5*cm)
+    s_title   = ParagraphStyle('t',  fontName='Helvetica-Bold', fontSize=22, textColor=C_PRI, spaceAfter=8)
+    s_section = ParagraphStyle('s',  fontName='Helvetica-Bold', fontSize=12, textColor=C_SEC, spaceBefore=18, spaceAfter=6)
+    s_body    = ParagraphStyle('b',  fontName='Helvetica',      fontSize=10, textColor=C_TXT, leading=16, spaceAfter=4)
+    s_bullet  = ParagraphStyle('bl', fontName='Helvetica',      fontSize=10, textColor=C_TXT, leading=15, leftIndent=15, spaceAfter=3)
+    s_about   = ParagraphStyle('ab', fontName='Helvetica-Bold', fontSize=11, textColor=C_PRI, spaceBefore=14, spaceAfter=6)
+    bar_style = TableStyle([('BACKGROUND',(0,0),(-1,-1),C_PRI),('TOPPADDING',(0,0),(-1,-1),0),('BOTTOMPADDING',(0,0),(-1,-1),0)])
+    story = []
+    story.append(Table([['']], colWidths=[pw], rowHeights=[0.8*cm], style=bar_style))
+    story.append(Spacer(1, 0.5*cm))
+    story.append(Paragraph(job['title'], s_title))
+    story.append(HRFlowable(width='100%', thickness=1.5, color=C_SEC, spaceAfter=8))
+    if job.get('description'):
+        story.append(Paragraph('Description', s_section))
+        story.append(Paragraph(job['description'].replace('\n','<br/>'), s_body))
+    if job.get('qualifications'):
+        story.append(Paragraph('Qualifications', s_section))
+        story.append(Paragraph(job['qualifications'].replace('\n','<br/>'), s_body))
+    if job.get('must_have'):
+        story.append(Paragraph('Must Have Competences', s_section))
+        for item in job['must_have']:
+            story.append(Paragraph(f'• {item}', s_bullet))
+    if job.get('nice_to_have'):
+        story.append(Paragraph('Nice to Have Competences', s_section))
+        for item in job['nice_to_have']:
+            story.append(Paragraph(f'• {item}', s_bullet))
+    if company_desc:
+        story.append(Spacer(1, 1.2*cm))
+        story.append(HRFlowable(width='100%', thickness=1, color=C_PRI, spaceAfter=8))
+        story.append(Paragraph('About WCOMPLY', s_about))
+        story.append(Paragraph(company_desc.replace('\n','<br/>'), s_body))
+    story.append(Spacer(1, 0.8*cm))
+    story.append(Table([['']], colWidths=[pw], rowHeights=[0.25*cm],
+        style=TableStyle([('BACKGROUND',(0,0),(-1,-1),C_SEC),('TOPPADDING',(0,0),(-1,-1),0),('BOTTOMPADDING',(0,0),(-1,-1),0)])))
+    doc.build(story)
+    return buf.getvalue()
+
+def _generate_docx(job: dict, company_desc: str) -> bytes:
+    from docx import Document
+    from docx.shared import Pt, RGBColor, Cm
+    from io import BytesIO as BIO
+    C_PRI = RGBColor(0x15, 0x60, 0x82)
+    C_SEC = RGBColor(0x45, 0xB6, 0xE4)
+    doc = Document()
+    for sec in doc.sections:
+        sec.top_margin = Cm(2); sec.bottom_margin = Cm(2.5)
+        sec.left_margin = Cm(2.5); sec.right_margin = Cm(2.5)
+    p = doc.add_paragraph()
+    run = p.add_run(job['title'])
+    run.font.size = Pt(22); run.font.bold = True; run.font.color.rgb = C_PRI
+    p.paragraph_format.space_after = Pt(8)
+    def add_h(text):
+        ph = doc.add_paragraph()
+        r = ph.add_run(text)
+        r.font.size = Pt(13); r.font.bold = True; r.font.color.rgb = C_SEC
+        ph.paragraph_format.space_before = Pt(14); ph.paragraph_format.space_after = Pt(4)
+    def add_body(text):
+        pb = doc.add_paragraph()
+        pb.add_run(text).font.size = Pt(10)
+        pb.paragraph_format.space_after = Pt(4)
+    def add_bullet(text):
+        pb = doc.add_paragraph(style='List Bullet')
+        pb.add_run(text).font.size = Pt(10)
+    if job.get('description'):
+        add_h('Description'); add_body(job['description'])
+    if job.get('qualifications'):
+        add_h('Qualifications'); add_body(job['qualifications'])
+    if job.get('must_have'):
+        add_h('Must Have Competences')
+        for item in job['must_have']: add_bullet(item)
+    if job.get('nice_to_have'):
+        add_h('Nice to Have Competences')
+        for item in job['nice_to_have']: add_bullet(item)
+    if company_desc:
+        doc.add_paragraph()
+        add_h('About WCOMPLY'); add_body(company_desc)
+    buf = BIO()
+    doc.save(buf)
+    return buf.getvalue()
+
+# ─── Company Settings ─────────────────────────────────────────────────────────
+@router.get("/settings/company-description")
+async def get_company_description(db: AsyncSession = Depends(get_db)):
+    result = await db.execute(text("SELECT value FROM hr_settings WHERE key='company_description'"))
+    row = result.fetchone()
+    return {"description": row[0] if row else ""}
+
+@router.put("/settings/company-description")
+async def update_company_description(data: dict, db: AsyncSession = Depends(get_db)):
+    await db.execute(text("""
+        INSERT INTO hr_settings (key, value, updated_at) VALUES ('company_description', :val, NOW())
+        ON CONFLICT (key) DO UPDATE SET value=:val, updated_at=NOW()
+    """), {"val": data.get("description", "")})
     await db.commit()
     return {"status": "ok"}
 
