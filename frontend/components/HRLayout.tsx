@@ -6,6 +6,7 @@ const NAV = [
   { href: '/rh',               icon: '📊', label: 'Dashboard' },
   { href: '/rh/freelancers',   icon: '🔗', label: 'Freelancers' },
   { href: '/rh/recrutement',   icon: '👥', label: 'Recrutement' },
+  { href: '/rh/positions',     icon: '💼', label: 'Job Positions' },
   { href: '/rh/jobs',          icon: '📋', label: 'Job Descriptions' },
   { href: '/rh/permissions',   icon: '🔐', label: 'Permissions' },
 ]
@@ -64,7 +65,7 @@ export function HRLayout({ children }: { children: React.ReactNode }) {
           </div>
         </div>
       </div>
-      <main style={{ marginLeft:'220px', flex:1, background:'#F5F7FA', minHeight:'100vh' }}>
+      <main style={{ marginLeft:'220px', width:'calc(100vw - 220px)', background:'#F5F7FA', minHeight:'100vh', overflowX:'hidden' }}>
         {children}
       </main>
     </div>

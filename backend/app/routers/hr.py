@@ -408,18 +408,21 @@ RECRUITMENT_STATUSES = ["new","screening","interview_1","interview_2","technical
 
 @router.get("/recruitment")
 async def list_internal(status: str = None, db: AsyncSession = Depends(get_db)):
-    where = "WHERE profile_type='internal'"
-    if status: where += f" AND recruitment_status='{status}'"
+    where = "WHERE p.profile_type='internal'"
+    if status: where += f" AND p.recruitment_status='{status}'"
     result = await db.execute(text(f"""
-        SELECT p.*, COUNT(pr.id) as project_count, COUNT(c.id) as comment_count
+        SELECT p.*, jp.title as job_position_title,
+               COUNT(DISTINCT pr.id) as project_count, COUNT(DISTINCT c.id) as comment_count
         FROM hr_profiles p
+        LEFT JOIN hr_job_positions jp ON jp.id = p.job_position_id
         LEFT JOIN hr_projects pr ON pr.profile_id = p.id
         LEFT JOIN hr_comments c ON c.profile_id = p.id
-        {where} GROUP BY p.id ORDER BY p.created_at DESC
+        {where} GROUP BY p.id, jp.title ORDER BY p.created_at DESC
     """))
     profiles = [dict(r._mapping) for r in result.fetchall()]
     for p in profiles:
         p["id"] = str(p["id"])
+        if p.get("job_position_id"): p["job_position_id"] = str(p["job_position_id"])
         if isinstance(p.get("skills"), str):
             try: p["skills"] = json.loads(p["skills"])
             except: p["skills"] = []
@@ -427,17 +430,25 @@ async def list_internal(status: str = None, db: AsyncSession = Depends(get_db)):
 
 @router.get("/recruitment/{profile_id}")
 async def get_candidate(profile_id: str, db: AsyncSession = Depends(get_db)):
-    p = await db.execute(text("SELECT * FROM hr_profiles WHERE id=CAST(:id AS UUID) AND profile_type='internal'"), {"id": profile_id})
+    p = await db.execute(text("""
+        SELECT hp.*, jp.title as job_position_title
+        FROM hr_profiles hp
+        LEFT JOIN hr_job_positions jp ON jp.id = hp.job_position_id
+        WHERE hp.id=CAST(:id AS UUID) AND hp.profile_type='internal'
+    """), {"id": profile_id})
     row = p.fetchone()
     if not row: raise HTTPException(404, "Not found")
     profile = dict(row._mapping)
     profile["id"] = str(profile["id"])
+    if profile.get("job_position_id"): profile["job_position_id"] = str(profile["job_position_id"])
     projs = await db.execute(text("SELECT * FROM hr_projects WHERE profile_id=CAST(:id AS UUID) ORDER BY start_date DESC"), {"id": profile_id})
     profile["projects"] = [dict(r._mapping) for r in projs.fetchall()]
     comments = await db.execute(text("SELECT * FROM hr_comments WHERE profile_id=CAST(:id AS UUID) ORDER BY created_at DESC"), {"id": profile_id})
     profile["comments"] = [dict(r._mapping) for r in comments.fetchall()]
     proposals = await db.execute(text("SELECT * FROM hr_proposals WHERE profile_id=CAST(:id AS UUID) ORDER BY created_at DESC"), {"id": profile_id})
     profile["proposals"] = [dict(r._mapping) for r in proposals.fetchall()]
+    interviewers = await db.execute(text("SELECT * FROM hr_interview_assignments WHERE profile_id=CAST(:id AS UUID) ORDER BY assigned_at DESC"), {"id": profile_id})
+    profile["interviewers"] = [dict(r._mapping) for r in interviewers.fetchall()]
     for pr in profile.get("projects",[]): pr["id"] = str(pr["id"]); pr["profile_id"] = str(pr["profile_id"])
     for c in profile.get("comments",[]): c["id"] = str(c["id"]); c["profile_id"] = str(c["profile_id"])
     for pr in profile.get("proposals",[]): pr["id"] = str(pr["id"]); pr["profile_id"] = str(pr["profile_id"])
@@ -482,6 +493,7 @@ async def update_status(profile_id: str, data: dict, db: AsyncSession = Depends(
 
 @router.put("/recruitment/{profile_id}")
 async def update_candidate(profile_id: str, data: dict, db: AsyncSession = Depends(get_db)):
+    jid = data.get("job_position_id")
     await db.execute(text("""
         UPDATE hr_profiles SET
             first_name=COALESCE(:first_name, first_name),
@@ -494,6 +506,7 @@ async def update_candidate(profile_id: str, data: dict, db: AsyncSession = Depen
             current_title=COALESCE(:current_title, current_title),
             skills=COALESCE(CAST(:skills AS JSON), skills),
             years_experience=COALESCE(:years_experience, years_experience),
+            job_position_id=CASE WHEN :jid_provided THEN CAST(:jid AS UUID) ELSE job_position_id END,
             updated_at=NOW()
         WHERE id=CAST(:id AS UUID) AND profile_type='internal'
     """), {
@@ -508,6 +521,8 @@ async def update_candidate(profile_id: str, data: dict, db: AsyncSession = Depen
         "current_title": data.get("current_title"),
         "skills": json.dumps(data["skills"]) if data.get("skills") is not None else None,
         "years_experience": data.get("years_experience"),
+        "jid": jid if jid else None,
+        "jid_provided": "job_position_id" in data,
     })
     await db.commit()
     return {"status": "ok"}
@@ -727,6 +742,151 @@ async def delete_job(job_id: str, db: AsyncSession = Depends(get_db)):
     await db.execute(text("DELETE FROM hr_job_descriptions WHERE id=CAST(:id AS UUID)"), {"id": job_id})
     await db.commit()
     return {"status": "ok"}
+
+# ─── Interview Assignment ──────────────────────────────────────────────────────
+
+WHUBBI_FRONTEND = os.getenv("WHUBBI_FRONTEND_URL", "https://dev.whubbi.wcomply.com")
+HR_SENDER_EMAIL = os.getenv("HR_SENDER_EMAIL", "william.delcour@wcomply.com")
+
+async def send_interview_emails(profile_id: str, candidate: dict, interviewers: list):
+    try:
+        token = await get_ms_token()
+        if not token:
+            print("⚠️ No MS token for interview emails"); return
+        candidate_name = f"{candidate.get('first_name','')} {candidate.get('last_name','')}".strip()
+        profile_url = f"{WHUBBI_FRONTEND}/rh/recrutement/{profile_id}"
+        for iv in interviewers:
+            body = f"""<html><body style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;">
+<div style="background:#156082;padding:20px;border-radius:8px 8px 0 0;">
+  <h2 style="color:white;margin:0;">📋 Interview Assignment — {candidate_name}</h2>
+</div>
+<div style="background:white;padding:24px;border:1px solid #EDF2F7;border-top:none;border-radius:0 0 8px 8px;">
+  <p>Dear {iv.get('name') or iv.get('email')},</p>
+  <p>You have been assigned to conduct an interview with <strong>{candidate_name}</strong>.</p>
+  <table style="width:100%;border-collapse:collapse;margin:16px 0;font-size:13px;">
+    <tr><td style="padding:6px 12px;background:#F8FAFC;font-weight:700;width:140px;">Name</td><td style="padding:6px 12px;">{candidate_name}</td></tr>
+    <tr><td style="padding:6px 12px;background:#F8FAFC;font-weight:700;">Title</td><td style="padding:6px 12px;">{candidate.get('current_title') or '—'}</td></tr>
+    <tr><td style="padding:6px 12px;background:#F8FAFC;font-weight:700;">Country</td><td style="padding:6px 12px;">{candidate.get('country') or '—'}</td></tr>
+  </table>
+  <p>Please organise the interview at your earliest convenience.</p>
+  <p><a href="{profile_url}" style="background:#156082;color:white;padding:10px 20px;border-radius:6px;text-decoration:none;display:inline-block;margin-top:8px;">View Candidate Profile →</a></p>
+  <p style="color:#94A3B8;font-size:11px;margin-top:24px;">Sent from WHUBBI HR · {WHUBBI_FRONTEND}</p>
+</div></body></html>"""
+            async with httpx.AsyncClient(timeout=15) as client:
+                await client.post(
+                    f"https://graph.microsoft.com/v1.0/users/{HR_SENDER_EMAIL}/sendMail",
+                    headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
+                    json={"message": {"subject": f"Interview Assignment: {candidate_name}",
+                                      "body": {"contentType": "HTML", "content": body},
+                                      "toRecipients": [{"emailAddress": {"address": iv.get("email")}}]}}
+                )
+    except Exception as e:
+        print(f"⚠️ Interview email error: {e}")
+
+
+@router.post("/recruitment/{profile_id}/assign-interview")
+async def assign_interview(profile_id: str, data: dict, background_tasks: BackgroundTasks, db: AsyncSession = Depends(get_db)):
+    interviewers = data.get("interviewers", [])  # [{email, name}]
+    assigned_by = data.get("assigned_by", "admin")
+
+    await db.execute(text("UPDATE hr_profiles SET recruitment_status='interview_1', updated_at=NOW() WHERE id=CAST(:id AS UUID)"),
+                     {"id": profile_id})
+
+    for iv in interviewers:
+        await db.execute(text("""
+            INSERT INTO hr_interview_assignments (id, profile_id, interviewer_email, interviewer_name, assigned_at, assigned_by)
+            VALUES (gen_random_uuid(), CAST(:pid AS UUID), :email, :name, NOW(), :by)
+        """), {"pid": profile_id, "email": iv.get("email"), "name": iv.get("name", iv.get("email")), "by": assigned_by})
+
+    await db.commit()
+
+    cand = await db.execute(text("SELECT first_name, last_name, current_title, country FROM hr_profiles WHERE id=CAST(:id AS UUID)"),
+                            {"id": profile_id})
+    row = cand.fetchone()
+    if row and interviewers:
+        background_tasks.add_task(send_interview_emails, profile_id, dict(row._mapping), interviewers)
+
+    return {"status": "ok", "interviewers": len(interviewers)}
+
+
+@router.get("/recruitment/{profile_id}/interviewers")
+async def get_interviewers(profile_id: str, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(text("""
+        SELECT * FROM hr_interview_assignments WHERE profile_id=CAST(:pid AS UUID) ORDER BY assigned_at DESC
+    """), {"pid": profile_id})
+    return {"interviewers": [dict(r._mapping) for r in result.fetchall()]}
+
+
+# ─── Job Positions ──────────────────────────────────────────────────────────────
+
+@router.get("/positions")
+async def list_positions(db: AsyncSession = Depends(get_db)):
+    result = await db.execute(text("""
+        SELECT jp.id, jp.title, jp.country, jp.status, jp.job_description_id, jp.created_at,
+               jd.title as jd_title,
+               COUNT(hp.id) FILTER (WHERE hp.recruitment_status NOT IN ('hired','rejected')) as active_count,
+               COUNT(hp.id) FILTER (WHERE hp.recruitment_status = 'hired') as hired_count,
+               COUNT(hp.id) as total_count,
+               COUNT(hp.id) FILTER (WHERE hp.recruitment_status = 'new') as cnt_new,
+               COUNT(hp.id) FILTER (WHERE hp.recruitment_status = 'screening') as cnt_screening,
+               COUNT(hp.id) FILTER (WHERE hp.recruitment_status = 'interview_1') as cnt_interview,
+               COUNT(hp.id) FILTER (WHERE hp.recruitment_status = 'technical_test') as cnt_technical,
+               COUNT(hp.id) FILTER (WHERE hp.recruitment_status = 'offer') as cnt_offer
+        FROM hr_job_positions jp
+        LEFT JOIN hr_job_descriptions jd ON jd.id = jp.job_description_id
+        LEFT JOIN hr_profiles hp ON hp.job_position_id = jp.id AND hp.profile_type = 'internal'
+        GROUP BY jp.id, jp.title, jp.country, jp.status, jp.job_description_id, jp.created_at, jd.title
+        ORDER BY jp.country, jp.created_at DESC
+    """))
+    rows = [dict(r._mapping) for r in result.fetchall()]
+    for r in rows:
+        r["id"] = str(r["id"])
+        if r.get("job_description_id"): r["job_description_id"] = str(r["job_description_id"])
+    return {"positions": rows}
+
+
+@router.post("/positions")
+async def create_position(data: dict, db: AsyncSession = Depends(get_db)):
+    pos_id = str(uuid.uuid4())
+    jd_id = data.get("job_description_id") or None
+    await db.execute(text("""
+        INSERT INTO hr_job_positions (id, title, country, job_description_id, status, created_at, updated_at, created_by)
+        VALUES (CAST(:id AS UUID), :title, :country,
+                CASE WHEN :jd_id IS NOT NULL THEN CAST(:jd_id AS UUID) ELSE NULL END,
+                :status, NOW(), NOW(), :created_by)
+    """), {"id": pos_id, "title": data.get("title",""), "country": data.get("country","france"),
+           "jd_id": jd_id, "status": data.get("status","open"), "created_by": data.get("created_by","admin")})
+    await db.commit()
+    return {"id": pos_id, "status": "ok"}
+
+
+@router.put("/positions/{position_id}")
+async def update_position(position_id: str, data: dict, db: AsyncSession = Depends(get_db)):
+    fields = ["updated_at = NOW()"]
+    params: dict = {"id": position_id}
+    if data.get("title") is not None:
+        fields.append("title = :title"); params["title"] = data["title"]
+    if data.get("country") is not None:
+        fields.append("country = :country"); params["country"] = data["country"]
+    if data.get("status") is not None:
+        fields.append("status = :status"); params["status"] = data["status"]
+    if "job_description_id" in data:
+        jd_id = data["job_description_id"]
+        if jd_id:
+            fields.append("job_description_id = CAST(:jd_id AS UUID)"); params["jd_id"] = jd_id
+        else:
+            fields.append("job_description_id = NULL")
+    await db.execute(text(f"UPDATE hr_job_positions SET {', '.join(fields)} WHERE id = CAST(:id AS UUID)"), params)
+    await db.commit()
+    return {"status": "ok"}
+
+
+@router.delete("/positions/{position_id}")
+async def delete_position(position_id: str, db: AsyncSession = Depends(get_db)):
+    await db.execute(text("DELETE FROM hr_job_positions WHERE id = CAST(:id AS UUID)"), {"id": position_id})
+    await db.commit()
+    return {"status": "ok"}
+
 
 # ─── Country config endpoint ─────────────────────────────────────────────────────
 @router.get("/country-config/{country}")

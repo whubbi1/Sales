@@ -13,6 +13,7 @@ const COMMENT_ICONS: Record<string,string> = { note:'📝', call:'📞', email:'
 const COUNTRIES = ['france','portugal','czech_republic','romania','spain']
 const CURRENCY: Record<string,string> = { france:'EUR', portugal:'EUR', czech_republic:'CZK', romania:'RON', spain:'EUR' }
 const LANGS: Record<string,string> = { france:'fr', portugal:'pt', czech_republic:'cs', romania:'ro', spain:'es' }
+const CURRENT_USER = { email:'william.delcour@wcomply.com', name:'William Delcour' }
 
 function InlineField({ label, value, onSave, type='text', href, displayAs, inputWidth }: any) {
   const [editing, setEditing] = useState(false)
@@ -24,17 +25,14 @@ function InlineField({ label, value, onSave, type='text', href, displayAs, input
     setEditing(false)
     const newVal = type === 'number' ? parseInt(val) || 0 : val
     if (String(newVal) !== String(value ?? '')) {
-      setSaving(true)
-      await onSave(newVal)
-      setSaving(false)
+      setSaving(true); await onSave(newVal); setSaving(false)
     }
   }
 
   return (
     <div>
       <div style={{ fontSize:'10px', fontWeight:'700', textTransform:'uppercase', letterSpacing:'0.07em', color:'#45B6E4', marginBottom:'3px', display:'flex', alignItems:'center', gap:'4px' }}>
-        {label}
-        {saving && <span style={{ fontSize:'9px', color:'#94A3B8', fontWeight:'400', textTransform:'none' }}>saving…</span>}
+        {label}{saving && <span style={{ fontSize:'9px', color:'#94A3B8', fontWeight:'400', textTransform:'none' }}>saving…</span>}
       </div>
       {editing ? (
         <input type={type} value={val} autoFocus onChange={e => setVal(e.target.value)} onBlur={commit}
@@ -52,13 +50,101 @@ function InlineField({ label, value, onSave, type='text', href, displayAs, input
   )
 }
 
+function InterviewModal({ candidateName, onConfirm, onCancel }: { candidateName: string, onConfirm: (interviewers: {email:string,name:string}[]) => void, onCancel: () => void }) {
+  const [interviewers, setInterviewers] = useState<{email:string,name:string}[]>([])
+  const [emailInput, setEmailInput] = useState('')
+  const [nameInput, setNameInput] = useState('')
+  const [sending, setSending] = useState(false)
+
+  const addInterviewer = () => {
+    if (!emailInput.trim()) return
+    setInterviewers(iv => [...iv, { email: emailInput.trim(), name: nameInput.trim() || emailInput.trim() }])
+    setEmailInput(''); setNameInput('')
+  }
+
+  const handleConfirm = async () => {
+    setSending(true)
+    await onConfirm(interviewers)
+    setSending(false)
+  }
+
+  return (
+    <div style={{ position:'fixed', inset:0, background:'rgba(21,96,130,0.45)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:1100, backdropFilter:'blur(2px)' }}
+      onClick={e => { if (e.target === e.currentTarget) onCancel() }}>
+      <div style={{ background:'white', borderRadius:'14px', width:'480px', boxShadow:'0 20px 60px rgba(21,96,130,0.25)', overflow:'hidden' }}>
+        <div style={{ padding:'16px 20px', borderBottom:'1px solid #EDF2F7', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+          <span style={{ fontSize:'14px', fontWeight:'800', color:'#156082' }}>🎤 Assign Interviewers</span>
+          <button onClick={onCancel} style={{ background:'none', border:'none', fontSize:'20px', cursor:'pointer', color:'#45B6E4' }}>×</button>
+        </div>
+        <div style={{ padding:'20px' }}>
+          <p style={{ fontSize:'13px', color:'#45B6E4', marginBottom:'16px' }}>
+            Assigning interviewers for <strong style={{ color:'#156082' }}>{candidateName}</strong>.
+            They will receive an email with the candidate profile link.
+          </p>
+
+          {/* Add interviewer */}
+          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'8px', marginBottom:'8px' }}>
+            <div>
+              <label style={{ display:'block', fontSize:'10px', fontWeight:'700', textTransform:'uppercase', letterSpacing:'0.06em', color:'#45B6E4', marginBottom:'4px' }}>Email *</label>
+              <input value={emailInput} onChange={e=>setEmailInput(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && addInterviewer()}
+                placeholder="interviewer@wcomply.com"
+                style={{ width:'100%', padding:'8px 10px', border:'1.5px solid #EDF2F7', borderRadius:'7px', fontFamily:'Montserrat, sans-serif', fontSize:'12px', outline:'none', boxSizing:'border-box' as const }}/>
+            </div>
+            <div>
+              <label style={{ display:'block', fontSize:'10px', fontWeight:'700', textTransform:'uppercase', letterSpacing:'0.06em', color:'#45B6E4', marginBottom:'4px' }}>Name</label>
+              <input value={nameInput} onChange={e=>setNameInput(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && addInterviewer()}
+                placeholder="Full name (optional)"
+                style={{ width:'100%', padding:'8px 10px', border:'1.5px solid #EDF2F7', borderRadius:'7px', fontFamily:'Montserrat, sans-serif', fontSize:'12px', outline:'none', boxSizing:'border-box' as const }}/>
+            </div>
+          </div>
+          <button onClick={addInterviewer} disabled={!emailInput.trim()}
+            style={{ marginBottom:'16px', padding:'7px 14px', background:emailInput.trim()?'#156082':'#F1F5F9', color:emailInput.trim()?'white':'#94A3B8', border:'none', borderRadius:'7px', fontSize:'12px', fontWeight:'700', cursor:emailInput.trim()?'pointer':'not-allowed', fontFamily:'Montserrat, sans-serif' }}>
+            + Add Interviewer
+          </button>
+
+          {/* List */}
+          {interviewers.length > 0 && (
+            <div style={{ background:'#F8FAFC', borderRadius:'8px', padding:'10px', marginBottom:'16px' }}>
+              {interviewers.map((iv, i) => (
+                <div key={i} style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'6px 8px', borderRadius:'6px', background:'white', marginBottom:'4px', border:'1px solid #EDF2F7' }}>
+                  <div>
+                    <div style={{ fontSize:'12px', fontWeight:'700', color:'#156082' }}>{iv.name}</div>
+                    <div style={{ fontSize:'11px', color:'#45B6E4' }}>{iv.email}</div>
+                  </div>
+                  <button onClick={() => setInterviewers(ivs => ivs.filter((_,j) => j !== i))}
+                    style={{ background:'#FEF2F2', color:'#DC2626', border:'none', borderRadius:'6px', padding:'2px 8px', cursor:'pointer', fontSize:'12px' }}>×</button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {interviewers.length === 0 && (
+            <div style={{ background:'#FFF7ED', borderRadius:'8px', padding:'10px 12px', marginBottom:'16px', fontSize:'12px', color:'#D97706' }}>
+              ⚠️ No interviewers added — status will be updated to Interview without sending emails.
+            </div>
+          )}
+        </div>
+        <div style={{ padding:'14px 20px', borderTop:'1px solid #EDF2F7', background:'#FAFBFC', display:'flex', justifyContent:'flex-end', gap:'8px' }}>
+          <button onClick={onCancel} style={{ padding:'8px 16px', background:'white', border:'1.5px solid #EDF2F7', borderRadius:'8px', fontSize:'12px', fontWeight:'600', cursor:'pointer', fontFamily:'Montserrat, sans-serif', color:'#45B6E4' }}>Cancel</button>
+          <button onClick={handleConfirm} disabled={sending}
+            style={{ padding:'8px 16px', background:'#156082', color:'white', border:'none', borderRadius:'8px', fontSize:'12px', fontWeight:'700', cursor:'pointer', fontFamily:'Montserrat, sans-serif', opacity: sending ? 0.7 : 1 }}>
+            {sending ? 'Assigning…' : interviewers.length > 0 ? `✉️ Assign & Send ${interviewers.length} Email${interviewers.length>1?'s':''}` : 'Move to Interview'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function CandidateDetail() {
   const router = useRouter()
   const { id } = useParams() as { id: string }
   const [profile, setProfile] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState<'profile'|'comments'|'proposal'>('profile')
-  const [comment, setComment] = useState({ content:'', comment_type:'note', author_email:'william.delcour@wcomply.com', author_name:'William Delcour' })
+  const [comment, setComment] = useState({ content:'', comment_type:'note', author_email: CURRENT_USER.email, author_name: CURRENT_USER.name })
   const [showProposal, setShowProposal] = useState(false)
   const [proposal, setProposal] = useState({ role:'', responsibilities:[] as string[], salary:'', advantages:[] as string[], start_date:'', country:'', resp_input:'', adv_input:'' })
   const [sending, setSending] = useState(false)
@@ -70,6 +156,8 @@ export default function CandidateDetail() {
   const [extracting, setExtracting] = useState(false)
   const [documents, setDocuments] = useState<any[]>([])
   const [docUploading, setDocUploading] = useState(false)
+  const [positions, setPositions] = useState<any[]>([])
+  const [showInterviewModal, setShowInterviewModal] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
   const docFileRef = useRef<HTMLInputElement>(null)
 
@@ -79,7 +167,10 @@ export default function CandidateDetail() {
   const loadDocs = () => {
     fetch(`${API}/hr/recruitment/${id}/documents`).then(r=>r.json()).then(d=>setDocuments(d.documents||[]))
   }
-  useEffect(() => { load(); loadDocs() }, [id])
+  const loadPositions = () => {
+    fetch(`${API}/hr/positions`).then(r=>r.json()).then(d=>setPositions(d.positions||[]))
+  }
+  useEffect(() => { load(); loadDocs(); loadPositions() }, [id])
   useEffect(() => { if (profile) setProposal(p=>({...p, country:profile.country||'france'})) }, [profile])
 
   const patchField = async (field: string, value: any) => {
@@ -93,9 +184,7 @@ export default function CandidateDetail() {
         body: JSON.stringify({ ...updated, language: updated.language || LANGS[profile.country] || 'fr' })
       })
       setProfile((p:any) => ({ ...p, [field]: value, ...(field==='country' ? {language: LANGS[value]||'fr'} : {}) }))
-    } finally {
-      setAutoSaving(false)
-    }
+    } finally { setAutoSaving(false) }
   }
 
   const addSkill = async () => {
@@ -105,8 +194,7 @@ export default function CandidateDetail() {
     await patchField('skills', newSkills)
   }
   const removeSkill = async (i: number) => {
-    const newSkills = (profile.skills||[]).filter((_:any, j:number) => j !== i)
-    await patchField('skills', newSkills)
+    await patchField('skills', (profile.skills||[]).filter((_:any, j:number) => j !== i))
   }
 
   const handleCvUpload = async (file: File) => {
@@ -125,7 +213,6 @@ export default function CandidateDetail() {
       if (ex.current_title)    updates.current_title = ex.current_title
       if (ex.years_experience) updates.years_experience = ex.years_experience
       if (ex.skills?.length)   updates.skills = ex.skills
-      if (ex.projects?.length) updates.projects = ex.projects
       if (Object.keys(updates).length > 0) {
         setAutoSaving(true)
         await fetch(`${API}/hr/recruitment/${id}`, {
@@ -138,8 +225,7 @@ export default function CandidateDetail() {
     } catch {}
     const fd2 = new FormData(); fd2.append('file', file)
     await fetch(`${API}/hr/cv/upload/${id}`, { method:'POST', body:fd2 })
-    setExtracting(false)
-    load()
+    setExtracting(false); load()
   }
 
   const uploadDocument = async (file: File) => {
@@ -148,14 +234,25 @@ export default function CandidateDetail() {
     try {
       await fetch(`${API}/hr/recruitment/${id}/documents`, { method:'POST', body:fd })
       loadDocs()
-    } finally {
-      setDocUploading(false)
-    }
+    } finally { setDocUploading(false) }
   }
 
   const updateStatus = async (status: string) => {
+    if (status === 'interview_1') {
+      setShowInterviewModal(true)
+      return
+    }
     await fetch(`${API}/hr/recruitment/${id}/status`, { method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify({status}) })
     setProfile((p:any)=>({...p, recruitment_status:status}))
+  }
+
+  const handleInterviewAssign = async (interviewers: {email:string,name:string}[]) => {
+    setShowInterviewModal(false)
+    await fetch(`${API}/hr/recruitment/${id}/assign-interview`, {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ interviewers, assigned_by: CURRENT_USER.email })
+    })
+    load()
   }
 
   const addComment = async () => {
@@ -186,7 +283,7 @@ export default function CandidateDetail() {
   if (loading) return <HRLayout><div style={{ padding:'48px', textAlign:'center', color:'#45B6E4' }}>Loading...</div></HRLayout>
   if (!profile) return <HRLayout><div style={{ padding:'48px', textAlign:'center', color:'#DC2626' }}>Candidate not found</div></HRLayout>
 
-  const activeColor = STATUS_TERMINAL_COLOR[profile.recruitment_status] || '#156082'
+  const openPositions = positions.filter(p => p.status === 'open')
 
   return (
     <HRLayout>
@@ -197,7 +294,7 @@ export default function CandidateDetail() {
         <div style={{ background:'white', borderRadius:'12px', border:'1px solid #EDF2F7', padding:'24px', marginBottom:'20px', boxShadow:'0 1px 3px rgba(0,0,0,0.06)' }}>
 
           {/* Name row */}
-          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:'20px' }}>
+          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:'20px', flexWrap:'wrap', gap:'12px' }}>
             <div style={{ display:'flex', alignItems:'center', gap:'16px' }}>
               <div style={{ width:'56px', height:'56px', borderRadius:'50%', background:'#7C3AED', display:'flex', alignItems:'center', justifyContent:'center', color:'white', fontSize:'20px', fontWeight:'800', flexShrink:0 }}>
                 {(profile.first_name||'?')[0]}{(profile.last_name||'?')[0]}
@@ -214,13 +311,11 @@ export default function CandidateDetail() {
                   displayAs={<span style={{ fontSize:'13px', color:'#45B6E4' }}>{profile.current_title||'Click to add title'} · {FLAG[profile.country]||'🌍'} {profile.country}</span>}/>
               </div>
             </div>
-            <div style={{ display:'flex', gap:'8px', alignItems:'center' }}>
-              <button onClick={() => setShowProposal(true)} style={{ padding:'7px 14px', background:'#059669', color:'white', border:'none', borderRadius:'8px', fontSize:'12px', fontWeight:'700', cursor:'pointer', fontFamily:'Montserrat, sans-serif' }}>📄 Send Proposal</button>
-            </div>
+            <button onClick={() => setShowProposal(true)} style={{ padding:'7px 14px', background:'#059669', color:'white', border:'none', borderRadius:'8px', fontSize:'12px', fontWeight:'700', cursor:'pointer', fontFamily:'Montserrat, sans-serif', flexShrink:0 }}>📄 Send Proposal</button>
           </div>
 
           {/* Contact fields */}
-          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr 1fr 1fr', gap:'14px', paddingBottom:'16px', borderBottom:'1px solid #F1F5F9', marginBottom:'16px' }}>
+          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(160px, 1fr))', gap:'14px', paddingBottom:'16px', borderBottom:'1px solid #F1F5F9', marginBottom:'16px' }}>
             <InlineField label="Email" value={profile.email} onSave={(v:string)=>patchField('email',v)} href={profile.email?`mailto:${profile.email}`:undefined}/>
             <InlineField label="Phone" value={profile.phone} onSave={(v:string)=>patchField('phone',v)} href={profile.phone?`tel:${profile.phone}`:undefined}/>
             <InlineField label="LinkedIn" value={profile.linkedin_url} onSave={(v:string)=>patchField('linkedin_url',v)}
@@ -234,6 +329,14 @@ export default function CandidateDetail() {
                 {COUNTRIES.map(c=><option key={c} value={c}>{FLAG[c]} {c}</option>)}
               </select>
             </div>
+            <div>
+              <div style={{ fontSize:'10px', fontWeight:'700', textTransform:'uppercase', letterSpacing:'0.07em', color:'#45B6E4', marginBottom:'3px' }}>Job Position</div>
+              <select value={profile.job_position_id||''} onChange={e=>patchField('job_position_id', e.target.value || null)}
+                style={{ fontSize:'12px', fontWeight:'600', border:'1px solid #EDF2F7', borderRadius:'6px', padding:'3px 7px', outline:'none', fontFamily:'Montserrat, sans-serif', color: profile.job_position_id ? '#3F3F3F' : '#94A3B8', background:'white', cursor:'pointer', width:'100%' }}>
+                <option value="">— No position —</option>
+                {openPositions.map(p=><option key={p.id} value={p.id}>{FLAG[p.country]||'🌍'} {p.title}</option>)}
+              </select>
+            </div>
           </div>
 
           {/* Skills */}
@@ -242,8 +345,7 @@ export default function CandidateDetail() {
             <div style={{ display:'flex', gap:'5px', flexWrap:'wrap', alignItems:'center' }}>
               {(profile.skills||[]).map((s:string, i:number) => (
                 <span key={i} style={{ background:'#F3F4F6', color:'#7C3AED', padding:'3px 8px', borderRadius:'12px', fontSize:'11px', fontWeight:'600', display:'flex', alignItems:'center', gap:'3px' }}>
-                  {s}
-                  <span onClick={()=>removeSkill(i)} style={{ cursor:'pointer', fontSize:'13px', lineHeight:'1', opacity:'0.6' }}>×</span>
+                  {s}<span onClick={()=>removeSkill(i)} style={{ cursor:'pointer', fontSize:'13px', lineHeight:'1', opacity:'0.6' }}>×</span>
                 </span>
               ))}
               {addingSkill ? (
@@ -269,18 +371,32 @@ export default function CandidateDetail() {
                     style={{ padding:'5px 14px', borderRadius:'20px', border:'none', cursor:'pointer', fontSize:'10px', fontWeight:'700', fontFamily:'Montserrat, sans-serif', transition:'all 0.15s',
                       background: isActive ? (terminalColor || '#156082') : '#F1F5F9',
                       color: isActive ? 'white' : '#94A3B8' }}>
-                    {STATUS_LABEL[s]}
+                    {STATUS_LABEL[s]}{s==='interview_1'&&' 🎤'}
                   </button>
                 )
               })}
             </div>
+            {/* Show current interviewers if in interview stage */}
+            {profile.recruitment_status === 'interview_1' && (profile.interviewers||[]).length > 0 && (
+              <div style={{ marginTop:'10px', display:'flex', gap:'6px', flexWrap:'wrap', alignItems:'center' }}>
+                <span style={{ fontSize:'10px', color:'#94A3B8', fontWeight:'600' }}>Interviewers:</span>
+                {(profile.interviewers||[]).map((iv:any, i:number) => (
+                  <span key={i} style={{ background:'#EFF6FF', color:'#156082', padding:'2px 10px', borderRadius:'10px', fontSize:'11px', fontWeight:'600' }}>
+                    {iv.interviewer_name || iv.interviewer_email}
+                  </span>
+                ))}
+                <button onClick={()=>setShowInterviewModal(true)}
+                  style={{ background:'none', border:'1px solid #CBD5E1', color:'#45B6E4', padding:'2px 8px', borderRadius:'8px', fontSize:'10px', fontWeight:'600', cursor:'pointer', fontFamily:'Montserrat, sans-serif' }}>
+                  + Add more
+                </button>
+              </div>
+            )}
           </div>
 
           {/* Documents */}
           <div>
             <div style={{ fontSize:'10px', fontWeight:'700', textTransform:'uppercase', letterSpacing:'0.07em', color:'#45B6E4', marginBottom:'8px' }}>Documents</div>
             <div style={{ display:'flex', gap:'8px', flexWrap:'wrap', alignItems:'center' }}>
-              {/* CV upload/view */}
               <div style={{ border:'1px solid #EDF2F7', borderRadius:'8px', padding:'8px 14px', display:'flex', alignItems:'center', gap:'8px', background:'#FAFBFC', cursor:'pointer', minWidth:'160px' }}
                 onClick={() => fileRef.current?.click()}>
                 <input ref={fileRef} type="file" accept=".pdf,.doc,.docx,.odt,.rtf" style={{ display:'none' }} onChange={e => e.target.files?.[0] && handleCvUpload(e.target.files[0])}/>
@@ -298,8 +414,6 @@ export default function CandidateDetail() {
                   <span style={{ color:'#45B6E4', fontSize:'12px' }}>📄 Upload CV</span>
                 )}
               </div>
-
-              {/* Other documents */}
               {documents.map((doc:any) => (
                 <a key={doc.id} href={doc.sharepoint_url} target="_blank"
                   style={{ border:'1px solid #EDF2F7', borderRadius:'8px', padding:'8px 14px', display:'flex', alignItems:'center', gap:'6px', background:'#FAFBFC', textDecoration:'none', minWidth:'120px' }}>
@@ -307,16 +421,12 @@ export default function CandidateDetail() {
                   <span style={{ fontSize:'12px', fontWeight:'600', color:'#156082' }}>{doc.filename}</span>
                 </a>
               ))}
-
-              {/* Upload other doc */}
               <div style={{ border:'1.5px dashed #EDF2F7', borderRadius:'8px', padding:'8px 14px', display:'flex', alignItems:'center', gap:'6px', cursor:'pointer', minWidth:'140px' }}
                 onClick={() => docFileRef.current?.click()}
                 onMouseEnter={e=>(e.currentTarget as HTMLDivElement).style.borderColor='#45B6E4'}
                 onMouseLeave={e=>(e.currentTarget as HTMLDivElement).style.borderColor='#EDF2F7'}>
                 <input ref={docFileRef} type="file" accept=".pdf,.doc,.docx,.odt,.rtf,.xls,.xlsx,.png,.jpg,.jpeg" style={{ display:'none' }} onChange={e => e.target.files?.[0] && uploadDocument(e.target.files[0])}/>
-                {docUploading
-                  ? <span style={{ color:'#45B6E4', fontSize:'12px' }}>Uploading…</span>
-                  : <span style={{ color:'#94A3B8', fontSize:'12px' }}>+ Add document</span>}
+                {docUploading ? <span style={{ color:'#45B6E4', fontSize:'12px' }}>Uploading…</span> : <span style={{ color:'#94A3B8', fontSize:'12px' }}>+ Add document</span>}
               </div>
             </div>
           </div>
@@ -341,7 +451,7 @@ export default function CandidateDetail() {
             {(profile.projects||[]).length===0&&<div style={{ padding:'32px', textAlign:'center', color:'#45B6E4', fontSize:'13px' }}>No projects on record.</div>}
             {(profile.projects||[]).map((p:any,i:number)=>(
               <div key={p.id} style={{ padding:'16px 20px', borderBottom:'1px solid #F9FAFB', background:i%2===0?'white':'#FAFBFC' }}>
-                <div style={{ display:'flex', justifyContent:'space-between', marginBottom:'6px' }}>
+                <div style={{ display:'flex', justifyContent:'space-between', marginBottom:'6px', flexWrap:'wrap', gap:'4px' }}>
                   <div><span style={{ fontSize:'13px', fontWeight:'700', color:'#156082' }}>{p.title}</span><span style={{ fontSize:'12px', color:'#45B6E4', marginLeft:'8px' }}>@ {p.company}</span></div>
                   <span style={{ fontSize:'11px', color:'#94A3B8' }}>{p.start_date} — {p.end_date}</span>
                 </div>
@@ -378,7 +488,7 @@ export default function CandidateDetail() {
             </div>
             {(profile.comments||[]).map((c:any)=>(
               <div key={c.id} style={{ background:'white', borderRadius:'10px', border:'1px solid #EDF2F7', padding:'14px 18px', marginBottom:'10px', boxShadow:'0 1px 2px rgba(0,0,0,0.04)' }}>
-                <div style={{ display:'flex', justifyContent:'space-between', marginBottom:'8px' }}>
+                <div style={{ display:'flex', justifyContent:'space-between', marginBottom:'8px', flexWrap:'wrap', gap:'4px' }}>
                   <div style={{ display:'flex', alignItems:'center', gap:'8px' }}>
                     <span style={{ fontSize:'14px' }}>{COMMENT_ICONS[c.comment_type]||'📝'}</span>
                     <span style={{ fontSize:'12px', fontWeight:'700', color:'#156082' }}>{c.author_name}</span>
@@ -399,7 +509,7 @@ export default function CandidateDetail() {
             {(profile.proposals||[]).length===0&&<div style={{ background:'white', borderRadius:'12px', border:'1px solid #EDF2F7', padding:'48px', textAlign:'center', color:'#45B6E4', fontSize:'13px' }}>No proposals sent yet.<br/><button onClick={()=>setShowProposal(true)} style={{ marginTop:'12px', background:'#059669', color:'white', border:'none', padding:'8px 18px', borderRadius:'8px', fontSize:'12px', fontWeight:'700', cursor:'pointer', fontFamily:'Montserrat, sans-serif' }}>Create First Proposal</button></div>}
             {(profile.proposals||[]).map((p:any)=>(
               <div key={p.id} style={{ background:'white', borderRadius:'12px', border:'1px solid #EDF2F7', padding:'18px', marginBottom:'10px', boxShadow:'0 1px 3px rgba(0,0,0,0.06)' }}>
-                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', flexWrap:'wrap', gap:'8px' }}>
                   <div>
                     <div style={{ fontSize:'14px', fontWeight:'800', color:'#156082' }}>{p.role}</div>
                     <div style={{ fontSize:'11px', color:'#45B6E4' }}>{p.country} · {p.language} · {p.salary?.toLocaleString()} {CURRENCY[p.country]||'EUR'}/yr</div>
@@ -408,14 +518,18 @@ export default function CandidateDetail() {
                     {p.status?.charAt(0).toUpperCase()+p.status?.slice(1)}
                   </span>
                 </div>
-                {p.onboarding_token&&p.status==='signed'&&(
-                  <div style={{ marginTop:'10px', padding:'8px 12px', background:'#ECFDF5', borderRadius:'8px', fontSize:'11px', color:'#059669' }}>
-                    ✅ Onboarding link: {API}/hr/onboarding/{p.onboarding_token}
-                  </div>
-                )}
               </div>
             ))}
           </div>
+        )}
+
+        {/* Interview Assignment Modal */}
+        {showInterviewModal && (
+          <InterviewModal
+            candidateName={`${profile.first_name} ${profile.last_name}`}
+            onConfirm={handleInterviewAssign}
+            onCancel={() => setShowInterviewModal(false)}
+          />
         )}
 
         {/* Proposal Modal */}
@@ -463,7 +577,7 @@ export default function CandidateDetail() {
                       </div>
                     </div>
                     <div>
-                      <label style={{ display:'block', fontSize:'10px', fontWeight:'700', textTransform:'uppercase', letterSpacing:'0.07em', color:'#45B6E4', marginBottom:'5px' }}>Company Advantages / Benefits</label>
+                      <label style={{ display:'block', fontSize:'10px', fontWeight:'700', textTransform:'uppercase', letterSpacing:'0.07em', color:'#45B6E4', marginBottom:'5px' }}>Advantages / Benefits</label>
                       {proposal.advantages.map((a,i)=>(
                         <div key={i} style={{ display:'flex', gap:'6px', marginBottom:'5px' }}>
                           <span style={{ flex:1, padding:'7px 10px', background:'#F8FAFC', borderRadius:'7px', fontSize:'12px', color:'#3F3F3F' }}>{a}</span>
@@ -490,12 +604,6 @@ export default function CandidateDetail() {
                     </ul>
                     <h4 style={{ fontSize:'13px', fontWeight:'700', color:'#156082', marginBottom:'4px' }}>{proposalPreview.template?.salary_label}</h4>
                     <p style={{ fontSize:'13px', marginBottom:'16px' }}>{proposalPreview.proposal?.salary?.toLocaleString()} {CURRENCY[proposalPreview.proposal?.country]||'EUR'} / an</p>
-                    <h4 style={{ fontSize:'13px', fontWeight:'700', color:'#156082', marginBottom:'8px' }}>{proposalPreview.template?.advantages_title}</h4>
-                    <ul style={{ fontSize:'13px', marginBottom:'16px', paddingLeft:'20px' }}>
-                      {(proposalPreview.proposal?.advantages||[]).map((a:string,i:number)=><li key={i} style={{ marginBottom:'4px' }}>{a}</li>)}
-                    </ul>
-                    <p style={{ fontSize:'13px', marginBottom:'12px', lineHeight:'1.6' }}>{proposalPreview.template?.closing}</p>
-                    <p style={{ fontSize:'13px', fontWeight:'700', color:'#156082' }}>{proposalPreview.template?.signature}</p>
                     <div style={{ marginTop:'20px', padding:'12px', background:'#ECFDF5', borderRadius:'8px', fontSize:'11px', color:'#059669' }}>
                       ✅ This proposal will be sent via DocuSign for electronic signature to {profile.email}
                     </div>

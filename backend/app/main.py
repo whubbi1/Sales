@@ -235,6 +235,27 @@ async def startup():
                     doc_type VARCHAR(50) DEFAULT 'document',
                     uploaded_at TIMESTAMP DEFAULT NOW()
                 )""",
+                # Job positions + interview assignments
+                """CREATE TABLE IF NOT EXISTS hr_job_positions (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    title VARCHAR(255) NOT NULL,
+                    country VARCHAR(50),
+                    job_description_id UUID,
+                    status VARCHAR(20) DEFAULT 'open',
+                    created_at TIMESTAMP DEFAULT NOW(),
+                    updated_at TIMESTAMP DEFAULT NOW(),
+                    created_by VARCHAR(255)
+                )""",
+                """CREATE TABLE IF NOT EXISTS hr_interview_assignments (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    profile_id UUID NOT NULL,
+                    interviewer_email VARCHAR(255),
+                    interviewer_name VARCHAR(255),
+                    assigned_at TIMESTAMP DEFAULT NOW(),
+                    assigned_by VARCHAR(255)
+                )""",
+                "ALTER TABLE hr_profiles ADD COLUMN IF NOT EXISTS job_position_id UUID",
+
                 # Merge interview_2 into interview_1
                 "UPDATE hr_profiles SET recruitment_status = 'interview_1' WHERE recruitment_status = 'interview_2'",
 

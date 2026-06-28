@@ -17,6 +17,7 @@ const ALL_REPORT_COLUMNS = [
   { key:'country',            label:'Country' },
   { key:'current_title',      label:'Profile / Title' },
   { key:'recruitment_status', label:'Status' },
+  { key:'job_position',       label:'Job Position' },
   { key:'email',              label:'Email' },
   { key:'phone',              label:'Phone' },
   { key:'linkedin_url',       label:'LinkedIn' },
@@ -53,6 +54,10 @@ function reportCell(col: string, c: any) {
           {(c.skills||[]).length > 3 && <span style={{ fontSize:'10px', color:'#45B6E4', fontWeight:'600' }}>+{(c.skills||[]).length-3}</span>}
         </div>
       )
+    case 'job_position':
+      return c.job_position_title
+        ? <span style={{ fontSize:'11px', background:'#EFF6FF', color:'#156082', padding:'2px 8px', borderRadius:'8px', fontWeight:'600' }}>{c.job_position_title}</span>
+        : <span style={{ color:'#CBD5E1' }}>—</span>
     case 'comment_count':
       return <span>{c.comment_count||0}</span>
     default:
