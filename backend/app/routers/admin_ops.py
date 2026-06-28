@@ -44,6 +44,10 @@ async def seed_jobs(db: AsyncSession):
              "job_type": "lambda", "schedule": "0 3 * * 0",
              "script_url": "", "script_content": "# Keep last 10 images per repo",
              "status": "stopped"},
+            {"job_id": "JOB-005", "name": "Audit Log Cleanup", "description": "Delete audit log entries older than configured retention period per table",
+             "job_type": "ecs_scheduled", "schedule": "0 3 * * 0",
+             "script_url": "", "script_content": "# Calls POST /admin/audit/cleanup — deletes audit_logs beyond retention_days",
+             "status": "active"},
         ]
         for job in jobs:
             await db.execute(text("""

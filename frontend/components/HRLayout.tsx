@@ -1,71 +1,97 @@
 'use client'
 import { useRouter, usePathname } from 'next/navigation'
-import { signOut } from 'aws-amplify/auth'
+import { useEffect, useState } from 'react'
+import { signOut, fetchUserAttributes } from 'aws-amplify/auth'
 
 const NAV = [
-  { href: '/rh',               icon: '📊', label: 'Dashboard' },
-  { href: '/rh/freelancers',   icon: '🔗', label: 'Freelancers' },
-  { href: '/rh/recrutement',   icon: '👥', label: 'Recrutement' },
-  { href: '/rh/positions',     icon: '💼', label: 'Job Positions' },
-  { href: '/rh/jobs',          icon: '📋', label: 'Job Descriptions' },
-  { href: '/rh/permissions',   icon: '🔐', label: 'Permissions' },
+  { href: '/rh',             icon: '📊', label: 'Dashboard' },
+  { href: '/rh/freelancers', icon: '🔗', label: 'Freelancers' },
+  { href: '/rh/recrutement', icon: '👥', label: 'Recrutement' },
+  { href: '/rh/positions',   icon: '💼', label: 'Job Positions' },
+  { href: '/rh/jobs',        icon: '📋', label: 'Job Descriptions' },
+  { href: '/rh/permissions', icon: '🔐', label: 'Permissions' },
 ]
 
 export function HRLayout({ children }: { children: React.ReactNode }) {
-  const router = useRouter()
-  const path = usePathname()
+  const router  = useRouter()
+  const path    = usePathname()
+  const [userEmail, setUserEmail] = useState('')
+  const [userName,  setUserName]  = useState('')
+
+  useEffect(() => {
+    fetchUserAttributes()
+      .then(a => {
+        setUserEmail(a.email || '')
+        setUserName((a.name || `${a.given_name || ''} ${a.family_name || ''}`.trim()) || (a.email?.split('@')[0] || ''))
+      })
+      .catch(() => {})
+  }, [])
 
   const handleSignOut = async () => {
     try { await signOut() } catch {}
     router.push('/auth/login')
   }
 
+  const btnStyle = (active: boolean): React.CSSProperties => ({
+    width: '100%', display: 'flex', alignItems: 'center', gap: '10px',
+    padding: '9px 12px', borderRadius: '8px', marginBottom: '2px',
+    background: active ? 'rgba(255,255,255,0.12)' : 'transparent',
+    color: active ? 'white' : 'rgba(255,255,255,0.6)',
+    fontSize: '12px', fontWeight: active ? '700' : '500',
+    border: 'none', cursor: 'pointer', fontFamily: 'Montserrat, sans-serif',
+    textAlign: 'left' as const,
+  })
+
   return (
-    <div style={{ display:'flex', minHeight:'100vh', fontFamily:'Montserrat, sans-serif' }}>
-      <div style={{ width:'220px', background:'#0d2137', position:'fixed', top:0, left:0, height:'100vh', display:'flex', flexDirection:'column', zIndex:100 }}>
-        <div style={{ padding:'20px 16px', borderBottom:'1px solid rgba(255,255,255,0.08)' }}>
-          <div style={{ display:'flex', alignItems:'center', gap:'10px', marginBottom:'4px' }}>
-            <span style={{ fontSize:'18px' }}>👤</span>
-            <span style={{ color:'white', fontSize:'13px', fontWeight:'800', letterSpacing:'0.05em' }}>HR</span>
+    <div style={{ display: 'flex', minHeight: '100vh', fontFamily: 'Montserrat, sans-serif' }}>
+      <div style={{ width: '220px', background: '#0d2137', position: 'fixed', top: 0, left: 0, height: '100vh', display: 'flex', flexDirection: 'column', zIndex: 100 }}>
+        {/* Module header */}
+        <div style={{ padding: '18px 16px 12px', borderBottom: '1px solid rgba(255,255,255,0.08)', flexShrink: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '2px' }}>
+            <span style={{ fontSize: '18px' }}>👤</span>
+            <span style={{ color: 'white', fontSize: '13px', fontWeight: '800', letterSpacing: '0.05em' }}>HR</span>
           </div>
-          <div style={{ fontSize:'10px', color:'rgba(255,255,255,0.4)', fontWeight:'500' }}>Human Resources</div>
+          <div style={{ fontSize: '10px', color: 'rgba(255,255,255,0.4)', fontWeight: '500' }}>Human Resources</div>
         </div>
-        <nav style={{ flex:1, padding:'12px 8px' }}>
+
+        {/* User info */}
+        {userEmail && (
+          <div style={{ padding: '10px 14px', borderBottom: '1px solid rgba(255,255,255,0.08)', background: 'rgba(0,0,0,0.12)', flexShrink: 0 }}>
+            <div style={{ fontSize: '12px', fontWeight: '600', color: 'white', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginBottom: '2px' }}>{userName}</div>
+            <div style={{ fontSize: '10px', color: 'rgba(255,255,255,0.45)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{userEmail}</div>
+          </div>
+        )}
+
+        {/* Navigation */}
+        <nav style={{ flex: 1, padding: '10px 8px', overflowY: 'auto' }}>
           {NAV.map(item => {
             const active = path === item.href || (item.href !== '/rh' && path.startsWith(item.href))
             return (
-              <div key={item.href} onClick={() => router.push(item.href)}
-                style={{ display:'flex', alignItems:'center', gap:'10px', padding:'9px 12px', borderRadius:'8px', cursor:'pointer', marginBottom:'2px',
-                  background: active ? 'rgba(255,255,255,0.12)' : 'transparent',
-                  color: active ? 'white' : 'rgba(255,255,255,0.6)',
-                  fontSize:'12px', fontWeight: active ? '700' : '500' }}
-                onMouseEnter={e => { if (!active) e.currentTarget.style.background='rgba(255,255,255,0.06)' }}
-                onMouseLeave={e => { if (!active) e.currentTarget.style.background='transparent' }}>
-                <span style={{ fontSize:'14px' }}>{item.icon}</span>
+              <button key={item.href} onClick={() => router.push(item.href)} style={btnStyle(active)}>
+                <span style={{ fontSize: '14px', flexShrink: 0 }}>{item.icon}</span>
                 {item.label}
-                {active && <div style={{ marginLeft:'auto', width:'4px', height:'4px', borderRadius:'50%', background:'#45B6E4' }} />}
-              </div>
+                {active && <div style={{ marginLeft: 'auto', width: '4px', height: '4px', borderRadius: '50%', background: '#45B6E4', flexShrink: 0 }} />}
+              </button>
             )
           })}
         </nav>
-        <div style={{ padding:'10px 8px', borderTop:'1px solid rgba(255,255,255,0.08)', display:'flex', flexDirection:'column', gap:'2px' }}>
-          <div onClick={() => router.push('/home')}
-            style={{ display:'flex', alignItems:'center', gap:'8px', padding:'8px 12px', borderRadius:'8px', cursor:'pointer', color:'rgba(255,255,255,0.45)', fontSize:'12px' }}
-            onMouseEnter={e => e.currentTarget.style.color='white'}
-            onMouseLeave={e => e.currentTarget.style.color='rgba(255,255,255,0.45)'}>
+
+        {/* Bottom actions */}
+        <div style={{ padding: '10px 8px', borderTop: '1px solid rgba(255,255,255,0.08)', flexShrink: 0, display: 'flex', flexDirection: 'column', gap: '2px' }}>
+          <button onClick={() => router.push('/home')}
+            style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 12px', borderRadius: '8px', color: 'rgba(255,255,255,0.55)', background: 'transparent', border: 'none', cursor: 'pointer', fontSize: '12px', fontFamily: 'Montserrat, sans-serif', textAlign: 'left' }}>
             <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
             All Modules
-          </div>
-          <div onClick={handleSignOut}
-            style={{ display:'flex', alignItems:'center', gap:'8px', padding:'8px 12px', borderRadius:'8px', cursor:'pointer', color:'rgba(255,255,255,0.45)', fontSize:'12px' }}
-            onMouseEnter={e => e.currentTarget.style.color='white'}
-            onMouseLeave={e => e.currentTarget.style.color='rgba(255,255,255,0.45)'}>
+          </button>
+          <button onClick={handleSignOut}
+            style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 12px', borderRadius: '8px', color: '#F87171', background: 'rgba(239,68,68,0.1)', border: 'none', cursor: 'pointer', fontSize: '12px', fontFamily: 'Montserrat, sans-serif', textAlign: 'left', fontWeight: '600' }}>
             <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
             Sign out
-          </div>
+          </button>
         </div>
       </div>
-      <main style={{ marginLeft:'220px', width:'calc(100vw - 220px)', background:'#F5F7FA', minHeight:'100vh', overflowX:'hidden' }}>
+
+      <main style={{ marginLeft: '220px', width: 'calc(100vw - 220px)', background: '#F5F7FA', minHeight: '100vh', overflowX: 'hidden' }}>
         {children}
       </main>
     </div>

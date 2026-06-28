@@ -53,6 +53,7 @@ const QUICK_LINKS = [
   {href:'/admin/jobs',     icon:'⚙️', label:'Background Jobs',  desc:'Scheduled tasks & execution logs'},
   {href:'/admin/licenses', icon:'📋', label:'License Mgmt',     desc:'Software licenses — coming soon'},
   {href:'/admin/costs',    icon:'💰', label:'AWS Costs',        desc:'Multi-account cost breakdown'},
+  {href:'/admin/audit',    icon:'📋', label:'Audit Logs',       desc:'All data changes & retention settings'},
 ]
 
 export default function AdminCockpitPage() {

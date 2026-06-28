@@ -268,8 +268,44 @@ async def startup():
                 "UPDATE hr_profiles SET recruitment_status = 'interview_1' WHERE recruitment_status = 'interview_2'",
 
                 "ALTER TABLE grc_frameworks ADD COLUMN IF NOT EXISTS color VARCHAR(20) DEFAULT '#156082'",
-                """CREATE UNIQUE INDEX IF NOT EXISTS idx_grc_mapping_unique 
+                """CREATE UNIQUE INDEX IF NOT EXISTS idx_grc_mapping_unique
                    ON grc_requirement_mappings(source_req_id, target_req_id)""",
+                # Audit logging
+                """CREATE TABLE IF NOT EXISTS audit_logs (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    table_name VARCHAR(100) NOT NULL,
+                    record_id VARCHAR(255),
+                    action VARCHAR(20) NOT NULL,
+                    changed_by VARCHAR(255),
+                    changed_at TIMESTAMP DEFAULT NOW(),
+                    old_values JSONB,
+                    new_values JSONB,
+                    module VARCHAR(50),
+                    description TEXT
+                )""",
+                "CREATE INDEX IF NOT EXISTS idx_audit_logs_table ON audit_logs(table_name)",
+                "CREATE INDEX IF NOT EXISTS idx_audit_logs_changed_at ON audit_logs(changed_at)",
+                # Log retention settings
+                """CREATE TABLE IF NOT EXISTS log_retention_settings (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    table_name VARCHAR(100) UNIQUE NOT NULL,
+                    module VARCHAR(50),
+                    retention_days INTEGER NOT NULL DEFAULT 365,
+                    updated_by VARCHAR(255),
+                    updated_at TIMESTAMP DEFAULT NOW()
+                )""",
+                # User report configs (per-user report variants)
+                """CREATE TABLE IF NOT EXISTS user_report_configs (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    user_email VARCHAR(255) NOT NULL,
+                    module VARCHAR(50) NOT NULL,
+                    report_name VARCHAR(100) NOT NULL,
+                    config JSONB NOT NULL DEFAULT '{}',
+                    is_default BOOLEAN DEFAULT FALSE,
+                    created_at TIMESTAMP DEFAULT NOW(),
+                    updated_at TIMESTAMP DEFAULT NOW()
+                )""",
+                "CREATE UNIQUE INDEX IF NOT EXISTS idx_user_report_configs ON user_report_configs(user_email, module, report_name)",
             ]
             for sql in sqls:
                 try:
@@ -334,6 +370,7 @@ _include("app.routers.grc",            "/grc",          "GRC")
 _include("app.routers.grc_extended",   "/grc",          "GRCExt")
 _include("app.routers.helpdesk",       "/helpdesk",     "Helpdesk")
 _include("app.routers.helpdesk_teams", "/helpdesk",     "Teams")
+_include("app.routers.admin_audit",    "/admin",        "Audit")
 
 try:
     from app.routers import auth, outlook, copilot
