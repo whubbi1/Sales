@@ -5,14 +5,52 @@ import { HRLayout } from '@/components/HRLayout'
 
 const API = 'https://api.whubbi.wcomply.com'
 const FLAG: Record<string,string> = { france:'🇫🇷', portugal:'🇵🇹', czech_republic:'🇨🇿', romania:'🇷🇴', spain:'🇪🇸' }
-const STATUSES = ['new','screening','interview_1','interview_2','technical_test','offer','hired','rejected','on_hold']
-const STATUS_COLOR: Record<string,string> = { new:'#45B6E4', screening:'#D97706', interview_1:'#7C3AED', interview_2:'#059669', technical_test:'#e97132', offer:'#156082', hired:'#059669', rejected:'#DC2626', on_hold:'#94A3B8' }
-const STATUS_LABEL: Record<string,string> = { new:'New', screening:'Screening', interview_1:'Interview 1', interview_2:'Interview 2', technical_test:'Tech Test', offer:'Offer', hired:'Hired', rejected:'Rejected', on_hold:'On Hold' }
+const STATUSES = ['new','screening','interview_1','technical_test','offer','hired','rejected','on_hold']
+const STATUS_LABEL: Record<string,string> = { new:'New', screening:'Screening', interview_1:'Interview', technical_test:'Tech Test', offer:'Offer', hired:'Hired', rejected:'Rejected', on_hold:'On Hold' }
+const STATUS_TERMINAL_COLOR: Record<string,string> = { hired:'#059669', rejected:'#DC2626', on_hold:'#94A3B8' }
 const COMMENT_TYPES = ['note','call','email','interview']
 const COMMENT_ICONS: Record<string,string> = { note:'📝', call:'📞', email:'✉️', interview:'🎤' }
 const COUNTRIES = ['france','portugal','czech_republic','romania','spain']
 const CURRENCY: Record<string,string> = { france:'EUR', portugal:'EUR', czech_republic:'CZK', romania:'RON', spain:'EUR' }
 const LANGS: Record<string,string> = { france:'fr', portugal:'pt', czech_republic:'cs', romania:'ro', spain:'es' }
+
+function InlineField({ label, value, onSave, type='text', href, displayAs, inputWidth }: any) {
+  const [editing, setEditing] = useState(false)
+  const [val, setVal] = useState(value ?? '')
+  const [saving, setSaving] = useState(false)
+  useEffect(() => { setVal(value ?? '') }, [value])
+
+  const commit = async () => {
+    setEditing(false)
+    const newVal = type === 'number' ? parseInt(val) || 0 : val
+    if (String(newVal) !== String(value ?? '')) {
+      setSaving(true)
+      await onSave(newVal)
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div>
+      <div style={{ fontSize:'10px', fontWeight:'700', textTransform:'uppercase', letterSpacing:'0.07em', color:'#45B6E4', marginBottom:'3px', display:'flex', alignItems:'center', gap:'4px' }}>
+        {label}
+        {saving && <span style={{ fontSize:'9px', color:'#94A3B8', fontWeight:'400', textTransform:'none' }}>saving…</span>}
+      </div>
+      {editing ? (
+        <input type={type} value={val} autoFocus onChange={e => setVal(e.target.value)} onBlur={commit}
+          onKeyDown={e => e.key === 'Enter' && commit()}
+          style={{ fontSize:'12px', fontWeight:'600', border:'1px solid #45B6E4', borderRadius:'5px', padding:'3px 7px', outline:'none', fontFamily:'Montserrat, sans-serif', width: inputWidth || '100%', boxSizing:'border-box' as const }}/>
+      ) : (
+        <div onClick={() => setEditing(true)}
+          style={{ fontSize:'12px', fontWeight:'600', color:'#3F3F3F', cursor:'text', padding:'3px 4px', borderRadius:'4px', minHeight:'20px', display:'inline-block', width:'100%' }}
+          onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.cssText += ';background:#F0F9FF;outline:1px dashed #CBD5E1;border-radius:4px' }}
+          onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.background = 'transparent'; (e.currentTarget as HTMLDivElement).style.outline = 'none' }}>
+          {displayAs || (value ? (href ? <a href={href} target="_blank" onClick={e => e.stopPropagation()} style={{ color:'#156082', textDecoration:'none' }}>{value}</a> : String(value)) : <span style={{ color:'#CBD5E1' }}>—</span>)}
+        </div>
+      )}
+    </div>
+  )
+}
 
 export default function CandidateDetail() {
   const router = useRouter()
@@ -25,21 +63,51 @@ export default function CandidateDetail() {
   const [proposal, setProposal] = useState({ role:'', responsibilities:[] as string[], salary:'', advantages:[] as string[], start_date:'', country:'', resp_input:'', adv_input:'' })
   const [sending, setSending] = useState(false)
   const [proposalPreview, setProposalPreview] = useState<any>(null)
-  // Edit mode
-  const [editing, setEditing] = useState(false)
-  const [form, setForm] = useState<any>({})
+  const [autoSaving, setAutoSaving] = useState(false)
   const [skillInput, setSkillInput] = useState('')
-  const [saving, setSaving] = useState(false)
-  const [saveError, setSaveError] = useState('')
+  const [addingSkill, setAddingSkill] = useState(false)
   const [cvFile, setCvFile] = useState<File|null>(null)
   const [extracting, setExtracting] = useState(false)
+  const [documents, setDocuments] = useState<any[]>([])
+  const [docUploading, setDocUploading] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
+  const docFileRef = useRef<HTMLInputElement>(null)
 
   const load = () => {
-    fetch(`${API}/hr/recruitment/${id}`).then(r=>r.json()).then(d=>{ setProfile(d); setForm(d) }).finally(()=>setLoading(false))
+    fetch(`${API}/hr/recruitment/${id}`).then(r=>r.json()).then(d=>{ setProfile(d) }).finally(()=>setLoading(false))
   }
-  useEffect(() => { load() }, [id])
+  const loadDocs = () => {
+    fetch(`${API}/hr/recruitment/${id}/documents`).then(r=>r.json()).then(d=>setDocuments(d.documents||[]))
+  }
+  useEffect(() => { load(); loadDocs() }, [id])
   useEffect(() => { if (profile) setProposal(p=>({...p, country:profile.country||'france'})) }, [profile])
+
+  const patchField = async (field: string, value: any) => {
+    if (!profile) return
+    setAutoSaving(true)
+    try {
+      const updated = { ...profile, [field]: value }
+      if (field === 'country') updated.language = LANGS[value] || 'fr'
+      await fetch(`${API}/hr/recruitment/${id}`, {
+        method:'PUT', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ ...updated, language: updated.language || LANGS[profile.country] || 'fr' })
+      })
+      setProfile((p:any) => ({ ...p, [field]: value, ...(field==='country' ? {language: LANGS[value]||'fr'} : {}) }))
+    } finally {
+      setAutoSaving(false)
+    }
+  }
+
+  const addSkill = async () => {
+    if (!skillInput.trim()) return
+    const newSkills = [...(profile.skills||[]), skillInput.trim()]
+    setSkillInput(''); setAddingSkill(false)
+    await patchField('skills', newSkills)
+  }
+  const removeSkill = async (i: number) => {
+    const newSkills = (profile.skills||[]).filter((_:any, j:number) => j !== i)
+    await patchField('skills', newSkills)
+  }
 
   const handleCvUpload = async (file: File) => {
     setCvFile(file); setExtracting(true)
@@ -48,37 +116,41 @@ export default function CandidateDetail() {
       const r = await fetch(`${API}/hr/cv/extract`, { method:'POST', body:fd })
       const d = await r.json()
       const ex = d.extracted || {}
-      setForm((f: any) => ({
-        ...f,
-        ...(ex.first_name    ? { first_name: ex.first_name }       : {}),
-        ...(ex.last_name     ? { last_name: ex.last_name }         : {}),
-        ...(ex.email         ? { email: ex.email }                 : {}),
-        ...(ex.phone         ? { phone: ex.phone }                 : {}),
-        ...(ex.linkedin_url  ? { linkedin_url: ex.linkedin_url }   : {}),
-        ...(ex.current_title ? { current_title: ex.current_title } : {}),
-        ...(ex.years_experience ? { years_experience: ex.years_experience } : {}),
-        ...(ex.skills?.length   ? { skills: ex.skills }           : {}),
-        ...(ex.projects?.length ? { projects: ex.projects }       : {}),
-      }))
+      const updates: any = {}
+      if (ex.first_name)       updates.first_name = ex.first_name
+      if (ex.last_name)        updates.last_name = ex.last_name
+      if (ex.email)            updates.email = ex.email
+      if (ex.phone)            updates.phone = ex.phone
+      if (ex.linkedin_url)     updates.linkedin_url = ex.linkedin_url
+      if (ex.current_title)    updates.current_title = ex.current_title
+      if (ex.years_experience) updates.years_experience = ex.years_experience
+      if (ex.skills?.length)   updates.skills = ex.skills
+      if (ex.projects?.length) updates.projects = ex.projects
+      if (Object.keys(updates).length > 0) {
+        setAutoSaving(true)
+        await fetch(`${API}/hr/recruitment/${id}`, {
+          method:'PUT', headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ ...profile, ...updates, language: LANGS[profile.country]||'fr' })
+        })
+        setProfile((p:any) => ({ ...p, ...updates }))
+        setAutoSaving(false)
+      }
     } catch {}
+    const fd2 = new FormData(); fd2.append('file', file)
+    await fetch(`${API}/hr/cv/upload/${id}`, { method:'POST', body:fd2 })
     setExtracting(false)
+    load()
   }
 
-  const saveProfile = async () => {
-    setSaving(true); setSaveError('')
+  const uploadDocument = async (file: File) => {
+    setDocUploading(true)
+    const fd = new FormData(); fd.append('file', file)
     try {
-      const r = await fetch(`${API}/hr/recruitment/${id}`, {
-        method:'PUT', headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({ ...form, language: LANGS[form.country]||'fr' })
-      })
-      if (!r.ok) throw new Error(`Server error ${r.status}`)
-      if (cvFile) {
-        const fd = new FormData(); fd.append('file', cvFile)
-        await fetch(`${API}/hr/cv/upload/${id}`, { method:'POST', body:fd })
-      }
-      setProfile({ ...profile, ...form }); setEditing(false); setCvFile(null)
-    } catch (e: any) { setSaveError(e.message || 'Failed to save') }
-    finally { setSaving(false) }
+      await fetch(`${API}/hr/recruitment/${id}/documents`, { method:'POST', body:fd })
+      loadDocs()
+    } finally {
+      setDocUploading(false)
+    }
   }
 
   const updateStatus = async (status: string) => {
@@ -99,7 +171,6 @@ export default function CandidateDetail() {
       body:JSON.stringify({ role:proposal.role, responsibilities:proposal.responsibilities, salary:parseInt(proposal.salary)||0, advantages:proposal.advantages, start_date:proposal.start_date, country:proposal.country })
     })
     const d = await r.json()
-    // Get preview
     const prev = await fetch(`${API}/hr/proposals/${d.id}/preview`).then(r=>r.json())
     setProposalPreview({...prev, id:d.id})
     setSending(false)
@@ -115,121 +186,140 @@ export default function CandidateDetail() {
   if (loading) return <HRLayout><div style={{ padding:'48px', textAlign:'center', color:'#45B6E4' }}>Loading...</div></HRLayout>
   if (!profile) return <HRLayout><div style={{ padding:'48px', textAlign:'center', color:'#DC2626' }}>Candidate not found</div></HRLayout>
 
+  const activeColor = STATUS_TERMINAL_COLOR[profile.recruitment_status] || '#156082'
+
   return (
     <HRLayout>
       <div style={{ padding:'28px 32px' }}>
         <button onClick={() => router.push('/rh/recrutement')} style={{ background:'none', border:'none', color:'#45B6E4', fontSize:'12px', fontWeight:'600', cursor:'pointer', marginBottom:'16px', fontFamily:'Montserrat, sans-serif', padding:0 }}>← Back</button>
 
-        {/* Header */}
+        {/* Header card */}
         <div style={{ background:'white', borderRadius:'12px', border:'1px solid #EDF2F7', padding:'24px', marginBottom:'20px', boxShadow:'0 1px 3px rgba(0,0,0,0.06)' }}>
-          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom: editing ? '20px' : '0' }}>
+
+          {/* Name row */}
+          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:'20px' }}>
             <div style={{ display:'flex', alignItems:'center', gap:'16px' }}>
               <div style={{ width:'56px', height:'56px', borderRadius:'50%', background:'#7C3AED', display:'flex', alignItems:'center', justifyContent:'center', color:'white', fontSize:'20px', fontWeight:'800', flexShrink:0 }}>
                 {(profile.first_name||'?')[0]}{(profile.last_name||'?')[0]}
               </div>
               <div>
-                <h1 style={{ fontSize:'18px', fontWeight:'800', color:'#156082', margin:'0 0 4px' }}>{profile.first_name} {profile.last_name}</h1>
-                <p style={{ fontSize:'13px', color:'#45B6E4', margin:0 }}>{profile.current_title} · {FLAG[profile.country]||'🌍'} {profile.country}</p>
+                <div style={{ display:'flex', gap:'6px', alignItems:'center', flexWrap:'wrap' }}>
+                  <InlineField label="" value={profile.first_name} onSave={(v:string)=>patchField('first_name',v)}
+                    displayAs={<span style={{ fontSize:'18px', fontWeight:'800', color:'#156082' }}>{profile.first_name}</span>}/>
+                  <InlineField label="" value={profile.last_name} onSave={(v:string)=>patchField('last_name',v)}
+                    displayAs={<span style={{ fontSize:'18px', fontWeight:'800', color:'#156082' }}>{profile.last_name}</span>}/>
+                  {autoSaving && <span style={{ fontSize:'10px', color:'#94A3B8' }}>saving…</span>}
+                </div>
+                <InlineField label="" value={profile.current_title} onSave={(v:string)=>patchField('current_title',v)}
+                  displayAs={<span style={{ fontSize:'13px', color:'#45B6E4' }}>{profile.current_title||'Click to add title'} · {FLAG[profile.country]||'🌍'} {profile.country}</span>}/>
               </div>
             </div>
             <div style={{ display:'flex', gap:'8px', alignItems:'center' }}>
-              {profile.cv_sharepoint_url && <a href={profile.cv_sharepoint_url} target="_blank" style={{ padding:'7px 14px', background:'#EFF6FF', color:'#156082', borderRadius:'8px', fontSize:'12px', fontWeight:'700', textDecoration:'none' }}>📄 CV</a>}
-              {!editing && <button onClick={() => setShowProposal(true)} style={{ padding:'7px 14px', background:'#059669', color:'white', border:'none', borderRadius:'8px', fontSize:'12px', fontWeight:'700', cursor:'pointer', fontFamily:'Montserrat, sans-serif' }}>📄 Send Proposal</button>}
-              {editing
-                ? <>
-                    <button onClick={saveProfile} disabled={saving} style={{ padding:'7px 14px', background: saving ? '#F1F5F9' : '#059669', color: saving ? '#45B6E4' : 'white', border:'none', borderRadius:'8px', fontSize:'12px', fontWeight:'700', cursor: saving ? 'not-allowed' : 'pointer', fontFamily:'Montserrat, sans-serif' }}>{saving ? 'Saving...' : 'Save'}</button>
-                    <button onClick={() => { setEditing(false); setForm(profile); setCvFile(null); setSaveError('') }} style={{ padding:'7px 14px', background:'#F1F5F9', color:'#45B6E4', border:'none', borderRadius:'8px', fontSize:'12px', fontWeight:'600', cursor:'pointer', fontFamily:'Montserrat, sans-serif' }}>Cancel</button>
-                  </>
-                : <button onClick={() => setEditing(true)} style={{ padding:'7px 14px', background:'#7C3AED', color:'white', border:'none', borderRadius:'8px', fontSize:'12px', fontWeight:'700', cursor:'pointer', fontFamily:'Montserrat, sans-serif' }}>Edit</button>}
+              <button onClick={() => setShowProposal(true)} style={{ padding:'7px 14px', background:'#059669', color:'white', border:'none', borderRadius:'8px', fontSize:'12px', fontWeight:'700', cursor:'pointer', fontFamily:'Montserrat, sans-serif' }}>📄 Send Proposal</button>
             </div>
           </div>
 
-          {/* Edit form */}
-          {editing && (
-            <div style={{ display:'flex', flexDirection:'column', gap:'14px' }}>
-              {/* CV re-upload */}
-              <div style={{ border:'2px dashed #EDF2F7', borderRadius:'10px', padding:'12px 16px', textAlign:'center', cursor:'pointer', background:'#FAFBFC' }}
-                onClick={() => fileRef.current?.click()}>
-                <input ref={fileRef} type="file" accept=".pdf,.doc,.docx,.odt,.rtf" style={{ display:'none' }} onChange={e => e.target.files?.[0] && handleCvUpload(e.target.files[0])}/>
-                {extracting ? <span style={{ color:'#45B6E4', fontSize:'12px' }}>⏳ Extracting CV data...</span>
-                : cvFile ? <span style={{ color:'#059669', fontSize:'12px' }}>✅ {cvFile.name} — fields updated from CV</span>
-                : <span style={{ color:'#45B6E4', fontSize:'12px' }}>📄 Upload new CV (PDF, Word, ODT) to auto-fill fields</span>}
-              </div>
-
-              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'10px' }}>
-                {([['first_name','First Name'],['last_name','Last Name'],['email','Email'],['phone','Phone'],['linkedin_url','LinkedIn URL'],['current_title','Current Title']] as [string,string][]).map(([key,label]) => (
-                  <div key={key}>
-                    <label style={{ display:'block', fontSize:'10px', fontWeight:'700', textTransform:'uppercase' as const, letterSpacing:'0.07em', color:'#45B6E4', marginBottom:'4px' }}>{label}</label>
-                    <input value={form[key]||''} onChange={e=>setForm((f:any)=>({...f,[key]:e.target.value}))}
-                      style={{ width:'100%', padding:'7px 10px', border:'1.5px solid #EDF2F7', borderRadius:'7px', fontFamily:'Montserrat, sans-serif', fontSize:'12px', outline:'none', boxSizing:'border-box' as const }}/>
-                  </div>
-                ))}
-                <div>
-                  <label style={{ display:'block', fontSize:'10px', fontWeight:'700', textTransform:'uppercase' as const, letterSpacing:'0.07em', color:'#45B6E4', marginBottom:'4px' }}>Country</label>
-                  <select value={form.country||'france'} onChange={e=>setForm((f:any)=>({...f,country:e.target.value}))}
-                    style={{ width:'100%', padding:'7px 10px', border:'1.5px solid #EDF2F7', borderRadius:'7px', fontFamily:'Montserrat, sans-serif', fontSize:'12px', outline:'none' }}>
-                    {COUNTRIES.map(c=><option key={c} value={c}>{FLAG[c]} {c}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label style={{ display:'block', fontSize:'10px', fontWeight:'700', textTransform:'uppercase' as const, letterSpacing:'0.07em', color:'#45B6E4', marginBottom:'4px' }}>Years Experience</label>
-                  <input type="number" value={form.years_experience||0} onChange={e=>setForm((f:any)=>({...f,years_experience:parseInt(e.target.value)||0}))}
-                    style={{ width:'100%', padding:'7px 10px', border:'1.5px solid #EDF2F7', borderRadius:'7px', fontFamily:'Montserrat, sans-serif', fontSize:'12px', outline:'none', boxSizing:'border-box' as const }}/>
-                </div>
-              </div>
-
-              {/* Skills */}
-              <div>
-                <label style={{ display:'block', fontSize:'10px', fontWeight:'700', textTransform:'uppercase' as const, letterSpacing:'0.07em', color:'#45B6E4', marginBottom:'6px' }}>Skills</label>
-                <div style={{ display:'flex', gap:'5px', flexWrap:'wrap', marginBottom:'6px' }}>
-                  {(form.skills||[]).map((s:string, i:number) => (
-                    <span key={i} style={{ background:'#F3F4F6', color:'#7C3AED', padding:'3px 10px', borderRadius:'12px', fontSize:'11px', fontWeight:'600', display:'flex', alignItems:'center', gap:'4px' }}>
-                      {s}<span style={{ cursor:'pointer' }} onClick={()=>setForm((f:any)=>({...f,skills:f.skills.filter((_:any,j:number)=>j!==i)}))}>×</span>
-                    </span>
-                  ))}
-                </div>
-                <div style={{ display:'flex', gap:'6px' }}>
-                  <input value={skillInput} onChange={e=>setSkillInput(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&skillInput.trim()){setForm((f:any)=>({...f,skills:[...(f.skills||[]),skillInput.trim()]}));setSkillInput('')}}}
-                    placeholder="Add skill..." style={{ flex:1, padding:'7px 10px', border:'1.5px solid #EDF2F7', borderRadius:'7px', fontFamily:'Montserrat, sans-serif', fontSize:'12px', outline:'none' }}/>
-                  <button onClick={()=>{if(skillInput.trim()){setForm((f:any)=>({...f,skills:[...(f.skills||[]),skillInput.trim()]}));setSkillInput('')}}} style={{ padding:'7px 14px', background:'#7C3AED', color:'white', border:'none', borderRadius:'7px', fontSize:'12px', cursor:'pointer', fontFamily:'Montserrat, sans-serif' }}>+</button>
-                </div>
-              </div>
-
-              {saveError && <div style={{ background:'#FEF2F2', color:'#DC2626', padding:'10px 14px', borderRadius:'8px', fontSize:'12px' }}>{saveError}</div>}
+          {/* Contact fields */}
+          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr 1fr 1fr', gap:'14px', paddingBottom:'16px', borderBottom:'1px solid #F1F5F9', marginBottom:'16px' }}>
+            <InlineField label="Email" value={profile.email} onSave={(v:string)=>patchField('email',v)} href={profile.email?`mailto:${profile.email}`:undefined}/>
+            <InlineField label="Phone" value={profile.phone} onSave={(v:string)=>patchField('phone',v)} href={profile.phone?`tel:${profile.phone}`:undefined}/>
+            <InlineField label="LinkedIn" value={profile.linkedin_url} onSave={(v:string)=>patchField('linkedin_url',v)}
+              displayAs={profile.linkedin_url ? <a href={profile.linkedin_url} target="_blank" onClick={e=>e.stopPropagation()} style={{ fontSize:'12px', fontWeight:'600', color:'#156082', textDecoration:'none' }}>Profile</a> : <span style={{ color:'#CBD5E1', fontSize:'12px' }}>—</span>}/>
+            <InlineField label="Experience" value={profile.years_experience} onSave={(v:number)=>patchField('years_experience',v)} type="number"
+              displayAs={<span style={{ fontSize:'12px', fontWeight:'600', color:'#3F3F3F' }}>{profile.years_experience||0} years</span>}/>
+            <div>
+              <div style={{ fontSize:'10px', fontWeight:'700', textTransform:'uppercase', letterSpacing:'0.07em', color:'#45B6E4', marginBottom:'3px' }}>Country</div>
+              <select value={profile.country||'france'} onChange={e=>patchField('country',e.target.value)}
+                style={{ fontSize:'12px', fontWeight:'600', border:'1px solid #EDF2F7', borderRadius:'6px', padding:'3px 7px', outline:'none', fontFamily:'Montserrat, sans-serif', color:'#3F3F3F', background:'white', cursor:'pointer', width:'100%' }}>
+                {COUNTRIES.map(c=><option key={c} value={c}>{FLAG[c]} {c}</option>)}
+              </select>
             </div>
-          )}
+          </div>
+
+          {/* Skills */}
+          <div style={{ paddingBottom:'16px', borderBottom:'1px solid #F1F5F9', marginBottom:'16px' }}>
+            <div style={{ fontSize:'10px', fontWeight:'700', textTransform:'uppercase', letterSpacing:'0.07em', color:'#45B6E4', marginBottom:'8px' }}>Skills</div>
+            <div style={{ display:'flex', gap:'5px', flexWrap:'wrap', alignItems:'center' }}>
+              {(profile.skills||[]).map((s:string, i:number) => (
+                <span key={i} style={{ background:'#F3F4F6', color:'#7C3AED', padding:'3px 8px', borderRadius:'12px', fontSize:'11px', fontWeight:'600', display:'flex', alignItems:'center', gap:'3px' }}>
+                  {s}
+                  <span onClick={()=>removeSkill(i)} style={{ cursor:'pointer', fontSize:'13px', lineHeight:'1', opacity:'0.6' }}>×</span>
+                </span>
+              ))}
+              {addingSkill ? (
+                <input value={skillInput} onChange={e=>setSkillInput(e.target.value)} autoFocus
+                  onBlur={()=>{ if(skillInput.trim()) addSkill(); else setAddingSkill(false) }}
+                  onKeyDown={e=>{ if(e.key==='Enter') addSkill(); if(e.key==='Escape') { setAddingSkill(false); setSkillInput('') } }}
+                  placeholder="skill..." style={{ padding:'3px 8px', border:'1.5px solid #7C3AED', borderRadius:'12px', fontSize:'11px', outline:'none', fontFamily:'Montserrat, sans-serif', width:'90px' }}/>
+              ) : (
+                <span onClick={()=>setAddingSkill(true)} style={{ padding:'3px 10px', borderRadius:'12px', fontSize:'11px', fontWeight:'600', color:'#7C3AED', background:'white', cursor:'pointer', border:'1.5px dashed #7C3AED' }}>+ Add</span>
+              )}
+            </div>
+          </div>
 
           {/* Status pipeline */}
-          <div style={{ marginTop:'20px', paddingTop:'20px', borderTop:'1px solid #F1F5F9' }}>
+          <div style={{ paddingBottom:'16px', borderBottom:'1px solid #F1F5F9', marginBottom:'16px' }}>
             <div style={{ fontSize:'10px', fontWeight:'700', textTransform:'uppercase', letterSpacing:'0.07em', color:'#45B6E4', marginBottom:'10px' }}>Recruitment Status</div>
             <div style={{ display:'flex', gap:'4px', flexWrap:'wrap' }}>
-              {STATUSES.map(s => (
-                <button key={s} onClick={() => updateStatus(s)}
-                  style={{ padding:'5px 12px', borderRadius:'20px', border:'none', cursor:'pointer', fontSize:'10px', fontWeight:'700', fontFamily:'Montserrat, sans-serif', transition:'all 0.15s',
-                    background: profile.recruitment_status===s ? STATUS_COLOR[s] : `${STATUS_COLOR[s]}15`,
-                    color: profile.recruitment_status===s ? 'white' : STATUS_COLOR[s] }}>
-                  {STATUS_LABEL[s]}
-                </button>
-              ))}
+              {STATUSES.map(s => {
+                const isActive = profile.recruitment_status === s
+                const terminalColor = STATUS_TERMINAL_COLOR[s]
+                return (
+                  <button key={s} onClick={() => updateStatus(s)}
+                    style={{ padding:'5px 14px', borderRadius:'20px', border:'none', cursor:'pointer', fontSize:'10px', fontWeight:'700', fontFamily:'Montserrat, sans-serif', transition:'all 0.15s',
+                      background: isActive ? (terminalColor || '#156082') : '#F1F5F9',
+                      color: isActive ? 'white' : '#94A3B8' }}>
+                    {STATUS_LABEL[s]}
+                  </button>
+                )
+              })}
             </div>
           </div>
 
-          {/* Read-only contact info */}
-          {!editing && (
-            <>
-              <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:'12px', marginTop:'16px', paddingTop:'16px', borderTop:'1px solid #F1F5F9' }}>
-                {[{label:'Email',v:profile.email,href:`mailto:${profile.email}`},{label:'Phone',v:profile.phone,href:`tel:${profile.phone}`},{label:'LinkedIn',v:profile.linkedin_url?'Profile':null,href:profile.linkedin_url},{label:'Experience',v:`${profile.years_experience||0} years`}].map(i=>(
-                  <div key={i.label}>
-                    <div style={{ fontSize:'10px', fontWeight:'700', textTransform:'uppercase', letterSpacing:'0.07em', color:'#45B6E4', marginBottom:'3px' }}>{i.label}</div>
-                    {i.href&&i.v?<a href={i.href} target="_blank" style={{ fontSize:'12px', fontWeight:'600', color:'#156082', textDecoration:'none' }}>{i.v}</a>:<div style={{ fontSize:'12px', fontWeight:'600', color:'#3F3F3F' }}>{i.v||'—'}</div>}
+          {/* Documents */}
+          <div>
+            <div style={{ fontSize:'10px', fontWeight:'700', textTransform:'uppercase', letterSpacing:'0.07em', color:'#45B6E4', marginBottom:'8px' }}>Documents</div>
+            <div style={{ display:'flex', gap:'8px', flexWrap:'wrap', alignItems:'center' }}>
+              {/* CV upload/view */}
+              <div style={{ border:'1px solid #EDF2F7', borderRadius:'8px', padding:'8px 14px', display:'flex', alignItems:'center', gap:'8px', background:'#FAFBFC', cursor:'pointer', minWidth:'160px' }}
+                onClick={() => fileRef.current?.click()}>
+                <input ref={fileRef} type="file" accept=".pdf,.doc,.docx,.odt,.rtf" style={{ display:'none' }} onChange={e => e.target.files?.[0] && handleCvUpload(e.target.files[0])}/>
+                {extracting ? (
+                  <span style={{ color:'#45B6E4', fontSize:'12px' }}>⏳ Extracting CV…</span>
+                ) : profile.cv_sharepoint_url ? (
+                  <div style={{ display:'flex', alignItems:'center', gap:'8px' }}>
+                    <span style={{ fontSize:'16px' }}>📄</span>
+                    <div>
+                      <a href={profile.cv_sharepoint_url} target="_blank" onClick={e=>e.stopPropagation()} style={{ fontSize:'12px', fontWeight:'700', color:'#156082', textDecoration:'none', display:'block' }}>{profile.cv_filename||'CV'}</a>
+                      <span style={{ fontSize:'10px', color:'#94A3B8' }}>click to replace</span>
+                    </div>
                   </div>
-                ))}
+                ) : (
+                  <span style={{ color:'#45B6E4', fontSize:'12px' }}>📄 Upload CV</span>
+                )}
               </div>
-              <div style={{ display:'flex', gap:'5px', flexWrap:'wrap', marginTop:'12px' }}>
-                {(profile.skills||[]).map((s:string)=><span key={s} style={{ background:'#F3F4F6', color:'#7C3AED', padding:'2px 8px', borderRadius:'12px', fontSize:'10px', fontWeight:'600' }}>{s}</span>)}
+
+              {/* Other documents */}
+              {documents.map((doc:any) => (
+                <a key={doc.id} href={doc.sharepoint_url} target="_blank"
+                  style={{ border:'1px solid #EDF2F7', borderRadius:'8px', padding:'8px 14px', display:'flex', alignItems:'center', gap:'6px', background:'#FAFBFC', textDecoration:'none', minWidth:'120px' }}>
+                  <span style={{ fontSize:'16px' }}>📎</span>
+                  <span style={{ fontSize:'12px', fontWeight:'600', color:'#156082' }}>{doc.filename}</span>
+                </a>
+              ))}
+
+              {/* Upload other doc */}
+              <div style={{ border:'1.5px dashed #EDF2F7', borderRadius:'8px', padding:'8px 14px', display:'flex', alignItems:'center', gap:'6px', cursor:'pointer', minWidth:'140px' }}
+                onClick={() => docFileRef.current?.click()}
+                onMouseEnter={e=>(e.currentTarget as HTMLDivElement).style.borderColor='#45B6E4'}
+                onMouseLeave={e=>(e.currentTarget as HTMLDivElement).style.borderColor='#EDF2F7'}>
+                <input ref={docFileRef} type="file" accept=".pdf,.doc,.docx,.odt,.rtf,.xls,.xlsx,.png,.jpg,.jpeg" style={{ display:'none' }} onChange={e => e.target.files?.[0] && uploadDocument(e.target.files[0])}/>
+                {docUploading
+                  ? <span style={{ color:'#45B6E4', fontSize:'12px' }}>Uploading…</span>
+                  : <span style={{ color:'#94A3B8', fontSize:'12px' }}>+ Add document</span>}
               </div>
-            </>
-          )}
+            </div>
+          </div>
         </div>
 
         {/* Tabs */}
@@ -267,7 +357,6 @@ export default function CandidateDetail() {
         {/* Comments tab */}
         {activeTab === 'comments' && (
           <div>
-            {/* Add comment */}
             <div style={{ background:'white', borderRadius:'12px', border:'1px solid #EDF2F7', padding:'16px', marginBottom:'14px', boxShadow:'0 1px 3px rgba(0,0,0,0.06)' }}>
               <div style={{ display:'flex', gap:'6px', marginBottom:'10px' }}>
                 {COMMENT_TYPES.map(t=>(
@@ -279,7 +368,7 @@ export default function CandidateDetail() {
               </div>
               <textarea value={comment.content} onChange={e=>setComment(c=>({...c,content:e.target.value}))}
                 placeholder="Add a note, call log, or interview feedback..."
-                style={{ width:'100%', padding:'10px', border:'1.5px solid #EDF2F7', borderRadius:'8px', fontFamily:'Montserrat, sans-serif', fontSize:'12px', resize:'vertical', minHeight:'70px', outline:'none', boxSizing:'border-box' }}/>
+                style={{ width:'100%', padding:'10px', border:'1.5px solid #EDF2F7', borderRadius:'8px', fontFamily:'Montserrat, sans-serif', fontSize:'12px', resize:'vertical', minHeight:'70px', outline:'none', boxSizing:'border-box' as const }}/>
               <div style={{ display:'flex', justifyContent:'flex-end', marginTop:'8px' }}>
                 <button onClick={addComment} disabled={!comment.content.trim()}
                   style={{ padding:'7px 16px', background:comment.content.trim()?'#156082':'#F1F5F9', color:comment.content.trim()?'white':'#45B6E4', border:'none', borderRadius:'8px', fontSize:'12px', fontWeight:'700', cursor:comment.content.trim()?'pointer':'not-allowed', fontFamily:'Montserrat, sans-serif' }}>
@@ -287,7 +376,6 @@ export default function CandidateDetail() {
                 </button>
               </div>
             </div>
-            {/* Comments list */}
             {(profile.comments||[]).map((c:any)=>(
               <div key={c.id} style={{ background:'white', borderRadius:'10px', border:'1px solid #EDF2F7', padding:'14px 18px', marginBottom:'10px', boxShadow:'0 1px 2px rgba(0,0,0,0.04)' }}>
                 <div style={{ display:'flex', justifyContent:'space-between', marginBottom:'8px' }}>
@@ -343,7 +431,7 @@ export default function CandidateDetail() {
                   <div style={{ display:'flex', flexDirection:'column', gap:'14px' }}>
                     <div>
                       <label style={{ display:'block', fontSize:'10px', fontWeight:'700', textTransform:'uppercase', letterSpacing:'0.07em', color:'#45B6E4', marginBottom:'5px' }}>Role / Position *</label>
-                      <input value={proposal.role} onChange={e=>setProposal(p=>({...p,role:e.target.value}))} style={{ width:'100%', padding:'9px 12px', border:'1.5px solid #EDF2F7', borderRadius:'8px', fontFamily:'Montserrat, sans-serif', fontSize:'13px', outline:'none', boxSizing:'border-box' }}/>
+                      <input value={proposal.role} onChange={e=>setProposal(p=>({...p,role:e.target.value}))} style={{ width:'100%', padding:'9px 12px', border:'1.5px solid #EDF2F7', borderRadius:'8px', fontFamily:'Montserrat, sans-serif', fontSize:'13px', outline:'none', boxSizing:'border-box' as const }}/>
                     </div>
                     <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:'12px' }}>
                       <div>
@@ -354,14 +442,13 @@ export default function CandidateDetail() {
                       </div>
                       <div>
                         <label style={{ display:'block', fontSize:'10px', fontWeight:'700', textTransform:'uppercase', letterSpacing:'0.07em', color:'#45B6E4', marginBottom:'5px' }}>Annual Salary ({CURRENCY[proposal.country]||'EUR'})</label>
-                        <input type="number" value={proposal.salary} onChange={e=>setProposal(p=>({...p,salary:e.target.value}))} style={{ width:'100%', padding:'9px 12px', border:'1.5px solid #EDF2F7', borderRadius:'8px', fontFamily:'Montserrat, sans-serif', fontSize:'13px', outline:'none', boxSizing:'border-box' }}/>
+                        <input type="number" value={proposal.salary} onChange={e=>setProposal(p=>({...p,salary:e.target.value}))} style={{ width:'100%', padding:'9px 12px', border:'1.5px solid #EDF2F7', borderRadius:'8px', fontFamily:'Montserrat, sans-serif', fontSize:'13px', outline:'none', boxSizing:'border-box' as const }}/>
                       </div>
                       <div>
                         <label style={{ display:'block', fontSize:'10px', fontWeight:'700', textTransform:'uppercase', letterSpacing:'0.07em', color:'#45B6E4', marginBottom:'5px' }}>Start Date</label>
-                        <input value={proposal.start_date} onChange={e=>setProposal(p=>({...p,start_date:e.target.value}))} placeholder="e.g. 01/09/2026" style={{ width:'100%', padding:'9px 12px', border:'1.5px solid #EDF2F7', borderRadius:'8px', fontFamily:'Montserrat, sans-serif', fontSize:'13px', outline:'none', boxSizing:'border-box' }}/>
+                        <input value={proposal.start_date} onChange={e=>setProposal(p=>({...p,start_date:e.target.value}))} placeholder="e.g. 01/09/2026" style={{ width:'100%', padding:'9px 12px', border:'1.5px solid #EDF2F7', borderRadius:'8px', fontFamily:'Montserrat, sans-serif', fontSize:'13px', outline:'none', boxSizing:'border-box' as const }}/>
                       </div>
                     </div>
-                    {/* Responsibilities */}
                     <div>
                       <label style={{ display:'block', fontSize:'10px', fontWeight:'700', textTransform:'uppercase', letterSpacing:'0.07em', color:'#45B6E4', marginBottom:'5px' }}>Responsibilities</label>
                       {proposal.responsibilities.map((r,i)=>(
@@ -375,7 +462,6 @@ export default function CandidateDetail() {
                         <button onClick={()=>{if(proposal.resp_input.trim())setProposal(p=>({...p,responsibilities:[...p.responsibilities,p.resp_input.trim()],resp_input:''}))}} style={{ padding:'7px 14px', background:'#156082', color:'white', border:'none', borderRadius:'7px', fontSize:'12px', cursor:'pointer', fontFamily:'Montserrat, sans-serif' }}>+</button>
                       </div>
                     </div>
-                    {/* Advantages */}
                     <div>
                       <label style={{ display:'block', fontSize:'10px', fontWeight:'700', textTransform:'uppercase', letterSpacing:'0.07em', color:'#45B6E4', marginBottom:'5px' }}>Company Advantages / Benefits</label>
                       {proposal.advantages.map((a,i)=>(
@@ -385,13 +471,12 @@ export default function CandidateDetail() {
                         </div>
                       ))}
                       <div style={{ display:'flex', gap:'6px' }}>
-                        <input value={proposal.adv_input} onChange={e=>setProposal(p=>({...p,adv_input:e.target.value}))} onKeyDown={e=>{if(e.key==='Enter'&&proposal.adv_input.trim()){setProposal(p=>({...p,advantages:[...p.advantages,p.adv_input.trim()],adv_input:''}))  }}} placeholder="e.g. Remote work, Health insurance, 25 days holiday..." style={{ flex:1, padding:'7px 10px', border:'1.5px solid #EDF2F7', borderRadius:'7px', fontFamily:'Montserrat, sans-serif', fontSize:'12px', outline:'none' }}/>
+                        <input value={proposal.adv_input} onChange={e=>setProposal(p=>({...p,adv_input:e.target.value}))} onKeyDown={e=>{if(e.key==='Enter'&&proposal.adv_input.trim()){setProposal(p=>({...p,advantages:[...p.advantages,p.adv_input.trim()],adv_input:''}))  }}} placeholder="e.g. Remote work, Health insurance..." style={{ flex:1, padding:'7px 10px', border:'1.5px solid #EDF2F7', borderRadius:'7px', fontFamily:'Montserrat, sans-serif', fontSize:'12px', outline:'none' }}/>
                         <button onClick={()=>{if(proposal.adv_input.trim())setProposal(p=>({...p,advantages:[...p.advantages,p.adv_input.trim()],adv_input:''}))}} style={{ padding:'7px 14px', background:'#156082', color:'white', border:'none', borderRadius:'7px', fontSize:'12px', cursor:'pointer', fontFamily:'Montserrat, sans-serif' }}>+</button>
                       </div>
                     </div>
                   </div>
                 ) : (
-                  /* Preview */
                   <div style={{ background:'#F8FAFC', borderRadius:'10px', padding:'24px', fontFamily:'Arial, sans-serif' }}>
                     <div style={{ textAlign:'center', marginBottom:'20px' }}>
                       <div style={{ fontSize:'20px', fontWeight:'800', color:'#156082' }}>WCOMPLY</div>

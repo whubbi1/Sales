@@ -7,9 +7,9 @@ const API = 'https://api.whubbi.wcomply.com'
 const FLAG: Record<string,string> = { france:'🇫🇷', portugal:'🇵🇹', czech_republic:'🇨🇿', romania:'🇷🇴', spain:'🇪🇸' }
 const COUNTRIES = ['france','portugal','czech_republic','romania','spain']
 const LANGS: Record<string,string> = { france:'fr', portugal:'pt', czech_republic:'cs', romania:'ro', spain:'es' }
-const STATUSES = ['new','screening','interview_1','interview_2','technical_test','offer','hired','rejected','on_hold']
-const STATUS_COLOR: Record<string,string> = { new:'#45B6E4', screening:'#D97706', interview_1:'#7C3AED', interview_2:'#059669', technical_test:'#e97132', offer:'#156082', hired:'#059669', rejected:'#DC2626', on_hold:'#94A3B8' }
-const STATUS_LABEL: Record<string,string> = { new:'New', screening:'Screening', interview_1:'Interview 1', interview_2:'Interview 2', technical_test:'Tech Test', offer:'Offer', hired:'Hired', rejected:'Rejected', on_hold:'On Hold' }
+const STATUSES = ['new','screening','interview_1','technical_test','offer','hired','rejected','on_hold']
+const STATUS_COLOR: Record<string,string> = { new:'#45B6E4', screening:'#45B6E4', interview_1:'#45B6E4', technical_test:'#45B6E4', offer:'#45B6E4', hired:'#059669', rejected:'#DC2626', on_hold:'#94A3B8' }
+const STATUS_LABEL: Record<string,string> = { new:'New', screening:'Screening', interview_1:'Interview', technical_test:'Tech Test', offer:'Offer', hired:'Hired', rejected:'Rejected', on_hold:'On Hold' }
 
 export default function RecruitmentPage() {
   const router = useRouter()
@@ -103,7 +103,7 @@ export default function RecruitmentPage() {
         {/* Kanban view */}
         {filterStatus === 'all' && !loading && (
           <div style={{ display:'flex', gap:'12px', overflowX:'auto', paddingBottom:'8px' }}>
-            {['new','screening','interview_1','interview_2','offer','hired'].map(status => (
+            {['new','screening','interview_1','technical_test','offer','hired'].map(status => (
               <div key={status} style={{ minWidth:'200px', background:'white', borderRadius:'12px', border:'1px solid #EDF2F7', overflow:'hidden', boxShadow:'0 1px 3px rgba(0,0,0,0.06)' }}>
                 <div style={{ padding:'10px 14px', borderBottom:'1px solid #F1F5F9', background: `${STATUS_COLOR[status]}15`, display:'flex', justifyContent:'space-between', alignItems:'center' }}>
                   <span style={{ fontSize:'11px', fontWeight:'700', color: STATUS_COLOR[status] }}>{STATUS_LABEL[status]}</span>

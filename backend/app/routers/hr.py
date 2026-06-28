@@ -17,7 +17,7 @@ DOCUSIGN_KEY = os.getenv("DOCUSIGN_INTEGRATION_KEY", "")
 WHUBBI_API_URL = os.getenv("WHUBBI_API_URL", "https://api.whubbi.wcomply.com")
 
 # SharePoint folder sharing URLs for CV/document storage
-SHAREPOINT_RECRUITMENT_URL = "https://wcomply.sharepoint.com/:f:/s/wcomply-HR/IgDsWu6K4lhqSIBLpu5eKpX4AThfbi029iqbHgDb_IQhoVY?e=sCToFw"
+SHAREPOINT_RECRUITMENT_URL = "https://wcomply.sharepoint.com/:f:/s/wcomply-HR/IgDsWu6K4lhqSIBLpu5eKpX4AThfbi029iqbHgDb_IQhoVY?e=9Jd3KH"
 SHAREPOINT_FREELANCER_URL  = "https://wcomply.sharepoint.com/:f:/s/wcomply-HR/IgDuttxAz2gOQJWIokbuzzmVAVdr92slh5OLUsqO_IkQGiA?e=ox55oP"
 
 # ─── Country config ────────────────────────────────────────────────────────────
@@ -284,6 +284,40 @@ async def upload_cv(profile_id: str, file: UploadFile = File(...), db: AsyncSess
     """), {"url": url, "fn": file.filename, "id": profile_id})
     await db.commit()
     return {"status": "ok", "sharepoint_url": url}
+
+@router.get("/recruitment/{profile_id}/documents")
+async def get_profile_documents(profile_id: str, db: AsyncSession = Depends(get_db)):
+    rows = await db.execute(text("""
+        SELECT id, filename, sharepoint_url, doc_type, uploaded_at
+        FROM hr_profile_documents WHERE profile_id = CAST(:id AS UUID)
+        ORDER BY uploaded_at DESC
+    """), {"id": profile_id})
+    docs = [dict(r._mapping) for r in rows.fetchall()]
+    for d in docs: d["id"] = str(d["id"])
+    return {"documents": docs}
+
+@router.post("/recruitment/{profile_id}/documents")
+async def upload_profile_document(profile_id: str, file: UploadFile = File(...), db: AsyncSession = Depends(get_db)):
+    content = await file.read()
+    token = await get_ms_token()
+    row = await db.execute(
+        text("SELECT first_name, last_name, country FROM hr_profiles WHERE id=CAST(:id AS UUID)"),
+        {"id": profile_id}
+    )
+    profile = row.fetchone()
+    url = ""
+    if profile:
+        name_folder = f"{profile.first_name} {profile.last_name}".strip() or profile_id
+        country = (profile.country or "unknown").replace(" ", "_")
+        subfolder = f"{country}/{name_folder}"
+        url = await upload_to_sharepoint_folder(token, SHAREPOINT_RECRUITMENT_URL, subfolder, file.filename, content)
+    if url:
+        await db.execute(text("""
+            INSERT INTO hr_profile_documents (id, profile_id, filename, sharepoint_url, uploaded_at)
+            VALUES (gen_random_uuid(), CAST(:pid AS UUID), :fn, :url, NOW())
+        """), {"pid": profile_id, "fn": file.filename, "url": url})
+        await db.commit()
+    return {"status": "ok" if url else "upload_failed", "sharepoint_url": url}
 
 # ─── Freelancers ────────────────────────────────────────────────────────────────
 @router.get("/freelancers")

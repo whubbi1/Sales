@@ -217,6 +217,18 @@ async def startup():
                     notes TEXT,
                     created_at TIMESTAMP DEFAULT NOW()
                 )""",
+                # HR document tracking
+                """CREATE TABLE IF NOT EXISTS hr_profile_documents (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    profile_id UUID NOT NULL,
+                    filename VARCHAR(255),
+                    sharepoint_url VARCHAR(1000),
+                    doc_type VARCHAR(50) DEFAULT 'document',
+                    uploaded_at TIMESTAMP DEFAULT NOW()
+                )""",
+                # Merge interview_2 into interview_1
+                "UPDATE hr_profiles SET recruitment_status = 'interview_1' WHERE recruitment_status = 'interview_2'",
+
                 "ALTER TABLE grc_frameworks ADD COLUMN IF NOT EXISTS color VARCHAR(20) DEFAULT '#156082'",
                 """CREATE UNIQUE INDEX IF NOT EXISTS idx_grc_mapping_unique 
                    ON grc_requirement_mappings(source_req_id, target_req_id)""",
