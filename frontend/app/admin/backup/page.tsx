@@ -1,5 +1,6 @@
 'use client'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { useState, useEffect } from 'react'
 
 const API = 'https://api.whubbi.wcomply.com'
@@ -75,19 +76,21 @@ export default function BackupPage() {
               return (
                 <div key={app.name} style={{background:'white',borderRadius:'12px',border:`1px solid ${s.bg}`,padding:'18px',boxShadow:'0 1px 3px rgba(0,0,0,0.06)',position:'relative',overflow:'hidden'}}>
                   <div style={{position:'absolute',top:0,left:0,right:0,height:'3px',background:s.dot}}/>
-                  <div style={{fontSize:'28px',marginBottom:'10px'}}>{app.icon}</div>
-                  <div style={{fontSize:'13px',fontWeight:'700',color:'#156082',marginBottom:'6px'}}>{app.name}</div>
-                  <div style={{marginBottom:'8px'}}>
-                    <span style={{background:s.bg,color:s.color,padding:'2px 8px',borderRadius:'10px',fontSize:'10px',fontWeight:'700',display:'inline-flex',alignItems:'center',gap:'4px'}}>
-                      <span style={{width:'6px',height:'6px',borderRadius:'50%',background:s.dot,display:'inline-block'}}/>
-                      {s.label}
-                    </span>
-                  </div>
-                  {record?.backup_date ? (
-                    <div style={{fontSize:'10px',color:'#45B6E4'}}>Last: {new Date(record.backup_date).toLocaleDateString()}</div>
-                  ) : (
-                    <div style={{fontSize:'10px',color:'#848EA5'}}>No backup recorded</div>
-                  )}
+                  <Link href={`/admin/backup/${app.slug}`} style={{textDecoration:'none'}}>
+                    <div style={{fontSize:'28px',marginBottom:'10px'}}>{app.icon}</div>
+                    <div style={{fontSize:'13px',fontWeight:'700',color:'#156082',marginBottom:'6px',cursor:'pointer'}}>{app.name}</div>
+                    <div style={{marginBottom:'8px'}}>
+                      <span style={{background:s.bg,color:s.color,padding:'2px 8px',borderRadius:'10px',fontSize:'10px',fontWeight:'700',display:'inline-flex',alignItems:'center',gap:'4px'}}>
+                        <span style={{width:'6px',height:'6px',borderRadius:'50%',background:s.dot,display:'inline-block'}}/>
+                        {s.label}
+                      </span>
+                    </div>
+                    {record?.backup_date ? (
+                      <div style={{fontSize:'10px',color:'#45B6E4'}}>Last: {new Date(record.backup_date).toLocaleDateString()}</div>
+                    ) : (
+                      <div style={{fontSize:'10px',color:'#848EA5'}}>No backup recorded</div>
+                    )}
+                  </Link>
                   {!app.auto && (
                     <button onClick={()=>setShowUpdate(app.name)} style={{marginTop:'10px',width:'100%',background:'#F1F5F9',color:'#156082',border:'none',padding:'5px',borderRadius:'6px',fontSize:'11px',fontWeight:'600',cursor:'pointer',fontFamily:'Montserrat, sans-serif'}}>
                       Update Status

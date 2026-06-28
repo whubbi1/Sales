@@ -93,6 +93,15 @@ async def startup():
                     created_at TIMESTAMP DEFAULT NOW()
                 )""",
 
+                """CREATE TABLE IF NOT EXISTS backup_app_config (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    application VARCHAR(100) UNIQUE NOT NULL,
+                    backup_policy TEXT,
+                    tool_name VARCHAR(255),
+                    updated_at TIMESTAMP DEFAULT NOW(),
+                    updated_by VARCHAR(255)
+                )""",
+
                 # GRC migrations
                 """CREATE TABLE IF NOT EXISTS grc_frameworks (
                     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

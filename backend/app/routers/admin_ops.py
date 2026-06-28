@@ -14,12 +14,14 @@ BACKUP_BUCKET = os.getenv("BACKUP_BUCKET", "whubbi-backups-dev")
 ACCOUNT_ID  = "351007427901"
 
 APPLICATIONS = [
-    {"name": "WHUBBI",          "type": "database+code", "auto": True,  "icon": "🚀"},
-    {"name": "Microsoft Office", "type": "cloud",        "auto": False, "icon": "🏢"},
-    {"name": "Payfit",           "type": "cloud",        "auto": False, "icon": "💰"},
-    {"name": "HubSpot",          "type": "cloud",        "auto": False, "icon": "🔶"},
-    {"name": "Karanext",         "type": "cloud",        "auto": False, "icon": "📊"},
+    {"name": "WHUBBI",         "slug": "whubbi",         "type": "database+code", "auto": True,  "icon": "🚀"},
+    {"name": "Microsoft 365",  "slug": "microsoft-365",  "type": "cloud",        "auto": False, "icon": "🏢"},
+    {"name": "Payfit",         "slug": "payfit",         "type": "cloud",        "auto": False, "icon": "💰"},
+    {"name": "HubSpot",        "slug": "hubspot",        "type": "cloud",        "auto": False, "icon": "🔶"},
+    {"name": "Karanext",       "slug": "karanext",       "type": "cloud",        "auto": False, "icon": "📊"},
 ]
+
+SLUG_TO_APP = {a["slug"]: a for a in APPLICATIONS}
 
 async def seed_jobs(db: AsyncSession):
     c = await db.execute(text("SELECT COUNT(*) FROM background_jobs"))
@@ -59,6 +61,18 @@ async def seed_jobs(db: AsyncSession):
                 VALUES (gen_random_uuid(),:app,'full','unknown','No backup recorded yet',NOW())
             """), {"app": app["name"]})
         await db.commit()
+
+    # Rename old "Microsoft Office" records to "Microsoft 365"
+    await db.execute(text("""
+        UPDATE backup_records SET application = 'Microsoft 365'
+        WHERE application = 'Microsoft Office'
+    """))
+    await db.commit()
+    await db.execute(text("""
+        UPDATE backup_app_config SET application = 'Microsoft 365'
+        WHERE application = 'Microsoft Office'
+    """))
+    await db.commit()
 
 
 # ─── Backup ───────────────────────────────────────────────────────────────────
@@ -233,6 +247,76 @@ async def update_job(job_id: str, data: dict, db: AsyncSession = Depends(get_db)
             updated_at = NOW()
         WHERE job_id = :jid
     """), {**{k: v or '' for k,v in data.items()}, "jid": job_id})
+    await db.commit()
+    return {"status": "ok"}
+
+
+@router.get("/backup/app/{slug}")
+async def get_backup_app_detail(slug: str, db: AsyncSession = Depends(get_db)):
+    app = SLUG_TO_APP.get(slug)
+    if not app:
+        return {"error": "Not found"}
+
+    # Get or create config row
+    cfg = await db.execute(text("""
+        SELECT backup_policy, tool_name, updated_at, updated_by
+        FROM backup_app_config WHERE application = :app
+    """), {"app": app["name"]})
+    row = cfg.fetchone()
+    config = dict(row._mapping) if row else {"backup_policy": None, "tool_name": None, "updated_at": None, "updated_by": None}
+
+    # Get recent backup records
+    records = await db.execute(text("""
+        SELECT application, backup_type, status, backup_date, size_mb, location, notes, created_by, created_at
+        FROM backup_records WHERE application = :app
+        ORDER BY created_at DESC LIMIT 10
+    """), {"app": app["name"]})
+    history = [dict(r._mapping) for r in records.fetchall()]
+
+    return {
+        "app": app,
+        "config": config,
+        "history": history,
+    }
+
+
+@router.put("/backup/app/{slug}")
+async def update_backup_app_detail(slug: str, data: dict, db: AsyncSession = Depends(get_db)):
+    app = SLUG_TO_APP.get(slug)
+    if not app:
+        return {"error": "Not found"}
+
+    # Upsert config
+    existing = await db.execute(text(
+        "SELECT id FROM backup_app_config WHERE application = :app"
+    ), {"app": app["name"]})
+    row = existing.fetchone()
+
+    if row:
+        await db.execute(text("""
+            UPDATE backup_app_config SET
+                backup_policy = COALESCE(:backup_policy, backup_policy),
+                tool_name = COALESCE(:tool_name, tool_name),
+                updated_at = NOW(),
+                updated_by = COALESCE(:updated_by, updated_by)
+            WHERE application = :app
+        """), {
+            "app": app["name"],
+            "backup_policy": data.get("backup_policy"),
+            "tool_name": data.get("tool_name"),
+            "updated_by": data.get("updated_by"),
+        })
+    else:
+        await db.execute(text("""
+            INSERT INTO backup_app_config (id, application, backup_policy, tool_name, updated_at, updated_by)
+            VALUES (gen_random_uuid(), :app, :backup_policy, :tool_name, NOW(), :updated_by)
+        """), {
+            "app": app["name"],
+            "backup_policy": data.get("backup_policy"),
+            "tool_name": data.get("tool_name"),
+            "updated_by": data.get("updated_by"),
+        })
+
     await db.commit()
     return {"status": "ok"}
 
