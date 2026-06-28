@@ -303,7 +303,7 @@ async def create_error_log(data: dict, db: AsyncSession = Depends(get_db)):
 
 
 # ─── Multi-account AWS Costs (cross-account via AssumeRole) ──────────────────
-COST_READER_ROLE = "arn:aws:iam::351007427901:role/whubbi-cost-reader"
+COST_READER_ROLE = "arn:aws:iam::882321772619:role/whubbi-cost-reader"
 
 def get_ce_client():
     """Get Cost Explorer client using cross-account role from main account."""

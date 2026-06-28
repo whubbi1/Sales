@@ -11,7 +11,7 @@ router = APIRouter()
 
 AWS_REGION  = os.getenv("AWS_REGION", "eu-west-1")
 BACKUP_BUCKET = os.getenv("BACKUP_BUCKET", "whubbi-backups-dev")
-ACCOUNT_ID  = "351007427901"
+ACCOUNT_ID  = "882321772619"
 
 APPLICATIONS = [
     {"name": "WHUBBI",         "slug": "whubbi",         "type": "database+code", "auto": True,  "icon": "🚀"},
