@@ -209,8 +209,20 @@ export default function FreelancerDetail() {
     router.push('/rh/freelancers')
   }
 
-  if (loading) return <HRLayout><div style={{ padding:'48px', textAlign:'center', color:'#45B6E4' }}>Loading...</div></HRLayout>
-  if (!profile) return <HRLayout><div style={{ padding:'48px', textAlign:'center', color:'#DC2626' }}>Profile not found</div></HRLayout>
+  if (loading) {
+    return (
+      <HRLayout>
+        <div style={{ padding:'48px', textAlign:'center', color:'#45B6E4' }}>Loading...</div>
+      </HRLayout>
+    )
+  }
+  if (!profile) {
+    return (
+      <HRLayout>
+        <div style={{ padding:'48px', textAlign:'center', color:'#DC2626' }}>Profile not found</div>
+      </HRLayout>
+    )
+  }
 
   return (
     <HRLayout>
