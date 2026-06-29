@@ -203,7 +203,7 @@ def _s3_presigned_url_sync(bucket: str, key: str, expires: int = 3600) -> str:
 
 async def upload_to_s3(key: str, content: bytes, content_type: str = "application/octet-stream") -> str:
     """Upload bytes to S3 and return the s3://bucket/key reference (stored in DB)."""
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     await loop.run_in_executor(None, lambda: _s3_put_sync(S3_HR_BUCKET, key, content, content_type))
     return f"s3://{S3_HR_BUCKET}/{key}"
 
@@ -213,12 +213,49 @@ async def s3_ref_to_presigned(ref: str, expires: int = 3600) -> str:
         return ref
     path = ref[5:]
     bucket, _, key = path.partition("/")
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     try:
         return await loop.run_in_executor(None, lambda: _s3_presigned_url_sync(bucket, key, expires))
     except Exception as e:
         print(f"S3 presigned URL error: {e}")
         return ref
+
+@router.get("/test-s3")
+async def test_s3():
+    """Diagnostic: verify S3 bucket access and credentials."""
+    import traceback
+    results = {}
+    # 1. Check identity
+    try:
+        sts = boto3.client("sts", region_name=AWS_REGION)
+        identity = sts.get_caller_identity()
+        results["identity"] = {"account": identity.get("Account"), "arn": identity.get("Arn")}
+    except Exception as e:
+        results["identity"] = {"error": str(e)}
+    # 2. Check bucket exists / list
+    try:
+        s3 = boto3.client("s3", region_name=AWS_REGION)
+        s3.head_bucket(Bucket=S3_HR_BUCKET)
+        results["bucket_access"] = "ok"
+    except Exception as e:
+        results["bucket_access"] = str(e)
+    # 3. Try put_object
+    try:
+        s3 = boto3.client("s3", region_name=AWS_REGION)
+        s3.put_object(Bucket=S3_HR_BUCKET, Key="hr/_test.txt", Body=b"test", ContentType="text/plain")
+        results["put_object"] = "ok"
+    except Exception as e:
+        results["put_object"] = str(e)
+    # 4. Try presigned URL
+    try:
+        s3 = boto3.client("s3", region_name=AWS_REGION)
+        url = s3.generate_presigned_url("get_object", Params={"Bucket": S3_HR_BUCKET, "Key": "hr/_test.txt"}, ExpiresIn=60)
+        results["presigned_url"] = url[:80] + "..."
+    except Exception as e:
+        results["presigned_url"] = str(e)
+    results["bucket"] = S3_HR_BUCKET
+    results["region"] = AWS_REGION
+    return results
 
 # ─── CV Extraction via Claude API ───────────────────────────────────────────────
 COUNTRY_MAP = {

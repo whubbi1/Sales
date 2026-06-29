@@ -93,6 +93,7 @@ export default function FreelancerDetail() {
   const [deleting, setDeleting] = useState(false)
   const [docUploading, setDocUploading] = useState(false)
   const [cvExtracting, setCvExtracting] = useState(false)
+  const [uploadError, setUploadError] = useState('')
   const cvRef = useRef<HTMLInputElement>(null)
   const docRef = useRef<HTMLInputElement>(null)
 
@@ -126,7 +127,7 @@ export default function FreelancerDetail() {
   }
 
   const handleCvUpload = async (file: File) => {
-    setCvExtracting(true)
+    setCvExtracting(true); setUploadError('')
     const fd = new FormData(); fd.append('file', file)
     try {
       const r = await fetch(`${API}/hr/cv/extract`, { method:'POST', body:fd })
@@ -153,16 +154,27 @@ export default function FreelancerDetail() {
       }
     } catch {}
     const fd2 = new FormData(); fd2.append('file', file)
-    await fetch(`${API}/hr/cv/upload/${id}`, { method:'POST', body:fd2 })
+    const uploadRes = await fetch(`${API}/hr/cv/upload/${id}`, { method:'POST', body:fd2 })
+    if (!uploadRes.ok) {
+      const err = await uploadRes.json().catch(() => ({}))
+      setUploadError(`CV upload failed: ${err.detail || uploadRes.status}`)
+    }
     setCvExtracting(false); load()
   }
 
   const uploadDocument = async (file: File) => {
-    setDocUploading(true)
+    setDocUploading(true); setUploadError('')
     const fd = new FormData(); fd.append('file', file)
     try {
-      await fetch(`${API}/hr/freelancers/${id}/documents`, { method:'POST', body:fd })
-      load()
+      const res = await fetch(`${API}/hr/freelancers/${id}/documents`, { method:'POST', body:fd })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        setUploadError(`Upload failed: ${err.detail || res.status}`)
+      } else {
+        load()
+      }
+    } catch(e: any) {
+      setUploadError(`Upload failed: ${e.message}`)
     } finally { setDocUploading(false) }
   }
 
@@ -386,8 +398,13 @@ export default function FreelancerDetail() {
                   : <span style={{ color:'#94A3B8', fontSize:'12px' }}>+ Add document</span>}
               </div>
             </div>
+            {uploadError && (
+              <div style={{ marginTop:'12px', padding:'10px 14px', background:'#FEF2F2', borderRadius:'8px', fontSize:'12px', color:'#DC2626', fontWeight:'600' }}>
+                ⚠ {uploadError}
+              </div>
+            )}
             <div style={{ marginTop:'14px', fontSize:'11px', color:'#94A3B8' }}>
-              Files are stored in SharePoint · <strong style={{ color:'#156082' }}>{profile.first_name} {profile.last_name}/</strong> folder
+              Files are stored in S3 · <strong style={{ color:'#156082' }}>{profile.first_name} {profile.last_name}/</strong>
             </div>
           </div>
         )}
