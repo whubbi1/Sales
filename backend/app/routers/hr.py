@@ -366,8 +366,9 @@ async def create_freelancer(data: dict, db: AsyncSession = Depends(get_db)):
         "country": data.get("country",""), "language": data.get("language",""),
         "current_title": data.get("current_title",""),
         "skills": json.dumps(data.get("skills",[])),
-        "years_experience": data.get("years_experience",0),
-        "daily_rate": data.get("daily_rate") or None, "availability_date": data.get("availability_date") or None,
+        "years_experience": int(data.get("years_experience") or 0),
+        "daily_rate": int(data["daily_rate"]) if data.get("daily_rate") not in (None, "") else None,
+        "availability_date": data.get("availability_date") or None,
         "cv_filename": data.get("cv_filename",""), "cv_sharepoint_url": data.get("cv_sharepoint_url",""),
         "cv_extracted": data.get("cv_extracted", False), "created_by": data.get("created_by",""),
     })
