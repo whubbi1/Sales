@@ -354,6 +354,7 @@ async def startup():
                 """CREATE TABLE IF NOT EXISTS hr_chat_messages (
                     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                     sender_email VARCHAR(255),
+                    sender_name VARCHAR(255),
                     message TEXT NOT NULL,
                     recipients JSONB DEFAULT '[]',
                     status VARCHAR(20) DEFAULT 'sent',
@@ -362,8 +363,13 @@ async def startup():
                     recurrence JSONB DEFAULT '{}',
                     sent_at TIMESTAMP,
                     sent_count INTEGER DEFAULT 0,
+                    delivered_count INTEGER DEFAULT 0,
+                    delivery_errors TEXT,
                     created_at TIMESTAMP DEFAULT NOW()
                 )""",
+                "ALTER TABLE hr_chat_messages ADD COLUMN IF NOT EXISTS sender_name VARCHAR(255)",
+                "ALTER TABLE hr_chat_messages ADD COLUMN IF NOT EXISTS delivered_count INTEGER DEFAULT 0",
+                "ALTER TABLE hr_chat_messages ADD COLUMN IF NOT EXISTS delivery_errors TEXT",
             ]
             for sql in sqls:
                 try:

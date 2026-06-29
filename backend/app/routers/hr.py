@@ -1359,7 +1359,7 @@ async def save_interview_results(profile_id: str, data: dict, db: AsyncSession =
 @router.get("/recruitment/{profile_id}/interview-results")
 async def get_interview_results(profile_id: str, db: AsyncSession = Depends(get_db)):
     result = await db.execute(text("""
-        SELECT id, profile_id, interviewer_email, interviewer_name, questions, skill_ratings, recommendation, notes, created_at
+        SELECT id, profile_id, interviewer_email, interviewer_name, interview_date, questions, skill_ratings, recommendation, notes, created_at
         FROM hr_interview_results WHERE profile_id=CAST(:pid AS UUID) ORDER BY created_at DESC
     """), {"pid": profile_id})
     rows = []
@@ -1458,15 +1458,46 @@ async def get_country_config(country: str):
 
 # ─── WHUBBI Chat ──────────────────────────────────────────────────────────────────
 
-async def send_teams_messages_bulk(recipients: list, message: str, sender_email: str):
+async def _get_aad_id(token: str, email: str) -> str | None:
+    """Resolve a UPN/email to an Azure AD object ID."""
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            r = await client.get(
+                f"https://graph.microsoft.com/v1.0/users/{email}?$select=id",
+                headers={"Authorization": f"Bearer {token}"}
+            )
+            if r.status_code == 200:
+                return r.json().get("id")
+            print(f"⚠️ AAD lookup {email}: {r.status_code} {r.text[:80]}")
+    except Exception as e:
+        print(f"⚠️ AAD lookup error {email}: {e}")
+    return None
+
+
+async def send_teams_messages_bulk(msg_id: str, recipients: list, message: str, sender_email: str):
+    """Send 1:1 Teams messages via MS Graph using resolved AAD object IDs."""
+    from app.database import AsyncSessionLocal
     token = await get_ms_token()
     if not token:
-        print("⚠️ No MS token for Teams chat messages"); return
-    success = 0
+        print("⚠️ No MS token for Teams chat"); return
+
+    sender_id = await _get_aad_id(token, sender_email)
+    if not sender_id:
+        print(f"⚠️ Cannot resolve sender AAD ID for {sender_email}"); return
+
+    success, errors = 0, []
+    html_body = message.replace('\n', '<br/>')
+
     for email in recipients:
+        if email.lower() == sender_email.lower():
+            success += 1; continue
         try:
-            async with httpx.AsyncClient(timeout=20) as client:
-                chat_resp = await client.post(
+            recip_id = await _get_aad_id(token, email)
+            if not recip_id:
+                errors.append(f"user_not_found:{email}"); continue
+
+            async with httpx.AsyncClient(timeout=25) as client:
+                cr = await client.post(
                     "https://graph.microsoft.com/v1.0/chats",
                     headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
                     json={
@@ -1474,29 +1505,47 @@ async def send_teams_messages_bulk(recipients: list, message: str, sender_email:
                         "members": [
                             {"@odata.type": "#microsoft.graph.aadUserConversationMember",
                              "roles": ["owner"],
-                             "user@odata.bind": f"https://graph.microsoft.com/v1.0/users('{sender_email}')"},
+                             "user@odata.bind": f"https://graph.microsoft.com/v1.0/users('{sender_id}')"},
                             {"@odata.type": "#microsoft.graph.aadUserConversationMember",
                              "roles": ["owner"],
-                             "user@odata.bind": f"https://graph.microsoft.com/v1.0/users('{email}')"},
+                             "user@odata.bind": f"https://graph.microsoft.com/v1.0/users('{recip_id}')"},
                         ]
                     }
                 )
-                if chat_resp.status_code not in [200, 201]:
-                    print(f"⚠️ Chat create failed for {email}: {chat_resp.text[:120]}"); continue
-                chat_id = chat_resp.json().get("id")
-                if not chat_id: continue
-                msg_resp = await client.post(
+                if cr.status_code not in [200, 201]:
+                    errors.append(f"chat_fail:{email}:{cr.status_code}"); continue
+                chat_id = cr.json().get("id")
+                if not chat_id:
+                    errors.append(f"no_chat_id:{email}"); continue
+
+                mr = await client.post(
                     f"https://graph.microsoft.com/v1.0/chats/{chat_id}/messages",
                     headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
-                    json={"body": {"content": message, "contentType": "text"}}
+                    json={"body": {"contentType": "html", "content": html_body}}
                 )
-                if msg_resp.status_code in [200, 201]:
+                if mr.status_code in [200, 201]:
                     success += 1
+                    print(f"✅ Teams → {email}")
                 else:
-                    print(f"⚠️ Teams msg failed for {email}: {msg_resp.text[:120]}")
+                    errors.append(f"msg_fail:{email}:{mr.status_code}:{mr.text[:60]}")
+                    print(f"⚠️ Teams msg failed {email}: {mr.status_code} {mr.text[:120]}")
         except Exception as e:
-            print(f"⚠️ Teams msg error for {email}: {e}")
-    print(f"✅ Teams chat: {success}/{len(recipients)} sent")
+            errors.append(f"error:{email}:{str(e)[:60]}")
+            print(f"⚠️ Teams error {email}: {e}")
+
+    print(f"Teams chat done: {success}/{len(recipients)} delivered, {len(errors)} errors")
+
+    # Update delivered count + errors in DB
+    try:
+        async with AsyncSessionLocal() as session:
+            await session.execute(text("""
+                UPDATE hr_chat_messages
+                SET delivered_count=:d, delivery_errors=:e
+                WHERE id=CAST(:id AS UUID)
+            """), {"d": success, "e": json.dumps(errors[:20]) if errors else None, "id": msg_id})
+            await session.commit()
+    except Exception as e:
+        print(f"⚠️ DB update after Teams send: {e}")
 
 
 @router.get("/chat/groups")
@@ -1527,16 +1576,20 @@ async def send_chat_message(data: dict, background_tasks: BackgroundTasks, db: A
     message = data.get("message", "")
     recipients = data.get("recipients", [])
     sender_email = data.get("sender_email", HR_SENDER_EMAIL)
+    sender_name = data.get("sender_name", sender_email)
     if not message or not recipients:
         raise HTTPException(400, "message and recipients required")
     msg_id = str(uuid.uuid4())
     await db.execute(text("""
-        INSERT INTO hr_chat_messages (id, sender_email, message, recipients, status, sent_at, sent_count, created_at)
-        VALUES (CAST(:id AS UUID), :sender, :message, CAST(:recipients AS JSONB), 'sent', NOW(), :count, NOW())
-    """), {"id": msg_id, "sender": sender_email, "message": message,
-           "recipients": json.dumps(recipients), "count": len(recipients)})
+        INSERT INTO hr_chat_messages
+            (id, sender_email, sender_name, message, recipients, status, sent_at, sent_count, delivered_count, created_at)
+        VALUES
+            (CAST(:id AS UUID), :sender, :sender_name, :message, CAST(:recipients AS JSONB),
+             'sent', NOW(), :count, 0, NOW())
+    """), {"id": msg_id, "sender": sender_email, "sender_name": sender_name,
+           "message": message, "recipients": json.dumps(recipients), "count": len(recipients)})
     await db.commit()
-    background_tasks.add_task(send_teams_messages_bulk, recipients, message, sender_email)
+    background_tasks.add_task(send_teams_messages_bulk, msg_id, recipients, message, sender_email)
     return {"status": "ok", "id": msg_id, "count": len(recipients)}
 
 
@@ -1545,12 +1598,17 @@ async def schedule_chat_message(data: dict, db: AsyncSession = Depends(get_db)):
     msg_id = str(uuid.uuid4())
     scheduled_at = data.get("scheduled_at")
     await db.execute(text("""
-        INSERT INTO hr_chat_messages (id, sender_email, message, recipients, status, schedule_type, scheduled_at, recurrence, sent_count, created_at)
-        VALUES (CAST(:id AS UUID), :sender, :message, CAST(:recipients AS JSONB), 'scheduled',
-                :stype, CAST(NULLIF(:sat,'') AS TIMESTAMP), CAST(:recurrence AS JSONB), 0, NOW())
+        INSERT INTO hr_chat_messages
+            (id, sender_email, sender_name, message, recipients, status, schedule_type,
+             scheduled_at, recurrence, sent_count, delivered_count, created_at)
+        VALUES
+            (CAST(:id AS UUID), :sender, :sender_name, :message, CAST(:recipients AS JSONB),
+             'scheduled', :stype, CAST(NULLIF(:sat,'') AS TIMESTAMP),
+             CAST(:recurrence AS JSONB), 0, 0, NOW())
     """), {
         "id": msg_id,
         "sender": data.get("sender_email", HR_SENDER_EMAIL),
+        "sender_name": data.get("sender_name", data.get("sender_email", HR_SENDER_EMAIL)),
         "message": data.get("message", ""),
         "recipients": json.dumps(data.get("recipients", [])),
         "stype": data.get("schedule_type", "once"),
@@ -1562,12 +1620,15 @@ async def schedule_chat_message(data: dict, db: AsyncSession = Depends(get_db)):
 
 
 @router.get("/chat/history")
-async def get_chat_history(db: AsyncSession = Depends(get_db)):
-    result = await db.execute(text("""
-        SELECT id, sender_email, message, recipients, status, schedule_type,
-               scheduled_at, recurrence, sent_at, sent_count, created_at
-        FROM hr_chat_messages ORDER BY created_at DESC LIMIT 100
-    """))
+async def get_chat_history(status: str = "", db: AsyncSession = Depends(get_db)):
+    where = "WHERE status = :status" if status else ""
+    result = await db.execute(text(f"""
+        SELECT id, sender_email, sender_name, message, recipients, status, schedule_type,
+               scheduled_at, recurrence, sent_at, sent_count, delivered_count, delivery_errors, created_at
+        FROM hr_chat_messages
+        {where}
+        ORDER BY created_at DESC LIMIT 200
+    """), {"status": status} if status else {})
     rows = []
     for r in result.fetchall():
         d = dict(r._mapping)
@@ -1592,7 +1653,7 @@ async def cancel_scheduled_message(msg_id: str, db: AsyncSession = Depends(get_d
 async def process_due_scheduled(db: AsyncSession = Depends(get_db)):
     """Process scheduled messages that are due. Call from external cron."""
     result = await db.execute(text("""
-        SELECT id, message, recipients, schedule_type, recurrence, sender_email
+        SELECT id, message, recipients, schedule_type, sender_email
         FROM hr_chat_messages
         WHERE status = 'scheduled' AND scheduled_at <= NOW()
     """))
@@ -1602,28 +1663,15 @@ async def process_due_scheduled(db: AsyncSession = Depends(get_db)):
         d = dict(row._mapping)
         msg_id = str(d['id'])
         recipients = d['recipients'] if isinstance(d['recipients'], list) else json.loads(d['recipients'] or '[]')
-        await send_teams_messages_bulk(recipients, d['message'], d['sender_email'] or HR_SENDER_EMAIL)
-        schedule_type = d.get('schedule_type', 'once')
-        if schedule_type == 'once':
-            await db.execute(text("""
-                UPDATE hr_chat_messages SET status='sent', sent_at=NOW(), sent_count=:c
-                WHERE id=CAST(:id AS UUID)
-            """), {"c": len(recipients), "id": msg_id})
-        elif schedule_type == 'daily':
-            await db.execute(text("""
-                UPDATE hr_chat_messages SET scheduled_at=scheduled_at + INTERVAL '1 day', sent_count=sent_count+:c
-                WHERE id=CAST(:id AS UUID)
-            """), {"c": len(recipients), "id": msg_id})
-        elif schedule_type == 'weekly':
-            await db.execute(text("""
-                UPDATE hr_chat_messages SET scheduled_at=scheduled_at + INTERVAL '7 days', sent_count=sent_count+:c
-                WHERE id=CAST(:id AS UUID)
-            """), {"c": len(recipients), "id": msg_id})
-        elif schedule_type == 'monthly':
-            await db.execute(text("""
-                UPDATE hr_chat_messages SET scheduled_at=scheduled_at + INTERVAL '1 month', sent_count=sent_count+:c
-                WHERE id=CAST(:id AS UUID)
-            """), {"c": len(recipients), "id": msg_id})
+        await send_teams_messages_bulk(msg_id, recipients, d['message'], d['sender_email'] or HR_SENDER_EMAIL)
+        stype = d.get('schedule_type', 'once')
+        interval = {'once': None, 'daily': "INTERVAL '1 day'", 'weekly': "INTERVAL '7 days'", 'monthly': "INTERVAL '1 month'"}.get(stype)
+        if stype == 'once':
+            await db.execute(text("UPDATE hr_chat_messages SET status='sent', sent_at=NOW(), sent_count=:c WHERE id=CAST(:id AS UUID)"),
+                             {"c": len(recipients), "id": msg_id})
+        elif interval:
+            await db.execute(text(f"UPDATE hr_chat_messages SET scheduled_at=scheduled_at + {interval}, sent_count=sent_count+:c WHERE id=CAST(:id AS UUID)"),
+                             {"c": len(recipients), "id": msg_id})
         await db.commit()
         processed += 1
     return {"processed": processed}
