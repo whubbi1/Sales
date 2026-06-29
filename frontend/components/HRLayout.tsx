@@ -10,6 +10,10 @@ const NAV = [
   { href: '/rh/positions',   icon: '💼', label: 'Job Positions' },
   { href: '/rh/jobs',        icon: '📋', label: 'Job Descriptions' },
   { href: '/rh/permissions', icon: '🔐', label: 'Permissions' },
+  { href: '/rh/chat',        icon: '💬', label: 'WHUBBI Chat' },
+]
+const HR_MANAGER_NAV = [
+  { href: '/rh/admin', icon: '⚙️', label: 'Admin Cockpit' },
 ]
 
 export function HRLayout({ children }: { children: React.ReactNode }) {
@@ -17,12 +21,19 @@ export function HRLayout({ children }: { children: React.ReactNode }) {
   const path    = usePathname()
   const [userEmail, setUserEmail] = useState('')
   const [userName,  setUserName]  = useState('')
+  const [isHRManager, setIsHRManager] = useState(false)
 
   useEffect(() => {
     fetchUserAttributes()
       .then(a => {
-        setUserEmail(a.email || '')
-        setUserName((a.name || `${a.given_name || ''} ${a.family_name || ''}`.trim()) || (a.email?.split('@')[0] || ''))
+        const email = a.email || ''
+        setUserEmail(email)
+        setUserName((a.name || `${a.given_name || ''} ${a.family_name || ''}`.trim()) || (email.split('@')[0] || ''))
+        // Check HR manager role
+        fetch(`https://api.whubbi.wcomply.com/hr/permissions/check?email=${encodeURIComponent(email)}&module=hr&submodule=admin`)
+          .then(r => r.json())
+          .then(d => setIsHRManager(d.allowed === true))
+          .catch(() => setIsHRManager(true)) // default allow if endpoint not available
       })
       .catch(() => {})
   }, [])
@@ -64,7 +75,7 @@ export function HRLayout({ children }: { children: React.ReactNode }) {
 
         {/* Navigation */}
         <nav style={{ flex: 1, padding: '10px 8px', overflowY: 'auto' }}>
-          {NAV.map(item => {
+          {[...NAV, ...(isHRManager ? HR_MANAGER_NAV : [])].map(item => {
             const active = path === item.href || (item.href !== '/rh' && path.startsWith(item.href))
             return (
               <button key={item.href} onClick={() => router.push(item.href)} style={btnStyle(active)}>

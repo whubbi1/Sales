@@ -717,10 +717,27 @@ async def create_candidate(data: dict, db: AsyncSession = Depends(get_db)):
     await db.commit()
     return {"status": "ok", "id": pid}
 
+async def _auto_comment(db: AsyncSession, profile_id: str, content: str, author_email: str = "system", author_name: str = "System", comment_type: str = "note"):
+    await db.execute(text("""
+        INSERT INTO hr_comments (id, profile_id, author_email, author_name, content, comment_type, created_at)
+        VALUES (gen_random_uuid(), CAST(:pid AS UUID), :email, :name, :content, :type, NOW())
+    """), {"pid": profile_id, "email": author_email, "name": author_name, "content": content, "type": comment_type})
+
+_STATUS_LABELS = {
+    "new": "New", "screening": "Screening", "interview_1": "Interview",
+    "technical_test": "Technical Test", "offer": "Offer",
+    "hired": "Hired", "rejected": "Rejected", "on_hold": "On Hold"
+}
+
 @router.put("/recruitment/{profile_id}/status")
 async def update_status(profile_id: str, data: dict, db: AsyncSession = Depends(get_db)):
+    status = data["status"]
     await db.execute(text("UPDATE hr_profiles SET recruitment_status=:status, updated_at=NOW() WHERE id=CAST(:id AS UUID)"),
-                     {"status": data["status"], "id": profile_id})
+                     {"status": status, "id": profile_id})
+    label = _STATUS_LABELS.get(status, status.replace("_", " ").title())
+    actor_email = data.get("updated_by_email", "")
+    actor_name = data.get("updated_by_name", actor_email or "Unknown")
+    await _auto_comment(db, profile_id, f"Status updated to {label} by {actor_name}", actor_email, actor_name)
     await db.commit()
     return {"status": "ok"}
 
@@ -776,20 +793,24 @@ async def add_comment(profile_id: str, data: dict, db: AsyncSession = Depends(ge
 async def create_proposal(profile_id: str, data: dict, db: AsyncSession = Depends(get_db)):
     proposal_id = str(uuid.uuid4())
     onboarding_token = secrets.token_urlsafe(32)
-    # Get country config
     country = data.get("country","france").lower().replace(" ","_")
     lang = COUNTRY_CONFIG.get(country, {}).get("language", "fr")
+    role = data.get("role","")
+    created_by_email = data.get("created_by_email", "")
+    created_by_name = data.get("created_by_name", created_by_email or "Unknown")
 
     await db.execute(text("""
         INSERT INTO hr_proposals (id, profile_id, role, responsibilities, salary, advantages,
             start_date, country, language, status, onboarding_token, created_at)
         VALUES (CAST(:id AS UUID), CAST(:pid AS UUID), :role, CAST(:resp AS JSON), :salary, CAST(:adv AS JSON),
             :start_date, :country, :lang, 'draft', :token, NOW())
-    """), {"id": proposal_id, "pid": profile_id, "role": data.get("role",""),
+    """), {"id": proposal_id, "pid": profile_id, "role": role,
            "resp": json.dumps(data.get("responsibilities",[])),
            "salary": data.get("salary",0), "adv": json.dumps(data.get("advantages",[])),
            "start_date": data.get("start_date",""), "country": country, "lang": lang,
            "token": onboarding_token})
+    role_str = f" for the role of {role}" if role else ""
+    await _auto_comment(db, profile_id, f"Proposal created by {created_by_name}{role_str}", created_by_email, created_by_name)
     await db.commit()
     return {"status": "ok", "id": proposal_id, "onboarding_token": onboarding_token}
 
@@ -1017,12 +1038,20 @@ async def export_job(job_id: str, format: str = "pdf", db: AsyncSession = Depend
     return StreamingResponse(BytesIO(content), media_type=media,
         headers={"Content-Disposition": f'attachment; filename="{fname}"'})
 
+def _fetch_logo() -> bytes | None:
+    try:
+        import urllib.request
+        with urllib.request.urlopen("https://wcomply.com/logo.png", timeout=5) as r:
+            return r.read()
+    except Exception:
+        return None
+
 def _generate_pdf(job: dict, company_desc: str) -> bytes:
     from reportlab.lib.pagesizes import A4
     from reportlab.lib.styles import ParagraphStyle
     from reportlab.lib.units import cm
     from reportlab.lib import colors
-    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, HRFlowable, Table, TableStyle
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, HRFlowable, Table, TableStyle, Image
     from io import BytesIO as BIO
     C_PRI = colors.HexColor('#156082')
     C_SEC = colors.HexColor('#45B6E4')
@@ -1037,8 +1066,22 @@ def _generate_pdf(job: dict, company_desc: str) -> bytes:
     s_about   = ParagraphStyle('ab', fontName='Helvetica-Bold', fontSize=11, textColor=C_PRI, spaceBefore=14, spaceAfter=6)
     bar_style = TableStyle([('BACKGROUND',(0,0),(-1,-1),C_PRI),('TOPPADDING',(0,0),(-1,-1),0),('BOTTOMPADDING',(0,0),(-1,-1),0)])
     story = []
-    story.append(Table([['']], colWidths=[pw], rowHeights=[0.8*cm], style=bar_style))
-    story.append(Spacer(1, 0.5*cm))
+    # Logo header
+    logo_bytes = _fetch_logo()
+    if logo_bytes:
+        logo_buf = BIO(logo_bytes)
+        logo_img = Image(logo_buf, height=1.2*cm, kind='proportional')
+        logo_row = Table([[logo_img, '']], colWidths=[4*cm, pw-4*cm],
+            style=TableStyle([
+                ('ALIGN',(0,0),(0,0),'LEFT'), ('VALIGN',(0,0),(-1,-1),'MIDDLE'),
+                ('LINEBELOW',(0,0),(-1,0),1.5,C_PRI),
+                ('TOPPADDING',(0,0),(-1,-1),0), ('BOTTOMPADDING',(0,0),(-1,-1),8),
+            ]))
+        story.append(logo_row)
+        story.append(Spacer(1, 0.4*cm))
+    else:
+        story.append(Table([['']], colWidths=[pw], rowHeights=[0.8*cm], style=bar_style))
+        story.append(Spacer(1, 0.5*cm))
     story.append(Paragraph(job['title'], s_title))
     story.append(HRFlowable(width='100%', thickness=1.5, color=C_SEC, spaceAfter=8))
     if job.get('description'):
@@ -1068,7 +1111,8 @@ def _generate_pdf(job: dict, company_desc: str) -> bytes:
 
 def _generate_docx(job: dict, company_desc: str) -> bytes:
     from docx import Document
-    from docx.shared import Pt, RGBColor, Cm
+    from docx.shared import Pt, RGBColor, Cm, Inches
+    from docx.enum.text import WD_ALIGN_PARAGRAPH
     from io import BytesIO as BIO
     C_PRI = RGBColor(0x15, 0x60, 0x82)
     C_SEC = RGBColor(0x45, 0xB6, 0xE4)
@@ -1076,6 +1120,18 @@ def _generate_docx(job: dict, company_desc: str) -> bytes:
     for sec in doc.sections:
         sec.top_margin = Cm(2); sec.bottom_margin = Cm(2.5)
         sec.left_margin = Cm(2.5); sec.right_margin = Cm(2.5)
+        # Logo in header
+        header = sec.header
+        hp = header.paragraphs[0]
+        hp.alignment = WD_ALIGN_PARAGRAPH.LEFT
+        logo_bytes = _fetch_logo()
+        if logo_bytes:
+            logo_buf = BIO(logo_bytes)
+            run_logo = hp.add_run()
+            run_logo.add_picture(logo_buf, height=Cm(1.2))
+        else:
+            run_h = hp.add_run("WCOMPLY")
+            run_h.font.bold = True; run_h.font.color.rgb = C_PRI; run_h.font.size = Pt(14)
     p = doc.add_paragraph()
     run = p.add_run(job['title'])
     run.font.size = Pt(22); run.font.bold = True; run.font.color.rgb = C_PRI
@@ -1169,7 +1225,8 @@ async def send_interview_emails(profile_id: str, candidate: dict, interviewers: 
 @router.post("/recruitment/{profile_id}/assign-interview")
 async def assign_interview(profile_id: str, data: dict, background_tasks: BackgroundTasks, db: AsyncSession = Depends(get_db)):
     interviewers = data.get("interviewers", [])  # [{email, name}]
-    assigned_by = data.get("assigned_by", "admin")
+    assigned_by = data.get("assigned_by", "")
+    assigned_by_name = data.get("assigned_by_name", assigned_by or "Unknown")
 
     await db.execute(text("UPDATE hr_profiles SET recruitment_status='interview_1', updated_at=NOW() WHERE id=CAST(:id AS UUID)"),
                      {"id": profile_id})
@@ -1179,6 +1236,12 @@ async def assign_interview(profile_id: str, data: dict, background_tasks: Backgr
             INSERT INTO hr_interview_assignments (id, profile_id, interviewer_email, interviewer_name, assigned_at, assigned_by)
             VALUES (gen_random_uuid(), CAST(:pid AS UUID), :email, :name, NOW(), :by)
         """), {"pid": profile_id, "email": iv.get("email"), "name": iv.get("name", iv.get("email")), "by": assigned_by})
+
+    if interviewers:
+        names = ", ".join(iv.get("name") or iv.get("email") for iv in interviewers)
+        await _auto_comment(db, profile_id, f"{assigned_by_name} assigned {names} to conduct an interview", assigned_by, assigned_by_name)
+    else:
+        await _auto_comment(db, profile_id, f"{assigned_by_name} moved the candidate to Interview stage", assigned_by, assigned_by_name)
 
     await db.commit()
 
@@ -1244,13 +1307,17 @@ async def request_interview(profile_id: str, data: dict, background_tasks: Backg
     assignee = {"email": data.get("assigned_to_email", ""), "name": data.get("assigned_to_name", "")}
     due_date = data.get("due_date", "") or ""
     message = data.get("message", "")
-    requested_by = data.get("requested_by", "admin")
+    requested_by = data.get("requested_by", "")
+    requested_by_name = data.get("requested_by_name", requested_by or "Unknown")
 
     await db.execute(text("""
         INSERT INTO hr_interview_requests (id, profile_id, assigned_to_email, assigned_to_name, due_date, message, requested_by, created_at)
         VALUES (gen_random_uuid(), CAST(:pid AS UUID), :email, :name, CAST(NULLIF(:due_date,'') AS DATE), :message, :requested_by, NOW())
     """), {"pid": profile_id, "email": assignee["email"], "name": assignee["name"],
            "due_date": due_date, "message": message, "requested_by": requested_by})
+
+    assignee_display = assignee["name"] or assignee["email"]
+    await _auto_comment(db, profile_id, f"{requested_by_name} asked {assignee_display} to perform an interview", requested_by, requested_by_name, "interview")
     await db.commit()
 
     cand = await db.execute(text("SELECT first_name, last_name, current_title, country FROM hr_profiles WHERE id=CAST(:id AS UUID)"), {"id": profile_id})
@@ -1264,18 +1331,27 @@ async def request_interview(profile_id: str, data: dict, background_tasks: Backg
 @router.post("/recruitment/{profile_id}/interview-results")
 async def save_interview_results(profile_id: str, data: dict, db: AsyncSession = Depends(get_db)):
     import json as _json
+    interviewer_email = data.get("interviewer_email", "")
+    interviewer_name = data.get("interviewer_name", "")
+    interview_date = data.get("interview_date", "") or None
+    recommendation = data.get("recommendation", "")
     await db.execute(text("""
-        INSERT INTO hr_interview_results (id, profile_id, interviewer_email, interviewer_name, questions, skill_ratings, recommendation, notes, created_at)
-        VALUES (gen_random_uuid(), CAST(:pid AS UUID), :email, :name, CAST(:questions AS JSONB), CAST(:ratings AS JSONB), :recommendation, :notes, NOW())
+        INSERT INTO hr_interview_results (id, profile_id, interviewer_email, interviewer_name, interview_date, questions, skill_ratings, recommendation, notes, created_at)
+        VALUES (gen_random_uuid(), CAST(:pid AS UUID), :email, :name, CAST(NULLIF(:idate,'') AS DATE), CAST(:questions AS JSONB), CAST(:ratings AS JSONB), :recommendation, :notes, NOW())
     """), {
         "pid": profile_id,
-        "email": data.get("interviewer_email", ""),
-        "name": data.get("interviewer_name", ""),
+        "email": interviewer_email,
+        "name": interviewer_name,
+        "idate": interview_date or "",
         "questions": _json.dumps(data.get("questions", [])),
         "ratings": _json.dumps(data.get("skill_ratings", {})),
-        "recommendation": data.get("recommendation", ""),
+        "recommendation": recommendation,
         "notes": data.get("notes", "")
     })
+    rec_labels = {"strong_hire": "Strong Hire", "hire": "Hire", "maybe": "Maybe", "pass": "Pass", "strong_pass": "Strong Pass"}
+    rec_label = rec_labels.get(recommendation, recommendation)
+    date_str = f" on {interview_date}" if interview_date else ""
+    await _auto_comment(db, profile_id, f"{interviewer_name or interviewer_email} recorded interview results{date_str} — Recommendation: {rec_label}", interviewer_email, interviewer_name or interviewer_email, "interview")
     await db.commit()
     return {"status": "ok"}
 
@@ -1378,3 +1454,260 @@ async def get_country_config(country: str):
     cfg = COUNTRY_CONFIG.get(country.lower().replace(" ","_"))
     if not cfg: raise HTTPException(404, "Country not configured")
     return cfg
+
+
+# ─── WHUBBI Chat ──────────────────────────────────────────────────────────────────
+
+async def send_teams_messages_bulk(recipients: list, message: str, sender_email: str):
+    token = await get_ms_token()
+    if not token:
+        print("⚠️ No MS token for Teams chat messages"); return
+    success = 0
+    for email in recipients:
+        try:
+            async with httpx.AsyncClient(timeout=20) as client:
+                chat_resp = await client.post(
+                    "https://graph.microsoft.com/v1.0/chats",
+                    headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
+                    json={
+                        "chatType": "oneOnOne",
+                        "members": [
+                            {"@odata.type": "#microsoft.graph.aadUserConversationMember",
+                             "roles": ["owner"],
+                             "user@odata.bind": f"https://graph.microsoft.com/v1.0/users('{sender_email}')"},
+                            {"@odata.type": "#microsoft.graph.aadUserConversationMember",
+                             "roles": ["owner"],
+                             "user@odata.bind": f"https://graph.microsoft.com/v1.0/users('{email}')"},
+                        ]
+                    }
+                )
+                if chat_resp.status_code not in [200, 201]:
+                    print(f"⚠️ Chat create failed for {email}: {chat_resp.text[:120]}"); continue
+                chat_id = chat_resp.json().get("id")
+                if not chat_id: continue
+                msg_resp = await client.post(
+                    f"https://graph.microsoft.com/v1.0/chats/{chat_id}/messages",
+                    headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
+                    json={"body": {"content": message, "contentType": "text"}}
+                )
+                if msg_resp.status_code in [200, 201]:
+                    success += 1
+                else:
+                    print(f"⚠️ Teams msg failed for {email}: {msg_resp.text[:120]}")
+        except Exception as e:
+            print(f"⚠️ Teams msg error for {email}: {e}")
+    print(f"✅ Teams chat: {success}/{len(recipients)} sent")
+
+
+@router.get("/chat/groups")
+async def list_chat_groups(db: AsyncSession = Depends(get_db)):
+    result = await db.execute(text("""
+        SELECT module, COUNT(DISTINCT user_email) AS member_count
+        FROM whubbi_permissions
+        WHERE user_email LIKE '%@wcomply.com' AND access_mode != 'none'
+        GROUP BY module ORDER BY module
+    """))
+    return {"groups": [{"module": r[0], "member_count": r[1]} for r in result.fetchall()]}
+
+
+@router.get("/chat/group-members")
+async def get_chat_group_members(module: str, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(text("""
+        SELECT DISTINCT wp.user_email, up.first_name, up.last_name, up.display_name
+        FROM whubbi_permissions wp
+        LEFT JOIN user_profiles up ON up.email = wp.user_email
+        WHERE wp.module = :module AND wp.access_mode != 'none'
+          AND wp.user_email LIKE '%@wcomply.com'
+    """), {"module": module})
+    return {"members": [dict(r._mapping) for r in result.fetchall()]}
+
+
+@router.post("/chat/send")
+async def send_chat_message(data: dict, background_tasks: BackgroundTasks, db: AsyncSession = Depends(get_db)):
+    message = data.get("message", "")
+    recipients = data.get("recipients", [])
+    sender_email = data.get("sender_email", HR_SENDER_EMAIL)
+    if not message or not recipients:
+        raise HTTPException(400, "message and recipients required")
+    msg_id = str(uuid.uuid4())
+    await db.execute(text("""
+        INSERT INTO hr_chat_messages (id, sender_email, message, recipients, status, sent_at, sent_count, created_at)
+        VALUES (CAST(:id AS UUID), :sender, :message, CAST(:recipients AS JSONB), 'sent', NOW(), :count, NOW())
+    """), {"id": msg_id, "sender": sender_email, "message": message,
+           "recipients": json.dumps(recipients), "count": len(recipients)})
+    await db.commit()
+    background_tasks.add_task(send_teams_messages_bulk, recipients, message, sender_email)
+    return {"status": "ok", "id": msg_id, "count": len(recipients)}
+
+
+@router.post("/chat/schedule")
+async def schedule_chat_message(data: dict, db: AsyncSession = Depends(get_db)):
+    msg_id = str(uuid.uuid4())
+    scheduled_at = data.get("scheduled_at")
+    await db.execute(text("""
+        INSERT INTO hr_chat_messages (id, sender_email, message, recipients, status, schedule_type, scheduled_at, recurrence, sent_count, created_at)
+        VALUES (CAST(:id AS UUID), :sender, :message, CAST(:recipients AS JSONB), 'scheduled',
+                :stype, CAST(NULLIF(:sat,'') AS TIMESTAMP), CAST(:recurrence AS JSONB), 0, NOW())
+    """), {
+        "id": msg_id,
+        "sender": data.get("sender_email", HR_SENDER_EMAIL),
+        "message": data.get("message", ""),
+        "recipients": json.dumps(data.get("recipients", [])),
+        "stype": data.get("schedule_type", "once"),
+        "sat": scheduled_at or "",
+        "recurrence": json.dumps(data.get("recurrence", {}))
+    })
+    await db.commit()
+    return {"status": "ok", "id": msg_id}
+
+
+@router.get("/chat/history")
+async def get_chat_history(db: AsyncSession = Depends(get_db)):
+    result = await db.execute(text("""
+        SELECT id, sender_email, message, recipients, status, schedule_type,
+               scheduled_at, recurrence, sent_at, sent_count, created_at
+        FROM hr_chat_messages ORDER BY created_at DESC LIMIT 100
+    """))
+    rows = []
+    for r in result.fetchall():
+        d = dict(r._mapping)
+        for k, v in list(d.items()):
+            if hasattr(v, 'isoformat'): d[k] = v.isoformat()
+            elif hasattr(v, 'hex'): d[k] = str(v)
+        rows.append(d)
+    return {"messages": rows}
+
+
+@router.delete("/chat/scheduled/{msg_id}")
+async def cancel_scheduled_message(msg_id: str, db: AsyncSession = Depends(get_db)):
+    await db.execute(text("""
+        UPDATE hr_chat_messages SET status='cancelled'
+        WHERE id=CAST(:id AS UUID) AND status='scheduled'
+    """), {"id": msg_id})
+    await db.commit()
+    return {"status": "ok"}
+
+
+@router.post("/chat/process-due")
+async def process_due_scheduled(db: AsyncSession = Depends(get_db)):
+    """Process scheduled messages that are due. Call from external cron."""
+    result = await db.execute(text("""
+        SELECT id, message, recipients, schedule_type, recurrence, sender_email
+        FROM hr_chat_messages
+        WHERE status = 'scheduled' AND scheduled_at <= NOW()
+    """))
+    due = result.fetchall()
+    processed = 0
+    for row in due:
+        d = dict(row._mapping)
+        msg_id = str(d['id'])
+        recipients = d['recipients'] if isinstance(d['recipients'], list) else json.loads(d['recipients'] or '[]')
+        await send_teams_messages_bulk(recipients, d['message'], d['sender_email'] or HR_SENDER_EMAIL)
+        schedule_type = d.get('schedule_type', 'once')
+        if schedule_type == 'once':
+            await db.execute(text("""
+                UPDATE hr_chat_messages SET status='sent', sent_at=NOW(), sent_count=:c
+                WHERE id=CAST(:id AS UUID)
+            """), {"c": len(recipients), "id": msg_id})
+        elif schedule_type == 'daily':
+            await db.execute(text("""
+                UPDATE hr_chat_messages SET scheduled_at=scheduled_at + INTERVAL '1 day', sent_count=sent_count+:c
+                WHERE id=CAST(:id AS UUID)
+            """), {"c": len(recipients), "id": msg_id})
+        elif schedule_type == 'weekly':
+            await db.execute(text("""
+                UPDATE hr_chat_messages SET scheduled_at=scheduled_at + INTERVAL '7 days', sent_count=sent_count+:c
+                WHERE id=CAST(:id AS UUID)
+            """), {"c": len(recipients), "id": msg_id})
+        elif schedule_type == 'monthly':
+            await db.execute(text("""
+                UPDATE hr_chat_messages SET scheduled_at=scheduled_at + INTERVAL '1 month', sent_count=sent_count+:c
+                WHERE id=CAST(:id AS UUID)
+            """), {"c": len(recipients), "id": msg_id})
+        await db.commit()
+        processed += 1
+    return {"processed": processed}
+
+
+# ─── HR Admin Cockpit ─────────────────────────────────────────────────────────────
+
+@router.get("/admin/interview-skills")
+async def list_interview_skills(country: str = "global", db: AsyncSession = Depends(get_db)):
+    result = await db.execute(text("""
+        SELECT id, skill_name, country, sort_order, created_at
+        FROM hr_interview_skills
+        WHERE country = :country OR country = 'global'
+        ORDER BY country DESC, sort_order ASC, skill_name ASC
+    """), {"country": country})
+    rows = []
+    for r in result.fetchall():
+        d = dict(r._mapping)
+        d["id"] = str(d["id"])
+        if d.get("created_at"): d["created_at"] = d["created_at"].isoformat()
+        rows.append(d)
+    return {"skills": rows}
+
+
+@router.post("/admin/interview-skills")
+async def add_interview_skill(data: dict, db: AsyncSession = Depends(get_db)):
+    skill_id = str(uuid.uuid4())
+    await db.execute(text("""
+        INSERT INTO hr_interview_skills (id, skill_name, country, sort_order, created_by, created_at)
+        VALUES (CAST(:id AS UUID), :skill_name, :country, :sort_order, :created_by, NOW())
+    """), {
+        "id": skill_id,
+        "skill_name": data.get("skill_name", ""),
+        "country": data.get("country", "global"),
+        "sort_order": data.get("sort_order", 0),
+        "created_by": data.get("created_by", "")
+    })
+    await db.commit()
+    return {"status": "ok", "id": skill_id}
+
+
+@router.delete("/admin/interview-skills/{skill_id}")
+async def delete_interview_skill(skill_id: str, db: AsyncSession = Depends(get_db)):
+    await db.execute(text("DELETE FROM hr_interview_skills WHERE id=CAST(:id AS UUID)"), {"id": skill_id})
+    await db.commit()
+    return {"status": "ok"}
+
+
+@router.get("/admin/interview-questions")
+async def list_interview_questions(country: str = "global", db: AsyncSession = Depends(get_db)):
+    result = await db.execute(text("""
+        SELECT id, question_text, country, sort_order, created_at
+        FROM hr_interview_questions
+        WHERE country = :country OR country = 'global'
+        ORDER BY country DESC, sort_order ASC
+    """), {"country": country})
+    rows = []
+    for r in result.fetchall():
+        d = dict(r._mapping)
+        d["id"] = str(d["id"])
+        if d.get("created_at"): d["created_at"] = d["created_at"].isoformat()
+        rows.append(d)
+    return {"questions": rows}
+
+
+@router.post("/admin/interview-questions")
+async def add_interview_question(data: dict, db: AsyncSession = Depends(get_db)):
+    q_id = str(uuid.uuid4())
+    await db.execute(text("""
+        INSERT INTO hr_interview_questions (id, question_text, country, sort_order, created_by, created_at)
+        VALUES (CAST(:id AS UUID), :question_text, :country, :sort_order, :created_by, NOW())
+    """), {
+        "id": q_id,
+        "question_text": data.get("question_text", ""),
+        "country": data.get("country", "global"),
+        "sort_order": data.get("sort_order", 0),
+        "created_by": data.get("created_by", "")
+    })
+    await db.commit()
+    return {"status": "ok", "id": q_id}
+
+
+@router.delete("/admin/interview-questions/{question_id}")
+async def delete_interview_question(question_id: str, db: AsyncSession = Depends(get_db)):
+    await db.execute(text("DELETE FROM hr_interview_questions WHERE id=CAST(:id AS UUID)"), {"id": question_id})
+    await db.commit()
+    return {"status": "ok"}

@@ -332,6 +332,38 @@ async def startup():
                     notes TEXT,
                     created_at TIMESTAMP DEFAULT NOW()
                 )""",
+                # HR Admin Cockpit — interview skills & questions
+                """CREATE TABLE IF NOT EXISTS hr_interview_skills (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    skill_name VARCHAR(255) NOT NULL,
+                    country VARCHAR(50) DEFAULT 'global',
+                    sort_order INTEGER DEFAULT 0,
+                    created_by VARCHAR(255),
+                    created_at TIMESTAMP DEFAULT NOW()
+                )""",
+                """CREATE TABLE IF NOT EXISTS hr_interview_questions (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    question_text TEXT NOT NULL,
+                    country VARCHAR(50) DEFAULT 'global',
+                    sort_order INTEGER DEFAULT 0,
+                    created_by VARCHAR(255),
+                    created_at TIMESTAMP DEFAULT NOW()
+                )""",
+                "ALTER TABLE hr_interview_results ADD COLUMN IF NOT EXISTS interview_date DATE",
+                # Chat broadcasts
+                """CREATE TABLE IF NOT EXISTS hr_chat_messages (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    sender_email VARCHAR(255),
+                    message TEXT NOT NULL,
+                    recipients JSONB DEFAULT '[]',
+                    status VARCHAR(20) DEFAULT 'sent',
+                    schedule_type VARCHAR(20),
+                    scheduled_at TIMESTAMP,
+                    recurrence JSONB DEFAULT '{}',
+                    sent_at TIMESTAMP,
+                    sent_count INTEGER DEFAULT 0,
+                    created_at TIMESTAMP DEFAULT NOW()
+                )""",
             ]
             for sql in sqls:
                 try:
