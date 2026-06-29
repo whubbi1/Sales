@@ -14,7 +14,11 @@ app.add_middleware(CORSMiddleware,
 async def global_exception_handler(request: Request, exc: Exception):
     import traceback
     traceback.print_exc()
-    return JSONResponse({"detail": "Internal server error"}, status_code=500)
+    response = JSONResponse({"detail": "Internal server error"}, status_code=500)
+    origin = request.headers.get("origin", "*")
+    response.headers["Access-Control-Allow-Origin"] = origin if origin else "*"
+    response.headers["Access-Control-Allow-Credentials"] = "false"
+    return response
 
 @app.on_event("startup")
 async def startup():

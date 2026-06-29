@@ -377,7 +377,7 @@ function FreelancerForm({ extracted, cvFile, extracting, extractError, onCvUploa
       </div>
       <div style={{ padding:'14px 20px', borderTop:'1px solid #EDF2F7', background:'#FAFBFC', display:'flex', justifyContent:'flex-end', gap:'8px' }}>
         <button onClick={onCancel} style={{ padding:'8px 16px', background:'white', border:'1.5px solid #EDF2F7', borderRadius:'8px', fontSize:'12px', fontWeight:'600', cursor:'pointer', fontFamily:'Montserrat, sans-serif', color:'#45B6E4' }}>Cancel</button>
-        <button onClick={() => onSave({...form, language: LANGS[form.country]||'fr', cv_extracted: !!cvFile})}
+        <button onClick={() => onSave({...form, language: LANGS[form.country]||'fr', cv_extracted: !!cvFile, daily_rate: form.daily_rate !== '' ? form.daily_rate : null, availability_date: form.availability_date !== '' ? form.availability_date : null})}
           disabled={!form.first_name||!form.last_name}
           style={{ padding:'8px 16px', background: form.first_name&&form.last_name?'#156082':'#F1F5F9', border:'none', borderRadius:'8px', fontSize:'12px', fontWeight:'700', cursor: form.first_name&&form.last_name?'pointer':'not-allowed', fontFamily:'Montserrat, sans-serif', color: form.first_name&&form.last_name?'white':'#45B6E4' }}>
           Save Freelancer
