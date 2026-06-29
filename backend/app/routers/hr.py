@@ -3,7 +3,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
 from app.database import get_db
 from datetime import datetime
-import uuid, os, base64, json, httpx, secrets
+import uuid, os, base64, json, httpx, secrets, asyncio
+import boto3
 
 router = APIRouter()
 
@@ -15,6 +16,8 @@ SHAREPOINT_SITE = os.getenv("SHAREPOINT_SITE_ID", "")
 DOCUSIGN_ACCOUNT = os.getenv("DOCUSIGN_ACCOUNT_ID", "")
 DOCUSIGN_KEY = os.getenv("DOCUSIGN_INTEGRATION_KEY", "")
 WHUBBI_API_URL = os.getenv("WHUBBI_API_URL", "https://api.whubbi.wcomply.com")
+AWS_REGION    = os.getenv("AWS_REGION", "eu-west-1")
+S3_HR_BUCKET  = os.getenv("S3_HR_BUCKET", "whubbi-backups-dev")
 
 # SharePoint folder sharing URLs for CV/document storage
 SHAREPOINT_RECRUITMENT_URL = "https://wcomply.sharepoint.com/:f:/s/wcomply-HR/IgDsWu6K4lhqSIBLpu5eKpX4AThfbi029iqbHgDb_IQhoVY?e=9Jd3KH"
@@ -181,6 +184,42 @@ async def delete_sharepoint_folder(token: str, share_url: str, folder_name: str)
         r = await client.delete(f"https://graph.microsoft.com/v1.0/drives/{drive_id}/items/{folder_id}", headers=auth)
         return r.status_code == 204
 
+# ─── S3 document storage ────────────────────────────────────────────────────────
+def _s3_put_sync(bucket: str, key: str, content: bytes, content_type: str) -> None:
+    s3 = boto3.client("s3", region_name=AWS_REGION)
+    s3.put_object(
+        Bucket=bucket, Key=key, Body=content,
+        ContentType=content_type,
+        ContentDisposition=f'attachment; filename="{key.split("/")[-1]}"',
+    )
+
+def _s3_presigned_url_sync(bucket: str, key: str, expires: int = 3600) -> str:
+    s3 = boto3.client("s3", region_name=AWS_REGION)
+    return s3.generate_presigned_url(
+        "get_object",
+        Params={"Bucket": bucket, "Key": key},
+        ExpiresIn=expires,
+    )
+
+async def upload_to_s3(key: str, content: bytes, content_type: str = "application/octet-stream") -> str:
+    """Upload bytes to S3 and return the s3://bucket/key reference (stored in DB)."""
+    loop = asyncio.get_event_loop()
+    await loop.run_in_executor(None, lambda: _s3_put_sync(S3_HR_BUCKET, key, content, content_type))
+    return f"s3://{S3_HR_BUCKET}/{key}"
+
+async def s3_ref_to_presigned(ref: str, expires: int = 3600) -> str:
+    """Convert s3://bucket/key to a short-lived presigned GET URL."""
+    if not ref.startswith("s3://"):
+        return ref
+    path = ref[5:]
+    bucket, _, key = path.partition("/")
+    loop = asyncio.get_event_loop()
+    try:
+        return await loop.run_in_executor(None, lambda: _s3_presigned_url_sync(bucket, key, expires))
+    except Exception as e:
+        print(f"S3 presigned URL error: {e}")
+        return ref
+
 # ─── CV Extraction via Claude API ───────────────────────────────────────────────
 COUNTRY_MAP = {
     "france": "france", "french": "france", "fr": "france",
@@ -292,9 +331,7 @@ async def extract_cv(file: UploadFile = File(...)):
 @router.post("/cv/upload/{profile_id}")
 async def upload_cv(profile_id: str, file: UploadFile = File(...), db: AsyncSession = Depends(get_db)):
     content = await file.read()
-    token = await get_ms_token()
 
-    # Get profile info to determine folder routing
     row = await db.execute(
         text("SELECT profile_type, first_name, last_name, country FROM hr_profiles WHERE id=CAST(:id AS UUID)"),
         {"id": profile_id}
@@ -303,17 +340,18 @@ async def upload_cv(profile_id: str, file: UploadFile = File(...), db: AsyncSess
 
     url = ""
     if profile:
-        name_folder = f"{profile.first_name} {profile.last_name}".strip() or profile_id
         if profile.profile_type == "freelancer":
-            url = await upload_to_sharepoint_folder(token, SHAREPOINT_FREELANCER_URL, name_folder, file.filename, content)
+            safe_fn = file.filename.replace(" ", "_")
+            key = f"hr/freelancers/{profile_id}/cv/{safe_fn}"
+            url = await upload_to_s3(key, content, file.content_type or "application/octet-stream")
         else:
+            token = await get_ms_token()
+            name_folder = f"{profile.first_name} {profile.last_name}".strip() or profile_id
             country = (profile.country or "unknown").replace(" ", "_")
             subfolder = f"{country}/{name_folder}"
             url = await upload_to_sharepoint_folder(token, SHAREPOINT_RECRUITMENT_URL, subfolder, file.filename, content)
-
-    # Fallback to legacy path if share URL upload failed
-    if not url:
-        url = await upload_to_sharepoint(token, f"{profile_id}_{file.filename}", content, "HR/CVs")
+            if not url:
+                url = await upload_to_sharepoint(token, f"{profile_id}_{file.filename}", content, "HR/CVs")
 
     await db.execute(text("""
         UPDATE hr_profiles SET cv_sharepoint_url=:url, cv_filename=:fn, updated_at=NOW()
@@ -392,7 +430,12 @@ async def get_freelancer(profile_id: str, db: AsyncSession = Depends(get_db)):
     for c in profile["comments"]: c["id"] = str(c["id"]); c["profile_id"] = str(c["profile_id"])
     docs = await db.execute(text("SELECT id, filename, sharepoint_url, doc_type, uploaded_at FROM hr_profile_documents WHERE profile_id=CAST(:id AS UUID) ORDER BY uploaded_at DESC"), {"id": profile_id})
     profile["documents"] = [dict(r._mapping) for r in docs.fetchall()]
-    for d in profile["documents"]: d["id"] = str(d["id"])
+    for d in profile["documents"]:
+        d["id"] = str(d["id"])
+        if d.get("sharepoint_url", "").startswith("s3://"):
+            d["sharepoint_url"] = await s3_ref_to_presigned(d["sharepoint_url"])
+    if profile.get("cv_sharepoint_url", "").startswith("s3://"):
+        profile["cv_sharepoint_url"] = await s3_ref_to_presigned(profile["cv_sharepoint_url"])
     return profile
 
 @router.post("/freelancers")
@@ -518,20 +561,20 @@ async def get_freelancer_documents(profile_id: str, db: AsyncSession = Depends(g
 @router.post("/freelancers/{profile_id}/documents")
 async def upload_freelancer_document(profile_id: str, file: UploadFile = File(...), db: AsyncSession = Depends(get_db)):
     content = await file.read()
-    token = await get_ms_token()
-    row = await db.execute(text("SELECT first_name, last_name FROM hr_profiles WHERE id=CAST(:id AS UUID)"), {"id": profile_id})
-    profile = row.fetchone()
-    url = ""
-    if profile:
-        folder_name = f"{profile.first_name} {profile.last_name}".strip() or profile_id
-        url = await upload_to_sharepoint_folder(token, SHAREPOINT_FREELANCER_URL, folder_name, file.filename, content)
-    if url:
-        await db.execute(text("""
-            INSERT INTO hr_profile_documents (id, profile_id, filename, sharepoint_url, uploaded_at)
-            VALUES (gen_random_uuid(), CAST(:pid AS UUID), :fn, :url, NOW())
-        """), {"pid": profile_id, "fn": file.filename, "url": url})
-        await db.commit()
-    return {"status": "ok", "sharepoint_url": url}
+    safe_fn = file.filename.replace(" ", "_")
+    key = f"hr/freelancers/{profile_id}/{safe_fn}"
+    try:
+        s3_ref = await upload_to_s3(key, content, file.content_type or "application/octet-stream")
+    except Exception as e:
+        print(f"S3 upload error: {e}")
+        raise HTTPException(500, f"Upload failed: {e}")
+    await db.execute(text("""
+        INSERT INTO hr_profile_documents (id, profile_id, filename, sharepoint_url, uploaded_at)
+        VALUES (gen_random_uuid(), CAST(:pid AS UUID), :fn, :url, NOW())
+    """), {"pid": profile_id, "fn": file.filename, "url": s3_ref})
+    await db.commit()
+    presigned = await s3_ref_to_presigned(s3_ref)
+    return {"status": "ok", "url": presigned}
 
 # ─── Internal Recruitment ───────────────────────────────────────────────────────
 RECRUITMENT_STATUSES = ["new","screening","interview_1","interview_2","technical_test","offer","hired","rejected","on_hold"]
