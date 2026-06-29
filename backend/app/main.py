@@ -310,6 +310,28 @@ async def startup():
                     updated_at TIMESTAMP DEFAULT NOW()
                 )""",
                 "CREATE UNIQUE INDEX IF NOT EXISTS idx_user_report_configs ON user_report_configs(user_email, module, report_name)",
+                # Interview requests and results
+                """CREATE TABLE IF NOT EXISTS hr_interview_requests (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    profile_id UUID NOT NULL,
+                    assigned_to_email VARCHAR(255) NOT NULL,
+                    assigned_to_name VARCHAR(255),
+                    due_date DATE,
+                    message TEXT,
+                    requested_by VARCHAR(255),
+                    created_at TIMESTAMP DEFAULT NOW()
+                )""",
+                """CREATE TABLE IF NOT EXISTS hr_interview_results (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    profile_id UUID NOT NULL,
+                    interviewer_email VARCHAR(255),
+                    interviewer_name VARCHAR(255),
+                    questions JSONB DEFAULT '[]',
+                    skill_ratings JSONB DEFAULT '{}',
+                    recommendation VARCHAR(50),
+                    notes TEXT,
+                    created_at TIMESTAMP DEFAULT NOW()
+                )""",
             ]
             for sql in sqls:
                 try:
@@ -383,3 +405,12 @@ try:
     app.include_router(copilot.router, prefix="/copilot", tags=["Copilot"])
 except Exception as e:
     print(f"✗ ROUTER FAILED [auth/outlook/copilot]: {e}")
+
+try:
+    from app.routers import bot
+    app.include_router(bot.router, prefix="/bot", tags=["Bot"])
+    print("✓ Bot")
+except Exception as e:
+    import traceback
+    print(f"✗ ROUTER FAILED [Bot]: {e}")
+    traceback.print_exc()

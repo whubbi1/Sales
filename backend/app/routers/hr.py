@@ -1199,6 +1199,103 @@ async def get_interviewers(profile_id: str, db: AsyncSession = Depends(get_db)):
     return {"interviewers": [dict(r._mapping) for r in result.fetchall()]}
 
 
+async def send_interview_request_email(profile_id: str, candidate: dict, assignee: dict, due_date: str, message: str):
+    try:
+        token = await get_ms_token()
+        if not token:
+            print("⚠️ No MS token for interview request emails"); return
+        candidate_name = f"{candidate.get('first_name','')} {candidate.get('last_name','')}".strip()
+        profile_url = f"{WHUBBI_FRONTEND}/rh/recrutement/{profile_id}"
+        due_str = f"<tr><td style='padding:6px 12px;background:#F8FAFC;font-weight:700;'>Due Date</td><td style='padding:6px 12px;'>{due_date}</td></tr>" if due_date else ""
+        due_text = f" by <strong>{due_date}</strong>" if due_date else ""
+        msg_html = f"<div style='background:#F8FAFC;border-radius:8px;padding:12px 14px;font-style:italic;font-size:13px;margin:12px 0;'>{message}</div>" if message else ""
+        body = f"""<html><body style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;">
+<div style="background:#156082;padding:20px;border-radius:8px 8px 0 0;">
+  <h2 style="color:white;margin:0;">🗓 Interview Request — {candidate_name}</h2>
+</div>
+<div style="background:white;padding:24px;border:1px solid #EDF2F7;border-top:none;border-radius:0 0 8px 8px;">
+  <p>Dear {assignee.get('name') or assignee.get('email')},</p>
+  <p>You have been asked to organise and conduct an interview with <strong>{candidate_name}</strong>{due_text}.</p>
+  {msg_html}
+  <table style="width:100%;border-collapse:collapse;margin:16px 0;font-size:13px;">
+    <tr><td style="padding:6px 12px;background:#F8FAFC;font-weight:700;width:140px;">Candidate</td><td style="padding:6px 12px;">{candidate_name}</td></tr>
+    <tr><td style="padding:6px 12px;background:#F8FAFC;font-weight:700;">Title</td><td style="padding:6px 12px;">{candidate.get('current_title') or '—'}</td></tr>
+    <tr><td style="padding:6px 12px;background:#F8FAFC;font-weight:700;">Country</td><td style="padding:6px 12px;">{candidate.get('country') or '—'}</td></tr>
+    {due_str}
+  </table>
+  <p>Once the interview is complete, please record your feedback directly on the candidate profile.</p>
+  <p><a href="{profile_url}" style="background:#156082;color:white;padding:10px 20px;border-radius:6px;text-decoration:none;display:inline-block;margin-top:8px;">View Candidate Profile & Enter Results →</a></p>
+  <p style="color:#94A3B8;font-size:11px;margin-top:24px;">Sent from WHUBBI HR · {WHUBBI_FRONTEND}</p>
+</div></body></html>"""
+        async with httpx.AsyncClient(timeout=15) as client:
+            await client.post(
+                f"https://graph.microsoft.com/v1.0/users/{HR_SENDER_EMAIL}/sendMail",
+                headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
+                json={"message": {"subject": f"Interview Request: {candidate_name}",
+                                  "body": {"contentType": "HTML", "content": body},
+                                  "toRecipients": [{"emailAddress": {"address": assignee.get("email")}}]}}
+            )
+    except Exception as e:
+        print(f"⚠️ Interview request email error: {e}")
+
+
+@router.post("/recruitment/{profile_id}/request-interview")
+async def request_interview(profile_id: str, data: dict, background_tasks: BackgroundTasks, db: AsyncSession = Depends(get_db)):
+    assignee = {"email": data.get("assigned_to_email", ""), "name": data.get("assigned_to_name", "")}
+    due_date = data.get("due_date", "") or ""
+    message = data.get("message", "")
+    requested_by = data.get("requested_by", "admin")
+
+    await db.execute(text("""
+        INSERT INTO hr_interview_requests (id, profile_id, assigned_to_email, assigned_to_name, due_date, message, requested_by, created_at)
+        VALUES (gen_random_uuid(), CAST(:pid AS UUID), :email, :name, CAST(NULLIF(:due_date,'') AS DATE), :message, :requested_by, NOW())
+    """), {"pid": profile_id, "email": assignee["email"], "name": assignee["name"],
+           "due_date": due_date, "message": message, "requested_by": requested_by})
+    await db.commit()
+
+    cand = await db.execute(text("SELECT first_name, last_name, current_title, country FROM hr_profiles WHERE id=CAST(:id AS UUID)"), {"id": profile_id})
+    row = cand.fetchone()
+    if row and assignee["email"]:
+        background_tasks.add_task(send_interview_request_email, profile_id, dict(row._mapping), assignee, due_date, message)
+
+    return {"status": "ok"}
+
+
+@router.post("/recruitment/{profile_id}/interview-results")
+async def save_interview_results(profile_id: str, data: dict, db: AsyncSession = Depends(get_db)):
+    import json as _json
+    await db.execute(text("""
+        INSERT INTO hr_interview_results (id, profile_id, interviewer_email, interviewer_name, questions, skill_ratings, recommendation, notes, created_at)
+        VALUES (gen_random_uuid(), CAST(:pid AS UUID), :email, :name, CAST(:questions AS JSONB), CAST(:ratings AS JSONB), :recommendation, :notes, NOW())
+    """), {
+        "pid": profile_id,
+        "email": data.get("interviewer_email", ""),
+        "name": data.get("interviewer_name", ""),
+        "questions": _json.dumps(data.get("questions", [])),
+        "ratings": _json.dumps(data.get("skill_ratings", {})),
+        "recommendation": data.get("recommendation", ""),
+        "notes": data.get("notes", "")
+    })
+    await db.commit()
+    return {"status": "ok"}
+
+
+@router.get("/recruitment/{profile_id}/interview-results")
+async def get_interview_results(profile_id: str, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(text("""
+        SELECT id, profile_id, interviewer_email, interviewer_name, questions, skill_ratings, recommendation, notes, created_at
+        FROM hr_interview_results WHERE profile_id=CAST(:pid AS UUID) ORDER BY created_at DESC
+    """), {"pid": profile_id})
+    rows = []
+    for r in result.fetchall():
+        d = dict(r._mapping)
+        for k, v in list(d.items()):
+            if hasattr(v, 'isoformat'): d[k] = v.isoformat()
+            elif hasattr(v, 'hex'): d[k] = str(v)
+        rows.append(d)
+    return {"results": rows}
+
+
 # ─── Job Positions ──────────────────────────────────────────────────────────────
 
 @router.get("/positions")
@@ -1230,14 +1327,19 @@ async def list_positions(db: AsyncSession = Depends(get_db)):
 @router.post("/positions")
 async def create_position(data: dict, db: AsyncSession = Depends(get_db)):
     pos_id = str(uuid.uuid4())
-    jd_id = data.get("job_description_id") or None
-    await db.execute(text("""
-        INSERT INTO hr_job_positions (id, title, country, job_description_id, status, created_at, updated_at, created_by)
-        VALUES (CAST(:id AS UUID), :title, :country,
-                CASE WHEN :jd_id IS NOT NULL THEN CAST(:jd_id AS UUID) ELSE NULL END,
-                :status, NOW(), NOW(), :created_by)
-    """), {"id": pos_id, "title": data.get("title",""), "country": data.get("country","france"),
-           "jd_id": jd_id, "status": data.get("status","open"), "created_by": data.get("created_by","admin")})
+    jd_id  = data.get("job_description_id") or None
+    base   = {"id": pos_id, "title": data.get("title",""), "country": data.get("country","france"),
+              "status": data.get("status","open"), "created_by": data.get("created_by","admin")}
+    if jd_id:
+        await db.execute(text("""
+            INSERT INTO hr_job_positions (id, title, country, job_description_id, status, created_at, updated_at, created_by)
+            VALUES (CAST(:id AS UUID), :title, :country, CAST(:jd_id AS UUID), :status, NOW(), NOW(), :created_by)
+        """), {**base, "jd_id": jd_id})
+    else:
+        await db.execute(text("""
+            INSERT INTO hr_job_positions (id, title, country, status, created_at, updated_at, created_by)
+            VALUES (CAST(:id AS UUID), :title, :country, :status, NOW(), NOW(), :created_by)
+        """), base)
     await db.commit()
     return {"id": pos_id, "status": "ok"}
 

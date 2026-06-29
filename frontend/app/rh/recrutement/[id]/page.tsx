@@ -14,6 +14,21 @@ const COUNTRIES = ['france','portugal','czech_republic','romania','spain']
 const CURRENCY: Record<string,string> = { france:'EUR', portugal:'EUR', czech_republic:'CZK', romania:'RON', spain:'EUR' }
 const LANGS: Record<string,string> = { france:'fr', portugal:'pt', czech_republic:'cs', romania:'ro', spain:'es' }
 const CURRENT_USER = { email:'william.delcour@wcomply.com', name:'William Delcour' }
+const DEFAULT_QUESTIONS = [
+  'Tell us about your professional background and key experiences.',
+  'What are your main technical skills relevant to this role?',
+  'Describe a challenging project you worked on and how you handled it.',
+  'Why are you interested in this opportunity at Wcomply?',
+  'How do you handle tight deadlines and multiple priorities?',
+  'What are your salary expectations and availability?',
+]
+const RECOMMENDATIONS = [
+  { value:'strong_hire', label:'Strong Hire', color:'#059669', bg:'#ECFDF5' },
+  { value:'hire',        label:'Hire',        color:'#0EA5E9', bg:'#EFF6FF' },
+  { value:'maybe',       label:'Maybe',       color:'#D97706', bg:'#FFFBEB' },
+  { value:'pass',        label:'Pass',        color:'#DC2626', bg:'#FEF2F2' },
+  { value:'strong_pass', label:'Strong Pass', color:'#7F1D1D', bg:'#FEE2E2' },
+]
 
 function InlineField({ label, value, onSave, type='text', href, displayAs, inputWidth }: any) {
   const [editing, setEditing] = useState(false)
@@ -138,12 +153,190 @@ function InterviewModal({ candidateName, onConfirm, onCancel }: { candidateName:
   )
 }
 
+function StarRating({ value, onChange }: { value: number, onChange: (v: number) => void }) {
+  const [hover, setHover] = useState(0)
+  return (
+    <div style={{ display:'flex', gap:'2px' }}>
+      {[1,2,3,4,5].map(i => (
+        <span key={i} onClick={() => onChange(i)}
+          onMouseEnter={() => setHover(i)} onMouseLeave={() => setHover(0)}
+          style={{ cursor:'pointer', fontSize:'20px', color:(hover||value)>=i?'#F59E0B':'#E5E7EB', lineHeight:'1' }}>★</span>
+      ))}
+    </div>
+  )
+}
+
+function RequestInterviewModal({ candidateName, onConfirm, onCancel }: { candidateName: string, onConfirm: (data: any) => Promise<void>, onCancel: () => void }) {
+  const [form, setForm] = useState({ assigned_to_email:'', assigned_to_name:'', due_date:'', message:'' })
+  const [sending, setSending] = useState(false)
+  const handleSubmit = async () => {
+    if (!form.assigned_to_email.trim()) return
+    setSending(true); await onConfirm(form); setSending(false)
+  }
+  return (
+    <div style={{ position:'fixed', inset:0, background:'rgba(21,96,130,0.45)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:1100, backdropFilter:'blur(2px)' }}
+      onClick={e => { if (e.target === e.currentTarget) onCancel() }}>
+      <div style={{ background:'white', borderRadius:'14px', width:'500px', boxShadow:'0 20px 60px rgba(21,96,130,0.25)', overflow:'hidden' }}>
+        <div style={{ padding:'16px 20px', borderBottom:'1px solid #EDF2F7', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+          <span style={{ fontSize:'14px', fontWeight:'800', color:'#156082' }}>🗓 Request Interview</span>
+          <button onClick={onCancel} style={{ background:'none', border:'none', fontSize:'20px', cursor:'pointer', color:'#45B6E4' }}>×</button>
+        </div>
+        <div style={{ padding:'20px', display:'flex', flexDirection:'column', gap:'14px' }}>
+          <p style={{ fontSize:'13px', color:'#45B6E4', margin:0 }}>
+            Assign the interview of <strong style={{ color:'#156082' }}>{candidateName}</strong> to a team member.
+            They will receive an email with a link to the candidate profile and instructions to record results.
+          </p>
+          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'10px' }}>
+            <div>
+              <label style={{ display:'block', fontSize:'10px', fontWeight:'700', textTransform:'uppercase', letterSpacing:'0.06em', color:'#45B6E4', marginBottom:'4px' }}>Assign to (Email) *</label>
+              <input value={form.assigned_to_email} onChange={e => setForm(f => ({...f, assigned_to_email:e.target.value}))}
+                placeholder="employee@wcomply.com"
+                style={{ width:'100%', padding:'8px 10px', border:'1.5px solid #EDF2F7', borderRadius:'7px', fontFamily:'Montserrat, sans-serif', fontSize:'12px', outline:'none', boxSizing:'border-box' as const }}/>
+            </div>
+            <div>
+              <label style={{ display:'block', fontSize:'10px', fontWeight:'700', textTransform:'uppercase', letterSpacing:'0.06em', color:'#45B6E4', marginBottom:'4px' }}>Name</label>
+              <input value={form.assigned_to_name} onChange={e => setForm(f => ({...f, assigned_to_name:e.target.value}))}
+                placeholder="Full name (optional)"
+                style={{ width:'100%', padding:'8px 10px', border:'1.5px solid #EDF2F7', borderRadius:'7px', fontFamily:'Montserrat, sans-serif', fontSize:'12px', outline:'none', boxSizing:'border-box' as const }}/>
+            </div>
+          </div>
+          <div>
+            <label style={{ display:'block', fontSize:'10px', fontWeight:'700', textTransform:'uppercase', letterSpacing:'0.06em', color:'#45B6E4', marginBottom:'4px' }}>Due Date</label>
+            <input type="date" value={form.due_date} onChange={e => setForm(f => ({...f, due_date:e.target.value}))}
+              style={{ width:'100%', padding:'8px 10px', border:'1.5px solid #EDF2F7', borderRadius:'7px', fontFamily:'Montserrat, sans-serif', fontSize:'12px', outline:'none', boxSizing:'border-box' as const }}/>
+          </div>
+          <div>
+            <label style={{ display:'block', fontSize:'10px', fontWeight:'700', textTransform:'uppercase', letterSpacing:'0.06em', color:'#45B6E4', marginBottom:'4px' }}>Message / Instructions</label>
+            <textarea value={form.message} onChange={e => setForm(f => ({...f, message:e.target.value}))}
+              placeholder="Add any context or instructions for the interviewer..." rows={3}
+              style={{ width:'100%', padding:'8px 10px', border:'1.5px solid #EDF2F7', borderRadius:'7px', fontFamily:'Montserrat, sans-serif', fontSize:'12px', outline:'none', resize:'vertical', boxSizing:'border-box' as const }}/>
+          </div>
+        </div>
+        <div style={{ padding:'14px 20px', borderTop:'1px solid #EDF2F7', background:'#FAFBFC', display:'flex', justifyContent:'flex-end', gap:'8px' }}>
+          <button onClick={onCancel} style={{ padding:'8px 16px', background:'white', border:'1.5px solid #EDF2F7', borderRadius:'8px', fontSize:'12px', fontWeight:'600', cursor:'pointer', fontFamily:'Montserrat, sans-serif', color:'#45B6E4' }}>Cancel</button>
+          <button onClick={handleSubmit} disabled={!form.assigned_to_email.trim()||sending}
+            style={{ padding:'8px 16px', background:form.assigned_to_email.trim()?'#7C3AED':'#F1F5F9', border:'none', borderRadius:'8px', fontSize:'12px', fontWeight:'700', cursor:form.assigned_to_email.trim()?'pointer':'not-allowed', fontFamily:'Montserrat, sans-serif', color:form.assigned_to_email.trim()?'white':'#94A3B8', opacity:sending?0.7:1 }}>
+            {sending ? 'Sending…' : '✉️ Send Request'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function InterviewResultsModal({ candidateName, candidateSkills, onConfirm, onCancel }: {
+  candidateName: string, candidateSkills: string[], onConfirm: (data: any) => Promise<void>, onCancel: () => void
+}) {
+  const [questions, setQuestions] = useState<string[]>([...DEFAULT_QUESTIONS])
+  const [newQuestion, setNewQuestion] = useState('')
+  const [skillRatings, setSkillRatings] = useState<Record<string,number>>(() => {
+    const init: Record<string,number> = {}
+    candidateSkills.forEach(s => { init[s] = 0 })
+    return init
+  })
+  const [recommendation, setRecommendation] = useState('')
+  const [notes, setNotes] = useState('')
+  const [saving, setSaving] = useState(false)
+
+  const addQuestion = () => {
+    if (!newQuestion.trim()) return
+    setQuestions(qs => [...qs, newQuestion.trim()]); setNewQuestion('')
+  }
+
+  const handleSubmit = async () => {
+    setSaving(true)
+    await onConfirm({ questions, skill_ratings: skillRatings, recommendation, notes })
+    setSaving(false)
+  }
+
+  const ratingLabel = (v: number) => ['—','Poor','Fair','Good','Great','Excellent'][v] || '—'
+
+  return (
+    <div style={{ position:'fixed', inset:0, background:'rgba(21,96,130,0.45)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:1100, backdropFilter:'blur(2px)' }}
+      onClick={e => { if (e.target === e.currentTarget) onCancel() }}>
+      <div style={{ background:'white', borderRadius:'14px', width:'700px', maxHeight:'90vh', display:'flex', flexDirection:'column', boxShadow:'0 20px 60px rgba(21,96,130,0.25)', overflow:'hidden' }}>
+        <div style={{ padding:'16px 20px', borderBottom:'1px solid #EDF2F7', display:'flex', justifyContent:'space-between', alignItems:'center', flexShrink:0 }}>
+          <span style={{ fontSize:'14px', fontWeight:'800', color:'#156082' }}>📋 Interview Results — {candidateName}</span>
+          <button onClick={onCancel} style={{ background:'none', border:'none', fontSize:'20px', cursor:'pointer', color:'#45B6E4' }}>×</button>
+        </div>
+        <div style={{ overflowY:'auto', flex:1, padding:'20px', display:'flex', flexDirection:'column', gap:'20px' }}>
+
+          {/* Questions */}
+          <div>
+            <div style={{ fontSize:'11px', fontWeight:'700', textTransform:'uppercase', letterSpacing:'0.07em', color:'#45B6E4', marginBottom:'10px' }}>Interview Questions</div>
+            {questions.map((q, i) => (
+              <div key={i} style={{ display:'flex', gap:'8px', marginBottom:'6px', alignItems:'flex-start' }}>
+                <span style={{ color:'#45B6E4', fontWeight:'700', fontSize:'12px', minWidth:'18px', paddingTop:'6px' }}>{i+1}.</span>
+                <span style={{ flex:1, fontSize:'12px', color:'#3F3F3F', background:'#F8FAFC', borderRadius:'6px', padding:'6px 10px', lineHeight:'1.5' }}>{q}</span>
+                <button onClick={() => setQuestions(qs => qs.filter((_,j) => j!==i))}
+                  style={{ background:'#FEF2F2', color:'#DC2626', border:'none', borderRadius:'6px', padding:'4px 8px', cursor:'pointer', fontSize:'12px', flexShrink:0, marginTop:'2px' }}>×</button>
+              </div>
+            ))}
+            <div style={{ display:'flex', gap:'6px', marginTop:'8px' }}>
+              <input value={newQuestion} onChange={e => setNewQuestion(e.target.value)}
+                onKeyDown={e => { if (e.key==='Enter') addQuestion() }}
+                placeholder="Add a custom question..."
+                style={{ flex:1, padding:'7px 10px', border:'1.5px solid #EDF2F7', borderRadius:'7px', fontFamily:'Montserrat, sans-serif', fontSize:'12px', outline:'none' }}/>
+              <button onClick={addQuestion} style={{ padding:'7px 14px', background:'#156082', color:'white', border:'none', borderRadius:'7px', fontSize:'12px', cursor:'pointer', fontFamily:'Montserrat, sans-serif' }}>+</button>
+            </div>
+          </div>
+
+          {/* Skill ratings */}
+          {Object.keys(skillRatings).length > 0 && (
+            <div>
+              <div style={{ fontSize:'11px', fontWeight:'700', textTransform:'uppercase', letterSpacing:'0.07em', color:'#45B6E4', marginBottom:'10px' }}>Skill Ratings</div>
+              <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
+                {Object.entries(skillRatings).map(([skill, rating]) => (
+                  <div key={skill} style={{ display:'flex', alignItems:'center', gap:'12px', padding:'8px 12px', background:'#F8FAFC', borderRadius:'8px' }}>
+                    <span style={{ fontSize:'12px', fontWeight:'600', color:'#7C3AED', flex:1 }}>{skill}</span>
+                    <StarRating value={rating} onChange={v => setSkillRatings(r => ({...r, [skill]:v}))}/>
+                    <span style={{ fontSize:'11px', color:'#94A3B8', minWidth:'64px' }}>{ratingLabel(rating)}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Recommendation */}
+          <div>
+            <div style={{ fontSize:'11px', fontWeight:'700', textTransform:'uppercase', letterSpacing:'0.07em', color:'#45B6E4', marginBottom:'10px' }}>Final Recommendation *</div>
+            <div style={{ display:'flex', gap:'8px', flexWrap:'wrap' }}>
+              {RECOMMENDATIONS.map(r => (
+                <button key={r.value} onClick={() => setRecommendation(r.value)}
+                  style={{ padding:'8px 18px', borderRadius:'20px', border:`2px solid ${recommendation===r.value?r.color:'#EDF2F7'}`, cursor:'pointer', fontSize:'12px', fontWeight:'700', fontFamily:'Montserrat, sans-serif',
+                    background: recommendation===r.value ? r.bg : 'white', color: recommendation===r.value ? r.color : '#94A3B8' }}>
+                  {r.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Notes */}
+          <div>
+            <div style={{ fontSize:'11px', fontWeight:'700', textTransform:'uppercase', letterSpacing:'0.07em', color:'#45B6E4', marginBottom:'8px' }}>General Notes</div>
+            <textarea value={notes} onChange={e => setNotes(e.target.value)}
+              placeholder="Overall impression, specific strengths or concerns..." rows={4}
+              style={{ width:'100%', padding:'10px', border:'1.5px solid #EDF2F7', borderRadius:'8px', fontFamily:'Montserrat, sans-serif', fontSize:'12px', resize:'vertical', outline:'none', boxSizing:'border-box' as const }}/>
+          </div>
+        </div>
+        <div style={{ padding:'14px 20px', borderTop:'1px solid #EDF2F7', background:'#FAFBFC', display:'flex', justifyContent:'flex-end', gap:'8px', flexShrink:0 }}>
+          <button onClick={onCancel} style={{ padding:'8px 16px', background:'white', border:'1.5px solid #EDF2F7', borderRadius:'8px', fontSize:'12px', fontWeight:'600', cursor:'pointer', fontFamily:'Montserrat, sans-serif', color:'#45B6E4' }}>Cancel</button>
+          <button onClick={handleSubmit} disabled={saving||!recommendation}
+            style={{ padding:'8px 20px', background:recommendation?'#156082':'#F1F5F9', border:'none', borderRadius:'8px', fontSize:'12px', fontWeight:'700', cursor:recommendation?'pointer':'not-allowed', fontFamily:'Montserrat, sans-serif', color:recommendation?'white':'#94A3B8', opacity:saving?0.7:1 }}>
+            {saving ? 'Saving…' : '💾 Save Results'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function CandidateDetail() {
   const router = useRouter()
   const { id } = useParams() as { id: string }
   const [profile, setProfile] = useState<any>(null)
   const [loading, setLoading] = useState(true)
-  const [activeTab, setActiveTab] = useState<'profile'|'comments'|'proposal'>('profile')
+  const [activeTab, setActiveTab] = useState<'profile'|'comments'|'proposal'|'interview'>('profile')
   const [comment, setComment] = useState({ content:'', comment_type:'note', author_email: CURRENT_USER.email, author_name: CURRENT_USER.name })
   const [showProposal, setShowProposal] = useState(false)
   const [proposal, setProposal] = useState({ role:'', responsibilities:[] as string[], salary:'', advantages:[] as string[], start_date:'', country:'', resp_input:'', adv_input:'' })
@@ -158,6 +351,9 @@ export default function CandidateDetail() {
   const [docUploading, setDocUploading] = useState(false)
   const [positions, setPositions] = useState<any[]>([])
   const [showInterviewModal, setShowInterviewModal] = useState(false)
+  const [showRequestInterview, setShowRequestInterview] = useState(false)
+  const [showInterviewResults, setShowInterviewResults] = useState(false)
+  const [interviewResultsList, setInterviewResultsList] = useState<any[]>([])
   const fileRef = useRef<HTMLInputElement>(null)
   const docFileRef = useRef<HTMLInputElement>(null)
 
@@ -170,7 +366,10 @@ export default function CandidateDetail() {
   const loadPositions = () => {
     fetch(`${API}/hr/positions`).then(r=>r.json()).then(d=>setPositions(d.positions||[]))
   }
-  useEffect(() => { load(); loadDocs(); loadPositions() }, [id])
+  const loadInterviewResults = () => {
+    fetch(`${API}/hr/recruitment/${id}/interview-results`).then(r=>r.json()).then(d=>setInterviewResultsList(d.results||[]))
+  }
+  useEffect(() => { load(); loadDocs(); loadPositions(); loadInterviewResults() }, [id])
   useEffect(() => { if (profile) setProposal(p=>({...p, country:profile.country||'france'})) }, [profile])
 
   const patchField = async (field: string, value: any) => {
@@ -280,6 +479,23 @@ export default function CandidateDetail() {
     setSending(false); setShowProposal(false); setProposalPreview(null); load()
   }
 
+  const handleRequestInterview = async (data: any) => {
+    await fetch(`${API}/hr/recruitment/${id}/request-interview`, {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({...data, requested_by: CURRENT_USER.email})
+    })
+    setShowRequestInterview(false)
+  }
+
+  const handleSaveInterviewResults = async (data: any) => {
+    await fetch(`${API}/hr/recruitment/${id}/interview-results`, {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({...data, interviewer_email: CURRENT_USER.email, interviewer_name: CURRENT_USER.name})
+    })
+    setShowInterviewResults(false)
+    loadInterviewResults()
+  }
+
   if (loading) return <HRLayout><div style={{ padding:'48px', textAlign:'center', color:'#45B6E4' }}>Loading...</div></HRLayout>
   if (!profile) return <HRLayout><div style={{ padding:'48px', textAlign:'center', color:'#DC2626' }}>Candidate not found</div></HRLayout>
 
@@ -311,7 +527,10 @@ export default function CandidateDetail() {
                   displayAs={<span style={{ fontSize:'13px', color:'#45B6E4' }}>{profile.current_title||'Click to add title'} · {FLAG[profile.country]||'🌍'} {profile.country}</span>}/>
               </div>
             </div>
-            <button onClick={() => setShowProposal(true)} style={{ padding:'7px 14px', background:'#059669', color:'white', border:'none', borderRadius:'8px', fontSize:'12px', fontWeight:'700', cursor:'pointer', fontFamily:'Montserrat, sans-serif', flexShrink:0 }}>📄 Send Proposal</button>
+            <div style={{ display:'flex', gap:'8px', flexShrink:0 }}>
+              <button onClick={() => setShowRequestInterview(true)} style={{ padding:'7px 14px', background:'#7C3AED', color:'white', border:'none', borderRadius:'8px', fontSize:'12px', fontWeight:'700', cursor:'pointer', fontFamily:'Montserrat, sans-serif' }}>🗓 Request Interview</button>
+              <button onClick={() => setShowProposal(true)} style={{ padding:'7px 14px', background:'#059669', color:'white', border:'none', borderRadius:'8px', fontSize:'12px', fontWeight:'700', cursor:'pointer', fontFamily:'Montserrat, sans-serif' }}>📄 Send Proposal</button>
+            </div>
           </div>
 
           {/* Contact fields */}
@@ -434,7 +653,7 @@ export default function CandidateDetail() {
 
         {/* Tabs */}
         <div style={{ display:'flex', gap:'0', marginBottom:'16px', background:'white', borderRadius:'10px', border:'1px solid #EDF2F7', overflow:'hidden', width:'fit-content' }}>
-          {[{key:'profile',label:'Profile & Projects'},{key:'comments',label:`Comments (${(profile.comments||[]).length})`},{key:'proposal',label:`Proposals (${(profile.proposals||[]).length})`}].map(t=>(
+          {[{key:'profile',label:'Profile & Projects'},{key:'comments',label:`Comments (${(profile.comments||[]).length})`},{key:'proposal',label:`Proposals (${(profile.proposals||[]).length})`},{key:'interview',label:`Interview (${interviewResultsList.length})`}].map(t=>(
             <button key={t.key} onClick={()=>setActiveTab(t.key as any)}
               style={{ padding:'9px 18px', border:'none', cursor:'pointer', fontSize:'12px', fontWeight:'700', fontFamily:'Montserrat, sans-serif', background:activeTab===t.key?'#156082':'transparent', color:activeTab===t.key?'white':'#45B6E4' }}>
               {t.label}
@@ -523,12 +742,110 @@ export default function CandidateDetail() {
           </div>
         )}
 
+        {/* Interview Results tab */}
+        {activeTab === 'interview' && (
+          <div>
+            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'14px' }}>
+              <span style={{ fontSize:'12px', color:'#94A3B8' }}>{interviewResultsList.length} result{interviewResultsList.length!==1?'s':''} recorded</span>
+              <button onClick={() => setShowInterviewResults(true)}
+                style={{ padding:'7px 16px', background:'#156082', color:'white', border:'none', borderRadius:'8px', fontSize:'12px', fontWeight:'700', cursor:'pointer', fontFamily:'Montserrat, sans-serif' }}>
+                📋 Enter Interview Results
+              </button>
+            </div>
+            {interviewResultsList.length === 0 && (
+              <div style={{ background:'white', borderRadius:'12px', border:'1px solid #EDF2F7', padding:'48px', textAlign:'center', color:'#45B6E4', fontSize:'13px' }}>
+                No interview results recorded yet.<br/>
+                <button onClick={() => setShowInterviewResults(true)}
+                  style={{ marginTop:'12px', background:'#156082', color:'white', border:'none', padding:'8px 18px', borderRadius:'8px', fontSize:'12px', fontWeight:'700', cursor:'pointer', fontFamily:'Montserrat, sans-serif' }}>
+                  Record First Interview
+                </button>
+              </div>
+            )}
+            {interviewResultsList.map((res: any) => {
+              const rec = RECOMMENDATIONS.find(r => r.value === res.recommendation)
+              return (
+                <div key={res.id} style={{ background:'white', borderRadius:'12px', border:'1px solid #EDF2F7', padding:'20px', marginBottom:'14px', boxShadow:'0 1px 3px rgba(0,0,0,0.06)' }}>
+                  <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:'16px', flexWrap:'wrap', gap:'8px' }}>
+                    <div>
+                      <div style={{ fontSize:'13px', fontWeight:'700', color:'#156082' }}>{res.interviewer_name || res.interviewer_email}</div>
+                      <div style={{ fontSize:'11px', color:'#94A3B8' }}>{res.created_at ? new Date(res.created_at).toLocaleDateString('fr-FR',{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'}) : '—'}</div>
+                    </div>
+                    {rec && (
+                      <span style={{ padding:'5px 14px', borderRadius:'20px', fontSize:'12px', fontWeight:'700', background:rec.bg, color:rec.color }}>
+                        {rec.label}
+                      </span>
+                    )}
+                  </div>
+                  {/* Skill ratings */}
+                  {res.skill_ratings && Object.keys(res.skill_ratings).length > 0 && (
+                    <div style={{ marginBottom:'14px' }}>
+                      <div style={{ fontSize:'10px', fontWeight:'700', textTransform:'uppercase', letterSpacing:'0.07em', color:'#45B6E4', marginBottom:'8px' }}>Skill Ratings</div>
+                      <div style={{ display:'flex', flexWrap:'wrap', gap:'6px' }}>
+                        {Object.entries(res.skill_ratings).map(([skill, rating]: [string, any]) => (
+                          <div key={skill} style={{ display:'flex', alignItems:'center', gap:'6px', background:'#F8FAFC', borderRadius:'8px', padding:'5px 10px' }}>
+                            <span style={{ fontSize:'11px', fontWeight:'600', color:'#7C3AED' }}>{skill}</span>
+                            <span style={{ display:'flex', gap:'1px' }}>
+                              {[1,2,3,4,5].map(i => (
+                                <span key={i} style={{ fontSize:'13px', color:rating>=i?'#F59E0B':'#E5E7EB' }}>★</span>
+                              ))}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {/* Notes */}
+                  {res.notes && (
+                    <div>
+                      <div style={{ fontSize:'10px', fontWeight:'700', textTransform:'uppercase', letterSpacing:'0.07em', color:'#45B6E4', marginBottom:'5px' }}>Notes</div>
+                      <p style={{ fontSize:'12px', color:'#3F3F3F', margin:0, lineHeight:'1.6', background:'#F8FAFC', borderRadius:'6px', padding:'10px 12px' }}>{res.notes}</p>
+                    </div>
+                  )}
+                  {/* Questions */}
+                  {res.questions && res.questions.length > 0 && (
+                    <div style={{ marginTop:'14px' }}>
+                      <div style={{ fontSize:'10px', fontWeight:'700', textTransform:'uppercase', letterSpacing:'0.07em', color:'#45B6E4', marginBottom:'6px' }}>Questions Asked ({res.questions.length})</div>
+                      <div style={{ display:'flex', flexDirection:'column', gap:'4px' }}>
+                        {res.questions.map((q: string, i: number) => (
+                          <div key={i} style={{ display:'flex', gap:'6px', fontSize:'11px', color:'#3F3F3F' }}>
+                            <span style={{ color:'#45B6E4', fontWeight:'700', minWidth:'16px' }}>{i+1}.</span>
+                            <span>{q}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        )}
+
         {/* Interview Assignment Modal */}
         {showInterviewModal && (
           <InterviewModal
             candidateName={`${profile.first_name} ${profile.last_name}`}
             onConfirm={handleInterviewAssign}
             onCancel={() => setShowInterviewModal(false)}
+          />
+        )}
+
+        {/* Request Interview Modal */}
+        {showRequestInterview && (
+          <RequestInterviewModal
+            candidateName={`${profile.first_name} ${profile.last_name}`}
+            onConfirm={handleRequestInterview}
+            onCancel={() => setShowRequestInterview(false)}
+          />
+        )}
+
+        {/* Interview Results Modal */}
+        {showInterviewResults && (
+          <InterviewResultsModal
+            candidateName={`${profile.first_name} ${profile.last_name}`}
+            candidateSkills={profile.skills||[]}
+            onConfirm={handleSaveInterviewResults}
+            onCancel={() => setShowInterviewResults(false)}
           />
         )}
 
