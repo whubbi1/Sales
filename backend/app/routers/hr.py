@@ -18,7 +18,7 @@ WHUBBI_API_URL = os.getenv("WHUBBI_API_URL", "https://api.whubbi.wcomply.com")
 
 # SharePoint folder sharing URLs for CV/document storage
 SHAREPOINT_RECRUITMENT_URL = "https://wcomply.sharepoint.com/:f:/s/wcomply-HR/IgDsWu6K4lhqSIBLpu5eKpX4AThfbi029iqbHgDb_IQhoVY?e=9Jd3KH"
-SHAREPOINT_FREELANCER_URL  = "https://wcomply.sharepoint.com/:f:/s/wcomply-HR/IgDuttxAz2gOQJWIokbuzzmVAVdr92slh5OLUsqO_IkQGiA?e=ox55oP"
+SHAREPOINT_FREELANCER_URL  = "https://wcomply.sharepoint.com/:f:/s/wcomply-HR/IgDuttxAz2gOQJWIokbuzzmVAVdr92slh5OLUsqO_IkQGiA?e=GyTmOM"
 
 # ─── Country config ────────────────────────────────────────────────────────────
 COUNTRY_CONFIG = {
@@ -130,19 +130,56 @@ async def upload_to_sharepoint_folder(token: str, share_url: str, subfolder: str
     encoded = _encode_share_url(share_url)
     auth = {"Authorization": f"Bearer {token}"}
     async with httpx.AsyncClient(timeout=30) as client:
-        # Get the parent folder's drive item
         pr = await client.get(f"https://graph.microsoft.com/v1.0/shares/{encoded}/driveItem", headers=auth)
         if pr.status_code != 200:
             return ""
         p = pr.json()
         drive_id = p["parentReference"]["driveId"]
         parent_id = p["id"]
-        # Upload — Graph API navigates path segments via :/path/to/file: notation
         upload_url = f"https://graph.microsoft.com/v1.0/drives/{drive_id}/items/{parent_id}:/{subfolder}/{filename}:/content"
         r = await client.put(upload_url, headers={**auth, "Content-Type": "application/octet-stream"}, content=content)
         if r.status_code in [200, 201]:
             return r.json().get("webUrl", "")
     return ""
+
+async def create_sharepoint_folder(token: str, share_url: str, folder_name: str) -> bool:
+    """Create a subfolder under a SharePoint sharing URL (no-op if it already exists)."""
+    encoded = _encode_share_url(share_url)
+    auth = {"Authorization": f"Bearer {token}"}
+    async with httpx.AsyncClient(timeout=30) as client:
+        pr = await client.get(f"https://graph.microsoft.com/v1.0/shares/{encoded}/driveItem", headers=auth)
+        if pr.status_code != 200:
+            return False
+        p = pr.json()
+        drive_id = p["parentReference"]["driveId"]
+        parent_id = p["id"]
+        r = await client.post(
+            f"https://graph.microsoft.com/v1.0/drives/{drive_id}/items/{parent_id}/children",
+            headers={**auth, "Content-Type": "application/json"},
+            json={"name": folder_name, "folder": {}, "@microsoft.graph.conflictBehavior": "fail"},
+        )
+        return r.status_code in [200, 201, 409]  # 409 = already exists, that's fine
+
+async def delete_sharepoint_folder(token: str, share_url: str, folder_name: str) -> bool:
+    """Delete a named subfolder (and all its contents) under a SharePoint sharing URL."""
+    encoded = _encode_share_url(share_url)
+    auth = {"Authorization": f"Bearer {token}"}
+    async with httpx.AsyncClient(timeout=30) as client:
+        pr = await client.get(f"https://graph.microsoft.com/v1.0/shares/{encoded}/driveItem", headers=auth)
+        if pr.status_code != 200:
+            return False
+        p = pr.json()
+        drive_id = p["parentReference"]["driveId"]
+        parent_id = p["id"]
+        resolve = await client.get(
+            f"https://graph.microsoft.com/v1.0/drives/{drive_id}/items/{parent_id}:/{folder_name}",
+            headers=auth,
+        )
+        if resolve.status_code != 200:
+            return False
+        folder_id = resolve.json()["id"]
+        r = await client.delete(f"https://graph.microsoft.com/v1.0/drives/{drive_id}/items/{folder_id}", headers=auth)
+        return r.status_code == 204
 
 # ─── CV Extraction via Claude API ───────────────────────────────────────────────
 COUNTRY_MAP = {
@@ -344,10 +381,18 @@ async def get_freelancer(profile_id: str, db: AsyncSession = Depends(get_db)):
     if not row: raise HTTPException(404, "Not found")
     profile = dict(row._mapping)
     profile["id"] = str(profile["id"])
+    if isinstance(profile.get("skills"), str):
+        try: profile["skills"] = json.loads(profile["skills"])
+        except: profile["skills"] = []
     projs = await db.execute(text("SELECT * FROM hr_projects WHERE profile_id=CAST(:id AS UUID) ORDER BY start_date DESC"), {"id": profile_id})
     profile["projects"] = [dict(r._mapping) for r in projs.fetchall()]
-    for pr in profile["projects"]:
-        pr["id"] = str(pr["id"]); pr["profile_id"] = str(pr["profile_id"])
+    for pr in profile["projects"]: pr["id"] = str(pr["id"]); pr["profile_id"] = str(pr["profile_id"])
+    comments = await db.execute(text("SELECT * FROM hr_comments WHERE profile_id=CAST(:id AS UUID) ORDER BY created_at DESC"), {"id": profile_id})
+    profile["comments"] = [dict(r._mapping) for r in comments.fetchall()]
+    for c in profile["comments"]: c["id"] = str(c["id"]); c["profile_id"] = str(c["profile_id"])
+    docs = await db.execute(text("SELECT id, filename, sharepoint_url, doc_type, uploaded_at FROM hr_profile_documents WHERE profile_id=CAST(:id AS UUID) ORDER BY uploaded_at DESC"), {"id": profile_id})
+    profile["documents"] = [dict(r._mapping) for r in docs.fetchall()]
+    for d in profile["documents"]: d["id"] = str(d["id"])
     return profile
 
 @router.post("/freelancers")
@@ -381,28 +426,112 @@ async def create_freelancer(data: dict, db: AsyncSession = Depends(get_db)):
                "start_date": proj.get("start_date",""), "end_date": proj.get("end_date",""),
                "description": proj.get("description",""), "tech": json.dumps(proj.get("technologies",[]))})
     await db.commit()
+    # Create SharePoint folder for this freelancer (best-effort)
+    folder_name = f"{data.get('first_name','')} {data.get('last_name','')}".strip() or pid
+    try:
+        token = await get_ms_token()
+        await create_sharepoint_folder(token, SHAREPOINT_FREELANCER_URL, folder_name)
+    except Exception as e:
+        print(f"SharePoint folder creation skipped: {e}")
     return {"status": "ok", "id": pid}
 
 @router.put("/freelancers/{profile_id}")
 async def update_freelancer(profile_id: str, data: dict, db: AsyncSession = Depends(get_db)):
+    dr = data.get("daily_rate")
+    daily_rate = int(dr) if dr not in (None, "") else None
+    ye = data.get("years_experience")
+    years_exp = int(ye) if ye is not None else None
     await db.execute(text("""
         UPDATE hr_profiles SET
-            first_name=COALESCE(:first_name,first_name), last_name=COALESCE(:last_name,last_name),
-            email=COALESCE(:email,email), phone=COALESCE(:phone,phone),
-            linkedin_url=COALESCE(:linkedin_url,linkedin_url), country=COALESCE(:country,country),
-            current_title=COALESCE(:current_title,current_title),
-            skills=COALESCE(CAST(:skills AS JSON),skills), years_experience=COALESCE(:years_experience,years_experience),
-            daily_rate=COALESCE(:daily_rate,daily_rate), updated_at=NOW()
-        WHERE id=CAST(:id AS UUID)
-    """), {**data, "id": profile_id, "skills": json.dumps(data.get("skills")) if data.get("skills") else None})
+            first_name=COALESCE(:first_name, first_name),
+            last_name=COALESCE(:last_name, last_name),
+            email=COALESCE(:email, email),
+            phone=COALESCE(:phone, phone),
+            linkedin_url=COALESCE(:linkedin_url, linkedin_url),
+            country=COALESCE(:country, country),
+            language=COALESCE(:language, language),
+            current_title=COALESCE(:current_title, current_title),
+            skills=COALESCE(CAST(:skills AS JSON), skills),
+            years_experience=COALESCE(:years_experience, years_experience),
+            daily_rate=COALESCE(:daily_rate, daily_rate),
+            availability_date=:availability_date,
+            updated_at=NOW()
+        WHERE id=CAST(:id AS UUID) AND profile_type='freelancer'
+    """), {
+        "id": profile_id,
+        "first_name": data.get("first_name"),
+        "last_name": data.get("last_name"),
+        "email": data.get("email"),
+        "phone": data.get("phone"),
+        "linkedin_url": data.get("linkedin_url"),
+        "country": data.get("country"),
+        "language": data.get("language"),
+        "current_title": data.get("current_title"),
+        "skills": json.dumps(data["skills"]) if data.get("skills") is not None else None,
+        "years_experience": years_exp,
+        "daily_rate": daily_rate,
+        "availability_date": data.get("availability_date") or None,
+    })
     await db.commit()
     return {"status": "ok"}
 
 @router.delete("/freelancers/{profile_id}")
 async def delete_freelancer(profile_id: str, db: AsyncSession = Depends(get_db)):
+    row = await db.execute(text("SELECT first_name, last_name FROM hr_profiles WHERE id=CAST(:id AS UUID)"), {"id": profile_id})
+    profile = row.fetchone()
+    await db.execute(text("DELETE FROM hr_profile_documents WHERE profile_id=CAST(:id AS UUID)"), {"id": profile_id})
+    await db.execute(text("DELETE FROM hr_comments WHERE profile_id=CAST(:id AS UUID)"), {"id": profile_id})
+    await db.execute(text("DELETE FROM hr_projects WHERE profile_id=CAST(:id AS UUID)"), {"id": profile_id})
     await db.execute(text("DELETE FROM hr_profiles WHERE id=CAST(:id AS UUID)"), {"id": profile_id})
     await db.commit()
+    if profile:
+        folder_name = f"{profile.first_name} {profile.last_name}".strip()
+        if folder_name:
+            try:
+                token = await get_ms_token()
+                await delete_sharepoint_folder(token, SHAREPOINT_FREELANCER_URL, folder_name)
+            except Exception as e:
+                print(f"SharePoint folder deletion skipped: {e}")
     return {"status": "ok"}
+
+@router.post("/freelancers/{profile_id}/comments")
+async def add_freelancer_comment(profile_id: str, data: dict, db: AsyncSession = Depends(get_db)):
+    await db.execute(text("""
+        INSERT INTO hr_comments (id, profile_id, author_email, author_name, content, comment_type, created_at)
+        VALUES (gen_random_uuid(), CAST(:pid AS UUID), :author_email, :author_name, :content, :comment_type, NOW())
+    """), {"pid": profile_id, "author_email": data.get("author_email",""),
+           "author_name": data.get("author_name",""), "content": data.get("content",""),
+           "comment_type": data.get("comment_type","note")})
+    await db.commit()
+    return {"status": "ok"}
+
+@router.get("/freelancers/{profile_id}/documents")
+async def get_freelancer_documents(profile_id: str, db: AsyncSession = Depends(get_db)):
+    rows = await db.execute(text("""
+        SELECT id, filename, sharepoint_url, doc_type, uploaded_at
+        FROM hr_profile_documents WHERE profile_id=CAST(:id AS UUID) ORDER BY uploaded_at DESC
+    """), {"id": profile_id})
+    docs = [dict(r._mapping) for r in rows.fetchall()]
+    for d in docs: d["id"] = str(d["id"])
+    return {"documents": docs}
+
+@router.post("/freelancers/{profile_id}/documents")
+async def upload_freelancer_document(profile_id: str, file: UploadFile = File(...), db: AsyncSession = Depends(get_db)):
+    content = await file.read()
+    token = await get_ms_token()
+    row = await db.execute(text("SELECT first_name, last_name FROM hr_profiles WHERE id=CAST(:id AS UUID)"), {"id": profile_id})
+    profile = row.fetchone()
+    url = ""
+    if profile:
+        folder_name = f"{profile.first_name} {profile.last_name}".strip() or profile_id
+        url = await upload_to_sharepoint_folder(token, SHAREPOINT_FREELANCER_URL, folder_name, file.filename, content)
+    if url:
+        await db.execute(text("""
+            INSERT INTO hr_profile_documents (id, profile_id, filename, sharepoint_url, uploaded_at)
+            VALUES (gen_random_uuid(), CAST(:pid AS UUID), :fn, :url, NOW())
+        """), {"pid": profile_id, "fn": file.filename, "url": url})
+        await db.commit()
+    return {"status": "ok", "sharepoint_url": url}
 
 # ─── Internal Recruitment ───────────────────────────────────────────────────────
 RECRUITMENT_STATUSES = ["new","screening","interview_1","interview_2","technical_test","offer","hired","rejected","on_hold"]
