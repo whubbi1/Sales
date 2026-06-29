@@ -195,7 +195,6 @@ export default function FreelancerDetail() {
     await fetch(`${API}/hr/freelancers/${id}/documents/${docId}`, { method:'DELETE' })
     load()
   }
-  }
 
   const addComment = async () => {
     if (!comment.content.trim()) return
