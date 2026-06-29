@@ -10,6 +10,15 @@ const LANGS: Record<string,string> = { france:'fr', portugal:'pt', czech_republi
 const COMMENT_TYPES = ['note','call','email','interview']
 const COMMENT_ICONS: Record<string,string> = { note:'📝', call:'📞', email:'✉️', interview:'🎤' }
 const CURRENT_USER = { email:'william.delcour@wcomply.com', name:'William Delcour' }
+const DOC_TYPES = [
+  { value:'cv',          label:'CV / Resume',  icon:'📄' },
+  { value:'contract',    label:'Contract',      icon:'📋' },
+  { value:'id',          label:'ID Document',   icon:'🪪' },
+  { value:'certificate', label:'Certificate',   icon:'🏆' },
+  { value:'portfolio',   label:'Portfolio',     icon:'🎨' },
+  { value:'other',       label:'Other',         icon:'📎' },
+]
+const DOC_ICON: Record<string,string> = Object.fromEntries(DOC_TYPES.map(d=>[d.value, d.icon]))
 
 function InlineField({ label, value, onSave, type='text', href, displayAs }: any) {
   const [editing, setEditing] = useState(false)
@@ -94,6 +103,9 @@ export default function FreelancerDetail() {
   const [docUploading, setDocUploading] = useState(false)
   const [cvExtracting, setCvExtracting] = useState(false)
   const [uploadError, setUploadError] = useState('')
+  const [showUploadModal, setShowUploadModal] = useState(false)
+  const [uploadDocType, setUploadDocType] = useState('other')
+  const [pendingFile, setPendingFile] = useState<File|null>(null)
   const cvRef = useRef<HTMLInputElement>(null)
   const docRef = useRef<HTMLInputElement>(null)
 
@@ -162,20 +174,27 @@ export default function FreelancerDetail() {
     setCvExtracting(false); load()
   }
 
-  const uploadDocument = async (file: File) => {
+  const uploadDocument = async (file: File, docType: string) => {
     setDocUploading(true); setUploadError('')
-    const fd = new FormData(); fd.append('file', file)
+    const fd = new FormData(); fd.append('file', file); fd.append('doc_type', docType)
     try {
       const res = await fetch(`${API}/hr/freelancers/${id}/documents`, { method:'POST', body:fd })
       if (!res.ok) {
         const err = await res.json().catch(() => ({}))
         setUploadError(`Upload failed: ${err.detail || res.status}`)
       } else {
-        load()
+        setShowUploadModal(false); setPendingFile(null); load()
       }
     } catch(e: any) {
       setUploadError(`Upload failed: ${e.message}`)
     } finally { setDocUploading(false) }
+  }
+
+  const deleteDocument = async (docId: string) => {
+    if (!confirm('Delete this document? It will also be removed from S3.')) return
+    await fetch(`${API}/hr/freelancers/${id}/documents/${docId}`, { method:'DELETE' })
+    load()
+  }
   }
 
   const addComment = async () => {
@@ -350,61 +369,132 @@ export default function FreelancerDetail() {
 
         {/* Documents tab */}
         {activeTab === 'documents' && (
-          <div style={{ background:'white', borderRadius:'12px', border:'1px solid #EDF2F7', padding:'20px', boxShadow:'0 1px 3px rgba(0,0,0,0.06)' }}>
-            <div style={{ fontSize:'10px', fontWeight:'700', textTransform:'uppercase', letterSpacing:'0.07em', color:'#45B6E4', marginBottom:'14px' }}>Documents · SharePoint</div>
-            <div style={{ display:'flex', gap:'10px', flexWrap:'wrap', alignItems:'stretch' }}>
+          <div style={{ background:'white', borderRadius:'12px', border:'1px solid #EDF2F7', overflow:'hidden', boxShadow:'0 1px 3px rgba(0,0,0,0.06)' }}>
+            <div style={{ padding:'14px 20px', borderBottom:'1px solid #F1F5F9', background:'#FAFBFC', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+              <span style={{ fontSize:'10px', fontWeight:'700', textTransform:'uppercase', letterSpacing:'0.07em', color:'#45B6E4' }}>Documents · S3</span>
+              <button onClick={() => { setShowUploadModal(true); setPendingFile(null); setUploadDocType('other'); setUploadError('') }}
+                style={{ padding:'6px 14px', background:'#156082', color:'white', border:'none', borderRadius:'7px', fontSize:'11px', fontWeight:'700', cursor:'pointer', fontFamily:'Montserrat, sans-serif' }}>
+                + Add document
+              </button>
+            </div>
 
-              {/* CV slot */}
-              <div style={{ border:'1px solid #EDF2F7', borderRadius:'10px', padding:'14px 16px', display:'flex', alignItems:'center', gap:'10px', background:'#FAFBFC', cursor:'pointer', minWidth:'180px' }}
-                onClick={() => cvRef.current?.click()}>
-                <input ref={cvRef} type="file" accept=".pdf,.doc,.docx,.odt,.rtf" style={{ display:'none' }}
-                  onChange={e => e.target.files?.[0] && handleCvUpload(e.target.files[0])}/>
-                {cvExtracting ? (
-                  <span style={{ color:'#45B6E4', fontSize:'12px' }}>⏳ Extracting CV…</span>
-                ) : profile.cv_sharepoint_url ? (
-                  <div style={{ display:'flex', alignItems:'center', gap:'10px' }}>
-                    <span style={{ fontSize:'20px' }}>📄</span>
-                    <div>
-                      <a href={profile.cv_sharepoint_url} target="_blank" onClick={e=>e.stopPropagation()} style={{ fontSize:'12px', fontWeight:'700', color:'#156082', textDecoration:'none', display:'block' }}>{profile.cv_filename||'CV'}</a>
-                      <span style={{ fontSize:'10px', color:'#94A3B8' }}>click to replace</span>
-                    </div>
-                  </div>
+            {/* CV row */}
+            <div style={{ padding:'12px 20px', borderBottom:'1px solid #F9FAFB', display:'flex', alignItems:'center', gap:'12px' }}>
+              <span style={{ fontSize:'18px', width:'24px', textAlign:'center' }}>📄</span>
+              <div style={{ flex:1, minWidth:0 }}>
+                {profile.cv_sharepoint_url ? (
+                  <a href={profile.cv_sharepoint_url} target="_blank" rel="noopener noreferrer"
+                    style={{ fontSize:'13px', fontWeight:'700', color:'#156082', textDecoration:'none' }}>
+                    {profile.cv_filename || 'CV'}
+                  </a>
                 ) : (
-                  <span style={{ color:'#45B6E4', fontSize:'12px' }}>📄 Upload CV</span>
+                  <span style={{ fontSize:'13px', color:'#94A3B8' }}>No CV uploaded</span>
                 )}
               </div>
-
-              {/* Additional documents */}
-              {(profile.documents||[]).map((doc:any) => (
-                <a key={doc.id} href={doc.sharepoint_url} target="_blank"
-                  style={{ border:'1px solid #EDF2F7', borderRadius:'10px', padding:'14px 16px', display:'flex', alignItems:'center', gap:'8px', background:'#FAFBFC', textDecoration:'none', minWidth:'160px' }}>
-                  <span style={{ fontSize:'20px' }}>📎</span>
-                  <div>
-                    <div style={{ fontSize:'12px', fontWeight:'700', color:'#156082' }}>{doc.filename}</div>
-                    {doc.uploaded_at && <div style={{ fontSize:'10px', color:'#94A3B8' }}>{new Date(doc.uploaded_at).toLocaleDateString('fr-FR',{day:'2-digit',month:'short',year:'numeric'})}</div>}
-                  </div>
-                </a>
-              ))}
-
-              {/* Upload additional doc */}
-              <div style={{ border:'1.5px dashed #EDF2F7', borderRadius:'10px', padding:'14px 16px', display:'flex', alignItems:'center', gap:'8px', cursor:'pointer', minWidth:'150px' }}
-                onClick={() => docRef.current?.click()}
-                onMouseEnter={e=>(e.currentTarget as HTMLDivElement).style.borderColor='#45B6E4'}
-                onMouseLeave={e=>(e.currentTarget as HTMLDivElement).style.borderColor='#EDF2F7'}>
-                <input ref={docRef} type="file" accept=".pdf,.doc,.docx,.odt,.rtf,.xls,.xlsx,.png,.jpg,.jpeg" style={{ display:'none' }}
-                  onChange={e => e.target.files?.[0] && uploadDocument(e.target.files[0])}/>
-                {docUploading
-                  ? <span style={{ color:'#45B6E4', fontSize:'12px' }}>Uploading…</span>
-                  : <span style={{ color:'#94A3B8', fontSize:'12px' }}>+ Add document</span>}
+              <span style={{ background:'#EFF6FF', color:'#156082', padding:'2px 8px', borderRadius:'10px', fontSize:'10px', fontWeight:'700', flexShrink:0 }}>CV / Resume</span>
+              <div style={{ display:'flex', gap:'6px', flexShrink:0 }}>
+                {profile.cv_sharepoint_url && (
+                  <a href={profile.cv_sharepoint_url} target="_blank" rel="noopener noreferrer"
+                    style={{ padding:'4px 10px', background:'#EFF6FF', color:'#156082', borderRadius:'6px', fontSize:'11px', fontWeight:'700', textDecoration:'none' }}>
+                    Open ↗
+                  </a>
+                )}
+                <button onClick={() => cvRef.current?.click()}
+                  style={{ padding:'4px 10px', background:'#F1F5F9', color:'#45B6E4', border:'none', borderRadius:'6px', fontSize:'11px', fontWeight:'700', cursor:'pointer', fontFamily:'Montserrat, sans-serif' }}>
+                  {cvExtracting ? '⏳' : profile.cv_sharepoint_url ? 'Replace' : 'Upload'}
+                </button>
               </div>
+              <input ref={cvRef} type="file" accept=".pdf,.doc,.docx,.odt,.rtf" style={{ display:'none' }}
+                onChange={e => e.target.files?.[0] && handleCvUpload(e.target.files[0])}/>
             </div>
+
+            {/* Other documents */}
+            {(profile.documents||[]).map((doc:any, i:number) => (
+              <div key={doc.id} style={{ padding:'12px 20px', borderBottom:'1px solid #F9FAFB', display:'flex', alignItems:'center', gap:'12px', background: i%2===0 ? 'white' : '#FAFBFC' }}>
+                <span style={{ fontSize:'18px', width:'24px', textAlign:'center' }}>{DOC_ICON[doc.doc_type||'other']||'📎'}</span>
+                <div style={{ flex:1, minWidth:0 }}>
+                  <div style={{ fontSize:'13px', fontWeight:'600', color:'#3F3F3F', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{doc.filename}</div>
+                  {doc.uploaded_at && <div style={{ fontSize:'10px', color:'#94A3B8' }}>{new Date(doc.uploaded_at).toLocaleDateString('fr-FR',{day:'2-digit',month:'short',year:'numeric'})}</div>}
+                </div>
+                <span style={{ background:'#F3F4F6', color:'#45B6E4', padding:'2px 8px', borderRadius:'10px', fontSize:'10px', fontWeight:'600', flexShrink:0 }}>
+                  {DOC_TYPES.find(t=>t.value===doc.doc_type)?.label || 'Other'}
+                </span>
+                <div style={{ display:'flex', gap:'6px', flexShrink:0 }}>
+                  <a href={doc.sharepoint_url} target="_blank" rel="noopener noreferrer"
+                    style={{ padding:'4px 10px', background:'#EFF6FF', color:'#156082', borderRadius:'6px', fontSize:'11px', fontWeight:'700', textDecoration:'none' }}>
+                    Open ↗
+                  </a>
+                  <button onClick={() => deleteDocument(doc.id)}
+                    style={{ padding:'4px 8px', background:'#FEF2F2', color:'#DC2626', border:'none', borderRadius:'6px', fontSize:'11px', fontWeight:'700', cursor:'pointer', fontFamily:'Montserrat, sans-serif' }}>
+                    ×
+                  </button>
+                </div>
+              </div>
+            ))}
+
+            {(profile.documents||[]).length === 0 && !profile.cv_sharepoint_url && (
+              <div style={{ padding:'32px', textAlign:'center', color:'#94A3B8', fontSize:'13px' }}>No documents yet.</div>
+            )}
+
             {uploadError && (
-              <div style={{ marginTop:'12px', padding:'10px 14px', background:'#FEF2F2', borderRadius:'8px', fontSize:'12px', color:'#DC2626', fontWeight:'600' }}>
+              <div style={{ margin:'12px 20px', padding:'10px 14px', background:'#FEF2F2', borderRadius:'8px', fontSize:'12px', color:'#DC2626', fontWeight:'600' }}>
                 ⚠ {uploadError}
               </div>
             )}
-            <div style={{ marginTop:'14px', fontSize:'11px', color:'#94A3B8' }}>
-              Files are stored in S3 · <strong style={{ color:'#156082' }}>{profile.first_name} {profile.last_name}/</strong>
+          </div>
+        )}
+
+        {/* Upload document modal */}
+        {showUploadModal && (
+          <div style={{ position:'fixed', inset:0, background:'rgba(21,96,130,0.45)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:1100, backdropFilter:'blur(2px)' }}
+            onClick={e => { if(e.target===e.currentTarget){ setShowUploadModal(false); setPendingFile(null) } }}>
+            <div style={{ background:'white', borderRadius:'14px', width:'440px', overflow:'hidden', boxShadow:'0 20px 60px rgba(21,96,130,0.25)' }}>
+              <div style={{ padding:'16px 20px', borderBottom:'1px solid #EDF2F7', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+                <span style={{ fontSize:'14px', fontWeight:'800', color:'#156082' }}>Upload Document</span>
+                <button onClick={() => { setShowUploadModal(false); setPendingFile(null) }} style={{ background:'none', border:'none', fontSize:'20px', cursor:'pointer', color:'#45B6E4' }}>×</button>
+              </div>
+              <div style={{ padding:'20px', display:'flex', flexDirection:'column', gap:'14px' }}>
+                <div>
+                  <div style={{ fontSize:'10px', fontWeight:'700', textTransform:'uppercase', letterSpacing:'0.07em', color:'#45B6E4', marginBottom:'8px' }}>Document type</div>
+                  <div style={{ display:'flex', gap:'6px', flexWrap:'wrap' }}>
+                    {DOC_TYPES.map(t => (
+                      <button key={t.value} onClick={() => setUploadDocType(t.value)}
+                        style={{ padding:'6px 12px', borderRadius:'20px', border:'none', cursor:'pointer', fontSize:'11px', fontWeight:'700', fontFamily:'Montserrat, sans-serif',
+                          background: uploadDocType===t.value ? '#156082' : '#F1F5F9',
+                          color: uploadDocType===t.value ? 'white' : '#45B6E4' }}>
+                        {t.icon} {t.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <div style={{ fontSize:'10px', fontWeight:'700', textTransform:'uppercase', letterSpacing:'0.07em', color:'#45B6E4', marginBottom:'8px' }}>File</div>
+                  <div style={{ border:'1.5px dashed #EDF2F7', borderRadius:'8px', padding:'16px', textAlign:'center', cursor:'pointer' }}
+                    onClick={() => docRef.current?.click()}
+                    onMouseEnter={e=>(e.currentTarget as HTMLDivElement).style.borderColor='#45B6E4'}
+                    onMouseLeave={e=>(e.currentTarget as HTMLDivElement).style.borderColor='#EDF2F7'}>
+                    <input ref={docRef} type="file" accept=".pdf,.doc,.docx,.odt,.rtf,.xls,.xlsx,.png,.jpg,.jpeg" style={{ display:'none' }}
+                      onChange={e => e.target.files?.[0] && setPendingFile(e.target.files[0])}/>
+                    {pendingFile
+                      ? <span style={{ fontSize:'12px', fontWeight:'600', color:'#156082' }}>📎 {pendingFile.name}</span>
+                      : <span style={{ fontSize:'12px', color:'#94A3B8' }}>Click to choose a file</span>}
+                  </div>
+                </div>
+                {uploadError && (
+                  <div style={{ padding:'10px 14px', background:'#FEF2F2', borderRadius:'8px', fontSize:'12px', color:'#DC2626', fontWeight:'600' }}>⚠ {uploadError}</div>
+                )}
+              </div>
+              <div style={{ padding:'14px 20px', borderTop:'1px solid #EDF2F7', background:'#FAFBFC', display:'flex', justifyContent:'flex-end', gap:'8px' }}>
+                <button onClick={() => { setShowUploadModal(false); setPendingFile(null) }}
+                  style={{ padding:'8px 16px', background:'white', border:'1.5px solid #EDF2F7', borderRadius:'8px', fontSize:'12px', fontWeight:'600', cursor:'pointer', fontFamily:'Montserrat, sans-serif', color:'#45B6E4' }}>
+                  Cancel
+                </button>
+                <button onClick={() => pendingFile && uploadDocument(pendingFile, uploadDocType)}
+                  disabled={!pendingFile || docUploading}
+                  style={{ padding:'8px 20px', background: pendingFile && !docUploading ? '#156082' : '#F1F5F9', color: pendingFile && !docUploading ? 'white' : '#94A3B8', border:'none', borderRadius:'8px', fontSize:'12px', fontWeight:'700', cursor: pendingFile && !docUploading ? 'pointer' : 'not-allowed', fontFamily:'Montserrat, sans-serif' }}>
+                  {docUploading ? 'Uploading…' : 'Upload'}
+                </button>
+              </div>
             </div>
           </div>
         )}

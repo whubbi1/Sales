@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, BackgroundTasks
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
 from app.database import get_db
@@ -190,7 +190,7 @@ def _s3_put_sync(bucket: str, key: str, content: bytes, content_type: str) -> No
     s3.put_object(
         Bucket=bucket, Key=key, Body=content,
         ContentType=content_type,
-        ContentDisposition=f'attachment; filename="{key.split("/")[-1]}"',
+        ContentDisposition=f'inline; filename="{key.split("/")[-1]}"',
     )
 
 def _s3_presigned_url_sync(bucket: str, key: str, expires: int = 3600) -> str:
@@ -596,7 +596,12 @@ async def get_freelancer_documents(profile_id: str, db: AsyncSession = Depends(g
     return {"documents": docs}
 
 @router.post("/freelancers/{profile_id}/documents")
-async def upload_freelancer_document(profile_id: str, file: UploadFile = File(...), db: AsyncSession = Depends(get_db)):
+async def upload_freelancer_document(
+    profile_id: str,
+    file: UploadFile = File(...),
+    doc_type: str = Form("other"),
+    db: AsyncSession = Depends(get_db),
+):
     content = await file.read()
     safe_fn = file.filename.replace(" ", "_")
     key = f"hr/freelancers/{profile_id}/{safe_fn}"
@@ -606,12 +611,30 @@ async def upload_freelancer_document(profile_id: str, file: UploadFile = File(..
         print(f"S3 upload error: {e}")
         raise HTTPException(500, f"Upload failed: {e}")
     await db.execute(text("""
-        INSERT INTO hr_profile_documents (id, profile_id, filename, sharepoint_url, uploaded_at)
-        VALUES (gen_random_uuid(), CAST(:pid AS UUID), :fn, :url, NOW())
-    """), {"pid": profile_id, "fn": file.filename, "url": s3_ref})
+        INSERT INTO hr_profile_documents (id, profile_id, filename, sharepoint_url, doc_type, uploaded_at)
+        VALUES (gen_random_uuid(), CAST(:pid AS UUID), :fn, :url, :doc_type, NOW())
+    """), {"pid": profile_id, "fn": file.filename, "url": s3_ref, "doc_type": doc_type})
     await db.commit()
     presigned = await s3_ref_to_presigned(s3_ref)
     return {"status": "ok", "url": presigned}
+
+@router.delete("/freelancers/{profile_id}/documents/{doc_id}")
+async def delete_freelancer_document(profile_id: str, doc_id: str, db: AsyncSession = Depends(get_db)):
+    row = await db.execute(text(
+        "SELECT sharepoint_url FROM hr_profile_documents WHERE id=CAST(:id AS UUID) AND profile_id=CAST(:pid AS UUID)"
+    ), {"id": doc_id, "pid": profile_id})
+    doc = row.fetchone()
+    if doc and doc.sharepoint_url and doc.sharepoint_url.startswith("s3://"):
+        path = doc.sharepoint_url[5:]
+        bucket, _, key = path.partition("/")
+        loop = asyncio.get_running_loop()
+        try:
+            await loop.run_in_executor(None, lambda: boto3.client("s3", region_name=AWS_REGION).delete_object(Bucket=bucket, Key=key))
+        except Exception as e:
+            print(f"S3 delete error: {e}")
+    await db.execute(text("DELETE FROM hr_profile_documents WHERE id=CAST(:id AS UUID)"), {"id": doc_id})
+    await db.commit()
+    return {"status": "ok"}
 
 # ─── Internal Recruitment ───────────────────────────────────────────────────────
 RECRUITMENT_STATUSES = ["new","screening","interview_1","interview_2","technical_test","offer","hired","rejected","on_hold"]
