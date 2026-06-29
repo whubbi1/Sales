@@ -41,22 +41,34 @@ export default function JobPositionsPage() {
   }
   useEffect(() => { load() }, [])
 
-  const openCreate = () => { setEditingPos(null); setForm(EMPTY_FORM); setShowModal(true) }
+  const openCreate = () => { setEditingPos(null); setForm(EMPTY_FORM); setSaveError(''); setShowModal(true) }
   const openEdit = (pos: any) => {
     setEditingPos(pos)
     setForm({ title: pos.title, country: pos.country, job_description_id: pos.job_description_id||'', status: pos.status })
-    setShowModal(true)
+    setSaveError(''); setShowModal(true)
   }
 
+  const [saveError, setSaveError] = useState('')
+
   const save = async () => {
-    setSaving(true)
-    const body = { ...form, job_description_id: form.job_description_id || null }
-    if (editingPos) {
-      await fetch(`${API}/hr/positions/${editingPos.id}`, { method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) })
-    } else {
-      await fetch(`${API}/hr/positions`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) })
+    if (!form.title.trim()) return
+    setSaving(true); setSaveError('')
+    try {
+      const body = { ...form, job_description_id: form.job_description_id || null }
+      const url = editingPos ? `${API}/hr/positions/${editingPos.id}` : `${API}/hr/positions`
+      const method = editingPos ? 'PUT' : 'POST'
+      const res = await fetch(url, { method, headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        setSaveError(err.detail || `Server error ${res.status}`)
+        return
+      }
+      setShowModal(false); setSaveError(''); load()
+    } catch(e: any) {
+      setSaveError(e.message || 'Network error — check your connection')
+    } finally {
+      setSaving(false)
     }
-    setSaving(false); setShowModal(false); load()
   }
 
   const deletePos = async (id: string) => {
@@ -265,8 +277,13 @@ export default function JobPositionsPage() {
                 <div style={{ fontSize:'10px', color:'#94A3B8', marginTop:'4px' }}>Link to a Job Description to define responsibilities and requirements</div>
               </div>
             </div>
+            {saveError && (
+              <div style={{ padding:'10px 20px', background:'#FEF2F2', borderTop:'1px solid #FECACA' }}>
+                <span style={{ fontSize:'12px', color:'#DC2626', fontWeight:'600' }}>⚠ {saveError}</span>
+              </div>
+            )}
             <div style={{ padding:'14px 20px', borderTop:'1px solid #EDF2F7', background:'#FAFBFC', display:'flex', justifyContent:'flex-end', gap:'8px' }}>
-              <button onClick={() => setShowModal(false)} style={{ padding:'8px 16px', background:'white', border:'1.5px solid #EDF2F7', borderRadius:'8px', fontSize:'12px', fontWeight:'600', cursor:'pointer', fontFamily:'Montserrat, sans-serif', color:'#45B6E4' }}>Cancel</button>
+              <button onClick={() => { setShowModal(false); setSaveError('') }} style={{ padding:'8px 16px', background:'white', border:'1.5px solid #EDF2F7', borderRadius:'8px', fontSize:'12px', fontWeight:'600', cursor:'pointer', fontFamily:'Montserrat, sans-serif', color:'#45B6E4' }}>Cancel</button>
               <button onClick={save} disabled={!form.title.trim() || saving}
                 style={{ padding:'8px 20px', background: form.title.trim() && !saving ? '#156082' : '#F1F5F9', color: form.title.trim() && !saving ? 'white' : '#94A3B8', border:'none', borderRadius:'8px', fontSize:'12px', fontWeight:'700', cursor: form.title.trim() && !saving ? 'pointer' : 'not-allowed', fontFamily:'Montserrat, sans-serif' }}>
                 {saving ? 'Saving…' : editingPos ? 'Save Changes' : 'Create Position'}
