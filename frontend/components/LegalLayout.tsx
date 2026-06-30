@@ -19,10 +19,11 @@ export function LegalLayout({ children }: { children: React.ReactNode }) {
     fetchUserAttributes()
       .then(a => {
         const email = a.email || ''
+        if (!email) { router.push('/auth/login'); return }
         setUserEmail(email)
         setUserName((a.name || `${a.given_name || ''} ${a.family_name || ''}`.trim()) || email.split('@')[0] || '')
       })
-      .catch(() => {})
+      .catch(() => { router.push('/auth/login') })
   }, [])
 
   const handleSignOut = async () => {

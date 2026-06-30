@@ -19,10 +19,9 @@ const EMPTY_FORM = { title: '', description: '', doc_type: '', country: 'global'
 
 export default function LegalTemplatesPage() {
   const [templates,      setTemplates]      = useState<Template[]>([])
-  const [loading,        setLoading]        = useState(true)
-  const [hasAccess,      setHasAccess]      = useState<boolean | null>(null)
-  const [canEdit,        setCanEdit]        = useState(false)
-  const [currentUser,    setCurrentUser]    = useState({ email: '', name: '' })
+  const [loading,     setLoading]     = useState(true)
+  const [canEdit,     setCanEdit]     = useState(false)
+  const [currentUser, setCurrentUser] = useState({ email: '', name: '' })
   const [filter,         setFilter]         = useState('all')
   const [showForm,       setShowForm]       = useState(false)
   const [editingTmpl,    setEditingTmpl]    = useState<Template | null>(null)
@@ -42,18 +41,17 @@ export default function LegalTemplatesPage() {
       const email = a.email || ''
       const name  = (a.name || `${a.given_name || ''} ${a.family_name || ''}`.trim()) || email.split('@')[0]
       setCurrentUser({ email, name })
-      if (!email) { setHasAccess(false); setLoading(false); return }
-      // All authenticated users get view access; permissions only control edit capability
-      setHasAccess(true)
-      fetch(`${API}/settings/permissions/${email}`)
-        .then(r => r.json())
-        .then(d => { setCanEdit(d.permissions?.legal?.templates?.access_mode === 'edit') })
-        .catch(() => {})
+      if (email) {
+        fetch(`${API}/settings/permissions/${email}`)
+          .then(r => r.json())
+          .then(d => { setCanEdit(d.permissions?.legal?.templates?.access_mode === 'edit') })
+          .catch(() => {})
+      }
       load()
-    }).catch(() => { setHasAccess(false); setLoading(false) })
+    }).catch(() => {})  // LegalLayout handles redirect to login on auth failure
   }, [])
 
-  useEffect(() => { if (hasAccess) load(filter) }, [filter])
+  useEffect(() => { load(filter) }, [filter])
 
   const saveTemplate = async () => {
     setSaving(true)
@@ -73,19 +71,6 @@ export default function LegalTemplatesPage() {
   const labelStyle: React.CSSProperties = { fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#45B6E4', display: 'block', marginBottom: '4px' }
 
   if (loading) return <LegalLayout><div style={{ padding: '60px', textAlign: 'center', color: '#94A3B8', fontSize: '13px' }}>Loading...</div></LegalLayout>
-
-  if (hasAccess === false) return (
-    <LegalLayout>
-      <div style={{ padding: '80px 40px', textAlign: 'center' }}>
-        <div style={{ fontSize: '48px', marginBottom: '16px' }}>🔒</div>
-        <h2 style={{ fontSize: '18px', fontWeight: '700', color: '#156082', marginBottom: '8px' }}>Access Restricted</h2>
-        <p style={{ fontSize: '13px', color: '#64748B', maxWidth: '400px', margin: '0 auto' }}>
-          You don't have permission to access Legal Templates.<br/>
-          Contact your HR administrator or ask the WHUBBI Bot.
-        </p>
-      </div>
-    </LegalLayout>
-  )
 
   const displayed = filter === 'all' ? templates : templates.filter(t => t.country === filter || t.country === 'global')
 

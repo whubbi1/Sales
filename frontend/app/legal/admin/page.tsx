@@ -1,39 +1,7 @@
 'use client'
 import { LegalLayout } from '@/components/LegalLayout'
-import { useEffect, useState } from 'react'
-import { fetchUserAttributes } from 'aws-amplify/auth'
-
-const API = 'https://api.whubbi.wcomply.com'
 
 export default function LegalAdminPage() {
-  const [loading,   setLoading]   = useState(true)
-  const [hasAccess, setHasAccess] = useState<boolean | null>(null)
-
-  useEffect(() => {
-    fetchUserAttributes().then(a => {
-      const email = a.email || ''
-      if (!email) { setHasAccess(false); setLoading(false); return }
-      // All authenticated users can access Legal Admin Cockpit
-      setHasAccess(true)
-      setLoading(false)
-    }).catch(() => { setHasAccess(false); setLoading(false) })
-  }, [])
-
-  if (loading) return <LegalLayout><div style={{ padding: '60px', textAlign: 'center', color: '#94A3B8', fontSize: '13px' }}>Loading...</div></LegalLayout>
-
-  if (!hasAccess) return (
-    <LegalLayout>
-      <div style={{ padding: '80px 40px', textAlign: 'center' }}>
-        <div style={{ fontSize: '48px', marginBottom: '16px' }}>🔒</div>
-        <h2 style={{ fontSize: '18px', fontWeight: '700', color: '#156082', marginBottom: '8px' }}>Access Restricted</h2>
-        <p style={{ fontSize: '13px', color: '#64748B', maxWidth: '400px', margin: '0 auto' }}>
-          Legal Admin Cockpit is only accessible to administrators.<br/>
-          Contact your HR administrator to request access.
-        </p>
-      </div>
-    </LegalLayout>
-  )
-
   return (
     <LegalLayout>
       <div style={{ padding: '32px' }}>

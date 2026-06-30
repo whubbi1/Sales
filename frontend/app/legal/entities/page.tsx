@@ -19,9 +19,8 @@ const EMPTY_DOC  = { doc_type: '', doc_label: '', sharepoint_url: '' }
 
 export default function LegalEntitiesPage() {
   const [entities,        setEntities]        = useState<Entity[]>([])
-  const [loading,         setLoading]         = useState(true)
-  const [hasAccess,       setHasAccess]       = useState<boolean | null>(null)
-  const [canEdit,         setCanEdit]         = useState(false)
+  const [loading,  setLoading]  = useState(true)
+  const [canEdit,  setCanEdit]  = useState(false)
   const [currentUser,     setCurrentUser]     = useState({ email: '', name: '' })
   const [showEntityForm,  setShowEntityForm]  = useState(false)
   const [editingEntity,   setEditingEntity]   = useState<Entity | null>(null)
@@ -29,8 +28,7 @@ export default function LegalEntitiesPage() {
   const [showDocForm,     setShowDocForm]     = useState<string | null>(null)
   const [form,            setForm]            = useState(EMPTY_FORM)
   const [docForm,         setDocForm]         = useState(EMPTY_DOC)
-  const [saving,          setSaving]          = useState(false)
-  const [debugInfo,       setDebugInfo]       = useState<Record<string, string>>({})
+  const [saving,   setSaving]   = useState(false)
 
   const load = () => {
     fetch(`${API}/legal/entities`)
@@ -40,29 +38,19 @@ export default function LegalEntitiesPage() {
   }
 
   useEffect(() => {
-    setDebugInfo(d => ({ ...d, step: 'calling fetchUserAttributes...' }))
     fetchUserAttributes().then(a => {
       const email = a.email || ''
       const name  = (a.name || `${a.given_name || ''} ${a.family_name || ''}`.trim()) || email.split('@')[0]
       setCurrentUser({ email, name })
-      setDebugInfo(d => ({ ...d, step: 'auth ok', email: email || '(empty)', allAttribs: JSON.stringify(Object.keys(a)) }))
-      if (!email) {
-        setDebugInfo(d => ({ ...d, blocked: 'email was empty after auth' }))
-        setHasAccess(false); setLoading(false); return
+      // Fetch permissions to determine edit rights only
+      if (email) {
+        fetch(`${API}/settings/permissions/${email}`)
+          .then(r => r.json())
+          .then(d => { setCanEdit(d.permissions?.legal?.entities?.access_mode === 'edit') })
+          .catch(() => {})
       }
-      setHasAccess(true)
-      fetch(`${API}/settings/permissions/${email}`)
-        .then(r => r.json())
-        .then(d => {
-          setDebugInfo(prev => ({ ...prev, permApiStatus: 'ok', legalPerm: JSON.stringify(d.permissions?.legal || null) }))
-          setCanEdit(d.permissions?.legal?.entities?.access_mode === 'edit')
-        })
-        .catch(e => setDebugInfo(prev => ({ ...prev, permApiStatus: 'error: ' + String(e) })))
       load()
-    }).catch(e => {
-      setDebugInfo(d => ({ ...d, step: 'auth failed', error: String(e) }))
-      setHasAccess(false); setLoading(false)
-    })
+    }).catch(() => {})  // LegalLayout handles redirect to login on auth failure
   }, [])
 
   const openAddEntity = () => { setEditingEntity(null); setForm(EMPTY_FORM); setShowEntityForm(true) }
@@ -99,24 +87,6 @@ export default function LegalEntitiesPage() {
   const labelStyle: React.CSSProperties = { fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#45B6E4', display: 'block', marginBottom: '4px' }
 
   if (loading) return <LegalLayout><div style={{ padding: '60px', textAlign: 'center', color: '#94A3B8', fontSize: '13px' }}>Loading...</div></LegalLayout>
-
-  if (hasAccess === false) return (
-    <LegalLayout>
-      <div style={{ padding: '60px 40px', maxWidth: '600px', margin: '0 auto' }}>
-        <div style={{ fontSize: '48px', marginBottom: '16px', textAlign: 'center' }}>🔒</div>
-        <h2 style={{ fontSize: '18px', fontWeight: '700', color: '#156082', marginBottom: '8px', textAlign: 'center' }}>Access Restricted</h2>
-        <p style={{ fontSize: '13px', color: '#64748B', textAlign: 'center', marginBottom: '24px' }}>
-          Authentication did not return a valid user session. Share the diagnostic info below with your administrator.
-        </p>
-        <div style={{ background: '#0F172A', borderRadius: '10px', padding: '16px', fontFamily: 'monospace', fontSize: '11px', color: '#94A3B8', lineHeight: 1.8 }}>
-          {Object.entries(debugInfo).map(([k, v]) => (
-            <div key={k}><span style={{ color: '#60A5FA' }}>{k}:</span> {v}</div>
-          ))}
-          {Object.keys(debugInfo).length === 0 && <div style={{ color: '#64748B' }}>No diagnostic data yet…</div>}
-        </div>
-      </div>
-    </LegalLayout>
-  )
 
   return (
     <LegalLayout>
