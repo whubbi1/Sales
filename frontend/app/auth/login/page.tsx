@@ -1,20 +1,18 @@
 'use client'
 import { useState } from 'react'
+import { signInWithRedirect } from 'aws-amplify/auth'
 
 export default function LoginPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
-  const handleMicrosoftSSO = () => {
+  const handleMicrosoftSSO = async () => {
     setLoading(true)
     setError('')
-    const domain = process.env.NEXT_PUBLIC_COGNITO_DOMAIN
-    const clientId = process.env.NEXT_PUBLIC_COGNITO_CLIENT_ID
-    const redirect = `${window.location.origin}/auth/callback`
-    if (domain && clientId) {
-      window.location.href = `${domain}/oauth2/authorize?client_id=${clientId}&response_type=code&scope=email+openid+profile&redirect_uri=${encodeURIComponent(redirect)}&identity_provider=Microsoft`
-    } else {
-      setError('SSO configuration error. Please contact support.')
+    try {
+      await signInWithRedirect({ provider: { custom: 'Microsoft' } })
+    } catch {
+      setError('SSO error. Please try again.')
       setLoading(false)
     }
   }
@@ -64,7 +62,7 @@ export default function LoginPage() {
               <path fill="#ffba08" d="M12 12h10v10H12z"/>
             </svg>
           )}
-          {loading ? 'Redirecting...' : 'Continue with Microsoft'}
+          {loading ? 'Redirecting to Microsoft...' : 'Continue with Microsoft'}
         </button>
 
         {error && <div style={{ marginTop: '14px', background: '#FEF2F2', color: '#DC2626', padding: '10px 14px', borderRadius: '8px', fontSize: '12px', fontWeight: '500' }}>{error}</div>}
