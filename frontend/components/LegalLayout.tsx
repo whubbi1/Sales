@@ -5,6 +5,7 @@ import { getStoredUser, clearStoredUser } from '@/lib/auth'
 
 const NAV = [
   { href: '/legal/entities',  icon: '🏢', label: 'Legal Entities' },
+  { href: '/legal/locations', icon: '📍', label: 'Locations' },
   { href: '/legal/templates', icon: '📄', label: 'Template Documents' },
   { href: '/legal/admin',     icon: '⚙️', label: 'Admin Cockpit' },
 ]

@@ -407,6 +407,77 @@ async def startup():
                     created_at TIMESTAMP DEFAULT NOW(),
                     updated_at TIMESTAMP DEFAULT NOW()
                 )""",
+                # Legal schema evolution
+                "ALTER TABLE legal_entities ADD COLUMN IF NOT EXISTS street VARCHAR(255)",
+                "ALTER TABLE legal_entities ADD COLUMN IF NOT EXISTS postal_code VARCHAR(20)",
+                "ALTER TABLE legal_entities ADD COLUMN IF NOT EXISTS city VARCHAR(100)",
+                "ALTER TABLE legal_entity_documents ALTER COLUMN doc_label DROP NOT NULL",
+                """CREATE TABLE IF NOT EXISTS legal_entity_registrations (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    entity_id UUID NOT NULL,
+                    reg_type VARCHAR(100),
+                    reg_value VARCHAR(255) NOT NULL,
+                    sort_order INTEGER DEFAULT 0,
+                    created_by VARCHAR(255),
+                    created_at TIMESTAMP DEFAULT NOW()
+                )""",
+                """CREATE TABLE IF NOT EXISTS legal_entity_websites (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    entity_id UUID NOT NULL,
+                    label VARCHAR(255),
+                    url TEXT NOT NULL,
+                    created_by VARCHAR(255),
+                    created_at TIMESTAMP DEFAULT NOW()
+                )""",
+                """CREATE TABLE IF NOT EXISTS legal_locations (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    location_name VARCHAR(255) NOT NULL,
+                    street VARCHAR(255),
+                    postal_code VARCHAR(20),
+                    city VARCHAR(100),
+                    country VARCHAR(100),
+                    created_by VARCHAR(255),
+                    updated_by VARCHAR(255),
+                    created_at TIMESTAMP DEFAULT NOW(),
+                    updated_at TIMESTAMP DEFAULT NOW()
+                )""",
+                """CREATE TABLE IF NOT EXISTS legal_location_registrations (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    location_id UUID NOT NULL,
+                    reg_type VARCHAR(100),
+                    reg_value VARCHAR(255) NOT NULL,
+                    created_by VARCHAR(255),
+                    created_at TIMESTAMP DEFAULT NOW()
+                )""",
+                """CREATE TABLE IF NOT EXISTS legal_location_documents (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    location_id UUID NOT NULL,
+                    doc_type VARCHAR(100),
+                    sharepoint_url TEXT,
+                    created_by VARCHAR(255),
+                    created_at TIMESTAMP DEFAULT NOW()
+                )""",
+                """CREATE TABLE IF NOT EXISTS legal_location_websites (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    location_id UUID NOT NULL,
+                    label VARCHAR(255),
+                    url TEXT NOT NULL,
+                    created_by VARCHAR(255),
+                    created_at TIMESTAMP DEFAULT NOW()
+                )""",
+                """CREATE TABLE IF NOT EXISTS legal_doc_types (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    label VARCHAR(255) NOT NULL,
+                    sort_order INTEGER DEFAULT 0,
+                    created_at TIMESTAMP DEFAULT NOW()
+                )""",
+                """INSERT INTO legal_doc_types (label, sort_order)
+                   SELECT v.label, v.sort_order FROM (VALUES
+                       ('KBIS', 1), ('SIREN/SIRET', 2), ('VAT Certificate', 3),
+                       ('Articles of Incorporation', 4), ('Insurance Certificate', 5),
+                       ('Bank Certificate', 6), ('Tax Certificate', 7), ('Other', 99)
+                   ) AS v(label, sort_order)
+                   WHERE NOT EXISTS (SELECT 1 FROM legal_doc_types LIMIT 1)""",
             ]
             for sql in sqls:
                 try:
