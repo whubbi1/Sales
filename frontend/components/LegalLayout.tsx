@@ -56,12 +56,6 @@ export function LegalLayout({ children }: { children: React.ReactNode }) {
           <div style={{ fontSize: '10px', color: 'rgba(255,255,255,0.4)', fontWeight: '500' }}>Legal Management</div>
         </div>
 
-        {userEmail && (
-          <div style={{ padding: '10px 14px', borderBottom: '1px solid rgba(255,255,255,0.08)', background: 'rgba(0,0,0,0.12)', flexShrink: 0 }}>
-            <div style={{ fontSize: '12px', fontWeight: '600', color: 'white', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginBottom: '2px' }}>{userName}</div>
-            <div style={{ fontSize: '10px', color: 'rgba(255,255,255,0.45)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{userEmail}</div>
-          </div>
-        )}
 
         <nav style={{ flex: 1, padding: '10px 8px', overflowY: 'auto' }}>
           {NAV.map(item => {
