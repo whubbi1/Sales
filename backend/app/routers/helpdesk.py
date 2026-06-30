@@ -98,13 +98,14 @@ async def dashboard(db: AsyncSession = Depends(get_db)):
 
 @router.get("/tickets")
 async def list_tickets(status:str=None,priority:str=None,group_id:str=None,
-                       assignee_email:str=None,search:str=None,
+                       assignee_email:str=None,requester_email:str=None,search:str=None,
                        limit:int=50,offset:int=0,db:AsyncSession=Depends(get_db)):
     where,params=["1=1"],{"limit":limit,"offset":offset}
     if status:   where.append("t.status=:status");    params["status"]=status
     if priority: where.append("t.priority=:priority"); params["priority"]=priority
     if group_id: where.append("t.group_id=CAST(:group_id AS uuid)"); params["group_id"]=group_id
     if assignee_email: where.append("t.assignee_email=:assignee_email"); params["assignee_email"]=assignee_email
+    if requester_email: where.append("t.requester_email=:requester_email"); params["requester_email"]=requester_email
     if search:
         where.append("(t.title ILIKE :s OR t.ticket_number ILIKE :s OR t.requester_email ILIKE :s)")
         params["s"]=f"%{search}%"
@@ -160,8 +161,11 @@ async def create_ticket(data:dict,db:AsyncSession=Depends(get_db)):
             g_row=g_r.fetchone()
             if g_row and g_row.group_id: group_id=str(g_row.group_id)
         if not group_id:
-            ag=await db.execute(text("SELECT id FROM helpdesk_groups WHERE name='Helpdesk Admin' LIMIT 1"))
+            ag=await db.execute(text("SELECT id FROM helpdesk_groups WHERE is_default=true ORDER BY created_at LIMIT 1"))
             ag_row=ag.fetchone()
+            if not ag_row:
+                ag=await db.execute(text("SELECT id FROM helpdesk_groups ORDER BY created_at LIMIT 1"))
+                ag_row=ag.fetchone()
             if ag_row: group_id=str(ag_row.id)
     assignee_email=data.get("assignee_email","")
     assignee_name=data.get("assignee_name","")
@@ -219,6 +223,7 @@ async def update_ticket(tid:str,data:dict,db:AsyncSession=Depends(get_db)):
         UPDATE tickets SET
             status=COALESCE(NULLIF(:status,''),status),
             priority=COALESCE(NULLIF(:priority,''),priority),
+            ticket_type=COALESCE(NULLIF(:ticket_type,''),ticket_type),
             assignee_email=COALESCE(NULLIF(:assignee_email,''),assignee_email),
             assignee_name=COALESCE(NULLIF(:assignee_name,''),assignee_name),
             group_id=CASE WHEN :group_id='' THEN group_id ELSE CAST(:group_id AS uuid) END,
@@ -320,6 +325,16 @@ async def create_group(data:dict,db:AsyncSession=Depends(get_db)):
                      {"id":gid,"name":data.get("name"),"desc":data.get("description",""),"resp_email":data.get("responsible_email",""),"resp_name":data.get("responsible_name","")})
     await db.commit()
     return {"status":"ok","id":gid}
+
+
+@router.put("/groups/{gid}")
+async def update_group(gid:str,data:dict,db:AsyncSession=Depends(get_db)):
+    if data.get("is_default"):
+        await db.execute(text("UPDATE helpdesk_groups SET is_default=false"))
+    await db.execute(text("UPDATE helpdesk_groups SET name=:name,description=:desc,is_default=:is_default WHERE id=CAST(:id AS uuid)"),
+                     {"id":gid,"name":data.get("name",""),"desc":data.get("description",""),"is_default":data.get("is_default",False)})
+    await db.commit()
+    return {"status":"ok"}
 
 
 @router.post("/groups/{gid}/members")

@@ -9,7 +9,7 @@ interface NavItem { href: string; label: string; icon: string; roles: string[] }
 
 const NAV_ITEMS: NavItem[] = [
   { href: '/helpdesk',                  label: 'Dashboard',       icon: '📊', roles: ['end_user','helpdesk_user','administrator'] },
-  { href: '/helpdesk/tickets/mine',     label: 'My Tickets',      icon: '🎫', roles: ['end_user','helpdesk_user','administrator'] },
+  { href: '/helpdesk/tickets?mine=1',   label: 'My Tickets',      icon: '🎫', roles: ['end_user','helpdesk_user','administrator'] },
   { href: '/helpdesk/tickets',          label: 'All Tickets',     icon: '📂', roles: ['helpdesk_user','administrator'] },
   { href: '/helpdesk/tickets/assigned', label: 'Assigned to Me',  icon: '👤', roles: ['helpdesk_user','administrator'] },
   { href: '/helpdesk/reporting',        label: 'Reporting',       icon: '📈', roles: ['helpdesk_user','administrator'] },
@@ -51,7 +51,10 @@ export default function HelpdeskLayout({ children }: Props) {
   }
 
   const visible = NAV_ITEMS.filter(item => item.roles.includes(role))
-  const isActive = (href: string) => href === '/helpdesk' ? pathname === '/helpdesk' : pathname.startsWith(href)
+  const isActive = (href: string) => {
+    const hrefPath = href.split('?')[0]
+    return hrefPath === '/helpdesk' ? pathname === '/helpdesk' : pathname.startsWith(hrefPath)
+  }
 
   const ROLE_LABEL: Record<string, { label: string; color: string }> = {
     end_user:      { label: 'End User',       color: '#45B6E4' },

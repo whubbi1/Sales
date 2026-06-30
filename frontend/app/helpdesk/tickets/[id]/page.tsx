@@ -21,6 +21,12 @@ export default function TicketDetailPage() {
   const [saving, setSaving] = useState(false)
   const [saveMsg, setSaveMsg] = useState<{text:string;type:'success'|'error'}|null>(null)
 
+  const TICKET_TYPE_LABELS: Record<string, string> = {
+    incident_request: '🚨 Incident',
+    change_request: '🔄 Change',
+    information_request: 'ℹ️ Information',
+  }
+
   const load = async () => {
     const [tr, gr, ti] = await Promise.all([
       fetch(`${API}/helpdesk/tickets/${id}`).then(r => r.json()),
@@ -33,6 +39,7 @@ export default function TicketDetailPage() {
     setTeamsInfo(ti)
     setEf({
       status: tr.ticket?.status,
+      ticket_type: tr.ticket?.ticket_type || '',
       assignee_email: tr.ticket?.assignee_email || '',
       assignee_name: tr.ticket?.assignee_name || '',
       resolution: tr.ticket?.resolution || '',
@@ -146,6 +153,7 @@ export default function TicketDetailPage() {
                     <span style={{ fontSize: '12px', fontWeight: '700', color: '#45B6E4' }}>{ticket.ticket_number}</span>
                     <span style={{ background: s.bg, color: s.color, padding: '3px 10px', borderRadius: '20px', fontSize: '11px', fontWeight: '700' }}>{s.label}</span>
                     <span style={{ background: p.bg, color: p.color, padding: '3px 10px', borderRadius: '20px', fontSize: '11px', fontWeight: '700', textTransform: 'capitalize' }}>{ticket.priority}</span>
+                    {ticket.ticket_type && <span style={{ background: '#F1F5F9', color: '#3F3F3F', padding: '3px 10px', borderRadius: '20px', fontSize: '11px', fontWeight: '600' }}>{TICKET_TYPE_LABELS[ticket.ticket_type] || ticket.ticket_type}</span>}
                     {ticket.category_name && <span style={{ background: (ticket.category_color || '#45B6E4') + '20', color: ticket.category_color || '#45B6E4', padding: '3px 10px', borderRadius: '20px', fontSize: '11px', fontWeight: '600' }}>{ticket.category_icon} {ticket.category_name}</span>}
                     {ticket.subcategory_name && <span style={{ background: '#F1F5F9', color: '#45B6E4', padding: '3px 9px', borderRadius: '20px', fontSize: '11px' }}>{ticket.subcategory_name}</span>}
                   </div>
@@ -166,7 +174,15 @@ export default function TicketDetailPage() {
                     <div>
                       <label className="form-label">Status</label>
                       <select className="form-input" value={ef.status} onChange={e => setEf((p: any) => ({ ...p, status: e.target.value }))}>
-                        {Object.entries(STATUS_STYLE).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+                        {Object.entries(STATUS_STYLE).map(([k, v]) => <option key={k} value={k}>{(v as any).label}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="form-label">Ticket Type</label>
+                      <select className="form-input" value={ef.ticket_type} onChange={e => setEf((p: any) => ({ ...p, ticket_type: e.target.value }))}>
+                        <option value="incident_request">Incident Request</option>
+                        <option value="change_request">Change Request</option>
+                        <option value="information_request">Information Request</option>
                       </select>
                     </div>
                     <div>

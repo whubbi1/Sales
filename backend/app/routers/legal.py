@@ -10,17 +10,17 @@ router = APIRouter()
 
 @router.get("/doc-types")
 async def list_doc_types(db: AsyncSession = Depends(get_db)):
-    r = await db.execute(text("SELECT id::text, label, label AS type_key, sort_order FROM legal_doc_types ORDER BY sort_order, label"))
+    r = await db.execute(text("SELECT id::text, label, label AS type_key, scope, sort_order FROM legal_doc_types ORDER BY sort_order, label"))
     return {"doc_types": [dict(row._mapping) for row in r.fetchall()]}
 
 
 @router.post("/doc-types")
 async def create_doc_type(data: dict, db: AsyncSession = Depends(get_db)):
     r = await db.execute(text("""
-        INSERT INTO legal_doc_types (id, label, sort_order, created_at)
-        VALUES (gen_random_uuid(), :label, :sort_order, NOW())
+        INSERT INTO legal_doc_types (id, label, scope, sort_order, created_at)
+        VALUES (gen_random_uuid(), :label, :scope, :sort_order, NOW())
         RETURNING id::text
-    """), {"label": data.get("label", ""), "sort_order": data.get("sort_order", 99)})
+    """), {"label": data.get("label", ""), "scope": data.get("scope", "both"), "sort_order": data.get("sort_order", 99)})
     await db.commit()
     return {"id": r.fetchone()[0], "status": "created"}
 
@@ -28,9 +28,9 @@ async def create_doc_type(data: dict, db: AsyncSession = Depends(get_db)):
 @router.put("/doc-types/{dt_id}")
 async def update_doc_type(dt_id: str, data: dict, db: AsyncSession = Depends(get_db)):
     await db.execute(text("""
-        UPDATE legal_doc_types SET label = :label, sort_order = :sort_order
+        UPDATE legal_doc_types SET label = :label, scope = :scope, sort_order = :sort_order
         WHERE id = CAST(:id AS UUID)
-    """), {"id": dt_id, "label": data.get("label", ""), "sort_order": data.get("sort_order", 99)})
+    """), {"id": dt_id, "label": data.get("label", ""), "scope": data.get("scope", "both"), "sort_order": data.get("sort_order", 99)})
     await db.commit()
     return {"status": "updated"}
 
@@ -379,30 +379,28 @@ async def delete_location_website(loc_id: str, web_id: str, db: AsyncSession = D
 # ─── Legal Templates ─────────────────────────────────────────────────────────
 
 @router.get("/templates")
-async def list_templates(country: str = None, db: AsyncSession = Depends(get_db)):
-    if country and country != "global":
-        r = await db.execute(text("""
-            SELECT id::text, title, description, doc_type, country, sharepoint_url, sort_order, created_at
-            FROM legal_templates WHERE country = :country OR country = 'global'
-            ORDER BY sort_order, title
-        """), {"country": country})
-    else:
-        r = await db.execute(text("""
-            SELECT id::text, title, description, doc_type, country, sharepoint_url, sort_order, created_at
-            FROM legal_templates ORDER BY country, sort_order, title
-        """))
+async def list_templates(db: AsyncSession = Depends(get_db)):
+    r = await db.execute(text("""
+        SELECT lt.id::text, lt.title, lt.description, lt.doc_type,
+               lt.entity_id::text, le.legal_name AS entity_name,
+               lt.sharepoint_url, lt.sort_order, lt.created_at
+        FROM legal_templates lt
+        LEFT JOIN legal_entities le ON lt.entity_id = le.id
+        ORDER BY le.legal_name NULLS LAST, lt.title
+    """))
     return {"templates": [dict(row._mapping) for row in r.fetchall()]}
 
 
 @router.post("/templates")
 async def create_template(data: dict, db: AsyncSession = Depends(get_db)):
+    entity_id = data.get("entity_id") or None
     r = await db.execute(text("""
-        INSERT INTO legal_templates (id, title, description, doc_type, country, sharepoint_url, sort_order, created_by, created_at, updated_at)
-        VALUES (gen_random_uuid(), :title, :description, :doc_type, :country, :sharepoint_url, :sort_order, :created_by, NOW(), NOW())
+        INSERT INTO legal_templates (id, title, description, doc_type, entity_id, sharepoint_url, sort_order, created_by, created_at, updated_at)
+        VALUES (gen_random_uuid(), :title, :description, :doc_type, CAST(:entity_id AS UUID), :sharepoint_url, :sort_order, :created_by, NOW(), NOW())
         RETURNING id::text
     """), {
         "title": data.get("title", ""), "description": data.get("description", ""),
-        "doc_type": data.get("doc_type", ""), "country": data.get("country", "global"),
+        "doc_type": data.get("doc_type", ""), "entity_id": entity_id,
         "sharepoint_url": data.get("sharepoint_url", ""), "sort_order": data.get("sort_order", 0),
         "created_by": data.get("created_by", ""),
     })
@@ -412,15 +410,17 @@ async def create_template(data: dict, db: AsyncSession = Depends(get_db)):
 
 @router.put("/templates/{tmpl_id}")
 async def update_template(tmpl_id: str, data: dict, db: AsyncSession = Depends(get_db)):
+    entity_id = data.get("entity_id") or None
     await db.execute(text("""
         UPDATE legal_templates SET
             title = :title, description = :description, doc_type = :doc_type,
-            country = :country, sharepoint_url = :sharepoint_url,
+            entity_id = CAST(:entity_id AS UUID),
+            sharepoint_url = :sharepoint_url,
             sort_order = :sort_order, updated_by = :updated_by, updated_at = NOW()
         WHERE id = CAST(:id AS UUID)
     """), {
         "id": tmpl_id, "title": data.get("title", ""), "description": data.get("description", ""),
-        "doc_type": data.get("doc_type", ""), "country": data.get("country", "global"),
+        "doc_type": data.get("doc_type", ""), "entity_id": entity_id,
         "sharepoint_url": data.get("sharepoint_url", ""), "sort_order": data.get("sort_order", 0),
         "updated_by": data.get("updated_by", ""),
     })

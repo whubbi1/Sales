@@ -69,6 +69,9 @@ async def startup():
                 "ALTER TABLE legal_entities ADD COLUMN IF NOT EXISTS email VARCHAR(255)",
                 "ALTER TABLE legal_locations ADD COLUMN IF NOT EXISTS phone VARCHAR(50)",
                 "ALTER TABLE legal_locations ADD COLUMN IF NOT EXISTS email VARCHAR(255)",
+                "ALTER TABLE legal_templates ADD COLUMN IF NOT EXISTS entity_id UUID",
+                "ALTER TABLE legal_doc_types ADD COLUMN IF NOT EXISTS scope VARCHAR(20) DEFAULT 'both'",
+                "ALTER TABLE helpdesk_groups ADD COLUMN IF NOT EXISTS is_default BOOLEAN DEFAULT false",
                 # Seed missing subcategories without dropping existing data
                 """INSERT INTO ticket_categories (id,name,description,color,icon,parent_id,active,created_at)
                    SELECT gen_random_uuid(),'WHUBBI','','#e97132','📱',p.id,true,NOW()
