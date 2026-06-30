@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect, useCallback } from 'react'
 import { HRLayout } from '@/components/HRLayout'
-import { fetchUserAttributes } from 'aws-amplify/auth'
+import { getStoredUser } from '@/lib/auth'
 
 const API = 'https://api.whubbi.wcomply.com'
 
@@ -88,13 +88,8 @@ function ComposeTab({ users, groups, loadingUsers, onSent }: {
   const [monthDay, setMonthDay] = useState('1')
 
   useEffect(() => {
-    fetchUserAttributes()
-      .then(a => {
-        const email = a.email || ''
-        const name = (a.name || `${a.given_name || ''} ${a.family_name || ''}`.trim() || email.split('@')[0]).trim()
-        setSenderInfo({ email, name })
-      })
-      .catch(() => {})
+    const user = getStoredUser()
+    if (user) setSenderInfo({ email: user.email, name: user.name })
   }, [])
 
   useEffect(() => {

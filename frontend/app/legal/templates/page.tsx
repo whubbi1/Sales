@@ -1,7 +1,7 @@
 'use client'
 import { LegalLayout } from '@/components/LegalLayout'
 import { useEffect, useState } from 'react'
-import { fetchUserAttributes } from 'aws-amplify/auth'
+import { getStoredUser } from '@/lib/auth'
 
 const API = 'https://api.whubbi.wcomply.com'
 
@@ -37,18 +37,14 @@ export default function LegalTemplatesPage() {
   }
 
   useEffect(() => {
-    fetchUserAttributes().then(a => {
-      const email = a.email || ''
-      const name  = (a.name || `${a.given_name || ''} ${a.family_name || ''}`.trim()) || email.split('@')[0]
-      setCurrentUser({ email, name })
-      if (email) {
-        fetch(`${API}/settings/permissions/${email}`)
-          .then(r => r.json())
-          .then(d => { setCanEdit(d.permissions?.legal?.templates?.access_mode === 'edit') })
-          .catch(() => {})
-      }
-      load()
-    }).catch(() => {})  // LegalLayout handles redirect to login on auth failure
+    const user = getStoredUser()
+    if (!user) return // LegalLayout handles redirect
+    setCurrentUser({ email: user.email, name: user.name })
+    fetch(`${API}/settings/permissions/${user.email}`)
+      .then(r => r.json())
+      .then(d => { setCanEdit(d.permissions?.legal?.templates?.access_mode === 'edit') })
+      .catch(() => {})
+    load()
   }, [])
 
   useEffect(() => { load(filter) }, [filter])

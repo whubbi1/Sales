@@ -2,7 +2,7 @@
 import { useRouter } from 'next/navigation'
 import { useState, useEffect, useRef } from 'react'
 import HelpdeskLayout from '@/components/HelpdeskLayout'
-import { fetchUserAttributes } from 'aws-amplify/auth'
+import { getStoredUser } from '@/lib/auth'
 import { API, STATUS_STYLE, PRIORITY_STYLE, BTN } from '../constants'
 
 export default function TicketsPage() {
@@ -28,9 +28,9 @@ export default function TicketsPage() {
   useEffect(() => {
     const prefill = async () => {
       try {
-        const attrs = await fetchUserAttributes()
-        const email = attrs.email || ''
-        const name  = attrs.name || `${attrs.given_name || ''} ${attrs.family_name || ''}`.trim() || email.split('@')[0]
+        const user = getStoredUser()
+        if (!user) return
+        const { email, name } = user
         setForm(p => ({
           ...p,
           requester_email: email,

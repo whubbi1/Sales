@@ -1,6 +1,6 @@
 'use client'
 import { useState, useEffect } from 'react'
-import { fetchUserAttributes } from 'aws-amplify/auth'
+import { getStoredUser } from '@/lib/auth'
 import { HRLayout } from '@/components/HRLayout'
 
 const API = 'https://api.whubbi.wcomply.com'
@@ -34,7 +34,7 @@ export default function AdminCockpit() {
   const [questionSaving, setQuestionSaving] = useState(false)
 
   useEffect(() => {
-    fetchUserAttributes().then(a => setCurrentUserEmail(a.email || '')).catch(() => {})
+    const user = getStoredUser(); if (user) setCurrentUserEmail(user.email)
   }, [])
 
   const loadSkills = () => {

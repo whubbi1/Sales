@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import HelpdeskLayout from '@/components/HelpdeskLayout'
-import { fetchUserAttributes } from 'aws-amplify/auth'
+import { getStoredUser } from '@/lib/auth'
 const API = 'https://api.whubbi.wcomply.com'
 
 const PRIO_COLOR: Record<string,string> = { critical:'#DC2626', high:'#D97706', medium:'#156082', low:'#45B6E4' }
@@ -32,11 +32,8 @@ export default function MyTicketsPage() {
   const [categories, setCategories] = useState<any[]>([])
 
   useEffect(() => {
-    fetchUserAttributes().then(attrs => {
-      const email = attrs.email || ''
-      setUserEmail(email)
-      if (email) loadTickets(email)
-    }).catch(() => {})
+    const user = getStoredUser()
+    if (user) { setUserEmail(user.email); loadTickets(user.email) }
 
     fetch(`${API}/helpdesk/categories`).then(r=>r.json()).then(d=>setCategories(d.categories||[])).catch(()=>{})
   }, [])

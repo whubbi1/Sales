@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect, useRef } from 'react'
 import { useRouter, useParams } from 'next/navigation'
-import { fetchUserAttributes } from 'aws-amplify/auth'
+import { getStoredUser } from '@/lib/auth'
 import { HRLayout } from '@/components/HRLayout'
 
 const API = 'https://api.whubbi.wcomply.com'
@@ -440,12 +440,8 @@ export default function CandidateDetail() {
   }
   useEffect(() => {
     load(); loadDocs(); loadPositions(); loadInterviewResults()
-    fetchUserAttributes().then(a => {
-      const email = a.email || ''
-      const name = (a.name || `${a.given_name || ''} ${a.family_name || ''}`.trim()) || (email.split('@')[0] || '')
-      setCurrentUser({ email, name })
-      setComment(c => ({ ...c, author_email: email, author_name: name }))
-    }).catch(() => {})
+    const user = getStoredUser()
+    if (user) { setCurrentUser(user); setComment(c => ({ ...c, author_email: user.email, author_name: user.name })) }
   }, [id])
   useEffect(() => { if (profile) setProposal(p=>({...p, country:profile.country||'france'})) }, [profile])
 
