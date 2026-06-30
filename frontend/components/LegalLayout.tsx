@@ -1,6 +1,6 @@
 'use client'
 import { useRouter, usePathname } from 'next/navigation'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { signOut, fetchUserAttributes } from 'aws-amplify/auth'
 
 const NAV = [
@@ -10,20 +10,28 @@ const NAV = [
 ]
 
 export function LegalLayout({ children }: { children: React.ReactNode }) {
-  const router = useRouter()
-  const path   = usePathname()
+  const router      = useRouter()
+  const path        = usePathname()
+  const redirecting = useRef(false)
   const [userEmail, setUserEmail] = useState('')
   const [userName,  setUserName]  = useState('')
+
+  const goToLogin = () => {
+    if (redirecting.current) return
+    redirecting.current = true
+    localStorage.setItem('redirectAfterLogin', window.location.pathname)
+    router.push('/auth/login')
+  }
 
   useEffect(() => {
     fetchUserAttributes()
       .then(a => {
         const email = a.email || ''
-        if (!email) { localStorage.setItem('redirectAfterLogin', window.location.pathname); router.push('/auth/login'); return }
+        if (!email) { goToLogin(); return }
         setUserEmail(email)
         setUserName((a.name || `${a.given_name || ''} ${a.family_name || ''}`.trim()) || email.split('@')[0] || '')
       })
-      .catch(() => { localStorage.setItem('redirectAfterLogin', window.location.pathname); router.push('/auth/login') })
+      .catch(() => goToLogin())
   }, [])
 
   const handleSignOut = async () => {
