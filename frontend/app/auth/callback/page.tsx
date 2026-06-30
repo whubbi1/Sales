@@ -1,47 +1,92 @@
 'use client'
 import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { fetchUserAttributes } from 'aws-amplify/auth'
-import { Hub } from 'aws-amplify/utils'
+
+function decodeJwtPayload(token: string): Record<string, any> {
+  const b64 = token.split('.')[1] ?? ''
+  const padded = b64 + '=='.slice(0, (4 - (b64.length % 4)) % 4)
+  return JSON.parse(atob(padded.replace(/-/g, '+').replace(/_/g, '/')))
+}
 
 export default function CallbackPage() {
-  const router    = useRouter()
-  const done      = useRef(false)
+  const router = useRouter()
+  const done   = useRef(false)
   const [status, setStatus] = useState('Signing in to WHUBBI...')
 
   useEffect(() => {
-    const redirect = () => {
-      if (done.current) return
-      done.current = true
-      const destination = localStorage.getItem('redirectAfterLogin') || '/home'
-      localStorage.removeItem('redirectAfterLogin')
-      router.push(destination)
+    if (done.current) return
+    done.current = true
+
+    const urlParams = new URLSearchParams(window.location.search)
+    const code  = urlParams.get('code')
+    const error = urlParams.get('error')
+
+    if (error) {
+      setStatus(`Authentication error: ${decodeURIComponent(error)}. Redirecting…`)
+      setTimeout(() => router.push('/auth/login'), 2500)
+      return
     }
 
-    // Listen for Amplify's 'signedIn' event — fires when the OAuth code exchange completes
-    const unsubscribe = Hub.listen('auth', ({ payload }) => {
-      if (payload.event === 'signedIn') redirect()
-    })
+    if (!code) {
+      // Direct navigation to /auth/callback — send to home
+      router.push('/home')
+      return
+    }
 
-    // Also poll: in case the event already fired before this listener was attached
-    let attempts = 0
-    const poll = async () => {
+    const exchange = async () => {
+      const domain     = process.env.NEXT_PUBLIC_COGNITO_DOMAIN!
+      const clientId   = process.env.NEXT_PUBLIC_COGNITO_CLIENT_ID!
+      const redirectUri = `${window.location.origin}/auth/callback`
+      const verifier   = sessionStorage.getItem('pkce_verifier') || ''
+
+      const body = new URLSearchParams({
+        grant_type:   'authorization_code',
+        client_id:    clientId,
+        code,
+        redirect_uri: redirectUri,
+      })
+      if (verifier) body.set('code_verifier', verifier)
+
       try {
-        await fetchUserAttributes()
-        redirect()
-      } catch {
-        attempts++
-        if (attempts < 20) {
-          setTimeout(poll, 500) // retry for up to 10 seconds
+        const res    = await fetch(`${domain}/oauth2/token`, {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body:    body.toString(),
+        })
+        const tokens = await res.json()
+
+        if (tokens.id_token) {
+          sessionStorage.removeItem('pkce_verifier')
+
+          const payload = decodeJwtPayload(tokens.id_token)
+          const email   = payload.email || ''
+          const name    = (
+            payload.name ||
+            `${payload.given_name || ''} ${payload.family_name || ''}`.trim() ||
+            payload['cognito:username'] ||
+            email
+          )
+
+          localStorage.setItem('whubbi_user', JSON.stringify({
+            email,
+            name,
+            exp: payload.exp,
+          }))
+
+          const dest = localStorage.getItem('redirectAfterLogin') || '/home'
+          localStorage.removeItem('redirectAfterLogin')
+          router.push(dest)
         } else {
-          setStatus('Session could not be confirmed. Redirecting to home…')
-          setTimeout(() => router.push('/home'), 1500)
+          setStatus(`Sign-in failed: ${tokens.error_description || tokens.error || 'Unknown error'}. Redirecting…`)
+          setTimeout(() => router.push('/auth/login'), 3000)
         }
+      } catch (err: any) {
+        setStatus(`Network error during sign-in. Redirecting…`)
+        setTimeout(() => router.push('/auth/login'), 3000)
       }
     }
-    setTimeout(poll, 500)
 
-    return () => unsubscribe()
+    exchange()
   }, [router])
 
   return (

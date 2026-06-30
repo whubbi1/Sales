@@ -1,7 +1,7 @@
 'use client'
 import { useRouter, usePathname } from 'next/navigation'
 import { useEffect, useRef, useState } from 'react'
-import { signOut, fetchUserAttributes } from 'aws-amplify/auth'
+import { getStoredUser, clearStoredUser } from '@/lib/auth'
 
 const NAV = [
   { href: '/legal/entities',  icon: '🏢', label: 'Legal Entities' },
@@ -16,26 +16,21 @@ export function LegalLayout({ children }: { children: React.ReactNode }) {
   const [userEmail, setUserEmail] = useState('')
   const [userName,  setUserName]  = useState('')
 
-  const goToLogin = () => {
-    if (redirecting.current) return
-    redirecting.current = true
-    localStorage.setItem('redirectAfterLogin', window.location.pathname)
-    router.push('/auth/login')
-  }
-
   useEffect(() => {
-    fetchUserAttributes()
-      .then(a => {
-        const email = a.email || ''
-        if (!email) { goToLogin(); return }
-        setUserEmail(email)
-        setUserName((a.name || `${a.given_name || ''} ${a.family_name || ''}`.trim()) || email.split('@')[0] || '')
-      })
-      .catch(() => goToLogin())
+    const user = getStoredUser()
+    if (!user) {
+      if (redirecting.current) return
+      redirecting.current = true
+      localStorage.setItem('redirectAfterLogin', window.location.pathname)
+      router.push('/auth/login')
+      return
+    }
+    setUserEmail(user.email)
+    setUserName(user.name)
   }, [])
 
-  const handleSignOut = async () => {
-    try { await signOut() } catch {}
+  const handleSignOut = () => {
+    clearStoredUser()
     router.push('/auth/login')
   }
 
@@ -52,7 +47,6 @@ export function LegalLayout({ children }: { children: React.ReactNode }) {
   return (
     <div style={{ display: 'flex', minHeight: '100vh', fontFamily: 'Montserrat, sans-serif' }}>
       <div style={{ width: '220px', background: '#1a2744', position: 'fixed', top: 0, left: 0, height: '100vh', display: 'flex', flexDirection: 'column', zIndex: 100 }}>
-        {/* Module header */}
         <div style={{ padding: '18px 16px 12px', borderBottom: '1px solid rgba(255,255,255,0.08)', flexShrink: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '2px' }}>
             <span style={{ fontSize: '18px' }}>⚖️</span>
@@ -61,7 +55,6 @@ export function LegalLayout({ children }: { children: React.ReactNode }) {
           <div style={{ fontSize: '10px', color: 'rgba(255,255,255,0.4)', fontWeight: '500' }}>Legal Management</div>
         </div>
 
-        {/* User info */}
         {userEmail && (
           <div style={{ padding: '10px 14px', borderBottom: '1px solid rgba(255,255,255,0.08)', background: 'rgba(0,0,0,0.12)', flexShrink: 0 }}>
             <div style={{ fontSize: '12px', fontWeight: '600', color: 'white', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginBottom: '2px' }}>{userName}</div>
@@ -69,7 +62,6 @@ export function LegalLayout({ children }: { children: React.ReactNode }) {
           </div>
         )}
 
-        {/* Navigation */}
         <nav style={{ flex: 1, padding: '10px 8px', overflowY: 'auto' }}>
           {NAV.map(item => {
             const active = path === item.href || path.startsWith(item.href)
@@ -83,7 +75,6 @@ export function LegalLayout({ children }: { children: React.ReactNode }) {
           })}
         </nav>
 
-        {/* Bottom actions */}
         <div style={{ padding: '10px 8px', borderTop: '1px solid rgba(255,255,255,0.08)', flexShrink: 0, display: 'flex', flexDirection: 'column', gap: '2px' }}>
           <button onClick={() => router.push('/home')}
             style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 12px', borderRadius: '8px', color: 'rgba(255,255,255,0.55)', background: 'transparent', border: 'none', cursor: 'pointer', fontSize: '12px', fontFamily: 'Montserrat, sans-serif', textAlign: 'left' }}>

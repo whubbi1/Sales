@@ -1,66 +1,41 @@
 'use client'
 import { Amplify } from 'aws-amplify'
-import { fetchUserAttributes } from 'aws-amplify/auth'
-import { Hub } from 'aws-amplify/utils'
 import { getAmplifyConfig } from '@/lib/amplifyConfig'
 import { useEffect, useState } from 'react'
+import { getStoredUser } from '@/lib/auth'
 
 Amplify.configure(getAmplifyConfig())
 
-interface UserInfo { name: string; email: string }
-
 function initials(name: string) {
-  return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2) || '?'
+  return name.split(' ').filter(Boolean).map(n => n[0]).join('').toUpperCase().slice(0, 2) || '?'
 }
 
 export function AmplifyProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<UserInfo | null>(null)
-
-  const loadUser = async () => {
-    try {
-      const a = await fetchUserAttributes()
-      const email = a.email || ''
-      const name  = (a.name || `${a.given_name || ''} ${a.family_name || ''}`.trim()) || email.split('@')[0] || email
-      const info  = { name, email }
-      setUser(info)
-      localStorage.setItem('whubbi_user', JSON.stringify(info))
-    } catch {
-      // Not authenticated — clear cache but don't redirect here (layouts handle that)
-      localStorage.removeItem('whubbi_user')
-      setUser(null)
-    }
-  }
+  const [userName, setUserName] = useState<string | null>(null)
 
   useEffect(() => {
-    // Show cached name instantly while we validate
-    const cached = localStorage.getItem('whubbi_user')
-    if (cached) {
-      try { setUser(JSON.parse(cached)) } catch {}
+    const refresh = () => {
+      const u = getStoredUser()
+      setUserName(u ? u.name : null)
     }
-
-    loadUser()
-
-    // Refresh user state whenever auth changes (login / logout / token refresh)
-    const unsubscribe = Hub.listen('auth', ({ payload }) => {
-      if (payload.event === 'signedIn' || payload.event === 'tokenRefresh') loadUser()
-      if (payload.event === 'signedOut') { setUser(null); localStorage.removeItem('whubbi_user') }
-    })
-
-    return () => unsubscribe()
+    refresh()
+    // Re-check whenever another tab writes to localStorage (e.g. after login)
+    window.addEventListener('storage', refresh)
+    return () => window.removeEventListener('storage', refresh)
   }, [])
 
   return (
     <>
       {children}
-      {user && (
+      {userName && (
         <div style={{
           position: 'fixed', top: '12px', right: '16px', zIndex: 9999,
           display: 'flex', alignItems: 'center', gap: '8px',
           background: 'rgba(255,255,255,0.96)',
           backdropFilter: 'blur(8px)',
-          border: '1px solid rgba(0,0,0,0.1)',
+          border: '1px solid rgba(0,0,0,0.10)',
           borderRadius: '24px',
-          padding: '5px 12px 5px 6px',
+          padding: '5px 14px 5px 6px',
           boxShadow: '0 2px 12px rgba(0,0,0,0.12)',
           fontFamily: 'Montserrat, sans-serif',
           pointerEvents: 'none',
@@ -72,10 +47,10 @@ export function AmplifyProvider({ children }: { children: React.ReactNode }) {
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             flexShrink: 0,
           }}>
-            {initials(user.name)}
+            {initials(userName)}
           </div>
           <span style={{ fontSize: '12px', fontWeight: '600', color: '#1E293B', whiteSpace: 'nowrap' }}>
-            {user.name}
+            {userName}
           </span>
         </div>
       )}
