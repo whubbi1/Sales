@@ -15,7 +15,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: '/helpdesk/ticket-reporting',  label: 'Ticket Reporting',  icon: '📋', roles: ['end_user','helpdesk_user','administrator'] },
   { href: '/helpdesk/reporting',         label: 'Analytics',         icon: '📈', roles: ['helpdesk_user','administrator'] },
   { href: '/helpdesk/knowledge',        label: 'Knowledge Base',  icon: '📚', roles: ['end_user','helpdesk_user','administrator'] },
-  { href: '/helpdesk/it-admin',         label: 'IT Admin Cockpit',icon: '🔧', roles: ['helpdesk_user','administrator'] },
+  { href: '/helpdesk/it-admin',         label: 'Helpdesk Admin Cockpit', icon: '🔧', roles: ['helpdesk_user','administrator'] },
   { href: '/helpdesk/admin',            label: 'Administration',  icon: '⚙️', roles: ['administrator'] },
 ]
 

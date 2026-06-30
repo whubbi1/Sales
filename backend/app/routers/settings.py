@@ -21,7 +21,7 @@ MODULES = {
     "hr":        ["freelancers", "recrutement", "positions", "jobs", "permissions", "chat", "admin"],
     "grc":       ["compliance", "risks", "audits", "certifications"],
     "it":        ["assets", "incidents", "access", "infrastructure"],
-    "helpdesk":  ["tickets", "knowledge", "sla"],
+    "helpdesk":  ["tickets", "knowledge", "sla", "admin_cockpit"],
     "admin":     ["users", "permissions", "monitoring", "costs"],
     "legal":     ["entities", "templates", "admin"],
 }
