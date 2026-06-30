@@ -65,7 +65,7 @@ export default function HelpdeskLayout({ children }: Props) {
       <aside style={{ width: '220px', minHeight: '100vh', background: '#156082', position: 'fixed', left: 0, top: 0, zIndex: 100, display: 'flex', flexDirection: 'column' }}>
         <div style={{ padding: '18px 16px 14px', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '10px' }}>
-            <img src="/logo.png" alt="WHUBBI" style={{ width: '90px', height: '36px', objectFit: 'contain' }} />
+            <img src="/logo.png" alt="WHUBBI" style={{ width: '90px', height: '36px', objectFit: 'contain', filter: 'brightness(0) invert(1)' }} onError={e => { (e.target as HTMLImageElement).style.display = 'none' }} />
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
             <span style={{ fontSize: '16px' }}>🎧</span>
@@ -73,11 +73,6 @@ export default function HelpdeskLayout({ children }: Props) {
           </div>
         </div>
 
-        <div style={{ padding: '10px 14px', borderBottom: '1px solid rgba(255,255,255,0.08)', background: 'rgba(0,0,0,0.1)' }}>
-          <div style={{ fontSize: '12px', fontWeight: '600', color: 'white', marginBottom: '2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{userName}</div>
-          <div style={{ fontSize: '10px', color: 'rgba(255,255,255,0.5)', marginBottom: '4px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{userEmail}</div>
-          <span style={{ background: roleInfo.color + '30', color: roleInfo.color, padding: '2px 7px', borderRadius: '8px', fontSize: '10px', fontWeight: '700' }}>{roleInfo.label}</span>
-        </div>
 
         <nav style={{ flex: 1, padding: '8px' }}>
           {visible.map(item => {

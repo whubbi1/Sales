@@ -18,12 +18,9 @@ export default function HelpdeskPage() {
     <HelpdeskLayout>
       <BackendCheck />
       <div style={{ padding: '24px 28px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
-          <div>
-            <h1 style={{ fontSize: '20px', fontWeight: '800', color: '#156082', margin: '0 0 4px' }}>Helpdesk Dashboard</h1>
-            <p style={{ fontSize: '13px', color: '#45B6E4', margin: 0 }}>Support tickets overview</p>
-          </div>
-          <button onClick={() => router.push('/helpdesk/tickets')} style={{ background: '#156082', color: 'white', border: 'none', padding: '9px 20px', borderRadius: '8px', fontSize: '12px', fontWeight: '700', cursor: 'pointer', fontFamily: 'Montserrat, sans-serif' }}>+ New Ticket</button>
+        <div style={{ marginBottom: '24px' }}>
+          <h1 style={{ fontSize: '20px', fontWeight: '800', color: '#156082', margin: '0 0 4px' }}>Helpdesk Dashboard</h1>
+          <p style={{ fontSize: '13px', color: '#45B6E4', margin: 0 }}>Support tickets overview</p>
         </div>
 
         {loading && <div style={{ textAlign: 'center', padding: '48px', color: '#45B6E4' }}>Loading...</div>}

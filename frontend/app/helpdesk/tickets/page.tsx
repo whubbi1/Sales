@@ -101,12 +101,9 @@ export default function TicketsPage() {
   return (
     <HelpdeskLayout>
       <div style={{ padding: '24px 28px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-          <h1 style={{ fontSize: '20px', fontWeight: '800', color: '#156082', margin: 0 }}>Tickets ({total})</h1>
-          <button onClick={() => setShowModal(true)} style={BTN.primary}>+ New Ticket</button>
-        </div>
+        <h1 style={{ fontSize: '20px', fontWeight: '800', color: '#156082', margin: '0 0 20px' }}>Tickets ({total})</h1>
 
-        <div style={{ display: 'flex', gap: '10px', marginBottom: '16px', flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', gap: '10px', marginBottom: '16px', flexWrap: 'wrap', alignItems: 'center' }}>
           <input className="form-input" style={{ maxWidth: '260px' }} placeholder="Search..." value={filters.search} onChange={e => setFilters(p => ({ ...p, search: e.target.value }))} />
           <select className="form-input" style={{ width: '160px' }} value={filters.status} onChange={e => setFilters(p => ({ ...p, status: e.target.value }))}>
             <option value="">All statuses</option>
@@ -116,6 +113,7 @@ export default function TicketsPage() {
             <option value="">All priorities</option>
             {['critical','high','medium','low'].map(p => <option key={p} value={p} style={{ textTransform: 'capitalize' }}>{p}</option>)}
           </select>
+          <button onClick={() => setShowModal(true)} style={{ ...BTN.primary, marginLeft: 'auto' }}>+ New Ticket</button>
         </div>
 
         <div style={{ background: 'white', borderRadius: '12px', border: '1px solid #EDF2F7', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
