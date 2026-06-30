@@ -30,6 +30,7 @@ export default function LegalEntitiesPage() {
   const [form,            setForm]            = useState(EMPTY_FORM)
   const [docForm,         setDocForm]         = useState(EMPTY_DOC)
   const [saving,          setSaving]          = useState(false)
+  const [debugInfo,       setDebugInfo]       = useState<Record<string, string>>({})
 
   const load = () => {
     fetch(`${API}/legal/entities`)
@@ -39,19 +40,29 @@ export default function LegalEntitiesPage() {
   }
 
   useEffect(() => {
+    setDebugInfo(d => ({ ...d, step: 'calling fetchUserAttributes...' }))
     fetchUserAttributes().then(a => {
       const email = a.email || ''
       const name  = (a.name || `${a.given_name || ''} ${a.family_name || ''}`.trim()) || email.split('@')[0]
       setCurrentUser({ email, name })
-      if (!email) { setHasAccess(false); setLoading(false); return }
-      // All authenticated users get view access; permissions only control edit capability
+      setDebugInfo(d => ({ ...d, step: 'auth ok', email: email || '(empty)', allAttribs: JSON.stringify(Object.keys(a)) }))
+      if (!email) {
+        setDebugInfo(d => ({ ...d, blocked: 'email was empty after auth' }))
+        setHasAccess(false); setLoading(false); return
+      }
       setHasAccess(true)
       fetch(`${API}/settings/permissions/${email}`)
         .then(r => r.json())
-        .then(d => { setCanEdit(d.permissions?.legal?.entities?.access_mode === 'edit') })
-        .catch(() => {})
+        .then(d => {
+          setDebugInfo(prev => ({ ...prev, permApiStatus: 'ok', legalPerm: JSON.stringify(d.permissions?.legal || null) }))
+          setCanEdit(d.permissions?.legal?.entities?.access_mode === 'edit')
+        })
+        .catch(e => setDebugInfo(prev => ({ ...prev, permApiStatus: 'error: ' + String(e) })))
       load()
-    }).catch(() => { setHasAccess(false); setLoading(false) })
+    }).catch(e => {
+      setDebugInfo(d => ({ ...d, step: 'auth failed', error: String(e) }))
+      setHasAccess(false); setLoading(false)
+    })
   }, [])
 
   const openAddEntity = () => { setEditingEntity(null); setForm(EMPTY_FORM); setShowEntityForm(true) }
@@ -91,13 +102,18 @@ export default function LegalEntitiesPage() {
 
   if (hasAccess === false) return (
     <LegalLayout>
-      <div style={{ padding: '80px 40px', textAlign: 'center' }}>
-        <div style={{ fontSize: '48px', marginBottom: '16px' }}>🔒</div>
-        <h2 style={{ fontSize: '18px', fontWeight: '700', color: '#156082', marginBottom: '8px' }}>Access Restricted</h2>
-        <p style={{ fontSize: '13px', color: '#64748B', maxWidth: '400px', margin: '0 auto' }}>
-          You don't have permission to access Legal Entities.<br/>
-          Contact your HR administrator to request access, or ask the WHUBBI Bot.
+      <div style={{ padding: '60px 40px', maxWidth: '600px', margin: '0 auto' }}>
+        <div style={{ fontSize: '48px', marginBottom: '16px', textAlign: 'center' }}>🔒</div>
+        <h2 style={{ fontSize: '18px', fontWeight: '700', color: '#156082', marginBottom: '8px', textAlign: 'center' }}>Access Restricted</h2>
+        <p style={{ fontSize: '13px', color: '#64748B', textAlign: 'center', marginBottom: '24px' }}>
+          Authentication did not return a valid user session. Share the diagnostic info below with your administrator.
         </p>
+        <div style={{ background: '#0F172A', borderRadius: '10px', padding: '16px', fontFamily: 'monospace', fontSize: '11px', color: '#94A3B8', lineHeight: 1.8 }}>
+          {Object.entries(debugInfo).map(([k, v]) => (
+            <div key={k}><span style={{ color: '#60A5FA' }}>{k}:</span> {v}</div>
+          ))}
+          {Object.keys(debugInfo).length === 0 && <div style={{ color: '#64748B' }}>No diagnostic data yet…</div>}
+        </div>
       </div>
     </LegalLayout>
   )
