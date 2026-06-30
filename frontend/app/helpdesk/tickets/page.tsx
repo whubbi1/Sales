@@ -43,6 +43,7 @@ export default function TicketsPage() {
   const emailDebounce = useRef<any>(null)
   const readyRef = useRef(false)
   const emailRef = useRef('')
+  const layoutMenuRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     const user = getStoredUser()
@@ -77,6 +78,18 @@ export default function TicketsPage() {
     fetch(`${API}/helpdesk/groups`).then(r => r.json()).then(d => setGroups(d.groups || []))
     readyRef.current = true
   }, [])
+
+  // Close layout menu when clicking outside
+  useEffect(() => {
+    if (!showLayoutMenu) return
+    const handle = (e: MouseEvent) => {
+      if (layoutMenuRef.current && !layoutMenuRef.current.contains(e.target as Node)) {
+        setShowLayoutMenu(false)
+      }
+    }
+    document.addEventListener('mousedown', handle)
+    return () => document.removeEventListener('mousedown', handle)
+  }, [showLayoutMenu])
 
   const applyFilter = (next: Filters) => {
     setFilters(next)
@@ -119,10 +132,6 @@ export default function TicketsPage() {
   useEffect(() => {
     if (readyRef.current) load(filters, emailRef.current)
   }, [filters])
-
-  useEffect(() => {
-    if (userEmail) load(filters, userEmail)
-  }, [userEmail])
 
   const handleEmailChange = (email: string) => {
     setForm(p => ({ ...p, requester_email: email }))
@@ -188,7 +197,7 @@ export default function TicketsPage() {
           )}
 
           {/* Layout save/load */}
-          <div style={{ position: 'relative' }}>
+          <div ref={layoutMenuRef} style={{ position: 'relative' }}>
             <button onClick={() => setShowLayoutMenu(!showLayoutMenu)}
               style={{ ...inp, background: 'white', color: '#45B6E4', border: '1px solid #E2E8F0', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}>
               ⊞ Layouts {savedLayouts.length > 0 && <span style={{ background: '#EFF6FF', borderRadius: '8px', padding: '0 5px', fontSize: '10px', fontWeight: '700', color: '#156082' }}>{savedLayouts.length}</span>}
@@ -231,7 +240,7 @@ export default function TicketsPage() {
             )}
           </div>
 
-          <button onClick={() => setShowModal(true)} style={{ ...BTN.primary, marginLeft: 'auto' }}>+ New Ticket</button>
+          <button onClick={() => { setShowLayoutMenu(false); setShowModal(true) }} style={{ ...BTN.primary, marginLeft: 'auto' }}>+ New Ticket</button>
         </div>
 
         <div style={{ background: 'white', borderRadius: '12px', border: '1px solid #EDF2F7', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
