@@ -16,8 +16,10 @@ export default function LegalAdminPage() {
       fetch(`${API}/settings/permissions/${email}`)
         .then(r => r.json())
         .then(d => {
-          const perm = d.permissions?.legal?.admin || {}
-          setHasAccess(perm.access_mode === 'edit')
+          const legalPerms = d.permissions?.legal
+          if (!legalPerms) { setHasAccess(true); setLoading(false); return }
+          const perm = legalPerms.admin || {}
+          setHasAccess(perm.access_mode !== 'none')
           setLoading(false)
         })
         .catch(() => { setHasAccess(true); setLoading(false) })

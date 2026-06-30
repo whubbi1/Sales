@@ -47,11 +47,15 @@ export default function LegalEntitiesPage() {
       fetch(`${API}/settings/permissions/${email}`)
         .then(r => r.json())
         .then(d => {
-          const perm = d.permissions?.legal?.entities || {}
-          const access = perm.access_mode && perm.access_mode !== 'none'
-          setHasAccess(!!access)
+          const legalPerms = d.permissions?.legal
+          // If the legal module isn't in the response yet (old backend / no record), allow access
+          if (!legalPerms) { setHasAccess(true); setCanEdit(true); load(); return }
+          const perm = legalPerms.entities || {}
+          // Only block if explicitly set to 'none'
+          const blocked = perm.access_mode === 'none'
+          setHasAccess(!blocked)
           setCanEdit(perm.access_mode === 'edit')
-          if (access) load()
+          if (!blocked) load()
           else setLoading(false)
         })
         .catch(() => { setHasAccess(true); setCanEdit(true); load() })

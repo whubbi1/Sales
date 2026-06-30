@@ -46,11 +46,13 @@ export default function LegalTemplatesPage() {
       fetch(`${API}/settings/permissions/${email}`)
         .then(r => r.json())
         .then(d => {
-          const perm = d.permissions?.legal?.templates || {}
-          const access = perm.access_mode && perm.access_mode !== 'none'
-          setHasAccess(!!access)
+          const legalPerms = d.permissions?.legal
+          if (!legalPerms) { setHasAccess(true); setCanEdit(true); load(); return }
+          const perm = legalPerms.templates || {}
+          const blocked = perm.access_mode === 'none'
+          setHasAccess(!blocked)
           setCanEdit(perm.access_mode === 'edit')
-          if (access) load()
+          if (!blocked) load()
           else setLoading(false)
         })
         .catch(() => { setHasAccess(true); setCanEdit(true); load() })
