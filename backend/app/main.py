@@ -64,6 +64,20 @@ async def startup():
                 "ALTER TABLE tickets ADD COLUMN IF NOT EXISTS subcategory_id UUID",
                 "ALTER TABLE tickets ADD COLUMN IF NOT EXISTS group_id UUID",
                 "ALTER TABLE tickets ADD COLUMN IF NOT EXISTS teams_chat_id TEXT",
+                "ALTER TABLE tickets ADD COLUMN IF NOT EXISTS ticket_type VARCHAR(50) DEFAULT 'incident_request'",
+                # Seed missing subcategories without dropping existing data
+                """INSERT INTO ticket_categories (id,name,description,color,icon,parent_id,active,created_at)
+                   SELECT gen_random_uuid(),'WHUBBI','','#e97132','📱',p.id,true,NOW()
+                   FROM ticket_categories p WHERE p.name='Applications' AND p.parent_id IS NULL
+                   AND NOT EXISTS (SELECT 1 FROM ticket_categories s WHERE s.parent_id=p.id AND s.name='WHUBBI')""",
+                """INSERT INTO ticket_categories (id,name,description,color,icon,parent_id,active,created_at)
+                   SELECT gen_random_uuid(),'Microsoft Office 365','','#45B6E4','💻',p.id,true,NOW()
+                   FROM ticket_categories p WHERE p.name='Software' AND p.parent_id IS NULL
+                   AND NOT EXISTS (SELECT 1 FROM ticket_categories s WHERE s.parent_id=p.id AND s.name='Microsoft Office 365')""",
+                """INSERT INTO ticket_categories (id,name,description,color,icon,parent_id,active,created_at)
+                   SELECT gen_random_uuid(),'SAP','','#45B6E4','🔷',p.id,true,NOW()
+                   FROM ticket_categories p WHERE p.name='Software' AND p.parent_id IS NULL
+                   AND NOT EXISTS (SELECT 1 FROM ticket_categories s WHERE s.parent_id=p.id AND s.name='SAP')""",
                 # Admin ops migrations
                 """CREATE TABLE IF NOT EXISTS background_jobs (
                     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

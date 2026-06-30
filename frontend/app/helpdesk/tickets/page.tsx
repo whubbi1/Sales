@@ -16,7 +16,8 @@ export default function TicketsPage() {
   const [filters, setFilters] = useState({ status: '', priority: '', search: '' })
   const [form, setForm] = useState({
     title: '', description: '', category_id: '', subcategory_id: '',
-    priority: 'medium', requester_email: '', requester_name: '',
+    priority: 'medium', ticket_type: '',
+    requester_email: '', requester_name: '',
     requester_type: 'internal', assignee_name: '', group_id: ''
   })
   const [subcategories, setSubcategories] = useState<any[]>([])
@@ -80,8 +81,14 @@ export default function TicketsPage() {
     setSubcategories(cat?.subcategories || [])
   }
 
+  const TICKET_TYPES = [
+    { value: 'incident_request',    label: 'Incident Request' },
+    { value: 'change_request',      label: 'Change Request' },
+    { value: 'information_request', label: 'Information Request' },
+  ]
+
   const create = async () => {
-    if (!form.title || !form.requester_email) return
+    if (!form.title || !form.requester_email || !form.ticket_type) return
     setSaving(true)
     const r = await fetch(`${API}/helpdesk/tickets`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form)
@@ -158,6 +165,24 @@ export default function TicketsPage() {
               <button onClick={() => setShowModal(false)} style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: '20px', color: '#45B6E4' }}>×</button>
             </div>
             <div style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              {/* Ticket Type — mandatory */}
+              <div>
+                <label className="form-label">Ticket Type *</label>
+                <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
+                  {TICKET_TYPES.map(tt => (
+                    <button key={tt.value} type="button" onClick={() => setForm(p => ({ ...p, ticket_type: tt.value }))}
+                      style={{ flex: 1, padding: '9px 8px', borderRadius: '8px', border: `2px solid ${form.ticket_type === tt.value ? '#156082' : '#EDF2F7'}`,
+                        background: form.ticket_type === tt.value ? '#EFF6FF' : 'white',
+                        color: form.ticket_type === tt.value ? '#156082' : '#64748B',
+                        fontSize: '11px', fontWeight: form.ticket_type === tt.value ? '700' : '400',
+                        cursor: 'pointer', fontFamily: 'Montserrat, sans-serif', textAlign: 'center' as const, lineHeight: '1.3' }}>
+                      {tt.label}
+                    </button>
+                  ))}
+                </div>
+                {!form.ticket_type && <p style={{ fontSize: '10px', color: '#DC2626', margin: '4px 0 0' }}>Please select a ticket type</p>}
+              </div>
+
               <div style={{ background: '#F0F9FF', borderRadius: '10px', padding: '14px', border: '1px solid #BAE6FD' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px' }}>
                   <span style={{ fontSize: '11px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#156082' }}>Requester</span>
@@ -173,7 +198,7 @@ export default function TicketsPage() {
                   </div>
                   <div><label className="form-label">Name</label><input className="form-input" value={form.requester_name} onChange={e => setForm(p => ({ ...p, requester_name: e.target.value }))} placeholder="Full name" /></div>
                   <div>
-                    <label className="form-label">Type</label>
+                    <label className="form-label">Organisation</label>
                     <select className="form-input" value={form.requester_type} onChange={e => setForm(p => ({ ...p, requester_type: e.target.value }))}>
                       <option value="internal">Internal (WCOMPLY)</option>
                       <option value="external">External (Client)</option>
@@ -230,8 +255,8 @@ export default function TicketsPage() {
             </div>
             <div style={{ padding: '14px 24px', borderTop: '1px solid #EDF2F7', display: 'flex', justifyContent: 'flex-end', gap: '10px', background: '#FAFBFC' }}>
               <button onClick={() => setShowModal(false)} style={BTN.secondary}>Cancel</button>
-              <button onClick={create} disabled={saving || !form.title || !form.requester_email}
-                style={{ ...BTN.primary, opacity: (saving || !form.title || !form.requester_email) ? 0.6 : 1 }}>
+              <button onClick={create} disabled={saving || !form.title || !form.requester_email || !form.ticket_type}
+                style={{ ...BTN.primary, opacity: (saving || !form.title || !form.requester_email || !form.ticket_type) ? 0.6 : 1 }}>
                 {saving ? 'Creating...' : 'Create Ticket'}
               </button>
             </div>

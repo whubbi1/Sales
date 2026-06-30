@@ -20,7 +20,8 @@ DEFAULT_CATEGORIES = [
     {"name":"Applications",       "color":"#e97132","icon":"⚙️"},
     {"name":"Projects",           "color":"#7C3AED","icon":"📋"},
 ]
-APP_SUBCATEGORIES = ["Payfit","Karanext","May","SWILE","TravelPerk"]
+APP_SUBCATEGORIES = ["WHUBBI","Karanext","Payfit"]
+SW_SUBCATEGORIES  = ["Microsoft Office 365","SAP"]
 DEFAULT_SLA = [
     {"name":"Critical SLA","priority":"critical","response_time_hours":1, "resolution_time_hours":4},
     {"name":"High SLA",    "priority":"high",    "response_time_hours":4, "resolution_time_hours":8},
@@ -37,6 +38,9 @@ async def seed(db: AsyncSession):
             if cat["name"] == "Applications":
                 for sub in APP_SUBCATEGORIES:
                     await db.execute(text("INSERT INTO ticket_categories (id,name,description,color,icon,parent_id,active,created_at) VALUES (gen_random_uuid(),:name,'',:color,'📱',CAST(:pid AS uuid),true,NOW())"), {"name":sub,"color":cat["color"],"pid":cat_id})
+            if cat["name"] == "Software":
+                for sub in SW_SUBCATEGORIES:
+                    await db.execute(text("INSERT INTO ticket_categories (id,name,description,color,icon,parent_id,active,created_at) VALUES (gen_random_uuid(),:name,'',:color,'💻',CAST(:pid AS uuid),true,NOW())"), {"name":sub,"color":cat["color"],"pid":cat_id})
         await db.commit()
     g = await db.execute(text("SELECT COUNT(*) FROM helpdesk_groups"))
     if g.scalar() == 0:
@@ -106,7 +110,7 @@ async def list_tickets(status:str=None,priority:str=None,group_id:str=None,
         params["s"]=f"%{search}%"
     w=" AND ".join(where)
     r=await db.execute(text(f"""
-        SELECT t.id,t.ticket_number,t.title,t.status,t.priority,
+        SELECT t.id,t.ticket_number,t.title,t.status,t.priority,t.ticket_type,
                t.requester_email,t.requester_name,t.requester_type,
                t.assignee_email,t.assignee_name,t.created_at,t.sla_deadline,
                c.name as category_name,c.color as category_color,c.icon as category_icon,
@@ -168,16 +172,17 @@ async def create_ticket(data:dict,db:AsyncSession=Depends(get_db)):
     ticket_num=gen_ticket_number()
     await db.execute(text("""
         INSERT INTO tickets (id,ticket_number,title,description,category_id,subcategory_id,group_id,
-            priority,status,requester_email,requester_name,requester_type,
+            priority,status,ticket_type,requester_email,requester_name,requester_type,
             assignee_email,assignee_name,sla_deadline,created_at,updated_at)
         VALUES (CAST(:id AS uuid),:tn,:title,:desc,
             CAST(NULLIF(:cat_id,'') AS uuid),CAST(NULLIF(:sub_id,'') AS uuid),CAST(NULLIF(:group_id,'') AS uuid),
-            :prio,'new',:req_email,:req_name,:req_type,
+            :prio,'new',:ticket_type,:req_email,:req_name,:req_type,
             NULLIF(:ass_email,''),NULLIF(:ass_name,''),
             :sla,NOW(),NOW())
     """),{"id":tid,"tn":ticket_num,"title":data.get("title"),"desc":data.get("description",""),
           "cat_id":data.get("category_id",""),"sub_id":data.get("subcategory_id",""),
           "group_id":group_id or "","prio":data.get("priority","medium"),
+          "ticket_type":data.get("ticket_type","incident_request"),
           "req_email":req_email,"req_name":req_name,"req_type":data.get("requester_type","internal"),
           "ass_email":assignee_email,"ass_name":assignee_name,
           "sla":datetime.utcnow()+timedelta(hours=sla_h)})
@@ -277,8 +282,14 @@ async def create_category(data:dict,db:AsyncSession=Depends(get_db)):
 
 @router.put("/categories/{cid}")
 async def update_category(cid:str,data:dict,db:AsyncSession=Depends(get_db)):
-    await db.execute(text("UPDATE ticket_categories SET group_id=CAST(NULLIF(:group_id,'') AS uuid),name=COALESCE(NULLIF(:name,''),name) WHERE id=CAST(:id AS uuid)"),
-                     {"id":cid,"group_id":data.get("group_id",""),"name":data.get("name","")})
+    await db.execute(text("""UPDATE ticket_categories SET
+        group_id=CAST(NULLIF(:group_id,'') AS uuid),
+        name=COALESCE(NULLIF(:name,''),name),
+        color=COALESCE(NULLIF(:color,''),color),
+        icon=COALESCE(NULLIF(:icon,''),icon)
+        WHERE id=CAST(:id AS uuid)"""),
+        {"id":cid,"group_id":data.get("group_id",""),"name":data.get("name",""),
+         "color":data.get("color",""),"icon":data.get("icon","")})
     await db.commit()
     return {"status":"ok"}
 
