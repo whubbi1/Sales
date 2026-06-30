@@ -1,6 +1,7 @@
 'use client'
 import { useState, useEffect, useRef } from 'react'
 import { useRouter, useParams } from 'next/navigation'
+import { fetchUserAttributes } from 'aws-amplify/auth'
 import { HRLayout } from '@/components/HRLayout'
 
 const API = 'https://api.whubbi.wcomply.com'
@@ -13,7 +14,6 @@ const COMMENT_ICONS: Record<string,string> = { note:'📝', call:'📞', email:'
 const COUNTRIES = ['france','portugal','czech_republic','romania','spain']
 const CURRENCY: Record<string,string> = { france:'EUR', portugal:'EUR', czech_republic:'CZK', romania:'RON', spain:'EUR' }
 const LANGS: Record<string,string> = { france:'fr', portugal:'pt', czech_republic:'cs', romania:'ro', spain:'es' }
-const CURRENT_USER = { email:'william.delcour@wcomply.com', name:'William Delcour' }
 const DEFAULT_QUESTIONS = [
   'Tell us about your professional background and key experiences.',
   'What are your main technical skills relevant to this role?',
@@ -224,28 +224,66 @@ function RequestInterviewModal({ candidateName, onConfirm, onCancel }: { candida
   )
 }
 
-function InterviewResultsModal({ candidateName, candidateSkills, onConfirm, onCancel }: {
-  candidateName: string, candidateSkills: string[], onConfirm: (data: any) => Promise<void>, onCancel: () => void
+function InterviewResultsModal({ candidateName, candidateSkills, candidateCountry, currentUser, onConfirm, onCancel }: {
+  candidateName: string, candidateSkills: string[], candidateCountry: string,
+  currentUser: { email: string, name: string },
+  onConfirm: (data: any) => Promise<void>, onCancel: () => void
 }) {
+  const [interviewerName, setInterviewerName] = useState(currentUser.name)
+  const [interviewerEmail, setInterviewerEmail] = useState(currentUser.email)
+  const [interviewDate, setInterviewDate] = useState('')
   const [questions, setQuestions] = useState<string[]>([...DEFAULT_QUESTIONS])
   const [newQuestion, setNewQuestion] = useState('')
-  const [skillRatings, setSkillRatings] = useState<Record<string,number>>(() => {
-    const init: Record<string,number> = {}
-    candidateSkills.forEach(s => { init[s] = 0 })
-    return init
-  })
+  const [skillRatings, setSkillRatings] = useState<Record<string,number>>({})
+  const [newSkill, setNewSkill] = useState('')
   const [recommendation, setRecommendation] = useState('')
   const [notes, setNotes] = useState('')
   const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    // Load admin questions for country
+    fetch(`${API}/hr/admin/interview-questions?country=${candidateCountry || 'global'}`)
+      .then(r => r.json())
+      .then(d => {
+        const qs = (d.questions || []).map((q: any) => q.question_text)
+        setQuestions(qs.length > 0 ? qs : [...DEFAULT_QUESTIONS])
+      })
+      .catch(() => {})
+
+    // Load admin skills for country + merge with candidate skills
+    fetch(`${API}/hr/admin/interview-skills?country=${candidateCountry || 'global'}`)
+      .then(r => r.json())
+      .then(d => {
+        const adminSkills = (d.skills || []).map((s: any) => s.skill_name)
+        const merged = Array.from(new Set([...adminSkills, ...candidateSkills]))
+        const init: Record<string,number> = {}
+        merged.forEach(s => { init[s] = 0 })
+        setSkillRatings(init)
+      })
+      .catch(() => {
+        const init: Record<string,number> = {}
+        candidateSkills.forEach(s => { init[s] = 0 })
+        setSkillRatings(init)
+      })
+  }, [])
 
   const addQuestion = () => {
     if (!newQuestion.trim()) return
     setQuestions(qs => [...qs, newQuestion.trim()]); setNewQuestion('')
   }
 
+  const addSkill = () => {
+    if (!newSkill.trim() || newSkill.trim() in skillRatings) return
+    setSkillRatings(r => ({ ...r, [newSkill.trim()]: 0 })); setNewSkill('')
+  }
+
+  const removeSkillRating = (skill: string) => {
+    setSkillRatings(r => { const n = {...r}; delete n[skill]; return n })
+  }
+
   const handleSubmit = async () => {
     setSaving(true)
-    await onConfirm({ questions, skill_ratings: skillRatings, recommendation, notes })
+    await onConfirm({ questions, skill_ratings: skillRatings, recommendation, notes, interview_date: interviewDate, interviewer_name: interviewerName, interviewer_email: interviewerEmail })
     setSaving(false)
   }
 
@@ -260,6 +298,27 @@ function InterviewResultsModal({ candidateName, candidateSkills, onConfirm, onCa
           <button onClick={onCancel} style={{ background:'none', border:'none', fontSize:'20px', cursor:'pointer', color:'#45B6E4' }}>×</button>
         </div>
         <div style={{ overflowY:'auto', flex:1, padding:'20px', display:'flex', flexDirection:'column', gap:'20px' }}>
+
+          {/* Interviewer info */}
+          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:'12px', background:'#F8FAFC', borderRadius:'10px', padding:'14px' }}>
+            <div>
+              <label style={{ display:'block', fontSize:'10px', fontWeight:'700', textTransform:'uppercase', letterSpacing:'0.06em', color:'#45B6E4', marginBottom:'4px' }}>Interviewer Name *</label>
+              <input value={interviewerName} onChange={e => setInterviewerName(e.target.value)}
+                placeholder="Full name"
+                style={{ width:'100%', padding:'7px 10px', border:'1.5px solid #EDF2F7', borderRadius:'7px', fontFamily:'Montserrat, sans-serif', fontSize:'12px', outline:'none', boxSizing:'border-box' as const }}/>
+            </div>
+            <div>
+              <label style={{ display:'block', fontSize:'10px', fontWeight:'700', textTransform:'uppercase', letterSpacing:'0.06em', color:'#45B6E4', marginBottom:'4px' }}>Interviewer Email</label>
+              <input value={interviewerEmail} onChange={e => setInterviewerEmail(e.target.value)}
+                placeholder="email@wcomply.com"
+                style={{ width:'100%', padding:'7px 10px', border:'1.5px solid #EDF2F7', borderRadius:'7px', fontFamily:'Montserrat, sans-serif', fontSize:'12px', outline:'none', boxSizing:'border-box' as const }}/>
+            </div>
+            <div>
+              <label style={{ display:'block', fontSize:'10px', fontWeight:'700', textTransform:'uppercase', letterSpacing:'0.06em', color:'#45B6E4', marginBottom:'4px' }}>Interview Date</label>
+              <input type="date" value={interviewDate} onChange={e => setInterviewDate(e.target.value)}
+                style={{ width:'100%', padding:'7px 10px', border:'1.5px solid #EDF2F7', borderRadius:'7px', fontFamily:'Montserrat, sans-serif', fontSize:'12px', outline:'none', boxSizing:'border-box' as const }}/>
+            </div>
+          </div>
 
           {/* Questions */}
           <div>
@@ -282,20 +341,29 @@ function InterviewResultsModal({ candidateName, candidateSkills, onConfirm, onCa
           </div>
 
           {/* Skill ratings */}
-          {Object.keys(skillRatings).length > 0 && (
-            <div>
-              <div style={{ fontSize:'11px', fontWeight:'700', textTransform:'uppercase', letterSpacing:'0.07em', color:'#45B6E4', marginBottom:'10px' }}>Skill Ratings</div>
-              <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
+          <div>
+            <div style={{ fontSize:'11px', fontWeight:'700', textTransform:'uppercase', letterSpacing:'0.07em', color:'#45B6E4', marginBottom:'10px' }}>Skill Ratings</div>
+            {Object.keys(skillRatings).length > 0 && (
+              <div style={{ display:'flex', flexDirection:'column', gap:'8px', marginBottom:'8px' }}>
                 {Object.entries(skillRatings).map(([skill, rating]) => (
                   <div key={skill} style={{ display:'flex', alignItems:'center', gap:'12px', padding:'8px 12px', background:'#F8FAFC', borderRadius:'8px' }}>
                     <span style={{ fontSize:'12px', fontWeight:'600', color:'#7C3AED', flex:1 }}>{skill}</span>
                     <StarRating value={rating} onChange={v => setSkillRatings(r => ({...r, [skill]:v}))}/>
                     <span style={{ fontSize:'11px', color:'#94A3B8', minWidth:'64px' }}>{ratingLabel(rating)}</span>
+                    <button onClick={() => removeSkillRating(skill)}
+                      style={{ background:'#FEF2F2', color:'#DC2626', border:'none', borderRadius:'6px', padding:'2px 7px', cursor:'pointer', fontSize:'12px' }}>×</button>
                   </div>
                 ))}
               </div>
+            )}
+            <div style={{ display:'flex', gap:'6px' }}>
+              <input value={newSkill} onChange={e => setNewSkill(e.target.value)}
+                onKeyDown={e => { if (e.key==='Enter') addSkill() }}
+                placeholder="Add a skill to rate..."
+                style={{ flex:1, padding:'7px 10px', border:'1.5px solid #EDF2F7', borderRadius:'7px', fontFamily:'Montserrat, sans-serif', fontSize:'12px', outline:'none' }}/>
+              <button onClick={addSkill} style={{ padding:'7px 14px', background:'#7C3AED', color:'white', border:'none', borderRadius:'7px', fontSize:'12px', cursor:'pointer', fontFamily:'Montserrat, sans-serif' }}>+</button>
             </div>
-          )}
+          </div>
 
           {/* Recommendation */}
           <div>
@@ -321,8 +389,8 @@ function InterviewResultsModal({ candidateName, candidateSkills, onConfirm, onCa
         </div>
         <div style={{ padding:'14px 20px', borderTop:'1px solid #EDF2F7', background:'#FAFBFC', display:'flex', justifyContent:'flex-end', gap:'8px', flexShrink:0 }}>
           <button onClick={onCancel} style={{ padding:'8px 16px', background:'white', border:'1.5px solid #EDF2F7', borderRadius:'8px', fontSize:'12px', fontWeight:'600', cursor:'pointer', fontFamily:'Montserrat, sans-serif', color:'#45B6E4' }}>Cancel</button>
-          <button onClick={handleSubmit} disabled={saving||!recommendation}
-            style={{ padding:'8px 20px', background:recommendation?'#156082':'#F1F5F9', border:'none', borderRadius:'8px', fontSize:'12px', fontWeight:'700', cursor:recommendation?'pointer':'not-allowed', fontFamily:'Montserrat, sans-serif', color:recommendation?'white':'#94A3B8', opacity:saving?0.7:1 }}>
+          <button onClick={handleSubmit} disabled={saving||!recommendation||!interviewerName.trim()}
+            style={{ padding:'8px 20px', background:(recommendation&&interviewerName.trim())?'#156082':'#F1F5F9', border:'none', borderRadius:'8px', fontSize:'12px', fontWeight:'700', cursor:(recommendation&&interviewerName.trim())?'pointer':'not-allowed', fontFamily:'Montserrat, sans-serif', color:(recommendation&&interviewerName.trim())?'white':'#94A3B8', opacity:saving?0.7:1 }}>
             {saving ? 'Saving…' : '💾 Save Results'}
           </button>
         </div>
@@ -336,8 +404,9 @@ export default function CandidateDetail() {
   const { id } = useParams() as { id: string }
   const [profile, setProfile] = useState<any>(null)
   const [loading, setLoading] = useState(true)
-  const [activeTab, setActiveTab] = useState<'profile'|'comments'|'proposal'|'interview'>('profile')
-  const [comment, setComment] = useState({ content:'', comment_type:'note', author_email: CURRENT_USER.email, author_name: CURRENT_USER.name })
+  const [currentUser, setCurrentUser] = useState({ email: '', name: '' })
+  const [activeTab, setActiveTab] = useState<'profile'|'followup'|'proposal'|'interview'>('profile')
+  const [comment, setComment] = useState({ content:'', comment_type:'note', author_email: '', author_name: '' })
   const [showProposal, setShowProposal] = useState(false)
   const [proposal, setProposal] = useState({ role:'', responsibilities:[] as string[], salary:'', advantages:[] as string[], start_date:'', country:'', resp_input:'', adv_input:'' })
   const [sending, setSending] = useState(false)
@@ -369,7 +438,15 @@ export default function CandidateDetail() {
   const loadInterviewResults = () => {
     fetch(`${API}/hr/recruitment/${id}/interview-results`).then(r=>r.json()).then(d=>setInterviewResultsList(d.results||[]))
   }
-  useEffect(() => { load(); loadDocs(); loadPositions(); loadInterviewResults() }, [id])
+  useEffect(() => {
+    load(); loadDocs(); loadPositions(); loadInterviewResults()
+    fetchUserAttributes().then(a => {
+      const email = a.email || ''
+      const name = (a.name || `${a.given_name || ''} ${a.family_name || ''}`.trim()) || (email.split('@')[0] || '')
+      setCurrentUser({ email, name })
+      setComment(c => ({ ...c, author_email: email, author_name: name }))
+    }).catch(() => {})
+  }, [id])
   useEffect(() => { if (profile) setProposal(p=>({...p, country:profile.country||'france'})) }, [profile])
 
   const patchField = async (field: string, value: any) => {
@@ -441,15 +518,19 @@ export default function CandidateDetail() {
       setShowInterviewModal(true)
       return
     }
-    await fetch(`${API}/hr/recruitment/${id}/status`, { method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify({status}) })
+    await fetch(`${API}/hr/recruitment/${id}/status`, {
+      method:'PUT', headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({ status, updated_by_email: currentUser.email, updated_by_name: currentUser.name })
+    })
     setProfile((p:any)=>({...p, recruitment_status:status}))
+    load()
   }
 
   const handleInterviewAssign = async (interviewers: {email:string,name:string}[]) => {
     setShowInterviewModal(false)
     await fetch(`${API}/hr/recruitment/${id}/assign-interview`, {
       method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ interviewers, assigned_by: CURRENT_USER.email })
+      body: JSON.stringify({ interviewers, assigned_by: currentUser.email, assigned_by_name: currentUser.name })
     })
     load()
   }
@@ -464,7 +545,7 @@ export default function CandidateDetail() {
     setSending(true)
     const r = await fetch(`${API}/hr/recruitment/${id}/proposals`, {
       method:'POST', headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({ role:proposal.role, responsibilities:proposal.responsibilities, salary:parseInt(proposal.salary)||0, advantages:proposal.advantages, start_date:proposal.start_date, country:proposal.country })
+      body:JSON.stringify({ role:proposal.role, responsibilities:proposal.responsibilities, salary:parseInt(proposal.salary)||0, advantages:proposal.advantages, start_date:proposal.start_date, country:proposal.country, created_by_email: currentUser.email, created_by_name: currentUser.name })
     })
     const d = await r.json()
     const prev = await fetch(`${API}/hr/proposals/${d.id}/preview`).then(r=>r.json())
@@ -482,18 +563,20 @@ export default function CandidateDetail() {
   const handleRequestInterview = async (data: any) => {
     await fetch(`${API}/hr/recruitment/${id}/request-interview`, {
       method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({...data, requested_by: CURRENT_USER.email})
+      body: JSON.stringify({ ...data, requested_by: currentUser.email, requested_by_name: currentUser.name })
     })
     setShowRequestInterview(false)
+    load()
   }
 
   const handleSaveInterviewResults = async (data: any) => {
     await fetch(`${API}/hr/recruitment/${id}/interview-results`, {
       method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({...data, interviewer_email: CURRENT_USER.email, interviewer_name: CURRENT_USER.name})
+      body: JSON.stringify(data)
     })
     setShowInterviewResults(false)
     loadInterviewResults()
+    load()
   }
 
   if (loading) return <HRLayout><div style={{ padding:'48px', textAlign:'center', color:'#45B6E4' }}>Loading...</div></HRLayout>
@@ -653,7 +736,7 @@ export default function CandidateDetail() {
 
         {/* Tabs */}
         <div style={{ display:'flex', gap:'0', marginBottom:'16px', background:'white', borderRadius:'10px', border:'1px solid #EDF2F7', overflow:'hidden', width:'fit-content' }}>
-          {[{key:'profile',label:'Profile & Projects'},{key:'comments',label:`Comments (${(profile.comments||[]).length})`},{key:'proposal',label:`Proposals (${(profile.proposals||[]).length})`},{key:'interview',label:`Interview (${interviewResultsList.length})`}].map(t=>(
+          {[{key:'profile',label:'Profile & Projects'},{key:'followup',label:`Follow-up (${(profile.comments||[]).length})`},{key:'proposal',label:`Proposals (${(profile.proposals||[]).length})`},{key:'interview',label:`Interview (${interviewResultsList.length})`}].map(t=>(
             <button key={t.key} onClick={()=>setActiveTab(t.key as any)}
               style={{ padding:'9px 18px', border:'none', cursor:'pointer', fontSize:'12px', fontWeight:'700', fontFamily:'Montserrat, sans-serif', background:activeTab===t.key?'#156082':'transparent', color:activeTab===t.key?'white':'#45B6E4' }}>
               {t.label}
@@ -683,8 +766,8 @@ export default function CandidateDetail() {
           </div>
         )}
 
-        {/* Comments tab */}
-        {activeTab === 'comments' && (
+        {/* Follow-up tab */}
+        {activeTab === 'followup' && (
           <div>
             <div style={{ background:'white', borderRadius:'12px', border:'1px solid #EDF2F7', padding:'16px', marginBottom:'14px', boxShadow:'0 1px 3px rgba(0,0,0,0.06)' }}>
               <div style={{ display:'flex', gap:'6px', marginBottom:'10px' }}>
@@ -696,12 +779,12 @@ export default function CandidateDetail() {
                 ))}
               </div>
               <textarea value={comment.content} onChange={e=>setComment(c=>({...c,content:e.target.value}))}
-                placeholder="Add a note, call log, or interview feedback..."
+                placeholder="Add a follow-up note, call log, or interview feedback..."
                 style={{ width:'100%', padding:'10px', border:'1.5px solid #EDF2F7', borderRadius:'8px', fontFamily:'Montserrat, sans-serif', fontSize:'12px', resize:'vertical', minHeight:'70px', outline:'none', boxSizing:'border-box' as const }}/>
               <div style={{ display:'flex', justifyContent:'flex-end', marginTop:'8px' }}>
                 <button onClick={addComment} disabled={!comment.content.trim()}
                   style={{ padding:'7px 16px', background:comment.content.trim()?'#156082':'#F1F5F9', color:comment.content.trim()?'white':'#45B6E4', border:'none', borderRadius:'8px', fontSize:'12px', fontWeight:'700', cursor:comment.content.trim()?'pointer':'not-allowed', fontFamily:'Montserrat, sans-serif' }}>
-                  Add Note
+                  Add Follow-up
                 </button>
               </div>
             </div>
@@ -718,7 +801,7 @@ export default function CandidateDetail() {
                 <p style={{ fontSize:'12px', color:'#3F3F3F', margin:0, lineHeight:'1.6' }}>{c.content}</p>
               </div>
             ))}
-            {(profile.comments||[]).length===0&&<div style={{ textAlign:'center', padding:'32px', color:'#45B6E4', fontSize:'13px' }}>No comments yet.</div>}
+            {(profile.comments||[]).length===0&&<div style={{ textAlign:'center', padding:'32px', color:'#45B6E4', fontSize:'13px' }}>No follow-up entries yet.</div>}
           </div>
         )}
 
@@ -768,7 +851,10 @@ export default function CandidateDetail() {
                   <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:'16px', flexWrap:'wrap', gap:'8px' }}>
                     <div>
                       <div style={{ fontSize:'13px', fontWeight:'700', color:'#156082' }}>{res.interviewer_name || res.interviewer_email}</div>
-                      <div style={{ fontSize:'11px', color:'#94A3B8' }}>{res.created_at ? new Date(res.created_at).toLocaleDateString('fr-FR',{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'}) : '—'}</div>
+                      <div style={{ fontSize:'11px', color:'#94A3B8' }}>
+                        {res.interview_date ? `Interview: ${new Date(res.interview_date).toLocaleDateString('fr-FR',{day:'2-digit',month:'short',year:'numeric'})} · ` : ''}
+                        Recorded: {res.created_at ? new Date(res.created_at).toLocaleDateString('fr-FR',{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'}) : '—'}
+                      </div>
                     </div>
                     {rec && (
                       <span style={{ padding:'5px 14px', borderRadius:'20px', fontSize:'12px', fontWeight:'700', background:rec.bg, color:rec.color }}>
@@ -844,6 +930,8 @@ export default function CandidateDetail() {
           <InterviewResultsModal
             candidateName={`${profile.first_name} ${profile.last_name}`}
             candidateSkills={profile.skills||[]}
+            candidateCountry={profile.country||'global'}
+            currentUser={currentUser}
             onConfirm={handleSaveInterviewResults}
             onCancel={() => setShowInterviewResults(false)}
           />

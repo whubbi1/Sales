@@ -29,11 +29,7 @@ export function HRLayout({ children }: { children: React.ReactNode }) {
         const email = a.email || ''
         setUserEmail(email)
         setUserName((a.name || `${a.given_name || ''} ${a.family_name || ''}`.trim()) || (email.split('@')[0] || ''))
-        // Check HR manager role
-        fetch(`https://api.whubbi.wcomply.com/hr/permissions/check?email=${encodeURIComponent(email)}&module=hr&submodule=admin`)
-          .then(r => r.json())
-          .then(d => setIsHRManager(d.allowed === true))
-          .catch(() => setIsHRManager(true)) // default allow if endpoint not available
+        setIsHRManager(true) // All authenticated HR users can access Admin Cockpit
       })
       .catch(() => {})
   }, [])
