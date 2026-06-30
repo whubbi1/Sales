@@ -310,7 +310,7 @@ export default function LegalLocationsPage() {
                             onSave={v => saveField(loc.id, 'country', v)} />
                         </div>
                       </div>
-                      <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr', gap: '12px' }}>
+                      <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr', gap: '12px', marginBottom: '10px' }}>
                         <div>
                           <label style={{ display: 'block', fontSize: '10px', fontWeight: '600', color: '#94A3B8', marginBottom: '2px' }}>Street Name & Number</label>
                           <InlineText value={loc.street || ''} placeholder="e.g. 12 Rue de la Paix"
@@ -325,6 +325,18 @@ export default function LegalLocationsPage() {
                           <label style={{ display: 'block', fontSize: '10px', fontWeight: '600', color: '#94A3B8', marginBottom: '2px' }}>City</label>
                           <InlineText value={loc.city || ''} placeholder="e.g. Paris"
                             onSave={v => saveField(loc.id, 'city', v)} />
+                        </div>
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                        <div>
+                          <label style={{ display: 'block', fontSize: '10px', fontWeight: '600', color: '#94A3B8', marginBottom: '2px' }}>Phone</label>
+                          <InlineText value={loc.phone || ''} placeholder="e.g. +33 1 23 45 67 89"
+                            onSave={v => saveField(loc.id, 'phone', v)} />
+                        </div>
+                        <div>
+                          <label style={{ display: 'block', fontSize: '10px', fontWeight: '600', color: '#94A3B8', marginBottom: '2px' }}>Email</label>
+                          <InlineText value={loc.email || ''} placeholder="e.g. contact@location.com"
+                            onSave={v => saveField(loc.id, 'email', v)} />
                         </div>
                       </div>
                     </div>
@@ -378,12 +390,19 @@ export default function LegalLocationsPage() {
                       {tab === 'websites' && (
                         <div>
                           {(loc.websites || []).map((web: any) => (
-                            <div key={web.id} style={{ display: 'grid', gridTemplateColumns: '200px 1fr 32px', gap: '8px', alignItems: 'center', marginBottom: '6px' }}>
-                              <InlineText value={web.label || ''} placeholder="Label"
+                            <div key={web.id} style={{ display: 'grid', gridTemplateColumns: '180px 1fr auto 28px', gap: '8px', alignItems: 'center', marginBottom: '6px' }}>
+                              <InlineText value={web.label || ''} placeholder="Name"
                                 onSave={v => saveWeb(loc.id, web.id, 'label', v)}
                                 style={{ fontSize: '12px', fontWeight: '600' }} />
                               <InlineText value={web.url || ''} placeholder="https://…"
                                 onSave={v => saveWeb(loc.id, web.id, 'url', v)} />
+                              {web.url ? (
+                                <a href={web.url.startsWith('http') ? web.url : `https://${web.url}`} target="_blank" rel="noopener noreferrer"
+                                  style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '4px 10px', background: '#EFF6FF', color: '#156082', borderRadius: '6px', fontSize: '11px', fontWeight: '700', textDecoration: 'none', whiteSpace: 'nowrap' }}>
+                                  <svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                                  Visit
+                                </a>
+                              ) : <div />}
                               <button onClick={() => deleteWeb(loc.id, web.id)}
                                 style={{ background: '#FEF2F2', color: '#DC2626', border: 'none', borderRadius: '6px', width: '28px', height: '28px', cursor: 'pointer', fontSize: '14px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>×</button>
                             </div>

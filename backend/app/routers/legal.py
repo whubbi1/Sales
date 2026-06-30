@@ -49,7 +49,7 @@ async def list_entities(db: AsyncSession = Depends(get_db)):
     r = await db.execute(text("""
         SELECT
             e.id::text, e.legal_name, e.street, e.postal_code, e.city, e.country,
-            e.created_at, e.created_by, e.updated_at, e.updated_by,
+            e.phone, e.email, e.created_at, e.created_by, e.updated_at, e.updated_by,
             COALESCE(
                 (SELECT json_agg(json_build_object('id', r.id::text, 'reg_type', r.reg_type, 'reg_value', r.reg_value)
                         ORDER BY r.sort_order, r.created_at)
@@ -97,7 +97,8 @@ async def update_entity(entity_id: str, data: dict, db: AsyncSession = Depends(g
     await db.execute(text("""
         UPDATE legal_entities SET
             legal_name = :legal_name, street = :street, postal_code = :postal_code,
-            city = :city, country = :country, updated_by = :updated_by, updated_at = NOW()
+            city = :city, country = :country, phone = :phone, email = :email,
+            updated_by = :updated_by, updated_at = NOW()
         WHERE id = CAST(:id AS UUID)
     """), {
         "id":         entity_id,
@@ -106,6 +107,8 @@ async def update_entity(entity_id: str, data: dict, db: AsyncSession = Depends(g
         "postal_code": data.get("postal_code", ""),
         "city":       data.get("city", ""),
         "country":    data.get("country", ""),
+        "phone":      data.get("phone", "") or "",
+        "email":      data.get("email", "") or "",
         "updated_by": data.get("updated_by", ""),
     })
     await db.commit()
@@ -221,7 +224,7 @@ async def list_locations(db: AsyncSession = Depends(get_db)):
     r = await db.execute(text("""
         SELECT
             l.id::text, l.location_name, l.street, l.postal_code, l.city, l.country,
-            l.created_at, l.created_by, l.updated_at, l.updated_by,
+            l.phone, l.email, l.created_at, l.created_by, l.updated_at, l.updated_by,
             COALESCE(
                 (SELECT json_agg(json_build_object('id', r.id::text, 'reg_type', r.reg_type, 'reg_value', r.reg_value)
                         ORDER BY r.created_at)
@@ -269,7 +272,8 @@ async def update_location(loc_id: str, data: dict, db: AsyncSession = Depends(ge
     await db.execute(text("""
         UPDATE legal_locations SET
             location_name = :location_name, street = :street, postal_code = :postal_code,
-            city = :city, country = :country, updated_by = :updated_by, updated_at = NOW()
+            city = :city, country = :country, phone = :phone, email = :email,
+            updated_by = :updated_by, updated_at = NOW()
         WHERE id = CAST(:id AS UUID)
     """), {
         "id":            loc_id,
@@ -278,6 +282,8 @@ async def update_location(loc_id: str, data: dict, db: AsyncSession = Depends(ge
         "postal_code":   data.get("postal_code", ""),
         "city":          data.get("city", ""),
         "country":       data.get("country", ""),
+        "phone":         data.get("phone", "") or "",
+        "email":         data.get("email", "") or "",
         "updated_by":    data.get("updated_by", ""),
     })
     await db.commit()
