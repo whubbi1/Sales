@@ -44,21 +44,13 @@ export default function LegalEntitiesPage() {
       const name  = (a.name || `${a.given_name || ''} ${a.family_name || ''}`.trim()) || email.split('@')[0]
       setCurrentUser({ email, name })
       if (!email) { setHasAccess(false); setLoading(false); return }
+      // All authenticated users get view access; permissions only control edit capability
+      setHasAccess(true)
       fetch(`${API}/settings/permissions/${email}`)
         .then(r => r.json())
-        .then(d => {
-          const legalPerms = d.permissions?.legal
-          // If the legal module isn't in the response yet (old backend / no record), allow access
-          if (!legalPerms) { setHasAccess(true); setCanEdit(true); load(); return }
-          const perm = legalPerms.entities || {}
-          // Only block if explicitly set to 'none'
-          const blocked = perm.access_mode === 'none'
-          setHasAccess(!blocked)
-          setCanEdit(perm.access_mode === 'edit')
-          if (!blocked) load()
-          else setLoading(false)
-        })
-        .catch(() => { setHasAccess(true); setCanEdit(true); load() })
+        .then(d => { setCanEdit(d.permissions?.legal?.entities?.access_mode === 'edit') })
+        .catch(() => {})
+      load()
     }).catch(() => { setHasAccess(false); setLoading(false) })
   }, [])
 

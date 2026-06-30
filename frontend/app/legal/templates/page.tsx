@@ -43,19 +43,13 @@ export default function LegalTemplatesPage() {
       const name  = (a.name || `${a.given_name || ''} ${a.family_name || ''}`.trim()) || email.split('@')[0]
       setCurrentUser({ email, name })
       if (!email) { setHasAccess(false); setLoading(false); return }
+      // All authenticated users get view access; permissions only control edit capability
+      setHasAccess(true)
       fetch(`${API}/settings/permissions/${email}`)
         .then(r => r.json())
-        .then(d => {
-          const legalPerms = d.permissions?.legal
-          if (!legalPerms) { setHasAccess(true); setCanEdit(true); load(); return }
-          const perm = legalPerms.templates || {}
-          const blocked = perm.access_mode === 'none'
-          setHasAccess(!blocked)
-          setCanEdit(perm.access_mode === 'edit')
-          if (!blocked) load()
-          else setLoading(false)
-        })
-        .catch(() => { setHasAccess(true); setCanEdit(true); load() })
+        .then(d => { setCanEdit(d.permissions?.legal?.templates?.access_mode === 'edit') })
+        .catch(() => {})
+      load()
     }).catch(() => { setHasAccess(false); setLoading(false) })
   }, [])
 

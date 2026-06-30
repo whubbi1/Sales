@@ -13,16 +13,9 @@ export default function LegalAdminPage() {
     fetchUserAttributes().then(a => {
       const email = a.email || ''
       if (!email) { setHasAccess(false); setLoading(false); return }
-      fetch(`${API}/settings/permissions/${email}`)
-        .then(r => r.json())
-        .then(d => {
-          const legalPerms = d.permissions?.legal
-          if (!legalPerms) { setHasAccess(true); setLoading(false); return }
-          const perm = legalPerms.admin || {}
-          setHasAccess(perm.access_mode !== 'none')
-          setLoading(false)
-        })
-        .catch(() => { setHasAccess(true); setLoading(false) })
+      // All authenticated users can access Legal Admin Cockpit
+      setHasAccess(true)
+      setLoading(false)
     }).catch(() => { setHasAccess(false); setLoading(false) })
   }, [])
 

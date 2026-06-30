@@ -21,15 +21,12 @@ export function HRLayout({ children }: { children: React.ReactNode }) {
   const path    = usePathname()
   const [userEmail, setUserEmail] = useState('')
   const [userName,  setUserName]  = useState('')
-  const [isHRManager, setIsHRManager] = useState(false)
-
   useEffect(() => {
     fetchUserAttributes()
       .then(a => {
         const email = a.email || ''
         setUserEmail(email)
         setUserName((a.name || `${a.given_name || ''} ${a.family_name || ''}`.trim()) || (email.split('@')[0] || ''))
-        setIsHRManager(true) // All authenticated HR users can access Admin Cockpit
       })
       .catch(() => {})
   }, [])
@@ -71,7 +68,7 @@ export function HRLayout({ children }: { children: React.ReactNode }) {
 
         {/* Navigation */}
         <nav style={{ flex: 1, padding: '10px 8px', overflowY: 'auto' }}>
-          {[...NAV, ...(isHRManager ? HR_MANAGER_NAV : [])].map(item => {
+          {[...NAV, ...HR_MANAGER_NAV].map(item => {
             const active = path === item.href || (item.href !== '/rh' && path.startsWith(item.href))
             return (
               <button key={item.href} onClick={() => router.push(item.href)} style={btnStyle(active)}>
