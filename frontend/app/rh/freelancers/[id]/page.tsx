@@ -271,8 +271,13 @@ export default function FreelancerDetail() {
               displayAs={<span style={{ fontSize:'12px', fontWeight:'600', color:'#3F3F3F' }}>{profile.years_experience||0} years</span>}/>
             <InlineField label="Daily Rate (€)" value={profile.daily_rate} onSave={(v:number)=>patchField('daily_rate',v)} type="number"
               displayAs={<span style={{ fontSize:'12px', fontWeight:'600', color:'#3F3F3F' }}>{profile.daily_rate ? `${profile.daily_rate}€/day` : '—'}</span>}/>
-            <InlineField label="Available From" value={profile.availability_date ? profile.availability_date.split('T')[0] : ''} onSave={(v:string)=>patchField('availability_date',v)} type="date"
-              displayAs={<span style={{ fontSize:'12px', fontWeight:'600', color:'#3F3F3F' }}>{profile.availability_date ? new Date(profile.availability_date).toLocaleDateString('fr-FR',{day:'2-digit',month:'short',year:'numeric'}) : '—'}</span>}/>
+            <div>
+              <div style={{ fontSize:'10px', fontWeight:'700', textTransform:'uppercase', letterSpacing:'0.07em', color:'#45B6E4', marginBottom:'3px' }}>Availability Date</div>
+              <input type="date"
+                value={profile.availability_date ? profile.availability_date.split('T')[0] : ''}
+                onChange={e => patchField('availability_date', e.target.value || null)}
+                style={{ fontSize:'12px', fontWeight:'600', border:'1px solid #EDF2F7', borderRadius:'5px', padding:'3px 7px', outline:'none', fontFamily:'Montserrat, sans-serif', width:'100%', boxSizing:'border-box' as const, color:'#3F3F3F', cursor:'pointer', background:'white' }}/>
+            </div>
             <div>
               <div style={{ fontSize:'10px', fontWeight:'700', textTransform:'uppercase', letterSpacing:'0.07em', color:'#45B6E4', marginBottom:'3px' }}>Country</div>
               <select value={profile.country||'france'} onChange={e=>patchField('country',e.target.value)}
