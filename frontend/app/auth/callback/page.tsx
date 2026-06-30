@@ -5,7 +5,11 @@ import { useRouter } from 'next/navigation'
 export default function CallbackPage() {
   const router = useRouter()
   useEffect(() => {
-    const timer = setTimeout(() => { router.push('/home') }, 2000)
+    const timer = setTimeout(() => {
+      const destination = localStorage.getItem('redirectAfterLogin') || '/home'
+      localStorage.removeItem('redirectAfterLogin')
+      router.push(destination)
+    }, 2000)
     return () => clearTimeout(timer)
   }, [router])
   return (
