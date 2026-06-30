@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 from sqlalchemy import Column, String, DateTime, Boolean, Text, JSON
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import UUID, JSONB
 from app.database import Base
 
 class UserProfile(Base):
@@ -32,8 +32,9 @@ class WhubbPermission(Base):
     user_email  = Column(String(255), nullable=False, index=True)
     module      = Column(String(50), nullable=False)   # sales, finance, hr, grc, it, helpdesk, admin
     submodule   = Column(String(100))                  # companies, contacts, opportunities, cv, etc.
-    data_scope  = Column(String(20), default='own')    # own, team, company
-    access_mode = Column(String(20), default='view')   # none, view, edit
-    granted_by  = Column(String(255))
+    data_scope     = Column(String(20), default='own')    # own, team, company
+    access_mode    = Column(String(20), default='view')   # none, view, edit
+    legal_entities = Column(JSONB, default=lambda: ["all"])  # ["all"] or ["france","portugal",...]
+    granted_by     = Column(String(255))
     created_at  = Column(DateTime, default=datetime.utcnow)
     updated_at  = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

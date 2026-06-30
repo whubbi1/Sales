@@ -1,0 +1,59 @@
+{
+  "$schema": "https://developer.microsoft.com/en-us/json-schemas/teams/v1.16/MicrosoftTeams.schema.json",
+  "manifestVersion": "1.16",
+  "version": "1.0.1",
+  "id": "d682f3fd-eb3e-4758-ac90-15ce7ea7be35",
+  "packageName": "com.wcomply.whubbi",
+  "developer": {
+    "name": "WCOMPLY",
+    "websiteUrl": "https://wcomply.com",
+    "privacyUrl": "https://wcomply.com/privacy",
+    "termsOfUseUrl": "https://wcomply.com/terms"
+  },
+  "name": {
+    "short": "WHUBBI",
+    "full": "WHUBBI HR Assistant"
+  },
+  "description": {
+    "short": "Your WCOMPLY Assistant",
+    "full": "WHUBBI gives you instant access to WCOMPLY's internal resources."
+  },
+  "icons": {
+    "color": "color.png",
+    "outline": "outline.png"
+  },
+  "accentColor": "#156082",
+  "bots": [
+    {
+      "botId": "d682f3fd-eb3e-4758-ac90-15ce7ea7be35",
+      "scopes": ["personal", "team", "groupchat"],
+      "supportsFiles": false,
+      "isNotificationOnly": false,
+      "commandLists": [
+        {
+          "scopes": ["personal", "team", "groupchat"],
+          "commands": [
+            {
+              "title": "freelancers france",
+              "description": "List available freelancers in France"
+            },
+            {
+              "title": "pipeline",
+              "description": "Show the recruitment pipeline"
+            },
+            {
+              "title": "positions",
+              "description": "List open job positions"
+            },
+            {
+              "title": "find [name]",
+              "description": "Search for a person by name"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "permissions": ["identity", "messageTeamMembers"],
+  "validDomains": ["api.whubbi.wcomply.com"]
+}

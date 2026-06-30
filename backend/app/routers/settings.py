@@ -18,12 +18,15 @@ CLIENT_SECRET = os.getenv("MS_CLIENT_SECRET", "")
 MODULES = {
     "sales":     ["companies", "contacts", "opportunities", "tasks"],
     "finance":   ["invoices", "budgets", "reports"],
-    "hr":        ["employees", "cv", "recruitment", "payroll"],
+    "hr":        ["freelancers", "recrutement", "positions", "jobs", "permissions", "chat", "admin"],
     "grc":       ["compliance", "risks", "audits", "certifications"],
     "it":        ["assets", "incidents", "access", "infrastructure"],
     "helpdesk":  ["tickets", "knowledge", "sla"],
     "admin":     ["users", "permissions", "monitoring", "costs"],
+    "legal":     ["entities", "templates", "admin"],
 }
+
+LEGAL_ENTITIES = ["all", "france", "portugal", "czech_republic", "romania", "spain"]
 
 async def get_ms_token() -> str:
     url = f"https://login.microsoftonline.com/{TENANT_ID}/oauth2/v2.0/token"
@@ -173,9 +176,15 @@ async def get_permissions(email: str, db: AsyncSession = Depends(get_db)):
         matrix[module] = {}
         for sub in submodules:
             existing = next((p for p in perms if p["module"] == module and p["submodule"] == sub), None)
+            legal_entities = existing.get("legal_entities") if existing else None
+            if isinstance(legal_entities, str):
+                import json as _json
+                try: legal_entities = _json.loads(legal_entities)
+                except: legal_entities = ["all"]
             matrix[module][sub] = {
                 "data_scope": existing["data_scope"] if existing else "none",
                 "access_mode": existing["access_mode"] if existing else "none",
+                "legal_entities": legal_entities or ["all"],
                 "id": str(existing["id"]) if existing else None,
             }
     return {"email": email, "permissions": matrix, "modules": MODULES}
@@ -184,23 +193,27 @@ async def get_permissions(email: str, db: AsyncSession = Depends(get_db)):
 @router.put("/permissions/{email}")
 async def update_permissions(email: str, data: dict, db: AsyncSession = Depends(get_db)):
     """Update permissions for a user. Admin only."""
+    import json as _json
     granted_by = data.get("granted_by", "admin")
     permissions = data.get("permissions", {})
 
     for module, submodules in permissions.items():
         for submodule, perm in submodules.items():
+            legal_entities = perm.get("legal_entities", ["all"])
             await db.execute(text("""
-                INSERT INTO whubbi_permissions (id, user_email, module, submodule, data_scope, access_mode, granted_by, created_at, updated_at)
-                VALUES (gen_random_uuid(), :email, :module, :submodule, :data_scope, :access_mode, :granted_by, NOW(), NOW())
+                INSERT INTO whubbi_permissions (id, user_email, module, submodule, data_scope, access_mode, legal_entities, granted_by, created_at, updated_at)
+                VALUES (gen_random_uuid(), :email, :module, :submodule, :data_scope, :access_mode, CAST(:legal_entities AS JSONB), :granted_by, NOW(), NOW())
                 ON CONFLICT (user_email, module, submodule) DO UPDATE SET
                     data_scope = EXCLUDED.data_scope,
                     access_mode = EXCLUDED.access_mode,
+                    legal_entities = EXCLUDED.legal_entities,
                     granted_by = EXCLUDED.granted_by,
                     updated_at = NOW()
             """), {
                 "email": email, "module": module, "submodule": submodule,
                 "data_scope": perm.get("data_scope", "none"),
                 "access_mode": perm.get("access_mode", "none"),
+                "legal_entities": _json.dumps(legal_entities),
                 "granted_by": granted_by
             })
     await db.commit()

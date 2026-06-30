@@ -11,6 +11,7 @@ const MODULES = [
   { id:'grc',      title:'GRC',               description:'Governance, Risk and Compliance. Manage audits, risks and regulatory frameworks.', icon:'🛡️', href:'/grc',       color:'#7C3AED', available:true  },
   { id:'it',       title:'IT',                description:'IT asset management, incidents, access control and infrastructure monitoring.',    icon:'🖥️', href:'/it',        color:'#45B6E4', available:true  },
   { id:'helpdesk', title:'Helpdesk',          description:'Support tickets, incident tracking and knowledge base management.',               icon:'🎧', href:'/helpdesk',  color:'#45B6E4', available:true  },
+  { id:'legal',    title:'Legal',             description:'Legal entities, template documents and compliance. Manage WCOMPLY legal structure.', icon:'⚖️', href:'/legal',     color:'#1a2744', available:true  },
   { id:'settings', title:'Personal Settings', description:'Manage your profile, preferences, notifications and account settings.',           icon:'⚙️', href:'/settings',  color:'#45B6E4', available:true  },
   { id:'admin',    title:'Admin Cockpit',     description:'Service health, cost tracking, error logs and system administration.',             icon:'🔧', href:'/admin',     color:'#45B6E4', available:true  },
 ]

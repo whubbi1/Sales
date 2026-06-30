@@ -332,6 +332,8 @@ async def startup():
                     notes TEXT,
                     created_at TIMESTAMP DEFAULT NOW()
                 )""",
+                # Permissions - legal entity dimension
+                "ALTER TABLE whubbi_permissions ADD COLUMN IF NOT EXISTS legal_entities JSONB DEFAULT '[\"all\"]'",
                 # HR Admin Cockpit — interview skills & questions
                 """CREATE TABLE IF NOT EXISTS hr_interview_skills (
                     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -370,6 +372,41 @@ async def startup():
                 "ALTER TABLE hr_chat_messages ADD COLUMN IF NOT EXISTS sender_name VARCHAR(255)",
                 "ALTER TABLE hr_chat_messages ADD COLUMN IF NOT EXISTS delivered_count INTEGER DEFAULT 0",
                 "ALTER TABLE hr_chat_messages ADD COLUMN IF NOT EXISTS delivery_errors TEXT",
+                # Legal module migrations
+                """CREATE TABLE IF NOT EXISTS legal_entities (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    legal_name VARCHAR(255) NOT NULL,
+                    legal_address TEXT,
+                    country VARCHAR(100),
+                    registration_description VARCHAR(255),
+                    registration_value VARCHAR(255),
+                    created_by VARCHAR(255),
+                    updated_by VARCHAR(255),
+                    created_at TIMESTAMP DEFAULT NOW(),
+                    updated_at TIMESTAMP DEFAULT NOW()
+                )""",
+                """CREATE TABLE IF NOT EXISTS legal_entity_documents (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    legal_entity_id UUID NOT NULL,
+                    doc_type VARCHAR(100),
+                    doc_label VARCHAR(255) NOT NULL,
+                    sharepoint_url TEXT,
+                    created_by VARCHAR(255),
+                    created_at TIMESTAMP DEFAULT NOW()
+                )""",
+                """CREATE TABLE IF NOT EXISTS legal_templates (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    title VARCHAR(255) NOT NULL,
+                    description TEXT,
+                    doc_type VARCHAR(100),
+                    country VARCHAR(100) DEFAULT 'global',
+                    sharepoint_url TEXT,
+                    sort_order INTEGER DEFAULT 0,
+                    created_by VARCHAR(255),
+                    updated_by VARCHAR(255),
+                    created_at TIMESTAMP DEFAULT NOW(),
+                    updated_at TIMESTAMP DEFAULT NOW()
+                )""",
             ]
             for sql in sqls:
                 try:
@@ -435,6 +472,7 @@ _include("app.routers.grc_extended",   "/grc",          "GRCExt")
 _include("app.routers.helpdesk",       "/helpdesk",     "Helpdesk")
 _include("app.routers.helpdesk_teams", "/helpdesk",     "Teams")
 _include("app.routers.admin_audit",    "/admin",        "Audit")
+_include("app.routers.legal",          "/legal",        "Legal")
 
 try:
     from app.routers import auth, outlook, copilot
