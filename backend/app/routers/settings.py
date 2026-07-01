@@ -21,9 +21,10 @@ MODULES = {
     "hr":        ["freelancers", "recrutement", "positions", "jobs", "permissions", "chat", "admin"],
     "grc":       ["compliance", "risks", "audits", "certifications"],
     "it":        ["assets", "incidents", "access", "infrastructure"],
-    "helpdesk":  ["tickets", "knowledge", "sla", "admin_cockpit"],
-    "admin":     ["users", "permissions", "monitoring", "costs"],
-    "legal":     ["entities", "templates", "admin"],
+    "helpdesk":     ["tickets", "knowledge", "sla", "admin_cockpit"],
+    "admin":        ["users", "permissions", "monitoring", "costs"],
+    "legal":        ["entities", "templates", "admin"],
+    "development":  ["general"],
 }
 
 LEGAL_ENTITIES = ["all", "france", "portugal", "czech_republic", "romania", "spain"]

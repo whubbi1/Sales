@@ -499,6 +499,72 @@ async def startup():
                        ('Bank Certificate', 6), ('Tax Certificate', 7), ('Other', 99)
                    ) AS v(label, sort_order)
                    WHERE NOT EXISTS (SELECT 1 FROM legal_doc_types LIMIT 1)""",
+
+                # Development module
+                """CREATE TABLE IF NOT EXISTS development_pipelines (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    pipeline_code VARCHAR(50) UNIQUE NOT NULL,
+                    name VARCHAR(255) NOT NULL,
+                    description TEXT,
+                    application VARCHAR(100),
+                    status VARCHAR(50) DEFAULT 'to_be_planned',
+                    release_number VARCHAR(50),
+                    created_at TIMESTAMP DEFAULT NOW(),
+                    updated_at TIMESTAMP DEFAULT NOW()
+                )""",
+                """CREATE TABLE IF NOT EXISTS development_requests (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    request_number VARCHAR(50) UNIQUE NOT NULL,
+                    title VARCHAR(255) NOT NULL,
+                    description TEXT,
+                    application VARCHAR(100),
+                    status VARCHAR(50) DEFAULT 'open',
+                    priority VARCHAR(20) DEFAULT 'medium',
+                    request_type VARCHAR(50) DEFAULT 'feature',
+                    requester_email VARCHAR(255),
+                    requester_name VARCHAR(255),
+                    assignee_email VARCHAR(255),
+                    assignee_name VARCHAR(255),
+                    pipeline_id UUID,
+                    created_at TIMESTAMP DEFAULT NOW(),
+                    updated_at TIMESTAMP DEFAULT NOW()
+                )""",
+                """CREATE TABLE IF NOT EXISTS dev_request_activity (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    request_id UUID NOT NULL,
+                    content TEXT,
+                    field_changed VARCHAR(100),
+                    old_value TEXT,
+                    new_value TEXT,
+                    author_email VARCHAR(255),
+                    author_name VARCHAR(255),
+                    is_system BOOLEAN DEFAULT false,
+                    created_at TIMESTAMP DEFAULT NOW()
+                )""",
+                """CREATE TABLE IF NOT EXISTS test_scripts (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    title VARCHAR(255) NOT NULL,
+                    application VARCHAR(100),
+                    description TEXT,
+                    script_steps TEXT,
+                    expected_results TEXT,
+                    request_id UUID,
+                    pipeline_id UUID,
+                    created_by VARCHAR(255),
+                    created_at TIMESTAMP DEFAULT NOW(),
+                    updated_at TIMESTAMP DEFAULT NOW()
+                )""",
+                """CREATE TABLE IF NOT EXISTS test_executions (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    script_id UUID,
+                    pipeline_id UUID,
+                    status VARCHAR(50) DEFAULT 'not_started',
+                    result TEXT,
+                    executed_by VARCHAR(255),
+                    notes TEXT,
+                    executed_at TIMESTAMP,
+                    created_at TIMESTAMP DEFAULT NOW()
+                )""",
             ]
             for sql in sqls:
                 try:
@@ -565,6 +631,7 @@ _include("app.routers.helpdesk",       "/helpdesk",     "Helpdesk")
 _include("app.routers.helpdesk_teams", "/helpdesk",     "Teams")
 _include("app.routers.admin_audit",    "/admin",        "Audit")
 _include("app.routers.legal",          "/legal",        "Legal")
+_include("app.routers.development",    "/development",  "Development")
 
 try:
     from app.routers import auth, outlook, copilot
