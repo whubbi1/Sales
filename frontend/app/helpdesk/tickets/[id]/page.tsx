@@ -25,6 +25,7 @@ export default function TicketDetailPage() {
     incident_request: '🚨 Incident',
     change_request: '🔄 Change',
     information_request: 'ℹ️ Information',
+    development_request: '💻 Development',
   }
 
   const load = async () => {
@@ -183,6 +184,7 @@ export default function TicketDetailPage() {
                         <option value="incident_request">Incident Request</option>
                         <option value="change_request">Change Request</option>
                         <option value="information_request">Information Request</option>
+                        <option value="development_request">Development Request</option>
                       </select>
                     </div>
                     <div>
