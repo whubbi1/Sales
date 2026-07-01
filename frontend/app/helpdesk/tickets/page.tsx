@@ -15,7 +15,10 @@ const TICKET_TYPES = [
   { value: 'incident_request',    label: 'Incident Request' },
   { value: 'change_request',      label: 'Change Request' },
   { value: 'information_request', label: 'Information Request' },
+  { value: 'development_request', label: 'Development Request' },
 ]
+
+const DEV_APPLICATIONS = ['WHUBBI', 'Karanext', 'Payfit', 'SAP', 'SharePoint', 'Microsoft 365', 'Other']
 
 export default function TicketsPage() {
   const router = useRouter()
@@ -35,7 +38,8 @@ export default function TicketsPage() {
     title: '', description: '', category_id: '', subcategory_id: '',
     priority: 'medium', ticket_type: '',
     requester_email: '', requester_name: '',
-    requester_type: 'internal', assignee_name: '', group_id: ''
+    requester_type: 'internal', assignee_name: '', group_id: '',
+    application: '',
   })
   const [subcategories, setSubcategories] = useState<any[]>([])
   const [lookupLoading, setLookupLoading] = useState(false)
@@ -257,7 +261,7 @@ export default function TicketsPage() {
                 const p = PRIORITY_STYLE[t.priority]||PRIORITY_STYLE.medium
                 const s = STATUS_STYLE[t.status]||STATUS_STYLE.new
                 const breached = t.sla_deadline && new Date(t.sla_deadline) < new Date() && !['resolved','closed'].includes(t.status)
-                const typeLabel = t.ticket_type === 'change_request' ? 'Change' : t.ticket_type === 'information_request' ? 'Info' : 'Incident'
+                const typeLabel = t.ticket_type === 'change_request' ? 'Change' : t.ticket_type === 'information_request' ? 'Info' : t.ticket_type === 'development_request' ? 'Dev' : 'Incident'
                 return (
                   <tr key={t.id} onClick={() => router.push(`/helpdesk/tickets/${t.id}`)} style={{ cursor: 'pointer', borderBottom: '1px solid #F1F5F9' }}
                     onMouseEnter={e => e.currentTarget.style.background = '#F8FAFC'}
@@ -293,10 +297,10 @@ export default function TicketsPage() {
             <div style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
               <div>
                 <label className="form-label">Ticket Type *</label>
-                <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginTop: '4px' }}>
                   {TICKET_TYPES.map(tt => (
-                    <button key={tt.value} type="button" onClick={() => setForm(p => ({ ...p, ticket_type: tt.value }))}
-                      style={{ flex: 1, padding: '9px 8px', borderRadius: '8px', border: `2px solid ${form.ticket_type === tt.value ? '#156082' : '#EDF2F7'}`,
+                    <button key={tt.value} type="button" onClick={() => setForm(p => ({ ...p, ticket_type: tt.value, application: '' }))}
+                      style={{ padding: '9px 8px', borderRadius: '8px', border: `2px solid ${form.ticket_type === tt.value ? '#156082' : '#EDF2F7'}`,
                         background: form.ticket_type === tt.value ? '#EFF6FF' : 'white',
                         color: form.ticket_type === tt.value ? '#156082' : '#64748B',
                         fontSize: '11px', fontWeight: form.ticket_type === tt.value ? '700' : '400',
@@ -307,6 +311,17 @@ export default function TicketsPage() {
                 </div>
                 {!form.ticket_type && <p style={{ fontSize: '10px', color: '#DC2626', margin: '4px 0 0' }}>Please select a ticket type</p>}
               </div>
+
+              {form.ticket_type === 'development_request' && (
+                <div style={{ background: '#F0FDF4', borderRadius: '10px', padding: '12px 14px', border: '1px solid #BBF7D0' }}>
+                  <label className="form-label" style={{ color: '#15803D', marginBottom: '6px', display: 'block' }}>Application *</label>
+                  <select className="form-input" value={form.application} onChange={e => setForm(p => ({ ...p, application: e.target.value }))}>
+                    <option value="">Select application…</option>
+                    {DEV_APPLICATIONS.map(a => <option key={a} value={a}>{a}</option>)}
+                  </select>
+                  {!form.application && <p style={{ fontSize: '10px', color: '#DC2626', margin: '4px 0 0' }}>Please select an application</p>}
+                </div>
+              )}
 
               <div style={{ background: '#F0F9FF', borderRadius: '10px', padding: '14px', border: '1px solid #BAE6FD' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px' }}>

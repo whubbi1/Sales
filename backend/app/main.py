@@ -565,6 +565,9 @@ async def startup():
                     executed_at TIMESTAMP,
                     created_at TIMESTAMP DEFAULT NOW()
                 )""",
+                # Link helpdesk tickets to the development module
+                "ALTER TABLE tickets ADD COLUMN IF NOT EXISTS application VARCHAR(100)",
+                "ALTER TABLE tickets ADD COLUMN IF NOT EXISTS dev_pipeline_id UUID",
             ]
             for sql in sqls:
                 try:

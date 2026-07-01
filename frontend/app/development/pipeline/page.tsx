@@ -13,7 +13,7 @@ const lbl: React.CSSProperties = {
   marginBottom: '4px', textTransform: 'uppercase' as const, letterSpacing: '0.05em',
 }
 
-const EMPTY_FORM = { pipeline_code: '', name: '', description: '', application: '', status: 'to_be_planned', release_number: '' }
+const EMPTY_FORM = { name: '', description: '', application: '', status: 'to_be_planned', release_number: '' }
 
 function PipelineContent() {
   const { canEdit } = useDevPerm()
@@ -45,7 +45,7 @@ function PipelineContent() {
 
   const openCreate = () => { setForm(EMPTY_FORM); setEditing(null); setShowModal(true) }
   const openEdit   = (pl: any) => {
-    setForm({ pipeline_code: pl.pipeline_code, name: pl.name, description: pl.description || '', application: pl.application || '', status: pl.status, release_number: pl.release_number || '' })
+    setForm({ name: pl.name, description: pl.description || '', application: pl.application || '', status: pl.status, release_number: pl.release_number || '' })
     setEditing(pl)
     setShowModal(true)
   }
@@ -215,15 +215,9 @@ function PipelineContent() {
               <button onClick={() => setShowModal(false)} style={{ background: 'none', border: 'none', fontSize: '20px', cursor: 'pointer', color: '#94A3B8' }}>×</button>
             </div>
             <div style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                <div>
-                  <label style={lbl}>Pipeline ID</label>
-                  <input style={{ ...inp, width: '100%', boxSizing: 'border-box' as const }} placeholder="Auto-generated if empty" value={form.pipeline_code} onChange={e => setForm((f: any) => ({ ...f, pipeline_code: e.target.value }))} />
-                </div>
-                <div>
-                  <label style={lbl}>Release Number</label>
-                  <input style={{ ...inp, width: '100%', boxSizing: 'border-box' as const }} placeholder="e.g. 1.2.0" value={form.release_number} onChange={e => setForm((f: any) => ({ ...f, release_number: e.target.value }))} />
-                </div>
+              <div>
+                <label style={lbl}>Release Number</label>
+                <input style={{ ...inp, width: '100%', boxSizing: 'border-box' as const }} placeholder="e.g. 1.2.0" value={form.release_number} onChange={e => setForm((f: any) => ({ ...f, release_number: e.target.value }))} />
               </div>
               <div>
                 <label style={lbl}>Name *</label>

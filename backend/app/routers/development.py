@@ -32,7 +32,7 @@ async def get_meta():
         "request_types": REQUEST_TYPES,
     }
 
-# ─── Development Requests ─────────────────────────────────────────────────────
+# ─── Development Requests (sourced from helpdesk tickets of type development_request) ──
 @router.get("/requests")
 async def list_requests(
     application: str = None,
@@ -41,30 +41,37 @@ async def list_requests(
     search: str = None,
     db: AsyncSession = Depends(get_db)
 ):
-    where = ["1=1"]
+    where = ["t.ticket_type = 'development_request'"]
     params = {}
     if application:
-        where.append("dr.application = :application")
+        where.append("t.application = :application")
         params["application"] = application
     if status:
-        where.append("dr.status = :status")
+        where.append("t.status = :status")
         params["status"] = status
     if pipeline_id:
-        where.append("dr.pipeline_id = CAST(:pipeline_id AS UUID)")
+        where.append("t.dev_pipeline_id = CAST(:pipeline_id AS UUID)")
         params["pipeline_id"] = pipeline_id
     if search:
-        where.append("(dr.title ILIKE :search OR dr.request_number ILIKE :search OR dr.requester_name ILIKE :search)")
+        where.append("(t.title ILIKE :search OR t.ticket_number ILIKE :search OR t.requester_name ILIKE :search)")
         params["search"] = f"%{search}%"
 
     r = await db.execute(text(f"""
-        SELECT dr.*,
-               dp.name AS pipeline_name,
+        SELECT t.id,
+               t.ticket_number  AS request_number,
+               t.title, t.description, t.status, t.priority,
+               t.application,
+               t.requester_email, t.requester_name,
+               t.assignee_email, t.assignee_name,
+               t.dev_pipeline_id AS pipeline_id,
+               t.created_at, t.updated_at,
+               dp.name          AS pipeline_name,
                dp.pipeline_code,
                dp.release_number
-        FROM development_requests dr
-        LEFT JOIN development_pipelines dp ON dr.pipeline_id = dp.id
+        FROM tickets t
+        LEFT JOIN development_pipelines dp ON t.dev_pipeline_id = dp.id
         WHERE {' AND '.join(where)}
-        ORDER BY dr.created_at DESC
+        ORDER BY t.created_at DESC
     """), params)
     rows = r.fetchall()
     result = []
@@ -76,56 +83,25 @@ async def list_requests(
         result.append(d)
     return {"requests": result}
 
-@router.post("/requests")
-async def create_request(data: dict, db: AsyncSession = Depends(get_db)):
-    req_id = str(uuid.uuid4())
-    req_num = _gen_req_number()
-    await db.execute(text("""
-        INSERT INTO development_requests
-            (id, request_number, title, description, application, status, priority, request_type,
-             requester_email, requester_name, assignee_email, assignee_name, pipeline_id, created_at, updated_at)
-        VALUES
-            (CAST(:id AS UUID), :request_number, :title, :description, :application, :status, :priority, :request_type,
-             :requester_email, :requester_name, :assignee_email, :assignee_name, CAST(:pipeline_id AS UUID), NOW(), NOW())
-    """), {
-        "id":              req_id,
-        "request_number":  req_num,
-        "title":           data.get("title", ""),
-        "description":     data.get("description", ""),
-        "application":     data.get("application", ""),
-        "status":          data.get("status", "open"),
-        "priority":        data.get("priority", "medium"),
-        "request_type":    data.get("request_type", "feature"),
-        "requester_email": data.get("requester_email", ""),
-        "requester_name":  data.get("requester_name", ""),
-        "assignee_email":  data.get("assignee_email", ""),
-        "assignee_name":   data.get("assignee_name", ""),
-        "pipeline_id":     data.get("pipeline_id") or None,
-    })
-    await db.execute(text("""
-        INSERT INTO dev_request_activity
-            (id, request_id, content, author_email, author_name, is_system, created_at)
-        VALUES
-            (gen_random_uuid(), CAST(:request_id AS UUID), :content, :author_email, :author_name, true, NOW())
-    """), {
-        "request_id":  req_id,
-        "content":     f"Request {req_num} created.",
-        "author_email": data.get("requester_email", ""),
-        "author_name":  data.get("requester_name", "System"),
-    })
-    await db.commit()
-    return {"status": "ok", "id": req_id, "request_number": req_num}
-
 @router.get("/requests/{rid}")
 async def get_request(rid: str, db: AsyncSession = Depends(get_db)):
     r = await db.execute(text("""
-        SELECT dr.*,
-               dp.name AS pipeline_name,
+        SELECT t.id,
+               t.ticket_number  AS request_number,
+               t.title, t.description, t.status, t.priority,
+               t.application,
+               t.requester_email, t.requester_name,
+               t.assignee_email, t.assignee_name,
+               t.dev_pipeline_id AS pipeline_id,
+               t.created_at, t.updated_at,
+               c.name AS category_name, c.icon AS category_icon,
+               dp.name          AS pipeline_name,
                dp.pipeline_code,
                dp.release_number
-        FROM development_requests dr
-        LEFT JOIN development_pipelines dp ON dr.pipeline_id = dp.id
-        WHERE dr.id = CAST(:id AS UUID)
+        FROM tickets t
+        LEFT JOIN ticket_categories c   ON t.category_id     = c.id
+        LEFT JOIN development_pipelines dp ON t.dev_pipeline_id = dp.id
+        WHERE t.id = CAST(:id AS UUID) AND t.ticket_type = 'development_request'
     """), {"id": rid})
     row = r.fetchone()
     if not row:
@@ -150,55 +126,55 @@ async def get_request(rid: str, db: AsyncSession = Depends(get_db)):
 
 @router.put("/requests/{rid}")
 async def update_request(rid: str, data: dict, db: AsyncSession = Depends(get_db)):
-    cur = await db.execute(
-        text("SELECT * FROM development_requests WHERE id = CAST(:id AS UUID)"),
-        {"id": rid}
-    )
+    cur = await db.execute(text("""
+        SELECT t.*, dp.name AS pipeline_name
+        FROM tickets t
+        LEFT JOIN development_pipelines dp ON t.dev_pipeline_id = dp.id
+        WHERE t.id = CAST(:id AS UUID) AND t.ticket_type = 'development_request'
+    """), {"id": rid})
     current = cur.fetchone()
     if not current:
         return {"status": "not_found"}
     cm = dict(current._mapping)
 
     track = {
-        "title":         "Title",
-        "status":        "Status",
-        "priority":      "Priority",
-        "request_type":  "Request Type",
-        "application":   "Application",
+        "title":          "Title",
+        "status":         "Status",
+        "priority":       "Priority",
+        "application":    "Application",
         "assignee_email": "Assignee",
-        "pipeline_id":   "Pipeline",
+        "pipeline_id":    "Pipeline",
     }
     changes = []
     for field, label in track.items():
         if field not in data:
             continue
-        old_val = str(cm.get(field) or "")
+        db_col = "dev_pipeline_id" if field == "pipeline_id" else field
+        old_val = str(cm.get(db_col) or "")
         new_val = str(data.get(field) or "")
         if old_val != new_val:
             changes.append((field, label, old_val, new_val))
 
     await db.execute(text("""
-        UPDATE development_requests SET
-            title          = :title,
-            status         = :status,
-            priority       = :priority,
-            request_type   = :request_type,
-            application    = :application,
-            assignee_email = :assignee_email,
-            assignee_name  = :assignee_name,
-            pipeline_id    = CAST(:pipeline_id AS UUID),
-            updated_at     = NOW()
-        WHERE id = CAST(:id AS UUID)
+        UPDATE tickets SET
+            title           = :title,
+            status          = :status,
+            priority        = :priority,
+            application     = :application,
+            assignee_email  = :assignee_email,
+            assignee_name   = :assignee_name,
+            dev_pipeline_id = CAST(:dev_pipeline_id AS UUID),
+            updated_at      = NOW()
+        WHERE id = CAST(:id AS UUID) AND ticket_type = 'development_request'
     """), {
-        "id":             rid,
-        "title":          data.get("title",          str(cm.get("title", ""))),
-        "status":         data.get("status",         str(cm.get("status", ""))),
-        "priority":       data.get("priority",       str(cm.get("priority", ""))),
-        "request_type":   data.get("request_type",   str(cm.get("request_type", ""))),
-        "application":    data.get("application",    str(cm.get("application", ""))),
-        "assignee_email": data.get("assignee_email", str(cm.get("assignee_email") or "")),
-        "assignee_name":  data.get("assignee_name",  str(cm.get("assignee_name") or "")),
-        "pipeline_id":    data.get("pipeline_id") or None,
+        "id":              rid,
+        "title":           data.get("title",          str(cm.get("title", ""))),
+        "status":          data.get("status",         str(cm.get("status", ""))),
+        "priority":        data.get("priority",       str(cm.get("priority", ""))),
+        "application":     data.get("application",    str(cm.get("application") or "")),
+        "assignee_email":  data.get("assignee_email", str(cm.get("assignee_email") or "")),
+        "assignee_name":   data.get("assignee_name",  str(cm.get("assignee_name") or "")),
+        "dev_pipeline_id": data.get("pipeline_id") or None,
     })
 
     for field, label, old_val, new_val in changes:
@@ -254,9 +230,9 @@ async def list_pipelines(
 
     r = await db.execute(text(f"""
         SELECT dp.*,
-               COUNT(dr.id) AS request_count
+               COUNT(t.id) AS request_count
         FROM development_pipelines dp
-        LEFT JOIN development_requests dr ON dr.pipeline_id = dp.id
+        LEFT JOIN tickets t ON t.dev_pipeline_id = dp.id AND t.ticket_type = 'development_request'
         WHERE {' AND '.join(where)}
         GROUP BY dp.id
         ORDER BY dp.created_at DESC
@@ -303,16 +279,16 @@ async def get_pipeline(pid: str, db: AsyncSession = Depends(get_db)):
     pl["id"] = str(pl["id"])
 
     rr = await db.execute(text("""
-        SELECT * FROM development_requests
-        WHERE pipeline_id = CAST(:id AS UUID)
+        SELECT id, ticket_number AS request_number, title, status, priority,
+               application, assignee_email, assignee_name, created_at
+        FROM tickets
+        WHERE dev_pipeline_id = CAST(:id AS UUID) AND ticket_type = 'development_request'
         ORDER BY created_at DESC
     """), {"id": pid})
     requests = []
     for req in rr.fetchall():
         d = dict(req._mapping)
         d["id"] = str(d["id"])
-        if d.get("pipeline_id"):
-            d["pipeline_id"] = str(d["pipeline_id"])
         requests.append(d)
     return {"pipeline": pl, "requests": requests}
 

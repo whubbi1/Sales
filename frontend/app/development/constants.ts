@@ -11,12 +11,14 @@ export const PIPELINE_STATUSES: { value: string; label: string; color: string; b
   { value: 'closed',         label: 'Closed',          color: '#6B7280', bg: '#F9FAFB' },
 ]
 
+// Development requests are helpdesk tickets — use helpdesk statuses
 export const REQUEST_STATUSES: { value: string; label: string; color: string; bg: string }[] = [
-  { value: 'open',        label: 'Open',        color: '#3B82F6', bg: '#EFF6FF' },
-  { value: 'in_progress', label: 'In Progress', color: '#F59E0B', bg: '#FFFBEB' },
-  { value: 'in_testing',  label: 'In Testing',  color: '#8B5CF6', bg: '#F5F3FF' },
-  { value: 'done',        label: 'Done',        color: '#10B981', bg: '#ECFDF5' },
-  { value: 'cancelled',   label: 'Cancelled',   color: '#6B7280', bg: '#F9FAFB' },
+  { value: 'new',         label: 'New',         color: '#3B82F6', bg: '#EFF6FF' },
+  { value: 'open',        label: 'Open',        color: '#F59E0B', bg: '#FFFBEB' },
+  { value: 'in_progress', label: 'In Progress', color: '#8B5CF6', bg: '#F5F3FF' },
+  { value: 'pending',     label: 'Pending',     color: '#F97316', bg: '#FFF7ED' },
+  { value: 'resolved',    label: 'Resolved',    color: '#10B981', bg: '#ECFDF5' },
+  { value: 'closed',      label: 'Closed',      color: '#6B7280', bg: '#F9FAFB' },
 ]
 
 export const REQUEST_PRIORITIES: { value: string; label: string; color: string; bg: string }[] = [

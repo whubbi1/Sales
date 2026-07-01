@@ -99,6 +99,7 @@ async def dashboard(db: AsyncSession = Depends(get_db)):
 @router.get("/tickets")
 async def list_tickets(status:str=None,priority:str=None,group_id:str=None,
                        assignee_email:str=None,requester_email:str=None,search:str=None,
+                       ticket_type:str=None,
                        limit:int=50,offset:int=0,db:AsyncSession=Depends(get_db)):
     where,params=["1=1"],{"limit":limit,"offset":offset}
     if status:   where.append("t.status=:status");    params["status"]=status
@@ -109,11 +110,13 @@ async def list_tickets(status:str=None,priority:str=None,group_id:str=None,
     if search:
         where.append("(t.title ILIKE :s OR t.ticket_number ILIKE :s OR t.requester_email ILIKE :s)")
         params["s"]=f"%{search}%"
+    if ticket_type: where.append("t.ticket_type=:ticket_type"); params["ticket_type"]=ticket_type
     w=" AND ".join(where)
     r=await db.execute(text(f"""
         SELECT t.id,t.ticket_number,t.title,t.status,t.priority,t.ticket_type,
                t.requester_email,t.requester_name,t.requester_type,
                t.assignee_email,t.assignee_name,t.created_at,t.sla_deadline,
+               t.application,t.dev_pipeline_id,
                c.name as category_name,c.color as category_color,c.icon as category_icon,
                sc.name as subcategory_name,g.name as group_name
         FROM tickets t
@@ -131,7 +134,8 @@ async def get_ticket(tid:str,db:AsyncSession=Depends(get_db)):
     t=await db.execute(text("""
         SELECT t.*,c.name as category_name,c.color as category_color,c.icon as category_icon,
                sc.name as subcategory_name,g.name as group_name,
-               g.responsible_email,g.responsible_name
+               g.responsible_email,g.responsible_name,
+               t.application,t.dev_pipeline_id
         FROM tickets t LEFT JOIN ticket_categories c ON t.category_id=c.id
         LEFT JOIN ticket_categories sc ON t.subcategory_id=sc.id
         LEFT JOIN helpdesk_groups g ON t.group_id=g.id WHERE t.id=CAST(:id AS uuid)
@@ -177,19 +181,20 @@ async def create_ticket(data:dict,db:AsyncSession=Depends(get_db)):
     await db.execute(text("""
         INSERT INTO tickets (id,ticket_number,title,description,category_id,subcategory_id,group_id,
             priority,status,ticket_type,requester_email,requester_name,requester_type,
-            assignee_email,assignee_name,sla_deadline,created_at,updated_at)
+            assignee_email,assignee_name,sla_deadline,application,created_at,updated_at)
         VALUES (CAST(:id AS uuid),:tn,:title,:desc,
             CAST(NULLIF(:cat_id,'') AS uuid),CAST(NULLIF(:sub_id,'') AS uuid),CAST(NULLIF(:group_id,'') AS uuid),
             :prio,'new',:ticket_type,:req_email,:req_name,:req_type,
             NULLIF(:ass_email,''),NULLIF(:ass_name,''),
-            :sla,NOW(),NOW())
+            :sla,:application,NOW(),NOW())
     """),{"id":tid,"tn":ticket_num,"title":data.get("title"),"desc":data.get("description",""),
           "cat_id":data.get("category_id",""),"sub_id":data.get("subcategory_id",""),
           "group_id":group_id or "","prio":data.get("priority","medium"),
           "ticket_type":data.get("ticket_type","incident_request"),
           "req_email":req_email,"req_name":req_name,"req_type":data.get("requester_type","internal"),
           "ass_email":assignee_email,"ass_name":assignee_name,
-          "sla":datetime.utcnow()+timedelta(hours=sla_h)})
+          "sla":datetime.utcnow()+timedelta(hours=sla_h),
+          "application":data.get("application","") or None})
     await db.commit()
 
     # Notify group responsible if not auto-assigned

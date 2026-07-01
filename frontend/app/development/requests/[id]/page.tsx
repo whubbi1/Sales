@@ -4,7 +4,7 @@ import { useRouter } from 'next/navigation'
 import DevelopmentLayout, { useDevPerm } from '@/components/DevelopmentLayout'
 import { getStoredUser } from '@/lib/auth'
 import {
-  API, APPLICATIONS, REQUEST_STATUSES, REQUEST_PRIORITIES, REQUEST_TYPES,
+  API, APPLICATIONS, REQUEST_STATUSES, REQUEST_PRIORITIES,
   getRequestStatus, getRequestPriority
 } from '../../constants'
 
@@ -52,9 +52,8 @@ function RequestDetailContent() {
       setReq(d.request)
       setForm({
         title: d.request.title || '',
-        status: d.request.status || 'open',
+        status: d.request.status || 'new',
         priority: d.request.priority || 'medium',
-        request_type: d.request.request_type || 'feature',
         application: d.request.application || '',
         assignee_email: d.request.assignee_email || '',
         assignee_name: d.request.assignee_name || '',
@@ -109,7 +108,6 @@ function RequestDetailContent() {
 
   const st = getRequestStatus(req.status)
   const pr = getRequestPriority(req.priority)
-  const rtLabel = REQUEST_TYPES.find(t => t.value === req.request_type)?.label || req.request_type
 
   return (
     <div style={{ padding: '24px 28px' }}>
@@ -129,7 +127,7 @@ function RequestDetailContent() {
         )}
         {editing && (
           <div style={{ display: 'flex', gap: '8px' }}>
-            <button onClick={() => { setEditing(false); setForm({ title: req.title, status: req.status, priority: req.priority, request_type: req.request_type, application: req.application, assignee_email: req.assignee_email || '', assignee_name: req.assignee_name || '', pipeline_id: req.pipeline_id || '' }) }} style={{ padding: '8px 16px', background: '#F1F5F9', color: '#64748B', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '700', fontFamily: 'Montserrat, sans-serif' }}>Cancel</button>
+            <button onClick={() => { setEditing(false); setForm({ title: req.title, status: req.status, priority: req.priority, application: req.application, assignee_email: req.assignee_email || '', assignee_name: req.assignee_name || '', pipeline_id: req.pipeline_id || '' }) }} style={{ padding: '8px 16px', background: '#F1F5F9', color: '#64748B', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '700', fontFamily: 'Montserrat, sans-serif' }}>Cancel</button>
             <button onClick={handleSave} disabled={saving} style={{ padding: '8px 16px', background: saving ? '#94A3B8' : '#156082', color: 'white', border: 'none', borderRadius: '8px', cursor: saving ? 'wait' : 'pointer', fontSize: '12px', fontWeight: '700', fontFamily: 'Montserrat, sans-serif' }}>{saving ? 'Saving…' : 'Save'}</button>
           </div>
         )}
@@ -176,14 +174,6 @@ function RequestDetailContent() {
                     {REQUEST_PRIORITIES.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
                   </select>
                 ) : <span style={{ background: pr.bg, color: pr.color, padding: '3px 10px', borderRadius: '20px', fontSize: '11px', fontWeight: '700' }}>{pr.label}</span>}
-              </div>
-              <div>
-                <span style={label}>Type</span>
-                {editing ? (
-                  <select style={inp} value={form.request_type} onChange={e => setForm((f: any) => ({ ...f, request_type: e.target.value }))}>
-                    {REQUEST_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
-                  </select>
-                ) : <div style={{ fontSize: '13px', color: '#3F3F3F' }}>{rtLabel}</div>}
               </div>
               <div>
                 <span style={label}>Pipeline</span>
