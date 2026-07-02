@@ -14,8 +14,7 @@ app.add_middleware(CORSMiddleware,
 async def global_exception_handler(request: Request, exc: Exception):
     import traceback
     traceback.print_exc()
-    # TEMP DEBUG - revert after diagnosing POST /training/trainings/{email}/{tid}/upload 500
-    response = JSONResponse({"detail": "Internal server error", "debug": str(exc), "debug_trace": traceback.format_exc()}, status_code=500)
+    response = JSONResponse({"detail": "Internal server error"}, status_code=500)
     origin = request.headers.get("origin", "*")
     response.headers["Access-Control-Allow-Origin"] = origin if origin else "*"
     response.headers["Access-Control-Allow-Credentials"] = "false"

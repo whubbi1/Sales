@@ -82,7 +82,7 @@ async def update_training(email: str, tid: str, data: dict, db: AsyncSession = D
 async def upload_training_file(email: str, tid: str, file: UploadFile = File(...), db: AsyncSession = Depends(get_db)):
     content = await file.read()
     safe_fn = file.filename.replace(" ", "_")
-    key = f"training/{email}/{tid}/{safe_fn}"
+    key = f"hr/training/{email}/{tid}/{safe_fn}"
     s3_ref = await upload_to_s3(key, content, file.content_type or "application/octet-stream")
     await db.execute(text("UPDATE trainings SET file_ref = :ref, file_name = :fn, updated_at = NOW() WHERE id = CAST(:id AS UUID) AND user_email = :email"),
                       {"ref": s3_ref, "fn": file.filename, "id": tid, "email": email})
@@ -128,7 +128,7 @@ async def update_certification(email: str, cid: str, data: dict, db: AsyncSessio
 async def upload_certification_file(email: str, cid: str, file: UploadFile = File(...), db: AsyncSession = Depends(get_db)):
     content = await file.read()
     safe_fn = file.filename.replace(" ", "_")
-    key = f"certifications/{email}/{cid}/{safe_fn}"
+    key = f"hr/certifications/{email}/{cid}/{safe_fn}"
     s3_ref = await upload_to_s3(key, content, file.content_type or "application/octet-stream")
     await db.execute(text("UPDATE certifications SET file_ref = :ref, file_name = :fn, updated_at = NOW() WHERE id = CAST(:id AS UUID) AND user_email = :email"),
                       {"ref": s3_ref, "fn": file.filename, "id": cid, "email": email})
@@ -172,7 +172,7 @@ async def complete_plan(
     if file is not None:
         content = await file.read()
         safe_fn = file.filename.replace(" ", "_")
-        key = f"training/{email}/{tid}/{safe_fn}"
+        key = f"hr/training/{email}/{tid}/{safe_fn}"
         file_ref = await upload_to_s3(key, content, file.content_type or "application/octet-stream")
         file_name = file.filename
 
