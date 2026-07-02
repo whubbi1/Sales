@@ -587,6 +587,33 @@ async def startup():
                     created_at TIMESTAMP DEFAULT NOW(),
                     updated_at TIMESTAMP DEFAULT NOW()
                 )""",
+
+                # Personal Profile — Curriculum Vitae
+                """CREATE TABLE IF NOT EXISTS employee_cv (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    email VARCHAR(255) UNIQUE NOT NULL,
+                    first_name VARCHAR(100),
+                    last_name VARCHAR(100),
+                    title VARCHAR(255),
+                    short_description TEXT,
+                    skills JSON DEFAULT '[]',
+                    languages JSON DEFAULT '[]',
+                    created_at TIMESTAMP DEFAULT NOW(),
+                    updated_at TIMESTAMP DEFAULT NOW()
+                )""",
+                """CREATE TABLE IF NOT EXISTS employee_cv_experience (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    user_email VARCHAR(255) NOT NULL,
+                    job_title VARCHAR(255),
+                    company VARCHAR(255),
+                    start_date VARCHAR(20),
+                    end_date VARCHAR(20),
+                    location VARCHAR(255),
+                    description TEXT,
+                    sort_order INTEGER DEFAULT 0,
+                    created_at TIMESTAMP DEFAULT NOW(),
+                    updated_at TIMESTAMP DEFAULT NOW()
+                )""",
             ]
             for sql in sqls:
                 try:
@@ -655,6 +682,7 @@ _include("app.routers.admin_audit",    "/admin",        "Audit")
 _include("app.routers.legal",          "/legal",        "Legal")
 _include("app.routers.development",    "/development",  "Development")
 _include("app.routers.it",             "/it",           "IT")
+_include("app.routers.cv",             "/cv",           "CV")
 
 try:
     from app.routers import auth, outlook, copilot
