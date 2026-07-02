@@ -12,6 +12,7 @@ const inp: React.CSSProperties = {
 function ByEmployee() {
   const [overview, setOverview] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
+  const [search, setSearch] = useState('')
   const [expandedEmail, setExpandedEmail] = useState<string | null>(null)
   const [expandedTrainings, setExpandedTrainings] = useState<any[]>([])
 
@@ -26,56 +27,88 @@ function ByEmployee() {
     setExpandedTrainings(d.trainings || [])
   }
 
+  const filtered = overview.filter((u: any) => {
+    if (!search) return true
+    const name = `${u.display_name || ''} ${u.first_name || ''} ${u.last_name || ''} ${u.email || ''}`.toLowerCase()
+    return name.includes(search.toLowerCase())
+  })
+
   if (loading) return <div style={{ textAlign: 'center', padding: '32px', color: '#45B6E4' }}>Loading…</div>
 
   return (
-    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
-      <thead style={{ background: '#FAFBFC' }}>
-        <tr>
-          {['Employee', 'Department', 'Trainings', 'Certifications', 'Active Assignments', ''].map(h => (
-            <th key={h} style={{ padding: '10px 16px', textAlign: 'left', fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#45B6E4', borderBottom: '1px solid #EDF2F7' }}>{h}</th>
-          ))}
-        </tr>
-      </thead>
-      <tbody>
-        {overview.map((u: any) => (
-          <Fragment key={u.email}>
-            <tr style={{ borderBottom: '1px solid #F1F5F9' }}>
-              <td style={{ padding: '10px 16px', fontWeight: '700', color: '#156082' }}>{u.display_name || `${u.first_name} ${u.last_name}`}</td>
-              <td style={{ padding: '10px 16px', color: '#64748B' }}>{u.department || '—'}</td>
-              <td style={{ padding: '10px 16px' }}>{u.trainings_count}</td>
-              <td style={{ padding: '10px 16px' }}>{u.certifications_count}</td>
-              <td style={{ padding: '10px 16px' }}>
-                {u.active_assignments_count > 0 ? <span style={{ background: '#FFF7ED', color: '#D97706', padding: '2px 9px', borderRadius: '10px', fontSize: '10px', fontWeight: '700' }}>{u.active_assignments_count}</span> : '—'}
-              </td>
-              <td style={{ padding: '10px 16px' }}>
-                <button onClick={() => toggleExpand(u.email)} style={{ padding: '4px 10px', background: '#F1F5F9', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '11px', color: '#64748B', fontWeight: '600', fontFamily: 'Montserrat, sans-serif' }}>
-                  {expandedEmail === u.email ? '▲ Hide' : '▼ View'}
-                </button>
-              </td>
-            </tr>
-            {expandedEmail === u.email && (
-              <tr>
-                <td colSpan={6} style={{ padding: '0', background: '#F8FAFC' }}>
-                  <div style={{ padding: '12px 20px' }}>
-                    {expandedTrainings.length === 0 ? (
-                      <span style={{ fontSize: '12px', color: '#94A3B8' }}>No trainings performed yet.</span>
-                    ) : (
-                      expandedTrainings.map((t: any) => (
-                        <div key={t.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', fontSize: '12px', borderBottom: '1px solid #EDF2F7' }}>
-                          <span style={{ fontWeight: '600', color: '#3F3F3F' }}>{t.name}</span>
-                          <span style={{ color: '#94A3B8' }}>{t.training_date}</span>
-                        </div>
-                      ))
-                    )}
-                  </div>
+    <div>
+      <div style={{ padding: '16px 16px 0' }}>
+        <input style={{ ...inp, width: '280px' }} placeholder="Search employee…" value={search} onChange={e => setSearch(e.target.value)} />
+      </div>
+      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
+        <thead style={{ background: '#FAFBFC' }}>
+          <tr>
+            {['Employee', 'Department', 'Trainings', 'Certifications', 'Active Assignments', 'Overdue', ''].map(h => (
+              <th key={h} style={{ padding: '10px 16px', textAlign: 'left', fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#45B6E4', borderBottom: '1px solid #EDF2F7' }}>{h}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {filtered.length === 0 ? (
+            <tr><td colSpan={7} style={{ textAlign: 'center', padding: '32px', color: '#94A3B8' }}>No employees match your search.</td></tr>
+          ) : filtered.map((u: any) => (
+            <Fragment key={u.email}>
+              <tr style={{ borderBottom: '1px solid #F1F5F9' }}>
+                <td style={{ padding: '10px 16px', fontWeight: '700', color: '#156082' }}>{u.display_name || `${u.first_name} ${u.last_name}`}</td>
+                <td style={{ padding: '10px 16px', color: '#64748B' }}>{u.department || '—'}</td>
+                <td style={{ padding: '10px 16px' }}>{u.trainings_count}</td>
+                <td style={{ padding: '10px 16px' }}>{u.certifications_count}</td>
+                <td style={{ padding: '10px 16px' }}>
+                  {u.active_assignments_count > 0 ? <span style={{ background: '#FFF7ED', color: '#D97706', padding: '2px 9px', borderRadius: '10px', fontSize: '10px', fontWeight: '700' }}>{u.active_assignments_count}</span> : '—'}
+                </td>
+                <td style={{ padding: '10px 16px' }}>
+                  {u.late_assignments_count > 0 ? <span style={{ background: '#FEF2F2', color: '#DC2626', padding: '2px 9px', borderRadius: '10px', fontSize: '10px', fontWeight: '700' }}>{u.late_assignments_count}</span> : '—'}
+                </td>
+                <td style={{ padding: '10px 16px' }}>
+                  <button onClick={() => toggleExpand(u.email)} style={{ padding: '4px 10px', background: '#F1F5F9', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '11px', color: '#64748B', fontWeight: '600', fontFamily: 'Montserrat, sans-serif' }}>
+                    {expandedEmail === u.email ? '▲ Hide' : '▼ View'}
+                  </button>
                 </td>
               </tr>
-            )}
-          </Fragment>
-        ))}
-      </tbody>
-    </table>
+              {expandedEmail === u.email && (
+                <tr>
+                  <td colSpan={7} style={{ padding: '0', background: '#F8FAFC' }}>
+                    <div style={{ padding: '12px 20px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                      <div>
+                        <div style={{ fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#DC2626', marginBottom: '6px' }}>Overdue Trainings</div>
+                        {(u.late_trainings || []).length === 0 ? (
+                          <span style={{ fontSize: '12px', color: '#94A3B8' }}>No overdue trainings.</span>
+                        ) : (
+                          (u.late_trainings || []).map((t: any, i: number) => (
+                            <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', fontSize: '12px', borderBottom: '1px solid #EDF2F7' }}>
+                              <span style={{ fontWeight: '600', color: '#DC2626' }}>⚠️ {t.name}</span>
+                              <span style={{ color: '#DC2626' }}>Due {new Date(t.due_date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</span>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                      <div>
+                        <div style={{ fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#45B6E4', marginBottom: '6px' }}>Performed Trainings</div>
+                        {expandedTrainings.length === 0 ? (
+                          <span style={{ fontSize: '12px', color: '#94A3B8' }}>No trainings performed yet.</span>
+                        ) : (
+                          expandedTrainings.map((t: any) => (
+                            <div key={t.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', fontSize: '12px', borderBottom: '1px solid #EDF2F7' }}>
+                              <span style={{ fontWeight: '600', color: '#3F3F3F' }}>{t.name}</span>
+                              <span style={{ color: '#94A3B8' }}>{t.training_date}</span>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </div>
+                  </td>
+                </tr>
+              )}
+            </Fragment>
+          ))}
+        </tbody>
+      </table>
+    </div>
   )
 }
 

@@ -524,6 +524,15 @@ async def training_overview(db: AsyncSession = Depends(get_db)):
     pr = await db.execute(text("SELECT user_email, COUNT(*) AS c FROM training_assignments WHERE status = 'assigned' GROUP BY user_email"))
     active_counts = {row.user_email: row.c for row in pr.fetchall()}
 
+    lr = await db.execute(text("""
+        SELECT user_email, training_name, due_date FROM training_assignments
+        WHERE status = 'assigned' AND due_date IS NOT NULL AND due_date < CURRENT_DATE
+        ORDER BY due_date ASC
+    """))
+    late_by_email: dict = {}
+    for row in lr.fetchall():
+        late_by_email.setdefault(row.user_email, []).append({"name": row.training_name, "due_date": str(row.due_date)})
+
     result = []
     for u in users:
         email = u.get("email")
@@ -532,6 +541,8 @@ async def training_overview(db: AsyncSession = Depends(get_db)):
             "trainings_count": training_counts.get(email, 0),
             "certifications_count": cert_counts.get(email, 0),
             "active_assignments_count": active_counts.get(email, 0),
+            "late_assignments_count": len(late_by_email.get(email, [])),
+            "late_trainings": late_by_email.get(email, []),
         })
     return {"users": result}
 
