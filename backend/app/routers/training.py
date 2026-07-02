@@ -244,16 +244,26 @@ async def delete_plan(pid: str, db: AsyncSession = Depends(get_db)):
 
 @router.get("/overview")
 async def training_overview(db: AsyncSession = Depends(get_db)):
-    r = await db.execute(text("""
-        SELECT up.email, up.display_name, up.first_name, up.last_name, up.job_title, up.department,
-               COUNT(DISTINCT t.id) AS trainings_count,
-               COUNT(DISTINCT c.id) AS certifications_count,
-               COUNT(DISTINCT tp.id) FILTER (WHERE tp.status = 'assigned') AS active_plans_count
-        FROM user_profiles up
-        LEFT JOIN trainings t ON t.user_email = up.email
-        LEFT JOIN certifications c ON c.user_email = up.email
-        LEFT JOIN training_plans tp ON tp.user_email = up.email
-        GROUP BY up.email, up.display_name, up.first_name, up.last_name, up.job_title, up.department
-        ORDER BY up.last_name, up.first_name
-    """))
-    return {"users": [dict(row._mapping) for row in r.fetchall()]}
+    # Reuse the same live-directory-with-DB-fallback source /settings/users uses,
+    # so employees who've never synced their profile still show up here.
+    from app.routers.settings import list_users as _list_users
+    users_resp = await _list_users(db)
+    users = users_resp.get("users", [])
+
+    tr = await db.execute(text("SELECT user_email, COUNT(*) AS c FROM trainings GROUP BY user_email"))
+    training_counts = {row.user_email: row.c for row in tr.fetchall()}
+    cr = await db.execute(text("SELECT user_email, COUNT(*) AS c FROM certifications GROUP BY user_email"))
+    cert_counts = {row.user_email: row.c for row in cr.fetchall()}
+    pr = await db.execute(text("SELECT user_email, COUNT(*) AS c FROM training_plans WHERE status = 'assigned' GROUP BY user_email"))
+    plan_counts = {row.user_email: row.c for row in pr.fetchall()}
+
+    result = []
+    for u in users:
+        email = u.get("email")
+        result.append({
+            **u,
+            "trainings_count": training_counts.get(email, 0),
+            "certifications_count": cert_counts.get(email, 0),
+            "active_plans_count": plan_counts.get(email, 0),
+        })
+    return {"users": result}
