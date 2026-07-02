@@ -64,7 +64,7 @@ export function HRLayout({ children }: { children: React.ReactNode }) {
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh', fontFamily: 'Montserrat, sans-serif' }}>
-      <div style={{ width: '220px', background: '#0d2137', position: 'fixed', top: 0, left: 0, height: '100vh', display: 'flex', flexDirection: 'column', zIndex: 100 }}>
+      <div style={{ width: '220px', background: '#156082', position: 'fixed', top: 0, left: 0, height: '100vh', display: 'flex', flexDirection: 'column', zIndex: 100 }}>
         <div style={{ padding: '18px 16px 12px', borderBottom: '1px solid rgba(255,255,255,0.08)', flexShrink: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '2px' }}>
             <span style={{ fontSize: '18px' }}>👤</span>
