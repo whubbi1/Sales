@@ -568,6 +568,25 @@ async def startup():
                 # Link helpdesk tickets to the development module
                 "ALTER TABLE tickets ADD COLUMN IF NOT EXISTS application VARCHAR(100)",
                 "ALTER TABLE tickets ADD COLUMN IF NOT EXISTS dev_pipeline_id UUID",
+
+                # IT module — company equipment registry
+                """CREATE TABLE IF NOT EXISTS it_equipment (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    equipment_type VARCHAR(20) NOT NULL DEFAULT 'IT',
+                    name VARCHAR(255) NOT NULL,
+                    serial_number VARCHAR(255),
+                    purchase_date DATE,
+                    purchase_price NUMERIC(12,2),
+                    entry_service_date DATE,
+                    planned_end_service_date DATE,
+                    end_service_date DATE,
+                    end_service_reason TEXT,
+                    comment TEXT,
+                    assigned_email VARCHAR(255),
+                    assigned_name VARCHAR(255),
+                    created_at TIMESTAMP DEFAULT NOW(),
+                    updated_at TIMESTAMP DEFAULT NOW()
+                )""",
             ]
             for sql in sqls:
                 try:
@@ -635,6 +654,7 @@ _include("app.routers.helpdesk_teams", "/helpdesk",     "Teams")
 _include("app.routers.admin_audit",    "/admin",        "Audit")
 _include("app.routers.legal",          "/legal",        "Legal")
 _include("app.routers.development",    "/development",  "Development")
+_include("app.routers.it",             "/it",           "IT")
 
 try:
     from app.routers import auth, outlook, copilot
