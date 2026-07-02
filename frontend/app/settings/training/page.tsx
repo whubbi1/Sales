@@ -137,10 +137,10 @@ export default function TrainingPage() {
   const load = async (email: string) => {
     setLoading(true)
     const [pr, tr] = await Promise.all([
-      fetch(`${API}/training/plans/${encodeURIComponent(email)}`).then(r => r.json()).catch(() => ({ plans: [] })),
+      fetch(`${API}/training/assignments/${encodeURIComponent(email)}`).then(r => r.json()).catch(() => ({ assignments: [] })),
       fetch(`${API}/training/trainings/${encodeURIComponent(email)}`).then(r => r.json()).catch(() => ({ trainings: [] })),
     ])
-    setPlans(pr.plans || [])
+    setPlans(pr.assignments || [])
     setTrainings(tr.trainings || [])
     setLoading(false)
   }
@@ -180,7 +180,7 @@ export default function TrainingPage() {
     fd.append('completion_date', date)
     fd.append('description', description)
     if (file) fd.append('file', file)
-    await fetch(`${API}/training/plans/${encodeURIComponent(email)}/${plan.id}/complete`, { method: 'POST', body: fd })
+    await fetch(`${API}/training/assignments/${encodeURIComponent(email)}/${plan.id}/complete`, { method: 'POST', body: fd })
     setCompletingPlan(null)
     load(email)
   }

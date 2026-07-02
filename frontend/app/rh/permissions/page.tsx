@@ -14,6 +14,7 @@ const MODULES_META: Record<string, { label: string; icon: string; color: string 
   helpdesk: { label: 'Helpdesk',         icon: '🎧', color: '#45B6E4' },
   admin:    { label: 'Admin',            icon: '🔧', color: '#45B6E4' },
   legal:    { label: 'Legal',            icon: '⚖️', color: '#1a2744' },
+  training: { label: 'Training',         icon: '🎓', color: '#7C3AED' },
 }
 
 const HR_SUBMODULE_META: Record<string, { label: string; href: string }> = {
@@ -24,13 +25,16 @@ const HR_SUBMODULE_META: Record<string, { label: string; href: string }> = {
   permissions: { label: 'Permissions',       href: '/rh/permissions' },
   chat:        { label: 'WHUBBI Chat',       href: '/rh/chat' },
   admin:       { label: 'HR Admin Cockpit',  href: '/rh/admin' },
-  training_plan: { label: 'Training Plan',   href: '/rh/training-plan' },
 }
 
 const LEGAL_SUBMODULE_META: Record<string, { label: string; href: string }> = {
   entities:  { label: 'Legal Entities',        href: '/legal/entities' },
   templates: { label: 'Template Documents',    href: '/legal/templates' },
   admin:     { label: 'Legal Admin Cockpit',   href: '/legal/admin' },
+}
+
+const TRAINING_SUBMODULE_META: Record<string, { label: string; href: string }> = {
+  manager: { label: 'Training Manager', href: '/training' },
 }
 
 const DATA_SCOPES  = ['none', 'own', 'team', 'company']
@@ -119,14 +123,16 @@ export default function PermissionsPage() {
   )
 
   const getSubmoduleLabel = (module: string, sub: string): string => {
-    if (module === 'hr')    return HR_SUBMODULE_META[sub]?.label    || sub.replace(/_/g, ' ')
-    if (module === 'legal') return LEGAL_SUBMODULE_META[sub]?.label || sub.replace(/_/g, ' ')
+    if (module === 'hr')       return HR_SUBMODULE_META[sub]?.label       || sub.replace(/_/g, ' ')
+    if (module === 'legal')    return LEGAL_SUBMODULE_META[sub]?.label    || sub.replace(/_/g, ' ')
+    if (module === 'training') return TRAINING_SUBMODULE_META[sub]?.label || sub.replace(/_/g, ' ')
     return sub.replace(/_/g, ' ')
   }
 
   const getSubmoduleHref = (module: string, sub: string): string | undefined => {
-    if (module === 'hr')    return HR_SUBMODULE_META[sub]?.href
-    if (module === 'legal') return LEGAL_SUBMODULE_META[sub]?.href
+    if (module === 'hr')       return HR_SUBMODULE_META[sub]?.href
+    if (module === 'legal')    return LEGAL_SUBMODULE_META[sub]?.href
+    if (module === 'training') return TRAINING_SUBMODULE_META[sub]?.href
     return undefined
   }
 

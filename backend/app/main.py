@@ -639,7 +639,10 @@ async def startup():
                     created_at TIMESTAMP DEFAULT NOW(),
                     updated_at TIMESTAMP DEFAULT NOW()
                 )""",
-                """CREATE TABLE IF NOT EXISTS training_plans (
+                # Training module — rename the old assignment table to free up
+                # "training_plans" for its new meaning (function-based bundle template)
+                "ALTER TABLE training_plans RENAME TO training_assignments",
+                """CREATE TABLE IF NOT EXISTS training_assignments (
                     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                     user_email VARCHAR(255) NOT NULL,
                     training_name VARCHAR(255) NOT NULL,
@@ -651,6 +654,35 @@ async def startup():
                     completed_training_id UUID,
                     created_at TIMESTAMP DEFAULT NOW(),
                     updated_at TIMESTAMP DEFAULT NOW()
+                )""",
+                "ALTER TABLE training_assignments ADD COLUMN IF NOT EXISTS catalog_id UUID",
+                "ALTER TABLE training_assignments ADD COLUMN IF NOT EXISTS source_plan_id UUID",
+                "ALTER TABLE training_assignments ADD COLUMN IF NOT EXISTS recurrence VARCHAR(20)",
+                "ALTER TABLE training_assignments ADD COLUMN IF NOT EXISTS next_assignment_id UUID",
+
+                """CREATE TABLE IF NOT EXISTS training_catalog (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    training_type VARCHAR(20) NOT NULL DEFAULT 'wcomply',
+                    company VARCHAR(255) NOT NULL,
+                    title VARCHAR(255) NOT NULL,
+                    description TEXT,
+                    duration VARCHAR(100) NOT NULL,
+                    material_link TEXT,
+                    created_at TIMESTAMP DEFAULT NOW(),
+                    updated_at TIMESTAMP DEFAULT NOW()
+                )""",
+                """CREATE TABLE IF NOT EXISTS training_plans (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    training_function VARCHAR(255) NOT NULL,
+                    description TEXT,
+                    created_at TIMESTAMP DEFAULT NOW(),
+                    updated_at TIMESTAMP DEFAULT NOW()
+                )""",
+                """CREATE TABLE IF NOT EXISTS training_plan_items (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    plan_id UUID NOT NULL,
+                    catalog_id UUID NOT NULL,
+                    created_at TIMESTAMP DEFAULT NOW()
                 )""",
             ]
             for sql in sqls:
