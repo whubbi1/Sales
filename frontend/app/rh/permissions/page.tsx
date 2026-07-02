@@ -37,6 +37,10 @@ const TRAINING_SUBMODULE_META: Record<string, { label: string; href: string }> =
   manager: { label: 'Training Manager', href: '/training' },
 }
 
+const SALES_SUBMODULE_META: Record<string, { label: string; href: string }> = {
+  cv_database: { label: 'CV Database', href: '/cv-database' },
+}
+
 const DATA_SCOPES  = ['none', 'own', 'team', 'company']
 const ACCESS_MODES = ['none', 'view', 'edit']
 const LEGAL_ENTITIES = ['all', 'france', 'portugal', 'czech_republic', 'romania', 'spain']
@@ -126,6 +130,7 @@ export default function PermissionsPage() {
     if (module === 'hr')       return HR_SUBMODULE_META[sub]?.label       || sub.replace(/_/g, ' ')
     if (module === 'legal')    return LEGAL_SUBMODULE_META[sub]?.label    || sub.replace(/_/g, ' ')
     if (module === 'training') return TRAINING_SUBMODULE_META[sub]?.label || sub.replace(/_/g, ' ')
+    if (module === 'sales')    return SALES_SUBMODULE_META[sub]?.label    || sub.replace(/_/g, ' ')
     return sub.replace(/_/g, ' ')
   }
 
@@ -133,6 +138,7 @@ export default function PermissionsPage() {
     if (module === 'hr')       return HR_SUBMODULE_META[sub]?.href
     if (module === 'legal')    return LEGAL_SUBMODULE_META[sub]?.href
     if (module === 'training') return TRAINING_SUBMODULE_META[sub]?.href
+    if (module === 'sales')    return SALES_SUBMODULE_META[sub]?.href
     return undefined
   }
 

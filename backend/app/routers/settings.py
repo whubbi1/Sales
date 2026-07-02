@@ -16,7 +16,7 @@ CLIENT_SECRET = os.getenv("MS_CLIENT_SECRET", "")
 
 # Modules & submodules definition
 MODULES = {
-    "sales":     ["companies", "contacts", "opportunities", "tasks"],
+    "sales":     ["companies", "contacts", "opportunities", "tasks", "cv_database"],
     "finance":   ["invoices", "budgets", "reports"],
     "hr":        ["freelancers", "recrutement", "positions", "jobs", "permissions", "chat", "admin"],
     "grc":       ["compliance", "risks", "audits", "certifications"],

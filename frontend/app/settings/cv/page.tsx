@@ -133,9 +133,17 @@ export default function CurriculumVitaePage() {
   return (
     <ProfileLayout>
       <div style={{ padding: '28px 32px' }}>
-        <div style={{ marginBottom: '24px' }}>
-          <h1 style={{ fontSize: '20px', fontWeight: '800', color: '#156082', margin: '0 0 4px' }}>Curriculum Vitae</h1>
-          <p style={{ fontSize: '13px', color: '#45B6E4', margin: 0 }}>Click any field to edit — changes save automatically</p>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '24px', gap: '12px', flexWrap: 'wrap' }}>
+          <div>
+            <h1 style={{ fontSize: '20px', fontWeight: '800', color: '#156082', margin: '0 0 4px' }}>Curriculum Vitae</h1>
+            <p style={{ fontSize: '13px', color: '#45B6E4', margin: 0 }}>Click any field to edit — changes save automatically</p>
+          </div>
+          {email && !loading && (
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <a href={`${API}/cv/${encodeURIComponent(email)}/export/word`} style={{ padding: '9px 16px', background: '#156082', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '700', fontFamily: 'Montserrat, sans-serif', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>📄 Download Word CV</a>
+              <a href={`${API}/cv/${encodeURIComponent(email)}/export/pptx`} style={{ padding: '9px 16px', background: '#EFF6FF', color: '#156082', border: '1.5px solid #156082', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '700', fontFamily: 'Montserrat, sans-serif', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>📊 Download Summary (PPT)</a>
+            </div>
+          )}
         </div>
 
         {loading && <div style={{ textAlign: 'center', padding: '48px', color: '#45B6E4' }}>Loading...</div>}
