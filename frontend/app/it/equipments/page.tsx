@@ -20,12 +20,14 @@ const EMPTY_FORM = {
   entry_service_date: '', planned_end_service_date: '', end_service_date: '',
   end_service_reason: '', comment: '',
   assigned_email: '', assigned_name: '',
+  location_id: '', location_name: 'All',
 }
 
 function EquipmentsContent() {
   const { canEdit } = useITPerm()
   const [equipments, setEquipments] = useState<any[]>([])
   const [users, setUsers]           = useState<any[]>([])
+  const [locations, setLocations]   = useState<any[]>([])
   const [loading, setLoading]       = useState(true)
   const [showModal, setShowModal]   = useState(false)
   const [editing, setEditing]       = useState<any>(null)
@@ -37,7 +39,14 @@ function EquipmentsContent() {
   useEffect(() => {
     loadEquipments()
     fetch(`${API}/settings/users`).then(r => r.json()).then(d => setUsers(d.users || [])).catch(() => {})
+    fetch(`${API}/legal/locations`).then(r => r.json()).then(d => setLocations(d.locations || [])).catch(() => {})
   }, [])
+
+  const handleLocationChange = (locationId: string) => {
+    if (!locationId) { setForm((f: any) => ({ ...f, location_id: '', location_name: 'All' })); return }
+    const loc = locations.find((l: any) => l.id === locationId)
+    setForm((f: any) => ({ ...f, location_id: locationId, location_name: loc?.location_name || 'All' }))
+  }
 
   const loadEquipments = async () => {
     setLoading(true)
@@ -70,6 +79,8 @@ function EquipmentsContent() {
       comment: eq.comment || '',
       assigned_email: eq.assigned_email || '',
       assigned_name: eq.assigned_name || '',
+      location_id: eq.location_id || '',
+      location_name: eq.location_name || 'All',
     })
     setEditing(eq)
     setShowModal(true)
@@ -134,16 +145,16 @@ function EquipmentsContent() {
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
           <thead style={{ background: '#FAFBFC' }}>
             <tr>
-              {['Type', 'Name', 'Serial Number', 'Assigned To', 'Purchase Date', 'Planned End of Service', 'Status', canEdit ? 'Actions' : null].filter(Boolean).map(h => (
+              {['Type', 'Name', 'Serial Number', 'Assigned To', 'Location', 'Purchase Date', 'Planned End of Service', 'Status', canEdit ? 'Actions' : null].filter(Boolean).map(h => (
                 <th key={h as string} style={{ padding: '10px 12px', textAlign: 'left', fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#45B6E4', borderBottom: '1px solid #EDF2F7', whiteSpace: 'nowrap' }}>{h}</th>
               ))}
             </tr>
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={8} style={{ textAlign: 'center', padding: '48px', color: '#45B6E4' }}>Loading…</td></tr>
+              <tr><td colSpan={9} style={{ textAlign: 'center', padding: '48px', color: '#45B6E4' }}>Loading…</td></tr>
             ) : filtered.length === 0 ? (
-              <tr><td colSpan={8} style={{ textAlign: 'center', padding: '48px', color: '#94A3B8' }}>No equipment found.</td></tr>
+              <tr><td colSpan={9} style={{ textAlign: 'center', padding: '48px', color: '#94A3B8' }}>No equipment found.</td></tr>
             ) : filtered.map(eq => {
               const ended = !!eq.end_service_date
               return (
@@ -152,6 +163,9 @@ function EquipmentsContent() {
                   <td style={{ padding: '10px 12px', fontWeight: '700', color: '#156082' }}>{eq.name}</td>
                   <td style={{ padding: '10px 12px', color: '#64748B' }}>{eq.serial_number || '—'}</td>
                   <td style={{ padding: '10px 12px', color: '#3F3F3F' }}>{eq.assigned_name || eq.assigned_email || '—'}</td>
+                  <td style={{ padding: '10px 12px' }}>
+                    <span style={{ background: (!eq.location_name || eq.location_name === 'All') ? '#EEF2FF' : '#F1F5F9', color: (!eq.location_name || eq.location_name === 'All') ? '#156082' : '#3F3F3F', padding: '2px 9px', borderRadius: '10px', fontSize: '10px', fontWeight: '700' }}>{eq.location_name || 'All'}</span>
+                  </td>
                   <td style={{ padding: '10px 12px', color: '#94A3B8' }}>{eq.purchase_date ? new Date(eq.purchase_date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}</td>
                   <td style={{ padding: '10px 12px', color: '#94A3B8' }}>{eq.planned_end_service_date ? new Date(eq.planned_end_service_date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}</td>
                   <td style={{ padding: '10px 12px' }}>
@@ -206,6 +220,13 @@ function EquipmentsContent() {
                     {users.map((u: any) => <option key={u.email} value={u.email}>{u.display_name || `${u.first_name} ${u.last_name}`}</option>)}
                   </select>
                 </div>
+              </div>
+              <div>
+                <label style={lbl}>Location</label>
+                <select style={{ ...inp, width: '100%' }} value={form.location_id} onChange={e => handleLocationChange(e.target.value)}>
+                  <option value="">All</option>
+                  {locations.map((l: any) => <option key={l.id} value={l.id}>{l.location_name}</option>)}
+                </select>
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                 <div>

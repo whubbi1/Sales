@@ -587,6 +587,23 @@ async def startup():
                     created_at TIMESTAMP DEFAULT NOW(),
                     updated_at TIMESTAMP DEFAULT NOW()
                 )""",
+                "ALTER TABLE it_equipment ADD COLUMN IF NOT EXISTS location_id UUID",
+                "ALTER TABLE it_equipment ADD COLUMN IF NOT EXISTS location_name VARCHAR(255) DEFAULT 'All'",
+
+                # IT module — software solutions registry
+                """CREATE TABLE IF NOT EXISTS it_software (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    name VARCHAR(255) NOT NULL,
+                    editor VARCHAR(255),
+                    version VARCHAR(100),
+                    install_link TEXT,
+                    owner_email VARCHAR(255),
+                    owner_name VARCHAR(255),
+                    location_id UUID,
+                    location_name VARCHAR(255) DEFAULT 'All',
+                    created_at TIMESTAMP DEFAULT NOW(),
+                    updated_at TIMESTAMP DEFAULT NOW()
+                )""",
 
                 # Personal Profile — Curriculum Vitae
                 """CREATE TABLE IF NOT EXISTS employee_cv (

@@ -13,6 +13,7 @@ export const useITPerm = () => useContext(ITPermContext)
 
 const NAV_ITEMS = [
   { href: '/it/equipments', label: 'Equipments', icon: '🖥️' },
+  { href: '/it/software',   label: 'Software',   icon: '💿' },
 ]
 
 export default function ITLayout({ children }: { children: React.ReactNode }) {
