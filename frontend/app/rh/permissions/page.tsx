@@ -24,6 +24,7 @@ const HR_SUBMODULE_META: Record<string, { label: string; href: string }> = {
   permissions: { label: 'Permissions',       href: '/rh/permissions' },
   chat:        { label: 'WHUBBI Chat',       href: '/rh/chat' },
   admin:       { label: 'HR Admin Cockpit',  href: '/rh/admin' },
+  training_plan: { label: 'Training Plan',   href: '/rh/training-plan' },
 }
 
 const LEGAL_SUBMODULE_META: Record<string, { label: string; href: string }> = {
