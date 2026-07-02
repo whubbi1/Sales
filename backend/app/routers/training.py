@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, UploadFile, File, Form
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
 from app.database import get_db
-import uuid, os, asyncio
+import uuid, os, asyncio, json
 import boto3
 
 router = APIRouter()

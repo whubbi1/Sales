@@ -46,7 +46,7 @@ export default function ProfileLayout({ children }: { children: React.ReactNode 
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
           <span style={{ fontSize: '16px' }}>👤</span>
-          <span style={{ color: 'white', fontSize: '12px', fontWeight: '800', letterSpacing: '0.05em' }}>PERSONAL PROFILE</span>
+          <span style={{ color: 'white', fontSize: '12px', fontWeight: '800', letterSpacing: '0.05em' }}>MYWHUBBI</span>
         </div>
       </div>
 

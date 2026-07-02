@@ -6,6 +6,7 @@ from app.database import get_db
 import httpx
 import os
 import base64
+import json
 from datetime import datetime
 
 router = APIRouter()
@@ -124,7 +125,7 @@ async def sync_user_from_ms(email: str, db: AsyncSession) -> dict:
                 ms_licenses, ms_groups, ms_roles, last_sync, created_at, updated_at)
             VALUES (gen_random_uuid(), :email, :first_name, :last_name, :display_name, :job_title, :department,
                 :mobile_phone, :office_phone, :manager_email, :manager_name, :photo_url, :ms_user_id,
-                :ms_licenses::jsonb, :ms_groups::jsonb, :ms_roles::jsonb, :last_sync, NOW(), NOW())
+                CAST(:ms_licenses AS JSONB), CAST(:ms_groups AS JSONB), CAST(:ms_roles AS JSONB), :last_sync, NOW(), NOW())
             ON CONFLICT (email) DO UPDATE SET
                 first_name = EXCLUDED.first_name, last_name = EXCLUDED.last_name,
                 display_name = EXCLUDED.display_name, job_title = EXCLUDED.job_title,
@@ -134,9 +135,9 @@ async def sync_user_from_ms(email: str, db: AsyncSession) -> dict:
                 ms_user_id = EXCLUDED.ms_user_id, ms_licenses = EXCLUDED.ms_licenses,
                 ms_groups = EXCLUDED.ms_groups, ms_roles = EXCLUDED.ms_roles,
                 last_sync = EXCLUDED.last_sync, updated_at = NOW()
-        """), {**profile, "ms_licenses": str(licenses).replace("'", '"'),
-               "ms_groups": str(groups).replace("'", '"'),
-               "ms_roles": str(roles).replace("'", '"')})
+        """), {**profile, "ms_licenses": json.dumps(licenses),
+               "ms_groups": json.dumps(groups),
+               "ms_roles": json.dumps(roles)})
         await db.commit()
         return profile
 
