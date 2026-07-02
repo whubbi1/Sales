@@ -226,8 +226,8 @@ async def update_ticket(tid:str,data:dict,db:AsyncSession=Depends(get_db)):
 
     await db.execute(text("""
         UPDATE tickets SET
-            status=COALESCE(NULLIF(:status,''),status),
-            priority=COALESCE(NULLIF(:priority,''),priority),
+            status=COALESCE(NULLIF(:status,'')::ticket_status,status),
+            priority=COALESCE(NULLIF(:priority,'')::ticket_priority,priority),
             ticket_type=COALESCE(NULLIF(:ticket_type,''),ticket_type),
             category_id=CASE WHEN :category_id='' THEN category_id WHEN :category_id='__clear__' THEN NULL ELSE CAST(:category_id AS uuid) END,
             subcategory_id=CASE WHEN :subcategory_id='' THEN subcategory_id WHEN :subcategory_id='__clear__' THEN NULL ELSE CAST(:subcategory_id AS uuid) END,
