@@ -27,6 +27,9 @@ function PipelineContent() {
   const [statusFilter, setStatus] = useState('')
   const [expandedId, setExpanded] = useState<string | null>(null)
   const [expandedReqs, setExpandedReqs] = useState<any[]>([])
+  const [reassigningId, setReassigningId] = useState<string | null>(null)
+  const [reassignPick, setReassignPick]   = useState('')
+  const [rowBusy, setRowBusy]             = useState<string | null>(null)
 
   useEffect(() => { loadPipelines() }, [])
 
@@ -78,6 +81,39 @@ function PipelineContent() {
     setExpanded(pl.id)
     const d = await fetch(`${API}/development/pipelines/${pl.id}`).then(r => r.json()).catch(() => null)
     setExpandedReqs(d?.requests || [])
+  }
+
+  const refreshExpanded = async () => {
+    if (!expandedId) return
+    const d = await fetch(`${API}/development/pipelines/${expandedId}`).then(r => r.json()).catch(() => null)
+    setExpandedReqs(d?.requests || [])
+    loadPipelines()
+  }
+
+  const putRequestPipeline = async (reqId: string, pipelineId: string | null) => {
+    const user = getStoredUser()
+    setRowBusy(reqId)
+    await fetch(`${API}/development/requests/${reqId}`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pipeline_id: pipelineId, updated_by: user?.email || '', updated_by_name: user?.name || user?.email || 'System' }),
+    })
+    setRowBusy(null)
+    await refreshExpanded()
+  }
+
+  const removeFromPipeline = (r: any) => {
+    if (!confirm(`Remove ${r.request_number} from this pipeline?`)) return
+    putRequestPipeline(r.id, null)
+  }
+
+  const startReassign = (r: any) => {
+    setReassigningId(r.id)
+    setReassignPick('')
+  }
+
+  const confirmReassign = (r: any) => {
+    if (!reassignPick) return
+    putRequestPipeline(r.id, reassignPick).then(() => setReassigningId(null))
   }
 
   const byStatus = PIPELINE_STATUSES.reduce((acc, s) => ({
@@ -176,14 +212,16 @@ function PipelineContent() {
                       <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
                         <thead>
                           <tr style={{ background: '#F1F5F9' }}>
-                            {['#', 'Title', 'Status', 'Priority', 'Assignee'].map(h => (
-                              <th key={h} style={{ padding: '8px 16px', textAlign: 'left', fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#45B6E4' }}>{h}</th>
+                            {['#', 'Title', 'Status', 'Priority', 'Assignee', canEdit ? 'Actions' : null].filter(Boolean).map(h => (
+                              <th key={h as string} style={{ padding: '8px 16px', textAlign: 'left', fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#45B6E4' }}>{h}</th>
                             ))}
                           </tr>
                         </thead>
                         <tbody>
                           {expandedReqs.map((r: any) => {
                             const rs = getPipelineStatus(r.status)
+                            const isReassigning = reassigningId === r.id
+                            const isBusy = rowBusy === r.id
                             return (
                               <tr key={r.id} style={{ borderTop: '1px solid #EDF2F7' }}>
                                 <td style={{ padding: '8px 16px', fontWeight: '700', color: '#156082' }}>{r.request_number}</td>
@@ -191,6 +229,25 @@ function PipelineContent() {
                                 <td style={{ padding: '8px 16px' }}><span style={{ background: rs.bg, color: rs.color, padding: '2px 7px', borderRadius: '10px', fontSize: '10px', fontWeight: '700' }}>{rs.label}</span></td>
                                 <td style={{ padding: '8px 16px', color: '#64748B', textTransform: 'capitalize' }}>{r.priority}</td>
                                 <td style={{ padding: '8px 16px', color: '#64748B' }}>{r.assignee_name || r.assignee_email || '—'}</td>
+                                {canEdit && (
+                                  <td style={{ padding: '8px 16px' }}>
+                                    {isReassigning ? (
+                                      <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                                        <select style={{ ...inp, padding: '4px 8px', fontSize: '11px' }} value={reassignPick} onChange={e => setReassignPick(e.target.value)}>
+                                          <option value="">Select pipeline…</option>
+                                          {pipelines.filter(p => p.id !== expandedId).map(p => <option key={p.id} value={p.id}>{p.pipeline_code} – {p.name}</option>)}
+                                        </select>
+                                        <button onClick={() => confirmReassign(r)} disabled={!reassignPick || isBusy} style={{ padding: '5px 10px', background: !reassignPick || isBusy ? '#94A3B8' : '#156082', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '11px', color: 'white', fontWeight: '700', fontFamily: 'Montserrat, sans-serif' }}>✓</button>
+                                        <button onClick={() => setReassigningId(null)} style={{ padding: '5px 10px', background: '#F1F5F9', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '11px', color: '#64748B', fontWeight: '700', fontFamily: 'Montserrat, sans-serif' }}>×</button>
+                                      </div>
+                                    ) : (
+                                      <div style={{ display: 'flex', gap: '6px' }}>
+                                        <button onClick={() => startReassign(r)} disabled={isBusy} style={{ padding: '5px 10px', background: '#EFF6FF', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '11px', color: '#3B82F6', fontWeight: '700', fontFamily: 'Montserrat, sans-serif' }}>Reassign</button>
+                                        <button onClick={() => removeFromPipeline(r)} disabled={isBusy} style={{ padding: '5px 10px', background: '#FEF2F2', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '11px', color: '#EF4444', fontWeight: '700', fontFamily: 'Montserrat, sans-serif' }}>{isBusy ? '…' : 'Delete'}</button>
+                                      </div>
+                                    )}
+                                  </td>
+                                )}
                               </tr>
                             )
                           })}

@@ -29,6 +29,9 @@ function RequestDetailContent() {
   const [comment, setComment] = useState('')
   const [addingComment, setAddingComment] = useState(false)
   const [form, setForm]       = useState<any>({})
+  const [pipelinePicker, setPipelinePicker] = useState(false)
+  const [pipelinePick, setPipelinePick]     = useState('')
+  const [assigningPipeline, setAssigningPipeline] = useState(false)
   const user                  = useRef<any>(null)
   const activityEndRef        = useRef<HTMLDivElement>(null)
 
@@ -82,6 +85,23 @@ function RequestDetailContent() {
     loadData()
   }
 
+  const assignPipeline = async () => {
+    if (!id) return
+    setAssigningPipeline(true)
+    await fetch(`${API}/development/requests/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        pipeline_id: pipelinePick || null,
+        updated_by: user.current?.email || '',
+        updated_by_name: user.current?.name || user.current?.email || 'System',
+      }),
+    })
+    setAssigningPipeline(false)
+    setPipelinePicker(false)
+    loadData()
+  }
+
   const handleAddComment = async () => {
     if (!comment.trim() || !id) return
     setAddingComment(true)
@@ -123,7 +143,29 @@ function RequestDetailContent() {
           <div style={{ fontSize: '13px', color: '#64748B', marginTop: '2px' }}>{req.title}</div>
         </div>
         {canEdit && !editing && (
-          <button onClick={() => setEditing(true)} style={{ padding: '8px 16px', background: '#156082', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '700', fontFamily: 'Montserrat, sans-serif' }}>Edit</button>
+          <div style={{ position: 'relative', display: 'flex', gap: '8px' }}>
+            <button onClick={() => { setPipelinePick(req.pipeline_id || ''); setPipelinePicker(v => !v) }}
+              style={{ padding: '8px 16px', background: '#EFF6FF', color: '#3B82F6', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '700', fontFamily: 'Montserrat, sans-serif' }}>
+              📦 Add to Pipeline
+            </button>
+            <button onClick={() => setEditing(true)} style={{ padding: '8px 16px', background: '#156082', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '700', fontFamily: 'Montserrat, sans-serif' }}>Edit</button>
+
+            {pipelinePicker && (
+              <div style={{ position: 'absolute', top: 'calc(100% + 8px)', right: 0, background: 'white', borderRadius: '10px', border: '1px solid #EDF2F7', boxShadow: '0 8px 24px rgba(0,0,0,0.12)', padding: '14px', width: '260px', zIndex: 10 }}>
+                <div style={{ fontSize: '10px', fontWeight: '700', color: '#45B6E4', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '8px' }}>Assign to Pipeline</div>
+                <select style={{ ...inp, marginBottom: '10px' }} value={pipelinePick} onChange={e => setPipelinePick(e.target.value)}>
+                  <option value="">None</option>
+                  {pipelines.map((p: any) => <option key={p.id} value={p.id}>{p.pipeline_code} – {p.name}</option>)}
+                </select>
+                <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+                  <button onClick={() => setPipelinePicker(false)} style={{ padding: '6px 12px', background: '#F1F5F9', color: '#64748B', border: 'none', borderRadius: '7px', cursor: 'pointer', fontSize: '11px', fontWeight: '700', fontFamily: 'Montserrat, sans-serif' }}>Cancel</button>
+                  <button onClick={assignPipeline} disabled={assigningPipeline} style={{ padding: '6px 12px', background: assigningPipeline ? '#94A3B8' : '#156082', color: 'white', border: 'none', borderRadius: '7px', cursor: 'pointer', fontSize: '11px', fontWeight: '700', fontFamily: 'Montserrat, sans-serif' }}>
+                    {assigningPipeline ? 'Saving…' : 'Assign'}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
         )}
         {editing && (
           <div style={{ display: 'flex', gap: '8px' }}>
