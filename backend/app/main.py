@@ -686,6 +686,7 @@ async def startup():
                 )""",
                 "ALTER TABLE training_catalog ADD COLUMN IF NOT EXISTS languages JSON DEFAULT '[]'",
                 "ALTER TABLE training_plan_items ADD COLUMN IF NOT EXISTS sequence INTEGER NOT NULL DEFAULT 0",
+                "ALTER TABLE training_catalog ADD COLUMN IF NOT EXISTS expertise_level VARCHAR(20) DEFAULT 'beginner'",
             ]
             for sql in sqls:
                 try:

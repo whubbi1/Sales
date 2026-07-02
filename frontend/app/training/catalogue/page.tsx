@@ -6,6 +6,8 @@ const API = 'https://api.whubbi.wcomply.com'
 const TRAINING_TYPES = ['wcomply', 'external']
 const TYPE_LABEL: Record<string, string> = { wcomply: 'WCOMPLY', external: 'External' }
 const TRAINING_LANGUAGES = ['English', 'French', 'Portuguese', 'Czech', 'Romanian', 'Spanish']
+const EXPERTISE_LEVELS = ['beginner', 'intermediate', 'expert']
+const EXPERTISE_LABEL: Record<string, string> = { beginner: 'Beginner', intermediate: 'Intermediate', expert: 'Expert' }
 
 const inp: React.CSSProperties = {
   fontSize: '12px', padding: '7px 11px', border: '1px solid #E2E8F0',
@@ -16,7 +18,7 @@ const lbl: React.CSSProperties = {
   marginBottom: '4px', textTransform: 'uppercase' as const, letterSpacing: '0.05em',
 }
 
-const EMPTY_FORM = { training_type: 'wcomply', company: '', title: '', description: '', duration: '', material_link: '', languages: [] as string[] }
+const EMPTY_FORM = { training_type: 'wcomply', company: '', title: '', description: '', duration: '', material_link: '', languages: [] as string[], expertise_level: 'beginner' }
 
 function LanguageChecklist({ selected, onToggle }: { selected: string[]; onToggle: (lang: string) => void }) {
   return (
@@ -96,6 +98,12 @@ function NewTrainingModal({ onClose, onSave }: any) {
             <label style={lbl}>Languages *</label>
             <LanguageChecklist selected={form.languages} onToggle={toggleLang} />
           </div>
+          <div>
+            <label style={lbl}>Level of Required Expertise</label>
+            <select style={{ ...inp, width: '100%' }} value={form.expertise_level} onChange={e => setForm((f: any) => ({ ...f, expertise_level: e.target.value }))}>
+              {EXPERTISE_LEVELS.map(l => <option key={l} value={l}>{EXPERTISE_LABEL[l]}</option>)}
+            </select>
+          </div>
           <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
             <button onClick={onClose} style={{ padding: '9px 18px', background: '#F1F5F9', color: '#64748B', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '700', fontFamily: 'Montserrat, sans-serif' }}>Cancel</button>
             <button onClick={submit} disabled={saving || !valid}
@@ -163,7 +171,7 @@ function CatalogueContent() {
   const patchItem = async (item: any, fields: any) => {
     await fetch(`${API}/training/catalog/${item.id}`, {
       method: 'PUT', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ training_type: item.training_type, company: item.company, title: item.title, description: item.description, duration: item.duration, material_link: item.material_link, languages: item.languages || [], ...fields }),
+      body: JSON.stringify({ training_type: item.training_type, company: item.company, title: item.title, description: item.description, duration: item.duration, material_link: item.material_link, languages: item.languages || [], expertise_level: item.expertise_level || 'beginner', ...fields }),
     })
     setEditing(null)
     load()
@@ -197,16 +205,16 @@ function CatalogueContent() {
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
           <thead style={{ background: '#FAFBFC' }}>
             <tr>
-              {['ID', 'Type', 'Company', 'Title', 'Description', 'Duration', 'Languages', 'Material Link', canEdit ? '' : null].filter(x => x !== null).map(h => (
+              {['ID', 'Type', 'Company', 'Title', 'Description', 'Duration', 'Languages', 'Expertise', 'Material Link', canEdit ? '' : null].filter(x => x !== null).map(h => (
                 <th key={h as string} style={{ padding: '10px 12px', textAlign: 'left', fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#45B6E4', borderBottom: '1px solid #EDF2F7', whiteSpace: 'nowrap' }}>{h}</th>
               ))}
             </tr>
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={9} style={{ textAlign: 'center', padding: '48px', color: '#45B6E4' }}>Loading…</td></tr>
+              <tr><td colSpan={10} style={{ textAlign: 'center', padding: '48px', color: '#45B6E4' }}>Loading…</td></tr>
             ) : filtered.length === 0 ? (
-              <tr><td colSpan={9} style={{ textAlign: 'center', padding: '48px', color: '#94A3B8' }}>No trainings in the catalogue yet.</td></tr>
+              <tr><td colSpan={10} style={{ textAlign: 'center', padding: '48px', color: '#94A3B8' }}>No trainings in the catalogue yet.</td></tr>
             ) : filtered.map(item => (
               <tr key={item.id} style={{ borderBottom: '1px solid #F1F5F9' }}>
                 <td style={{ padding: '10px 12px', color: '#94A3B8', fontFamily: 'monospace', fontSize: '11px' }} title={item.id}>{item.id.slice(0, 8)}</td>
@@ -242,6 +250,14 @@ function CatalogueContent() {
                   <EditableLanguages item={item} editing={isEditing(item.id, 'languages')}
                     onStartEdit={() => canEdit && setEditing({ id: item.id, field: 'languages' })}
                     onSave={(langs: string[]) => patchItem(item, { languages: langs })} />
+                </td>
+                <td style={{ padding: '10px 12px', minWidth: '110px' }}>
+                  <EditableCell display={<span style={{ background: '#EEF2FF', color: '#156082', padding: '2px 9px', borderRadius: '10px', fontSize: '10px', fontWeight: '700' }}>{EXPERTISE_LABEL[item.expertise_level] || 'Beginner'}</span>}
+                    editing={isEditing(item.id, 'expertise_level')} onStartEdit={() => canEdit && setEditing({ id: item.id, field: 'expertise_level' })}>
+                    <select autoFocus style={inp} defaultValue={item.expertise_level || 'beginner'} onChange={e => patchItem(item, { expertise_level: e.target.value })} onBlur={() => setEditing(null)}>
+                      {EXPERTISE_LEVELS.map(l => <option key={l} value={l}>{EXPERTISE_LABEL[l]}</option>)}
+                    </select>
+                  </EditableCell>
                 </td>
                 <td style={{ padding: '10px 12px', minWidth: '140px' }}>
                   <EditableCell display={item.material_link ? <a href={item.material_link} target="_blank" rel="noopener noreferrer" style={{ color: '#3B82F6' }} onClick={e => e.stopPropagation()}>🔗 Link</a> : null}

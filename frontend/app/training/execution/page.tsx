@@ -123,7 +123,7 @@ function ByTraining() {
               const overdue = a.status === 'assigned' && a.due_date && new Date(a.due_date) < new Date()
               return (
                 <tr key={a.id} style={{ borderBottom: '1px solid #F1F5F9' }}>
-                  <td style={{ padding: '10px 16px', color: '#3F3F3F' }}>{a.user_email}</td>
+                  <td style={{ padding: '10px 16px', color: '#3F3F3F' }}>{(a.first_name || a.last_name) ? `${a.first_name} ${a.last_name}`.trim() : a.user_email}</td>
                   <td style={{ padding: '10px 16px', color: overdue ? '#DC2626' : '#94A3B8' }}>{a.due_date ? new Date(a.due_date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}</td>
                   <td style={{ padding: '10px 16px' }}>
                     <span style={{ background: a.status === 'completed' ? '#ECFDF5' : overdue ? '#FEF2F2' : '#FFF7ED', color: a.status === 'completed' ? '#059669' : overdue ? '#DC2626' : '#D97706', padding: '2px 9px', borderRadius: '10px', fontSize: '10px', fontWeight: '700' }}>

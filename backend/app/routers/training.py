@@ -1,12 +1,13 @@
-from fastapi import APIRouter, Depends, UploadFile, File, Form
+from fastapi import APIRouter, Depends, UploadFile, File, Form, BackgroundTasks
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
 from app.database import get_db
-import uuid, os, asyncio, json
+import uuid, os, asyncio, json, httpx
 import boto3
 
 router = APIRouter()
 
+FRONTEND_URL = os.getenv("FRONTEND_URL", "https://dev.whubbi.wcomply.com")
 AWS_REGION   = os.getenv("AWS_REGION", "eu-west-1")
 S3_HR_BUCKET = os.getenv("S3_HR_BUCKET", "whubbi-backups-dev")
 
@@ -148,10 +149,12 @@ async def delete_certification(email: str, cid: str, db: AsyncSession = Depends(
 TRAINING_TYPES = ['wcomply', 'external']
 TRAINING_TYPE_LABELS = {'wcomply': 'WCOMPLY', 'external': 'External'}
 TRAINING_LANGUAGES = ['English', 'French', 'Portuguese', 'Czech', 'Romanian', 'Spanish']
+EXPERTISE_LEVELS = ['beginner', 'intermediate', 'expert']
 
 @router.get("/meta")
 async def get_meta():
-    return {"training_types": TRAINING_TYPES, "training_type_labels": TRAINING_TYPE_LABELS, "training_languages": TRAINING_LANGUAGES}
+    return {"training_types": TRAINING_TYPES, "training_type_labels": TRAINING_TYPE_LABELS,
+            "training_languages": TRAINING_LANGUAGES, "expertise_levels": EXPERTISE_LEVELS}
 
 @router.get("/catalog")
 async def list_catalog(db: AsyncSession = Depends(get_db)):
@@ -162,8 +165,8 @@ async def list_catalog(db: AsyncSession = Depends(get_db)):
 async def create_catalog_item(data: dict, db: AsyncSession = Depends(get_db)):
     cid = str(uuid.uuid4())
     await db.execute(text("""
-        INSERT INTO training_catalog (id, training_type, company, title, description, duration, material_link, languages, created_at, updated_at)
-        VALUES (CAST(:id AS UUID), :training_type, :company, :title, :description, :duration, :material_link, CAST(:languages AS JSON), NOW(), NOW())
+        INSERT INTO training_catalog (id, training_type, company, title, description, duration, material_link, languages, expertise_level, created_at, updated_at)
+        VALUES (CAST(:id AS UUID), :training_type, :company, :title, :description, :duration, :material_link, CAST(:languages AS JSON), :expertise_level, NOW(), NOW())
     """), {
         "id": cid,
         "training_type": data.get("training_type") or "wcomply",
@@ -173,6 +176,7 @@ async def create_catalog_item(data: dict, db: AsyncSession = Depends(get_db)):
         "duration": data.get("duration", ""),
         "material_link": data.get("material_link", ""),
         "languages": json.dumps(data.get("languages") or []),
+        "expertise_level": data.get("expertise_level") or "beginner",
     })
     await db.commit()
     return {"status": "ok", "id": cid}
@@ -187,6 +191,7 @@ async def update_catalog_item(cid: str, data: dict, db: AsyncSession = Depends(g
         "description": data.get("description", ""),
         "duration": data.get("duration", ""),
         "material_link": data.get("material_link", ""),
+        "expertise_level": data.get("expertise_level", ""),
     }
     lang_set = "languages = CAST(:languages AS JSON)," if "languages" in data else ""
     if "languages" in data:
@@ -199,6 +204,7 @@ async def update_catalog_item(cid: str, data: dict, db: AsyncSession = Depends(g
             description = :description,
             duration = COALESCE(NULLIF(:duration,''), duration),
             material_link = :material_link,
+            expertise_level = COALESCE(NULLIF(:expertise_level,''), expertise_level),
             {lang_set}
             updated_at = NOW()
         WHERE id = CAST(:id AS UUID)
@@ -375,8 +381,77 @@ async def list_all_assignments(status: str = None, user_email: str = None, catal
     r = await db.execute(text(f"SELECT * FROM training_assignments WHERE {' AND '.join(where)} ORDER BY due_date ASC NULLS LAST"), params)
     return {"assignments": [_stringify_ids(dict(row._mapping)) for row in r.fetchall()]}
 
+# ─── Assignment notifications: a WHUBBI Chat (Teams) message + a personal email ──
+async def _notify_teams_assignment(recipients: list, training_names: list):
+    from app.routers.hr import send_teams_messages_bulk, HR_SENDER_EMAIL
+    from app.database import AsyncSessionLocal
+    if not recipients or not training_names:
+        return
+    plural = len(training_names) != 1
+    names_list = ", ".join(training_names[:5]) + ("…" if len(training_names) > 5 else "")
+    message = (
+        f"📚 New training{'s' if plural else ''} assigned to you in WHUBBI: {names_list}. "
+        f"View and complete {'them' if plural else 'it'} on your Training page: {FRONTEND_URL}/settings/training"
+    )
+    msg_id = str(uuid.uuid4())
+    try:
+        async with AsyncSessionLocal() as session:
+            await session.execute(text("""
+                INSERT INTO hr_chat_messages
+                    (id, sender_email, sender_name, message, recipients, status, sent_at, sent_count, delivered_count, created_at)
+                VALUES
+                    (CAST(:id AS UUID), :sender, :sender_name, :message, CAST(:recipients AS JSONB),
+                     'sent', NOW(), :count, 0, NOW())
+            """), {"id": msg_id, "sender": HR_SENDER_EMAIL, "sender_name": "WHUBBI Training",
+                   "message": message, "recipients": json.dumps(recipients), "count": len(recipients)})
+            await session.commit()
+        await send_teams_messages_bulk(msg_id, recipients, message, HR_SENDER_EMAIL)
+    except Exception as e:
+        print(f"⚠️ Training assignment Teams notification failed: {e}")
+
+async def _notify_email_assignment(email: str, trainings: list):
+    from app.routers.settings import get_ms_token
+    from app.routers.hr import HR_SENDER_EMAIL
+    try:
+        token = await get_ms_token()
+        if not token:
+            return
+        plural = len(trainings) != 1
+        rows = "".join(
+            f"<li><strong>{t['name']}</strong>" +
+            (f' — <a href="{t["material_link"]}">Training material</a>' if t.get("material_link") else "") +
+            "</li>" for t in trainings
+        )
+        html = f"""
+            <p>Hello,</p>
+            <p>The following training{'s' if plural else ''} {'have' if plural else 'has'} been assigned to you in WHUBBI:</p>
+            <ul>{rows}</ul>
+            <p>You can view and complete {'them' if plural else 'it'} from your
+            <a href="{FRONTEND_URL}/settings/training">Training page</a>.</p>
+        """
+        async with httpx.AsyncClient(timeout=15) as client:
+            await client.post(
+                f"https://graph.microsoft.com/v1.0/users/{HR_SENDER_EMAIL}/sendMail",
+                headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
+                json={"message": {
+                    "subject": f"New training{'s' if plural else ''} assigned to you",
+                    "body": {"contentType": "HTML", "content": html},
+                    "toRecipients": [{"emailAddress": {"address": email}}],
+                }},
+            )
+    except Exception as e:
+        print(f"⚠️ Training assignment email failed for {email}: {e}")
+
+async def _notify_assignments(assignments_by_email: dict):
+    if not assignments_by_email:
+        return
+    all_names = sorted({t["name"] for trainings in assignments_by_email.values() for t in trainings})
+    await _notify_teams_assignment(list(assignments_by_email.keys()), all_names)
+    for email, trainings in assignments_by_email.items():
+        await _notify_email_assignment(email, trainings)
+
 @router.post("/assignments")
-async def create_assignments(data: dict, db: AsyncSession = Depends(get_db)):
+async def create_assignments(data: dict, background_tasks: BackgroundTasks, db: AsyncSession = Depends(get_db)):
     emails = data.get("user_emails") or []
     due_date = data.get("due_date", "")
     recurrence = data.get("recurrence") or None
@@ -401,6 +476,7 @@ async def create_assignments(data: dict, db: AsyncSession = Depends(get_db)):
             catalog_items = [dict(row._mapping)]
 
     created = 0
+    assignments_by_email: dict = {}
     for email in emails:
         for item in catalog_items:
             aid = str(uuid.uuid4())
@@ -419,7 +495,10 @@ async def create_assignments(data: dict, db: AsyncSession = Depends(get_db)):
                 "assigned_by_email": assigned_by_email, "assigned_by_name": assigned_by_name,
             })
             created += 1
+            assignments_by_email.setdefault(email, []).append({"name": item["title"], "material_link": item.get("material_link", "")})
     await db.commit()
+    if assignments_by_email:
+        background_tasks.add_task(_notify_assignments, assignments_by_email)
     return {"status": "ok", "created": created}
 
 @router.delete("/assignments/{aid}")
@@ -459,7 +538,47 @@ async def training_overview(db: AsyncSession = Depends(get_db)):
 @router.get("/overview/training/{catalog_id}")
 async def training_overview_by_training(catalog_id: str, db: AsyncSession = Depends(get_db)):
     await _renew_due_recurring(db)
+    from app.routers.settings import list_users as _list_users
+    users_resp = await _list_users(db)
+    names_by_email = {u.get("email"): u for u in users_resp.get("users", [])}
+
     r = await db.execute(text("""
         SELECT * FROM training_assignments WHERE catalog_id = CAST(:id AS UUID) ORDER BY user_email
     """), {"id": catalog_id})
-    return {"assignments": [_stringify_ids(dict(row._mapping)) for row in r.fetchall()]}
+    assignments = []
+    for row in r.fetchall():
+        a = _stringify_ids(dict(row._mapping))
+        u = names_by_email.get(a.get("user_email"), {})
+        a["first_name"] = u.get("first_name", "")
+        a["last_name"] = u.get("last_name", "")
+        assignments.append(a)
+    return {"assignments": assignments}
+
+# ─── Dashboard stats ─────────────────────────────────────────────────────────
+@router.get("/dashboard-stats")
+async def training_dashboard_stats(db: AsyncSession = Depends(get_db)):
+    await _renew_due_recurring(db)
+    assigned_r = await db.execute(text("SELECT COUNT(*) AS c FROM training_assignments WHERE status = 'assigned'"))
+    assigned_count = assigned_r.fetchone().c
+
+    executed_r = await db.execute(text("""
+        SELECT COUNT(*) AS c FROM training_assignments
+        WHERE status = 'completed' AND updated_at >= NOW() - INTERVAL '1 year'
+    """))
+    executed_count = executed_r.fetchone().c
+
+    late_r = await db.execute(text("""
+        SELECT COUNT(*) AS c FROM training_assignments
+        WHERE status = 'assigned' AND due_date IS NOT NULL AND due_date < CURRENT_DATE
+    """))
+    late_count = late_r.fetchone().c
+
+    available_r = await db.execute(text("SELECT COUNT(*) AS c FROM training_catalog"))
+    available_count = available_r.fetchone().c
+
+    return {
+        "assigned_count": assigned_count,
+        "executed_count": executed_count,
+        "late_count": late_count,
+        "available_count": available_count,
+    }
