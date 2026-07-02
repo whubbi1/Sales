@@ -18,7 +18,7 @@ const DEFAULT_QUESTIONS = [
   'Tell us about your professional background and key experiences.',
   'What are your main technical skills relevant to this role?',
   'Describe a challenging project you worked on and how you handled it.',
-  'Why are you interested in this opportunity at Wcomply?',
+  'Why are you interested in this opportunity at WCOMPLY?',
   'How do you handle tight deadlines and multiple priorities?',
   'What are your salary expectations and availability?',
 ]

@@ -605,6 +605,36 @@ async def startup():
                     updated_at TIMESTAMP DEFAULT NOW()
                 )""",
 
+                # IT module — applications registry (locations are multi-select)
+                """CREATE TABLE IF NOT EXISTS it_applications (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    name VARCHAR(255) NOT NULL,
+                    editor VARCHAR(255),
+                    version VARCHAR(100),
+                    app_link TEXT,
+                    owner_email VARCHAR(255),
+                    owner_name VARCHAR(255),
+                    all_locations BOOLEAN NOT NULL DEFAULT true,
+                    location_ids JSONB NOT NULL DEFAULT '[]',
+                    location_names JSONB NOT NULL DEFAULT '[]',
+                    created_at TIMESTAMP DEFAULT NOW(),
+                    updated_at TIMESTAMP DEFAULT NOW()
+                )""",
+
+                # IT module — per-user saved report views (shared by equipment/software/application reports)
+                """CREATE TABLE IF NOT EXISTS it_report_views (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    user_email VARCHAR(255) NOT NULL,
+                    module VARCHAR(30) NOT NULL,
+                    name VARCHAR(255) NOT NULL,
+                    columns JSONB NOT NULL DEFAULT '[]',
+                    filters JSONB NOT NULL DEFAULT '{}',
+                    sort_field VARCHAR(100),
+                    sort_dir VARCHAR(4) DEFAULT 'asc',
+                    created_at TIMESTAMP DEFAULT NOW(),
+                    updated_at TIMESTAMP DEFAULT NOW()
+                )""",
+
                 # Personal Profile — Curriculum Vitae
                 """CREATE TABLE IF NOT EXISTS employee_cv (
                     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

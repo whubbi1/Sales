@@ -6,15 +6,6 @@ import { getStoredUser } from '@/lib/auth'
 
 const API = 'https://api.whubbi.wcomply.com'
 
-const COLUMNS: ReportColumn[] = [
-  { key: 'name', label: 'Software Name', filterable: 'text' },
-  { key: 'editor', label: 'Editor', filterable: 'text' },
-  { key: 'version', label: 'Version', filterable: 'text' },
-  { key: 'install_link', label: 'Installation Files' },
-  { key: 'owner_name', label: 'Owner', filterable: 'text' },
-  { key: 'location_name', label: 'Location', filterable: 'text' },
-]
-
 const inp: React.CSSProperties = {
   fontSize: '12px', padding: '7px 11px', border: '1px solid #E2E8F0',
   borderRadius: '8px', fontFamily: 'Montserrat, sans-serif', outline: 'none', background: 'white',
@@ -24,7 +15,16 @@ const lbl: React.CSSProperties = {
   marginBottom: '4px', textTransform: 'uppercase' as const, letterSpacing: '0.05em',
 }
 
-const EMPTY_FORM = { name: '', editor: '', version: '', install_link: '', owner_email: '', owner_name: '', location_id: '', location_name: 'All' }
+const EMPTY_FORM = { name: '', editor: '', version: '', app_link: '', owner_email: '', owner_name: '', all_locations: true, location_ids: [] as string[], location_names: [] as string[] }
+
+const COLUMNS: ReportColumn[] = [
+  { key: 'name', label: 'Application Name', filterable: 'text' },
+  { key: 'editor', label: 'Editor', filterable: 'text' },
+  { key: 'version', label: 'Version', filterable: 'text' },
+  { key: 'app_link', label: 'Link' },
+  { key: 'owner_name', label: 'Owner', filterable: 'text' },
+  { key: 'locations_display', label: 'Locations', filterable: 'text' },
+]
 
 function EditableCell({ display, editing, onStartEdit, children }: any) {
   return editing ? children : (
@@ -37,18 +37,44 @@ function EditableCell({ display, editing, onStartEdit, children }: any) {
   )
 }
 
-function NewSoftwareModal({ users, locations, onClose, onSave }: any) {
+function LocationChecklist({ allLocations, selectedIds, locations, onToggleAll, onToggleLocation }: any) {
+  return (
+    <div>
+      <label style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '4px 8px', marginBottom: '6px', background: allLocations ? '#EFF6FF' : '#F8FAFC', border: `1px solid ${allLocations ? '#156082' : '#E2E8F0'}`, borderRadius: '8px', fontSize: '11px', cursor: 'pointer', color: allLocations ? '#156082' : '#64748B', fontWeight: '700' }}>
+        <input type="checkbox" checked={allLocations} onChange={onToggleAll} style={{ margin: 0 }} />
+        All Locations
+      </label>
+      {!allLocations && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+          {locations.map((l: any) => (
+            <label key={l.id} style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '4px 8px', background: selectedIds.includes(l.id) ? '#EFF6FF' : '#F8FAFC', border: `1px solid ${selectedIds.includes(l.id) ? '#156082' : '#E2E8F0'}`, borderRadius: '14px', fontSize: '11px', cursor: 'pointer', color: selectedIds.includes(l.id) ? '#156082' : '#64748B' }}>
+              <input type="checkbox" checked={selectedIds.includes(l.id)} onChange={() => onToggleLocation(l.id)} style={{ margin: 0 }} />
+              {l.location_name}
+            </label>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function NewApplicationModal({ users, locations, onClose, onSave }: any) {
   const [form, setForm] = useState<any>(EMPTY_FORM)
   const [saving, setSaving] = useState(false)
   const valid = form.name.trim().length > 0
+
   const handleOwnerChange = (email: string) => {
     const u = users.find((uu: any) => uu.email === email)
     setForm((f: any) => ({ ...f, owner_email: email, owner_name: u?.display_name || (u ? `${u.first_name} ${u.last_name}` : '') }))
   }
-  const handleLocationChange = (locationId: string) => {
-    if (!locationId) { setForm((f: any) => ({ ...f, location_id: '', location_name: 'All' })); return }
-    const loc = locations.find((l: any) => l.id === locationId)
-    setForm((f: any) => ({ ...f, location_id: locationId, location_name: loc?.location_name || 'All' }))
+  const toggleAll = () => setForm((f: any) => ({ ...f, all_locations: !f.all_locations, location_ids: [], location_names: [] }))
+  const toggleLocation = (id: string) => {
+    setForm((f: any) => {
+      const has = f.location_ids.includes(id)
+      const ids = has ? f.location_ids.filter((x: string) => x !== id) : [...f.location_ids, id]
+      const names = ids.map((i: string) => locations.find((l: any) => l.id === i)?.location_name).filter(Boolean)
+      return { ...f, location_ids: ids, location_names: names }
+    })
   }
   const submit = async () => {
     if (!valid) return
@@ -56,52 +82,50 @@ function NewSoftwareModal({ users, locations, onClose, onSave }: any) {
     await onSave(form)
     setSaving(false)
   }
+
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
       onClick={e => { if (e.target === e.currentTarget) onClose() }}>
       <div style={{ background: 'white', borderRadius: '14px', width: '520px', maxHeight: '90vh', overflow: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
         <div style={{ padding: '20px 24px', borderBottom: '1px solid #EDF2F7', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <h2 style={{ fontSize: '15px', fontWeight: '800', color: '#156082', margin: 0 }}>New Software</h2>
+          <h2 style={{ fontSize: '15px', fontWeight: '800', color: '#156082', margin: 0 }}>New Application</h2>
           <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: '20px', cursor: 'pointer', color: '#94A3B8' }}>×</button>
         </div>
         <div style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
           <div>
-            <label style={lbl}>Software Name *</label>
+            <label style={lbl}>Application Name *</label>
             <input style={{ ...inp, width: '100%', boxSizing: 'border-box' as const }} value={form.name} onChange={e => setForm((f: any) => ({ ...f, name: e.target.value }))} />
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
             <div>
-              <label style={lbl}>Software Editor</label>
+              <label style={lbl}>Editor Name</label>
               <input style={{ ...inp, width: '100%', boxSizing: 'border-box' as const }} value={form.editor} onChange={e => setForm((f: any) => ({ ...f, editor: e.target.value }))} />
             </div>
             <div>
-              <label style={lbl}>Software Version</label>
+              <label style={lbl}>Version</label>
               <input style={{ ...inp, width: '100%', boxSizing: 'border-box' as const }} value={form.version} onChange={e => setForm((f: any) => ({ ...f, version: e.target.value }))} />
             </div>
           </div>
           <div>
-            <label style={lbl}>Link to Installation Files</label>
-            <input style={{ ...inp, width: '100%', boxSizing: 'border-box' as const }} placeholder="https://…" value={form.install_link} onChange={e => setForm((f: any) => ({ ...f, install_link: e.target.value }))} />
+            <label style={lbl}>Link to the Application</label>
+            <input style={{ ...inp, width: '100%', boxSizing: 'border-box' as const }} placeholder="https://…" value={form.app_link} onChange={e => setForm((f: any) => ({ ...f, app_link: e.target.value }))} />
           </div>
           <div>
-            <label style={lbl}>Owner of the Solution</label>
+            <label style={lbl}>Owner of the Application</label>
             <select style={{ ...inp, width: '100%' }} value={form.owner_email} onChange={e => handleOwnerChange(e.target.value)}>
               <option value="">Unassigned</option>
               {users.map((u: any) => <option key={u.email} value={u.email}>{u.display_name || `${u.first_name} ${u.last_name}`}</option>)}
             </select>
           </div>
           <div>
-            <label style={lbl}>Location</label>
-            <select style={{ ...inp, width: '100%' }} value={form.location_id} onChange={e => handleLocationChange(e.target.value)}>
-              <option value="">All</option>
-              {locations.map((l: any) => <option key={l.id} value={l.id}>{l.location_name}</option>)}
-            </select>
+            <label style={lbl}>Locations Using the Application</label>
+            <LocationChecklist allLocations={form.all_locations} selectedIds={form.location_ids} locations={locations} onToggleAll={toggleAll} onToggleLocation={toggleLocation} />
           </div>
           <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
             <button onClick={onClose} style={{ padding: '9px 18px', background: '#F1F5F9', color: '#64748B', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '700', fontFamily: 'Montserrat, sans-serif' }}>Cancel</button>
             <button onClick={submit} disabled={saving || !valid}
               style={{ padding: '9px 18px', background: saving || !valid ? '#94A3B8' : '#156082', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '700', fontFamily: 'Montserrat, sans-serif' }}>
-              {saving ? 'Creating…' : 'Create Software'}
+              {saving ? 'Creating…' : 'Create Application'}
             </button>
           </div>
         </div>
@@ -135,35 +159,45 @@ function EditableOwner({ item, users, editing, onStartEdit, onSave }: any) {
   )
 }
 
-function EditableLocation({ item, locations, editing, onStartEdit, onSave }: any) {
+function EditableLocations({ item, locations, editing, onStartEdit, onSave }: any) {
+  const [draftAll, setDraftAll] = useState<boolean>(item.all_locations)
+  const [draftIds, setDraftIds] = useState<string[]>(item.location_ids || [])
+  useEffect(() => { setDraftAll(item.all_locations); setDraftIds(item.location_ids || []) }, [editing])
+
   if (!editing) {
-    const isAll = !item.location_name || item.location_name === 'All'
     return (
       <div onClick={onStartEdit} title="Click to edit" style={{ cursor: 'pointer', padding: '4px 6px', margin: '-4px -6px', borderRadius: '5px', minHeight: '18px' }}
         onMouseEnter={e => (e.currentTarget.style.background = '#F1F5F9')}
         onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
-        <span style={{ background: isAll ? '#EEF2FF' : '#F1F5F9', color: isAll ? '#156082' : '#3F3F3F', padding: '2px 9px', borderRadius: '10px', fontSize: '10px', fontWeight: '700' }}>{item.location_name || 'All'}</span>
+        {item.all_locations ? (
+          <span style={{ background: '#EEF2FF', color: '#156082', padding: '2px 9px', borderRadius: '10px', fontSize: '10px', fontWeight: '700' }}>All</span>
+        ) : (item.location_names || []).length > 0 ? (
+          <span style={{ fontSize: '12px', color: '#3F3F3F' }}>{(item.location_names || []).join(', ')}</span>
+        ) : (
+          <span style={{ color: '#94A3B8' }}>—</span>
+        )}
       </div>
     )
   }
+
+  const toggleAll = () => { setDraftAll(a => !a); setDraftIds([]) }
+  const toggleLoc = (id: string) => setDraftIds(ids => ids.includes(id) ? ids.filter(i => i !== id) : [...ids, id])
+  const names = draftIds.map(i => locations.find((l: any) => l.id === i)?.location_name).filter(Boolean)
+
   return (
-    <select autoFocus style={inp} defaultValue={item.location_id || ''}
-      onChange={e => {
-        const locationId = e.target.value
-        if (!locationId) { onSave({ location_id: '', location_name: 'All' }); return }
-        const loc = locations.find((l: any) => l.id === locationId)
-        onSave({ location_id: locationId, location_name: loc?.location_name || 'All' })
-      }}
-      onBlur={onStartEdit}>
-      <option value="">All</option>
-      {locations.map((l: any) => <option key={l.id} value={l.id}>{l.location_name}</option>)}
-    </select>
+    <div style={{ minWidth: '240px' }}>
+      <LocationChecklist allLocations={draftAll} selectedIds={draftIds} locations={locations} onToggleAll={toggleAll} onToggleLocation={toggleLoc} />
+      <button onClick={() => onSave({ all_locations: draftAll, location_ids: draftAll ? [] : draftIds, location_names: draftAll ? [] : names })}
+        style={{ marginTop: '6px', padding: '4px 10px', background: '#156082', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '11px', fontWeight: '700', fontFamily: 'Montserrat, sans-serif' }}>
+        Done
+      </button>
+    </div>
   )
 }
 
-function SoftwareContent() {
+function ApplicationsContent() {
   const { canEdit } = useITPerm()
-  const [software, setSoftware] = useState<any[]>([])
+  const [applications, setApplications] = useState<any[]>([])
   const [users, setUsers] = useState<any[]>([])
   const [locations, setLocations] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
@@ -180,29 +214,35 @@ function SoftwareContent() {
     if (u?.email) setUserEmail(u.email)
   }, [])
 
-  const rb = useReportBuilder('software', COLUMNS, userEmail)
+  const rb = useReportBuilder('application', COLUMNS, userEmail)
 
   const load = async () => {
     setLoading(true)
-    const d = await fetch(`${API}/it/software`).then(r => r.json()).catch(() => ({ software: [] }))
-    setSoftware(d.software || [])
+    const d = await fetch(`${API}/it/applications`).then(r => r.json()).catch(() => ({ applications: [] }))
+    setApplications(d.applications || [])
     setLoading(false)
   }
 
-  const searched = software.filter(s => !search || `${s.name} ${s.editor}`.toLowerCase().includes(search.toLowerCase()))
-  const filtered = applyReport(searched, COLUMNS, rb.filters, rb.sortField, rb.sortDir)
+  const withDisplay = applications.map(a => ({ ...a, locations_display: a.all_locations ? 'All' : (a.location_names || []).join(', ') }))
+  const searched = withDisplay.filter(a => !search || `${a.name} ${a.editor}`.toLowerCase().includes(search.toLowerCase()))
+  const reported = applyReport(searched, COLUMNS, rb.filters, rb.sortField, rb.sortDir)
   const isVisible = (key: string) => rb.visibleCols.includes(key)
 
   const createItem = async (form: any) => {
-    await fetch(`${API}/it/software`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form) })
+    await fetch(`${API}/it/applications`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form) })
     setShowNew(false)
     load()
   }
 
   const patchItem = async (item: any, fields: any) => {
-    await fetch(`${API}/it/software/${item.id}`, {
+    await fetch(`${API}/it/applications/${item.id}`, {
       method: 'PUT', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: item.name, editor: item.editor, version: item.version, install_link: item.install_link, owner_email: item.owner_email, owner_name: item.owner_name, location_id: item.location_id, location_name: item.location_name, ...fields }),
+      body: JSON.stringify({
+        name: item.name, editor: item.editor, version: item.version, app_link: item.app_link,
+        owner_email: item.owner_email, owner_name: item.owner_name,
+        all_locations: item.all_locations, location_ids: item.location_ids, location_names: item.location_names,
+        ...fields,
+      }),
     })
     setEditing(null)
     load()
@@ -210,23 +250,24 @@ function SoftwareContent() {
 
   const deleteItem = async (item: any) => {
     if (!confirm(`Delete "${item.name}"? This cannot be undone.`)) return
-    await fetch(`${API}/it/software/${item.id}`, { method: 'DELETE' })
+    await fetch(`${API}/it/applications/${item.id}`, { method: 'DELETE' })
     load()
   }
 
   const isEditing = (id: string, field: string) => editing?.id === id && editing.field === field
+  const toggleEdit = (id: string, field: string) => canEdit && setEditing(isEditing(id, field) ? null : { id, field })
 
   return (
     <div style={{ padding: '24px 28px' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
         <div>
-          <h1 style={{ fontSize: '20px', fontWeight: '800', color: '#156082', margin: '0 0 4px' }}>💿 Software</h1>
-          <p style={{ fontSize: '12px', color: '#94A3B8', margin: 0 }}>{filtered.length} software solution{filtered.length !== 1 ? 's' : ''} used by WCOMPLY · click any field to edit</p>
+          <h1 style={{ fontSize: '20px', fontWeight: '800', color: '#156082', margin: '0 0 4px' }}>🧩 Applications</h1>
+          <p style={{ fontSize: '12px', color: '#94A3B8', margin: 0 }}>{reported.length} application{reported.length !== 1 ? 's' : ''} used by WCOMPLY · click any field to edit</p>
         </div>
         <div style={{ display: 'flex', gap: '8px' }}>
           <ReportPanel columns={COLUMNS} rb={rb} />
           {canEdit && (
-            <button onClick={() => setShowNew(true)} style={{ padding: '9px 18px', background: '#156082', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '700', fontFamily: 'Montserrat, sans-serif' }}>+ New Software</button>
+            <button onClick={() => setShowNew(true)} style={{ padding: '9px 18px', background: '#156082', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '700', fontFamily: 'Montserrat, sans-serif' }}>+ New Application</button>
           )}
         </div>
       </div>
@@ -248,51 +289,49 @@ function SoftwareContent() {
           <tbody>
             {loading ? (
               <tr><td colSpan={COLUMNS.length + 1} style={{ textAlign: 'center', padding: '48px', color: '#45B6E4' }}>Loading…</td></tr>
-            ) : filtered.length === 0 ? (
-              <tr><td colSpan={COLUMNS.length + 1} style={{ textAlign: 'center', padding: '48px', color: '#94A3B8' }}>No software solutions recorded yet.</td></tr>
-            ) : filtered.map(item => (
+            ) : reported.length === 0 ? (
+              <tr><td colSpan={COLUMNS.length + 1} style={{ textAlign: 'center', padding: '48px', color: '#94A3B8' }}>No applications recorded yet.</td></tr>
+            ) : reported.map(item => (
               <tr key={item.id} style={{ borderBottom: '1px solid #F1F5F9' }}>
                 {isVisible('name') && (
                   <td style={{ padding: '10px 12px', minWidth: '160px', fontWeight: '700', color: '#156082' }}>
-                    <EditableCell display={item.name} editing={isEditing(item.id, 'name')} onStartEdit={() => canEdit && setEditing({ id: item.id, field: 'name' })}>
+                    <EditableCell display={item.name} editing={isEditing(item.id, 'name')} onStartEdit={() => toggleEdit(item.id, 'name')}>
                       <input autoFocus style={inp} defaultValue={item.name} onBlur={e => patchItem(item, { name: e.target.value })} onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }} />
                     </EditableCell>
                   </td>
                 )}
                 {isVisible('editor') && (
                   <td style={{ padding: '10px 12px', minWidth: '140px' }}>
-                    <EditableCell display={item.editor} editing={isEditing(item.id, 'editor')} onStartEdit={() => canEdit && setEditing({ id: item.id, field: 'editor' })}>
+                    <EditableCell display={item.editor} editing={isEditing(item.id, 'editor')} onStartEdit={() => toggleEdit(item.id, 'editor')}>
                       <input autoFocus style={inp} defaultValue={item.editor} onBlur={e => patchItem(item, { editor: e.target.value })} onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }} />
                     </EditableCell>
                   </td>
                 )}
                 {isVisible('version') && (
                   <td style={{ padding: '10px 12px', minWidth: '100px' }}>
-                    <EditableCell display={item.version} editing={isEditing(item.id, 'version')} onStartEdit={() => canEdit && setEditing({ id: item.id, field: 'version' })}>
+                    <EditableCell display={item.version} editing={isEditing(item.id, 'version')} onStartEdit={() => toggleEdit(item.id, 'version')}>
                       <input autoFocus style={inp} defaultValue={item.version} onBlur={e => patchItem(item, { version: e.target.value })} onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }} />
                     </EditableCell>
                   </td>
                 )}
-                {isVisible('install_link') && (
+                {isVisible('app_link') && (
                   <td style={{ padding: '10px 12px', minWidth: '160px' }}>
-                    <EditableCell display={item.install_link ? <a href={item.install_link} target="_blank" rel="noopener noreferrer" style={{ color: '#3B82F6' }} onClick={e => e.stopPropagation()}>🔗 Link</a> : null}
-                      editing={isEditing(item.id, 'install_link')} onStartEdit={() => canEdit && setEditing({ id: item.id, field: 'install_link' })}>
-                      <input autoFocus style={inp} defaultValue={item.install_link} onBlur={e => patchItem(item, { install_link: e.target.value })} onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }} />
+                    <EditableCell display={item.app_link ? <a href={item.app_link} target="_blank" rel="noopener noreferrer" style={{ color: '#3B82F6' }} onClick={e => e.stopPropagation()}>🔗 Link</a> : null}
+                      editing={isEditing(item.id, 'app_link')} onStartEdit={() => toggleEdit(item.id, 'app_link')}>
+                      <input autoFocus style={inp} defaultValue={item.app_link} onBlur={e => patchItem(item, { app_link: e.target.value })} onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }} />
                     </EditableCell>
                   </td>
                 )}
                 {isVisible('owner_name') && (
                   <td style={{ padding: '10px 12px', minWidth: '160px' }}>
                     <EditableOwner item={item} users={users} editing={isEditing(item.id, 'owner')}
-                      onStartEdit={() => canEdit && setEditing(editing?.id === item.id && editing?.field === 'owner' ? null : { id: item.id, field: 'owner' })}
-                      onSave={(fields: any) => patchItem(item, fields)} />
+                      onStartEdit={() => toggleEdit(item.id, 'owner')} onSave={(fields: any) => patchItem(item, fields)} />
                   </td>
                 )}
-                {isVisible('location_name') && (
-                  <td style={{ padding: '10px 12px', minWidth: '120px' }}>
-                    <EditableLocation item={item} locations={locations} editing={isEditing(item.id, 'location')}
-                      onStartEdit={() => canEdit && setEditing(editing?.id === item.id && editing?.field === 'location' ? null : { id: item.id, field: 'location' })}
-                      onSave={(fields: any) => patchItem(item, fields)} />
+                {isVisible('locations_display') && (
+                  <td style={{ padding: '10px 12px', minWidth: '180px' }}>
+                    <EditableLocations item={item} locations={locations} editing={isEditing(item.id, 'locations')}
+                      onStartEdit={() => toggleEdit(item.id, 'locations')} onSave={(fields: any) => patchItem(item, fields)} />
                   </td>
                 )}
                 {canEdit && (
@@ -306,11 +345,11 @@ function SoftwareContent() {
         </table>
       </div>
 
-      {showNew && <NewSoftwareModal users={users} locations={locations} onClose={() => setShowNew(false)} onSave={createItem} />}
+      {showNew && <NewApplicationModal users={users} locations={locations} onClose={() => setShowNew(false)} onSave={createItem} />}
     </div>
   )
 }
 
-export default function SoftwarePage() {
-  return <ITLayout><SoftwareContent /></ITLayout>
+export default function ApplicationsPage() {
+  return <ITLayout><ApplicationsContent /></ITLayout>
 }

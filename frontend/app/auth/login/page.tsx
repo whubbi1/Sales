@@ -74,7 +74,7 @@ export default function LoginPage() {
       <div style={{ width: '420px', background: 'white', display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '48px 40px' }}>
         <div style={{ marginBottom: '32px' }}>
           <h2 style={{ fontSize: '22px', fontWeight: '800', color: '#156082', marginBottom: '6px', letterSpacing: '-0.01em' }}>Sign in to WHUBBI</h2>
-          <p style={{ fontSize: '12px', color: '#848EA5' }}>Use your Wcomply Microsoft account.</p>
+          <p style={{ fontSize: '12px', color: '#848EA5' }}>Use your WCOMPLY Microsoft account.</p>
         </div>
 
         <button onClick={handleMicrosoftSSO} disabled={loading}
@@ -99,11 +99,11 @@ export default function LoginPage() {
 
         <div style={{ marginTop: '40px', padding: '16px', background: '#F5F7FA', borderRadius: '10px' }}>
           <p style={{ fontSize: '11px', color: '#848EA5', lineHeight: '1.5', textAlign: 'center' }}>
-            By signing in, you agree to Wcomply's internal use policies. Your session is secured via AWS Cognito.
+            By signing in, you agree to WCOMPLY's internal use policies. Your session is secured via AWS Cognito.
           </p>
         </div>
         <div style={{ marginTop: '24px', textAlign: 'center' }}>
-          <p style={{ fontSize: '10px', color: '#848EA5' }}>WHUBBI · Powered by Wcomply</p>
+          <p style={{ fontSize: '10px', color: '#848EA5' }}>WHUBBI · Powered by WCOMPLY</p>
         </div>
       </div>
     </div>

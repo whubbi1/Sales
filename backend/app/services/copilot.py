@@ -1,5 +1,5 @@
 # backend/app/services/copilot.py
-# Intégration Microsoft Copilot / Azure OpenAI pour Wcomply
+# Intégration Microsoft Copilot / Azure OpenAI pour WCOMPLY
 
 import httpx
 import os
@@ -10,7 +10,7 @@ AZURE_OPENAI_API_KEY    = os.getenv("AZURE_OPENAI_API_KEY")
 AZURE_OPENAI_DEPLOYMENT = os.getenv("AZURE_OPENAI_DEPLOYMENT", "gpt-4")
 AZURE_OPENAI_API_VERSION = "2024-02-15-preview"
 
-SYSTEM_PROMPT = """Tu es l'assistant IA de Wcomply, une application de gestion commerciale.
+SYSTEM_PROMPT = """Tu es l'assistant IA de WCOMPLY, une application de gestion commerciale.
 Tu aides les commerciaux à :
 - Analyser leurs opportunités et pipeline de vente
 - Préparer des emails et communications clients

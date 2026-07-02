@@ -3,6 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
 from app.database import get_db
 import uuid
+import json
 
 router = APIRouter()
 
@@ -203,5 +204,150 @@ async def update_software(sid: str, data: dict, db: AsyncSession = Depends(get_d
 @router.delete("/software/{sid}")
 async def delete_software(sid: str, db: AsyncSession = Depends(get_db)):
     await db.execute(text("DELETE FROM it_software WHERE id = CAST(:id AS UUID)"), {"id": sid})
+    await db.commit()
+    return {"status": "ok"}
+
+# ─── Applications ───────────────────────────────────────────────────────────────
+@router.get("/applications")
+async def list_applications(search: str = None, db: AsyncSession = Depends(get_db)):
+    where = ["1=1"]
+    params = {}
+    if search:
+        where.append("(name ILIKE :search OR editor ILIKE :search)")
+        params["search"] = f"%{search}%"
+
+    r = await db.execute(text(f"""
+        SELECT * FROM it_applications
+        WHERE {' AND '.join(where)}
+        ORDER BY name ASC
+    """), params)
+    result = [_stringify_row(dict(row._mapping)) for row in r.fetchall()]
+    return {"applications": result}
+
+@router.post("/applications")
+async def create_application(data: dict, db: AsyncSession = Depends(get_db)):
+    aid = str(uuid.uuid4())
+    all_locations = data.get("all_locations")
+    if all_locations is None:
+        all_locations = not data.get("location_ids")
+    await db.execute(text("""
+        INSERT INTO it_applications
+            (id, name, editor, version, app_link, owner_email, owner_name,
+             all_locations, location_ids, location_names, created_at, updated_at)
+        VALUES
+            (CAST(:id AS UUID), :name, :editor, :version, :app_link, :owner_email, :owner_name,
+             :all_locations, CAST(:location_ids AS JSONB), CAST(:location_names AS JSONB), NOW(), NOW())
+    """), {
+        "id": aid,
+        "name": data.get("name", ""),
+        "editor": data.get("editor", ""),
+        "version": data.get("version", ""),
+        "app_link": data.get("app_link", ""),
+        "owner_email": data.get("owner_email", ""),
+        "owner_name": data.get("owner_name", ""),
+        "all_locations": bool(all_locations),
+        "location_ids": json.dumps(data.get("location_ids") or []),
+        "location_names": json.dumps(data.get("location_names") or []),
+    })
+    await db.commit()
+    return {"status": "ok", "id": aid}
+
+@router.put("/applications/{aid}")
+async def update_application(aid: str, data: dict, db: AsyncSession = Depends(get_db)):
+    all_locations = data.get("all_locations")
+    if all_locations is None:
+        all_locations = not data.get("location_ids")
+    await db.execute(text("""
+        UPDATE it_applications SET
+            name           = COALESCE(NULLIF(:name,''), name),
+            editor         = :editor,
+            version        = :version,
+            app_link       = :app_link,
+            owner_email    = :owner_email,
+            owner_name     = :owner_name,
+            all_locations  = :all_locations,
+            location_ids   = CAST(:location_ids AS JSONB),
+            location_names = CAST(:location_names AS JSONB),
+            updated_at     = NOW()
+        WHERE id = CAST(:id AS UUID)
+    """), {
+        "id": aid,
+        "name": data.get("name", ""),
+        "editor": data.get("editor", ""),
+        "version": data.get("version", ""),
+        "app_link": data.get("app_link", ""),
+        "owner_email": data.get("owner_email", ""),
+        "owner_name": data.get("owner_name", ""),
+        "all_locations": bool(all_locations),
+        "location_ids": json.dumps(data.get("location_ids") or []),
+        "location_names": json.dumps(data.get("location_names") or []),
+    })
+    await db.commit()
+    return {"status": "ok"}
+
+@router.delete("/applications/{aid}")
+async def delete_application(aid: str, db: AsyncSession = Depends(get_db)):
+    await db.execute(text("DELETE FROM it_applications WHERE id = CAST(:id AS UUID)"), {"id": aid})
+    await db.commit()
+    return {"status": "ok"}
+
+# ─── Saved report views (Equipment / Software / Application) ──────────────────
+@router.get("/report-views")
+async def list_report_views(module: str, user_email: str, db: AsyncSession = Depends(get_db)):
+    r = await db.execute(text("""
+        SELECT * FROM it_report_views
+        WHERE module = :module AND user_email = :user_email
+        ORDER BY name ASC
+    """), {"module": module, "user_email": user_email})
+    result = [_stringify_row(dict(row._mapping)) for row in r.fetchall()]
+    return {"views": result}
+
+@router.post("/report-views")
+async def create_report_view(data: dict, db: AsyncSession = Depends(get_db)):
+    vid = str(uuid.uuid4())
+    await db.execute(text("""
+        INSERT INTO it_report_views
+            (id, user_email, module, name, columns, filters, sort_field, sort_dir, created_at, updated_at)
+        VALUES
+            (CAST(:id AS UUID), :user_email, :module, :name, CAST(:columns AS JSONB), CAST(:filters AS JSONB),
+             :sort_field, :sort_dir, NOW(), NOW())
+    """), {
+        "id": vid,
+        "user_email": data.get("user_email", ""),
+        "module": data.get("module", ""),
+        "name": data.get("name", ""),
+        "columns": json.dumps(data.get("columns") or []),
+        "filters": json.dumps(data.get("filters") or {}),
+        "sort_field": data.get("sort_field") or "",
+        "sort_dir": data.get("sort_dir") or "asc",
+    })
+    await db.commit()
+    return {"status": "ok", "id": vid}
+
+@router.put("/report-views/{vid}")
+async def update_report_view(vid: str, data: dict, db: AsyncSession = Depends(get_db)):
+    await db.execute(text("""
+        UPDATE it_report_views SET
+            name       = COALESCE(NULLIF(:name,''), name),
+            columns    = CAST(:columns AS JSONB),
+            filters    = CAST(:filters AS JSONB),
+            sort_field = :sort_field,
+            sort_dir   = :sort_dir,
+            updated_at = NOW()
+        WHERE id = CAST(:id AS UUID)
+    """), {
+        "id": vid,
+        "name": data.get("name", ""),
+        "columns": json.dumps(data.get("columns") or []),
+        "filters": json.dumps(data.get("filters") or {}),
+        "sort_field": data.get("sort_field") or "",
+        "sort_dir": data.get("sort_dir") or "asc",
+    })
+    await db.commit()
+    return {"status": "ok"}
+
+@router.delete("/report-views/{vid}")
+async def delete_report_view(vid: str, db: AsyncSession = Depends(get_db)):
+    await db.execute(text("DELETE FROM it_report_views WHERE id = CAST(:id AS UUID)"), {"id": vid})
     await db.commit()
     return {"status": "ok"}

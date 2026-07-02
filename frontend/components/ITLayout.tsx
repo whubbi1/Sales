@@ -12,8 +12,9 @@ export const ITPermContext = createContext<ITPermCtx>({ canEdit: false })
 export const useITPerm = () => useContext(ITPermContext)
 
 const NAV_ITEMS = [
-  { href: '/it/equipments', label: 'Equipments', icon: '🖥️' },
-  { href: '/it/software',   label: 'Software',   icon: '💿' },
+  { href: '/it/equipments',   label: 'Equipments',   icon: '🖥️' },
+  { href: '/it/software',     label: 'Software',     icon: '💿' },
+  { href: '/it/applications', label: 'Applications', icon: '🧩' },
 ]
 
 export default function ITLayout({ children }: { children: React.ReactNode }) {
