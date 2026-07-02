@@ -3,6 +3,8 @@ import { useRouter, usePathname } from 'next/navigation'
 import { useEffect, useRef, useState } from 'react'
 import { getStoredUser, clearStoredUser } from '@/lib/auth'
 
+const API = 'https://api.whubbi.wcomply.com'
+
 const NAV = [
   { href: '/rh',             icon: '📊', label: 'Dashboard' },
   { href: '/rh/freelancers', icon: '🔗', label: 'Freelancers' },
@@ -22,6 +24,7 @@ export function HRLayout({ children }: { children: React.ReactNode }) {
   const redirecting = useRef(false)
   const [userEmail, setUserEmail] = useState('')
   const [userName,  setUserName]  = useState('')
+  const [canTrainingPlan, setCanTrainingPlan] = useState(false)
 
   useEffect(() => {
     const user = getStoredUser()
@@ -34,6 +37,14 @@ export function HRLayout({ children }: { children: React.ReactNode }) {
     }
     setUserEmail(user.email)
     setUserName(user.name)
+
+    fetch(`${API}/settings/permissions/${encodeURIComponent(user.email)}`)
+      .then(r => r.json())
+      .then(d => {
+        const p = d.permissions?.hr?.training_plan
+        setCanTrainingPlan(!!p && p.access_mode !== 'none')
+      })
+      .catch(() => {})
   }, [])
 
   const handleSignOut = () => {
@@ -63,7 +74,7 @@ export function HRLayout({ children }: { children: React.ReactNode }) {
         </div>
 
         <nav style={{ flex: 1, padding: '10px 8px', overflowY: 'auto' }}>
-          {[...NAV, ...HR_MANAGER_NAV].map(item => {
+          {[...NAV, ...HR_MANAGER_NAV, ...(canTrainingPlan ? [{ href: '/rh/training-plan', icon: '🎓', label: 'Training Plan' }] : [])].map(item => {
             const active = path === item.href || (item.href !== '/rh' && path.startsWith(item.href))
             return (
               <button key={item.href} onClick={() => router.push(item.href)} style={btnStyle(active)}>

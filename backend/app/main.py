@@ -614,6 +614,44 @@ async def startup():
                     created_at TIMESTAMP DEFAULT NOW(),
                     updated_at TIMESTAMP DEFAULT NOW()
                 )""",
+
+                # Personal Profile — Training, Certifications, HR Training Plan
+                """CREATE TABLE IF NOT EXISTS trainings (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    user_email VARCHAR(255) NOT NULL,
+                    training_date DATE,
+                    name VARCHAR(255) NOT NULL,
+                    file_ref TEXT,
+                    file_name VARCHAR(255),
+                    description TEXT,
+                    plan_id UUID,
+                    created_at TIMESTAMP DEFAULT NOW(),
+                    updated_at TIMESTAMP DEFAULT NOW()
+                )""",
+                """CREATE TABLE IF NOT EXISTS certifications (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    user_email VARCHAR(255) NOT NULL,
+                    cert_date DATE,
+                    name VARCHAR(255) NOT NULL,
+                    file_ref TEXT,
+                    file_name VARCHAR(255),
+                    description TEXT,
+                    created_at TIMESTAMP DEFAULT NOW(),
+                    updated_at TIMESTAMP DEFAULT NOW()
+                )""",
+                """CREATE TABLE IF NOT EXISTS training_plans (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    user_email VARCHAR(255) NOT NULL,
+                    training_name VARCHAR(255) NOT NULL,
+                    description TEXT,
+                    due_date DATE,
+                    status VARCHAR(20) DEFAULT 'assigned',
+                    assigned_by_email VARCHAR(255),
+                    assigned_by_name VARCHAR(255),
+                    completed_training_id UUID,
+                    created_at TIMESTAMP DEFAULT NOW(),
+                    updated_at TIMESTAMP DEFAULT NOW()
+                )""",
             ]
             for sql in sqls:
                 try:
@@ -683,6 +721,7 @@ _include("app.routers.legal",          "/legal",        "Legal")
 _include("app.routers.development",    "/development",  "Development")
 _include("app.routers.it",             "/it",           "IT")
 _include("app.routers.cv",             "/cv",           "CV")
+_include("app.routers.training",       "/training",     "Training")
 
 try:
     from app.routers import auth, outlook, copilot
