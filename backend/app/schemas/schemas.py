@@ -1,5 +1,5 @@
 # backend/app/schemas/schemas.py
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from typing import Optional, List
 from datetime import datetime
 from uuid import UUID
@@ -103,6 +103,13 @@ class ContactBase(BaseModel):
     subscriptions: Optional[List[str]] = []
     assigned_to: Optional[str] = None
     notes: Optional[str] = None
+
+    @field_validator("job_type", "lead_status", mode="before")
+    @classmethod
+    def _blank_enum_to_none(cls, v):
+        # job_type/lead_status map to Postgres enum columns that reject '' —
+        # the frontend sends '' for "no selection" instead of omitting the field.
+        return v or None
 
 class ContactCreate(ContactBase):
     pass
