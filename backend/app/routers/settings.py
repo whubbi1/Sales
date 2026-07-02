@@ -115,7 +115,7 @@ async def sync_user_from_ms(email: str, db: AsyncSession) -> dict:
             "ms_licenses": licenses,
             "ms_groups": groups,
             "ms_roles": roles,
-            "last_sync": datetime.utcnow().isoformat(),
+            "last_sync": datetime.utcnow(),
         }
 
         # Upsert to DB
