@@ -4,7 +4,8 @@ import TrainingLayout, { useTrainingPerm } from '@/components/TrainingLayout'
 
 const API = 'https://api.whubbi.wcomply.com'
 const TRAINING_TYPES = ['wcomply', 'external']
-const TYPE_LABEL: Record<string, string> = { wcomply: 'wComply', external: 'External' }
+const TYPE_LABEL: Record<string, string> = { wcomply: 'WCOMPLY', external: 'External' }
+const TRAINING_LANGUAGES = ['English', 'French', 'Portuguese', 'Czech', 'Romanian', 'Spanish']
 
 const inp: React.CSSProperties = {
   fontSize: '12px', padding: '7px 11px', border: '1px solid #E2E8F0',
@@ -15,7 +16,20 @@ const lbl: React.CSSProperties = {
   marginBottom: '4px', textTransform: 'uppercase' as const, letterSpacing: '0.05em',
 }
 
-const EMPTY_FORM = { training_type: 'wcomply', company: '', title: '', description: '', duration: '', material_link: '' }
+const EMPTY_FORM = { training_type: 'wcomply', company: '', title: '', description: '', duration: '', material_link: '', languages: [] as string[] }
+
+function LanguageChecklist({ selected, onToggle }: { selected: string[]; onToggle: (lang: string) => void }) {
+  return (
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+      {TRAINING_LANGUAGES.map(l => (
+        <label key={l} style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '4px 8px', background: selected.includes(l) ? '#EFF6FF' : '#F8FAFC', border: `1px solid ${selected.includes(l) ? '#156082' : '#E2E8F0'}`, borderRadius: '14px', fontSize: '11px', cursor: 'pointer', color: selected.includes(l) ? '#156082' : '#64748B' }}>
+          <input type="checkbox" checked={selected.includes(l)} onChange={() => onToggle(l)} style={{ margin: 0 }} />
+          {l}
+        </label>
+      ))}
+    </div>
+  )
+}
 
 function EditableCell({ display, editing, onStartEdit, children }: any) {
   return editing ? children : (
@@ -31,7 +45,8 @@ function EditableCell({ display, editing, onStartEdit, children }: any) {
 function NewTrainingModal({ onClose, onSave }: any) {
   const [form, setForm] = useState<any>(EMPTY_FORM)
   const [saving, setSaving] = useState(false)
-  const valid = form.company.trim() && form.title.trim() && form.duration.trim()
+  const valid = form.company.trim() && form.title.trim() && form.duration.trim() && form.languages.length > 0
+  const toggleLang = (lang: string) => setForm((f: any) => ({ ...f, languages: f.languages.includes(lang) ? f.languages.filter((l: string) => l !== lang) : [...f.languages, lang] }))
   const submit = async () => {
     if (!valid) return
     setSaving(true)
@@ -77,6 +92,10 @@ function NewTrainingModal({ onClose, onSave }: any) {
             <label style={lbl}>Description</label>
             <textarea style={{ ...inp, width: '100%', boxSizing: 'border-box' as const, minHeight: '70px', resize: 'vertical' }} value={form.description} onChange={e => setForm((f: any) => ({ ...f, description: e.target.value }))} />
           </div>
+          <div>
+            <label style={lbl}>Languages *</label>
+            <LanguageChecklist selected={form.languages} onToggle={toggleLang} />
+          </div>
           <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
             <button onClick={onClose} style={{ padding: '9px 18px', background: '#F1F5F9', color: '#64748B', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '700', fontFamily: 'Montserrat, sans-serif' }}>Cancel</button>
             <button onClick={submit} disabled={saving || !valid}
@@ -86,6 +105,32 @@ function NewTrainingModal({ onClose, onSave }: any) {
           </div>
         </div>
       </div>
+    </div>
+  )
+}
+
+function EditableLanguages({ item, editing, onStartEdit, onSave }: any) {
+  const [draft, setDraft] = useState<string[]>(item.languages || [])
+  useEffect(() => { setDraft(item.languages || []) }, [editing])
+  const toggle = (lang: string) => setDraft(d => d.includes(lang) ? d.filter(l => l !== lang) : [...d, lang])
+
+  if (!editing) {
+    return (
+      <div onClick={onStartEdit} title="Click to edit"
+        style={{ fontSize: '12px', color: '#3F3F3F', cursor: 'pointer', padding: '4px 6px', margin: '-4px -6px', borderRadius: '5px', minHeight: '18px' }}
+        onMouseEnter={e => (e.currentTarget.style.background = '#F1F5F9')}
+        onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
+        {(item.languages || []).length > 0 ? item.languages.join(', ') : <span style={{ color: '#94A3B8' }}>—</span>}
+      </div>
+    )
+  }
+  return (
+    <div style={{ minWidth: '220px' }}>
+      <LanguageChecklist selected={draft} onToggle={toggle} />
+      <button onClick={() => onSave(draft)} disabled={draft.length === 0}
+        style={{ marginTop: '6px', padding: '4px 10px', background: draft.length === 0 ? '#94A3B8' : '#156082', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '11px', fontWeight: '700', fontFamily: 'Montserrat, sans-serif' }}>
+        Done
+      </button>
     </div>
   )
 }
@@ -118,7 +163,7 @@ function CatalogueContent() {
   const patchItem = async (item: any, fields: any) => {
     await fetch(`${API}/training/catalog/${item.id}`, {
       method: 'PUT', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ training_type: item.training_type, company: item.company, title: item.title, description: item.description, duration: item.duration, material_link: item.material_link, ...fields }),
+      body: JSON.stringify({ training_type: item.training_type, company: item.company, title: item.title, description: item.description, duration: item.duration, material_link: item.material_link, languages: item.languages || [], ...fields }),
     })
     setEditing(null)
     load()
@@ -152,16 +197,16 @@ function CatalogueContent() {
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
           <thead style={{ background: '#FAFBFC' }}>
             <tr>
-              {['ID', 'Type', 'Company', 'Title', 'Description', 'Duration', 'Material Link', canEdit ? '' : null].filter(x => x !== null).map(h => (
+              {['ID', 'Type', 'Company', 'Title', 'Description', 'Duration', 'Languages', 'Material Link', canEdit ? '' : null].filter(x => x !== null).map(h => (
                 <th key={h as string} style={{ padding: '10px 12px', textAlign: 'left', fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#45B6E4', borderBottom: '1px solid #EDF2F7', whiteSpace: 'nowrap' }}>{h}</th>
               ))}
             </tr>
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={8} style={{ textAlign: 'center', padding: '48px', color: '#45B6E4' }}>Loading…</td></tr>
+              <tr><td colSpan={9} style={{ textAlign: 'center', padding: '48px', color: '#45B6E4' }}>Loading…</td></tr>
             ) : filtered.length === 0 ? (
-              <tr><td colSpan={8} style={{ textAlign: 'center', padding: '48px', color: '#94A3B8' }}>No trainings in the catalogue yet.</td></tr>
+              <tr><td colSpan={9} style={{ textAlign: 'center', padding: '48px', color: '#94A3B8' }}>No trainings in the catalogue yet.</td></tr>
             ) : filtered.map(item => (
               <tr key={item.id} style={{ borderBottom: '1px solid #F1F5F9' }}>
                 <td style={{ padding: '10px 12px', color: '#94A3B8', fontFamily: 'monospace', fontSize: '11px' }} title={item.id}>{item.id.slice(0, 8)}</td>
@@ -192,6 +237,11 @@ function CatalogueContent() {
                   <EditableCell display={item.duration} editing={isEditing(item.id, 'duration')} onStartEdit={() => canEdit && setEditing({ id: item.id, field: 'duration' })}>
                     <input autoFocus style={inp} defaultValue={item.duration} onBlur={e => patchItem(item, { duration: e.target.value })} onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }} />
                   </EditableCell>
+                </td>
+                <td style={{ padding: '10px 12px', minWidth: '160px' }}>
+                  <EditableLanguages item={item} editing={isEditing(item.id, 'languages')}
+                    onStartEdit={() => canEdit && setEditing({ id: item.id, field: 'languages' })}
+                    onSave={(langs: string[]) => patchItem(item, { languages: langs })} />
                 </td>
                 <td style={{ padding: '10px 12px', minWidth: '140px' }}>
                   <EditableCell display={item.material_link ? <a href={item.material_link} target="_blank" rel="noopener noreferrer" style={{ color: '#3B82F6' }} onClick={e => e.stopPropagation()}>🔗 Link</a> : null}

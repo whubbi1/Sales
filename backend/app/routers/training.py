@@ -146,10 +146,12 @@ async def delete_certification(email: str, cid: str, db: AsyncSession = Depends(
 
 # ─── Training Catalogue ─────────────────────────────────────────────────────────
 TRAINING_TYPES = ['wcomply', 'external']
+TRAINING_TYPE_LABELS = {'wcomply': 'WCOMPLY', 'external': 'External'}
+TRAINING_LANGUAGES = ['English', 'French', 'Portuguese', 'Czech', 'Romanian', 'Spanish']
 
 @router.get("/meta")
 async def get_meta():
-    return {"training_types": TRAINING_TYPES}
+    return {"training_types": TRAINING_TYPES, "training_type_labels": TRAINING_TYPE_LABELS, "training_languages": TRAINING_LANGUAGES}
 
 @router.get("/catalog")
 async def list_catalog(db: AsyncSession = Depends(get_db)):
@@ -160,8 +162,8 @@ async def list_catalog(db: AsyncSession = Depends(get_db)):
 async def create_catalog_item(data: dict, db: AsyncSession = Depends(get_db)):
     cid = str(uuid.uuid4())
     await db.execute(text("""
-        INSERT INTO training_catalog (id, training_type, company, title, description, duration, material_link, created_at, updated_at)
-        VALUES (CAST(:id AS UUID), :training_type, :company, :title, :description, :duration, :material_link, NOW(), NOW())
+        INSERT INTO training_catalog (id, training_type, company, title, description, duration, material_link, languages, created_at, updated_at)
+        VALUES (CAST(:id AS UUID), :training_type, :company, :title, :description, :duration, :material_link, CAST(:languages AS JSON), NOW(), NOW())
     """), {
         "id": cid,
         "training_type": data.get("training_type") or "wcomply",
@@ -170,23 +172,14 @@ async def create_catalog_item(data: dict, db: AsyncSession = Depends(get_db)):
         "description": data.get("description", ""),
         "duration": data.get("duration", ""),
         "material_link": data.get("material_link", ""),
+        "languages": json.dumps(data.get("languages") or []),
     })
     await db.commit()
     return {"status": "ok", "id": cid}
 
 @router.put("/catalog/{cid}")
 async def update_catalog_item(cid: str, data: dict, db: AsyncSession = Depends(get_db)):
-    await db.execute(text("""
-        UPDATE training_catalog SET
-            training_type = COALESCE(NULLIF(:training_type,''), training_type),
-            company = COALESCE(NULLIF(:company,''), company),
-            title = COALESCE(NULLIF(:title,''), title),
-            description = :description,
-            duration = COALESCE(NULLIF(:duration,''), duration),
-            material_link = :material_link,
-            updated_at = NOW()
-        WHERE id = CAST(:id AS UUID)
-    """), {
+    params = {
         "id": cid,
         "training_type": data.get("training_type", ""),
         "company": data.get("company", ""),
@@ -194,7 +187,22 @@ async def update_catalog_item(cid: str, data: dict, db: AsyncSession = Depends(g
         "description": data.get("description", ""),
         "duration": data.get("duration", ""),
         "material_link": data.get("material_link", ""),
-    })
+    }
+    lang_set = "languages = CAST(:languages AS JSON)," if "languages" in data else ""
+    if "languages" in data:
+        params["languages"] = json.dumps(data.get("languages") or [])
+    await db.execute(text(f"""
+        UPDATE training_catalog SET
+            training_type = COALESCE(NULLIF(:training_type,''), training_type),
+            company = COALESCE(NULLIF(:company,''), company),
+            title = COALESCE(NULLIF(:title,''), title),
+            description = :description,
+            duration = COALESCE(NULLIF(:duration,''), duration),
+            material_link = :material_link,
+            {lang_set}
+            updated_at = NOW()
+        WHERE id = CAST(:id AS UUID)
+    """), params)
     await db.commit()
     return {"status": "ok"}
 
@@ -211,9 +219,10 @@ async def list_plans(db: AsyncSession = Depends(get_db)):
     plans = [_stringify_ids(dict(row._mapping)) for row in r.fetchall()]
     for p in plans:
         ir = await db.execute(text("""
-            SELECT tpi.id AS item_id, tc.* FROM training_plan_items tpi
+            SELECT tpi.id AS item_id, tpi.sequence AS sequence, tc.* FROM training_plan_items tpi
             JOIN training_catalog tc ON tc.id = tpi.catalog_id
             WHERE tpi.plan_id = CAST(:pid AS UUID)
+            ORDER BY tpi.sequence ASC
         """), {"pid": p["id"]})
         p["trainings"] = [_stringify_ids(dict(row._mapping)) for row in ir.fetchall()]
     return {"plans": plans}
@@ -225,11 +234,11 @@ async def create_plan(data: dict, db: AsyncSession = Depends(get_db)):
         INSERT INTO training_plans (id, training_function, description, created_at, updated_at)
         VALUES (CAST(:id AS UUID), :training_function, :description, NOW(), NOW())
     """), {"id": pid, "training_function": data.get("training_function", ""), "description": data.get("description", "")})
-    for catalog_id in (data.get("catalog_ids") or []):
+    for item in (data.get("items") or []):
         await db.execute(text("""
-            INSERT INTO training_plan_items (id, plan_id, catalog_id, created_at)
-            VALUES (gen_random_uuid(), CAST(:pid AS UUID), CAST(:cid AS UUID), NOW())
-        """), {"pid": pid, "cid": catalog_id})
+            INSERT INTO training_plan_items (id, plan_id, catalog_id, sequence, created_at)
+            VALUES (gen_random_uuid(), CAST(:pid AS UUID), CAST(:cid AS UUID), :sequence, NOW())
+        """), {"pid": pid, "cid": item.get("catalog_id"), "sequence": item.get("sequence", 0)})
     await db.commit()
     return {"status": "ok", "id": pid}
 
@@ -255,9 +264,16 @@ async def delete_plan(pid: str, db: AsyncSession = Depends(get_db)):
 @router.post("/plans/{pid}/items")
 async def add_plan_item(pid: str, data: dict, db: AsyncSession = Depends(get_db)):
     await db.execute(text("""
-        INSERT INTO training_plan_items (id, plan_id, catalog_id, created_at)
-        VALUES (gen_random_uuid(), CAST(:pid AS UUID), CAST(:cid AS UUID), NOW())
-    """), {"pid": pid, "cid": data.get("catalog_id")})
+        INSERT INTO training_plan_items (id, plan_id, catalog_id, sequence, created_at)
+        VALUES (gen_random_uuid(), CAST(:pid AS UUID), CAST(:cid AS UUID), :sequence, NOW())
+    """), {"pid": pid, "cid": data.get("catalog_id"), "sequence": data.get("sequence", 0)})
+    await db.commit()
+    return {"status": "ok"}
+
+@router.put("/plans/{pid}/items/{item_id}")
+async def update_plan_item(pid: str, item_id: str, data: dict, db: AsyncSession = Depends(get_db)):
+    await db.execute(text("UPDATE training_plan_items SET sequence = :sequence WHERE id = CAST(:id AS UUID) AND plan_id = CAST(:pid AS UUID)"),
+                      {"id": item_id, "pid": pid, "sequence": data.get("sequence", 0)})
     await db.commit()
     return {"status": "ok"}
 

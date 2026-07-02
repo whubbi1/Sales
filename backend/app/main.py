@@ -684,6 +684,8 @@ async def startup():
                     catalog_id UUID NOT NULL,
                     created_at TIMESTAMP DEFAULT NOW()
                 )""",
+                "ALTER TABLE training_catalog ADD COLUMN IF NOT EXISTS languages JSON DEFAULT '[]'",
+                "ALTER TABLE training_plan_items ADD COLUMN IF NOT EXISTS sequence INTEGER NOT NULL DEFAULT 0",
             ]
             for sql in sqls:
                 try:

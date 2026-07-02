@@ -30,9 +30,15 @@ function EditableField({ label, display, editing, onStartEdit, children }: any) 
 }
 
 function NewPlanModal({ catalog, onClose, onSave }: any) {
-  const [form, setForm] = useState({ training_function: '', description: '', catalog_ids: [] as string[] })
+  const [form, setForm] = useState<{ training_function: string; description: string; items: { catalog_id: string; sequence: number }[] }>({ training_function: '', description: '', items: [] })
   const [saving, setSaving] = useState(false)
-  const toggle = (id: string) => setForm(f => ({ ...f, catalog_ids: f.catalog_ids.includes(id) ? f.catalog_ids.filter(c => c !== id) : [...f.catalog_ids, id] }))
+  const isSelected = (id: string) => form.items.some(i => i.catalog_id === id)
+  const toggle = (id: string) => setForm(f => {
+    if (f.items.some(i => i.catalog_id === id)) return { ...f, items: f.items.filter(i => i.catalog_id !== id) }
+    const nextSeq = f.items.length > 0 ? Math.max(...f.items.map(i => i.sequence)) + 1 : 1
+    return { ...f, items: [...f.items, { catalog_id: id, sequence: nextSeq }] }
+  })
+  const setSeq = (id: string, sequence: number) => setForm(f => ({ ...f, items: f.items.map(i => i.catalog_id === id ? { ...i, sequence } : i) }))
   const submit = async () => {
     if (!form.training_function.trim()) return
     setSaving(true)
@@ -57,18 +63,27 @@ function NewPlanModal({ catalog, onClose, onSave }: any) {
             <textarea style={{ ...inp, width: '100%', boxSizing: 'border-box' as const, minHeight: '60px', resize: 'vertical' }} value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} />
           </div>
           <div>
-            <label style={lbl}>Assigned Trainings</label>
+            <label style={lbl}>Assigned Trainings — Training Sequence *</label>
             {catalog.length === 0 ? (
               <p style={{ fontSize: '12px', color: '#94A3B8' }}>No trainings in the catalogue yet — create some first.</p>
             ) : (
-              <div style={{ maxHeight: '200px', overflowY: 'auto', border: '1px solid #EDF2F7', borderRadius: '8px' }}>
-                {catalog.map((c: any) => (
-                  <label key={c.id} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 12px', borderBottom: '1px solid #F1F5F9', fontSize: '12px', cursor: 'pointer' }}>
-                    <input type="checkbox" checked={form.catalog_ids.includes(c.id)} onChange={() => toggle(c.id)} />
-                    <span style={{ fontWeight: '600' }}>{c.title}</span>
-                    <span style={{ color: '#94A3B8' }}>· {c.company} · {c.duration}</span>
-                  </label>
-                ))}
+              <div style={{ maxHeight: '220px', overflowY: 'auto', border: '1px solid #EDF2F7', borderRadius: '8px' }}>
+                {catalog.map((c: any) => {
+                  const item = form.items.find(i => i.catalog_id === c.id)
+                  return (
+                    <div key={c.id} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 12px', borderBottom: '1px solid #F1F5F9', fontSize: '12px' }}>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', flex: 1 }}>
+                        <input type="checkbox" checked={isSelected(c.id)} onChange={() => toggle(c.id)} />
+                        <span style={{ fontWeight: '600' }}>{c.title}</span>
+                        <span style={{ color: '#94A3B8' }}>· {c.company} · {c.duration}</span>
+                      </label>
+                      {item && (
+                        <input type="number" min={1} style={{ ...inp, width: '56px', flexShrink: 0 }} value={item.sequence}
+                          onChange={e => setSeq(c.id, parseInt(e.target.value) || 1)} title="Sequence" />
+                      )}
+                    </div>
+                  )
+                })}
               </div>
             )}
           </div>
@@ -94,6 +109,8 @@ function PlansContent() {
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [editing, setEditing] = useState<{ id: string; field: string } | null>(null)
   const [addingCatalogId, setAddingCatalogId] = useState('')
+  const [addingSequence, setAddingSequence] = useState(1)
+  const [editingSeq, setEditingSeq] = useState<string | null>(null)
 
   useEffect(() => { load() }, [])
 
@@ -132,14 +149,23 @@ function PlansContent() {
   const addTrainingToPlan = async (plan: any) => {
     if (!addingCatalogId) return
     await fetch(`${API}/training/plans/${plan.id}/items`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ catalog_id: addingCatalogId }),
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ catalog_id: addingCatalogId, sequence: addingSequence }),
     })
     setAddingCatalogId('')
+    setAddingSequence(1)
     load()
   }
 
   const removeTrainingFromPlan = async (plan: any, itemId: string) => {
     await fetch(`${API}/training/plans/${plan.id}/items/${itemId}`, { method: 'DELETE' })
+    load()
+  }
+
+  const updateItemSequence = async (plan: any, itemId: string, sequence: number) => {
+    await fetch(`${API}/training/plans/${plan.id}/items/${itemId}`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sequence }),
+    })
+    setEditingSeq(null)
     load()
   }
 
@@ -184,7 +210,11 @@ function PlansContent() {
                     <div style={{ fontSize: '11px', color: '#94A3B8', marginTop: '6px' }}>📋 {(plan.trainings || []).length} training{(plan.trainings || []).length !== 1 ? 's' : ''}</div>
                   </div>
                   <div style={{ display: 'flex', gap: '8px', flexShrink: 0 }}>
-                    <button onClick={() => setExpandedId(isExpanded ? null : plan.id)} style={{ padding: '6px 12px', background: '#F1F5F9', border: 'none', borderRadius: '7px', cursor: 'pointer', fontSize: '11px', color: '#64748B', fontFamily: 'Montserrat, sans-serif', fontWeight: '600' }}>
+                    <button onClick={() => {
+                      setExpandedId(isExpanded ? null : plan.id)
+                      const maxSeq = (plan.trainings || []).reduce((m: number, t: any) => Math.max(m, t.sequence || 0), 0)
+                      setAddingSequence(maxSeq + 1)
+                    }} style={{ padding: '6px 12px', background: '#F1F5F9', border: 'none', borderRadius: '7px', cursor: 'pointer', fontSize: '11px', color: '#64748B', fontFamily: 'Montserrat, sans-serif', fontWeight: '600' }}>
                       {isExpanded ? '▲ Collapse' : '▼ Trainings'}
                     </button>
                     {canEdit && (
@@ -201,7 +231,19 @@ function PlansContent() {
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '12px' }}>
                         {plan.trainings.map((t: any) => (
                           <div key={t.item_id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', background: 'white', borderRadius: '8px', border: '1px solid #EDF2F7' }}>
-                            <span style={{ fontSize: '12px' }}><strong>{t.title}</strong> · {t.company} · {t.duration}</span>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                              {editingSeq === t.item_id ? (
+                                <input type="number" min={1} autoFocus style={{ ...inp, width: '48px' }} defaultValue={t.sequence}
+                                  onBlur={e => updateItemSequence(plan, t.item_id, parseInt(e.target.value) || 1)}
+                                  onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }} />
+                              ) : (
+                                <span onClick={() => canEdit && setEditingSeq(t.item_id)} title="Click to edit sequence"
+                                  style={{ width: '24px', height: '24px', borderRadius: '50%', background: '#EFF6FF', color: '#156082', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px', fontWeight: '800', cursor: canEdit ? 'pointer' : 'default', flexShrink: 0 }}>
+                                  {t.sequence ?? '—'}
+                                </span>
+                              )}
+                              <span style={{ fontSize: '12px' }}><strong>{t.title}</strong> · {t.company} · {t.duration}</span>
+                            </div>
                             {canEdit && (
                               <button onClick={() => removeTrainingFromPlan(plan, t.item_id)} style={{ padding: '3px 9px', background: '#FEF2F2', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '10px', color: '#EF4444', fontWeight: '700', fontFamily: 'Montserrat, sans-serif' }}>Remove</button>
                             )}
@@ -210,11 +252,13 @@ function PlansContent() {
                       </div>
                     )}
                     {canEdit && availableToAdd.length > 0 && (
-                      <div style={{ display: 'flex', gap: '8px' }}>
+                      <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                         <select style={{ ...inp, flex: 1 }} value={addingCatalogId} onChange={e => setAddingCatalogId(e.target.value)}>
                           <option value="">Add a training…</option>
                           {availableToAdd.map(c => <option key={c.id} value={c.id}>{c.title} · {c.company}</option>)}
                         </select>
+                        <input type="number" min={1} style={{ ...inp, width: '70px' }} value={addingSequence} title="Sequence"
+                          onChange={e => setAddingSequence(parseInt(e.target.value) || 1)} />
                         <button onClick={() => addTrainingToPlan(plan)} disabled={!addingCatalogId} style={{ padding: '7px 14px', background: addingCatalogId ? '#156082' : '#94A3B8', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '700', fontFamily: 'Montserrat, sans-serif' }}>+ Add</button>
                       </div>
                     )}
