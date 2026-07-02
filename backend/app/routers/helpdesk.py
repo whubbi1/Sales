@@ -229,14 +229,27 @@ async def update_ticket(tid:str,data:dict,db:AsyncSession=Depends(get_db)):
             status=COALESCE(NULLIF(:status,''),status),
             priority=COALESCE(NULLIF(:priority,''),priority),
             ticket_type=COALESCE(NULLIF(:ticket_type,''),ticket_type),
+            category_id=CASE WHEN :category_id='' THEN category_id WHEN :category_id='__clear__' THEN NULL ELSE CAST(:category_id AS uuid) END,
+            subcategory_id=CASE WHEN :subcategory_id='' THEN subcategory_id WHEN :subcategory_id='__clear__' THEN NULL ELSE CAST(:subcategory_id AS uuid) END,
             assignee_email=COALESCE(NULLIF(:assignee_email,''),assignee_email),
             assignee_name=COALESCE(NULLIF(:assignee_name,''),assignee_name),
-            group_id=CASE WHEN :group_id='' THEN group_id ELSE CAST(:group_id AS uuid) END,
+            group_id=CASE WHEN :group_id='' THEN group_id WHEN :group_id='__clear__' THEN NULL ELSE CAST(:group_id AS uuid) END,
             resolution=COALESCE(NULLIF(:resolution,''),resolution),
             resolved_at=CASE WHEN :status IN ('resolved','closed') AND resolved_at IS NULL THEN NOW() ELSE resolved_at END,
             updated_at=NOW()
         WHERE id=CAST(:id AS uuid)
-    """),{**{k:v or '' for k,v in data.items()},"id":tid,"group_id":data.get("group_id","")})
+    """),{
+        "id":tid,
+        "status":data.get("status") or "",
+        "priority":data.get("priority") or "",
+        "ticket_type":data.get("ticket_type") or "",
+        "category_id":data.get("category_id") or "",
+        "subcategory_id":data.get("subcategory_id") or "",
+        "assignee_email":data.get("assignee_email") or "",
+        "assignee_name":data.get("assignee_name") or "",
+        "group_id":data.get("group_id") or "",
+        "resolution":data.get("resolution") or "",
+    })
     await db.commit()
 
     # Create Teams chat when assignee is set/changed

@@ -4,6 +4,26 @@ import { useState, useEffect } from 'react'
 import HelpdeskLayout from '@/components/HelpdeskLayout'
 import { API, STATUS_STYLE, PRIORITY_STYLE, BTN } from '../../constants'
 
+function EditableField({ label, display, editing, onStartEdit, children }: any) {
+  return (
+    <div style={{ padding: '6px 0', borderBottom: '1px solid #F1F5F9' }}>
+      <div style={{ fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', color: '#45B6E4', marginBottom: '2px' }}>{label}</div>
+      {editing ? children : (
+        <div
+          onClick={onStartEdit}
+          title="Click to edit"
+          style={{ fontSize: '12px', color: '#3F3F3F', fontWeight: '500', cursor: 'pointer', padding: '3px 5px', margin: '-3px -5px', borderRadius: '5px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px' }}
+          onMouseEnter={e => (e.currentTarget.style.background = '#F8FAFC')}
+          onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+        >
+          <span>{display}</span>
+          <span style={{ opacity: 0.35, fontSize: '10px' }}>✎</span>
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function TicketDetailPage() {
   const { id } = useParams()
   const router = useRouter()
@@ -20,6 +40,8 @@ export default function TicketDetailPage() {
   const [ef, setEf] = useState<any>({})
   const [saving, setSaving] = useState(false)
   const [saveMsg, setSaveMsg] = useState<{text:string;type:'success'|'error'}|null>(null)
+  const [categories, setCategories] = useState<any[]>([])
+  const [editingField, setEditingField] = useState<string | null>(null)
 
   const TICKET_TYPE_LABELS: Record<string, string> = {
     incident_request: '🚨 Incident',
@@ -29,18 +51,23 @@ export default function TicketDetailPage() {
   }
 
   const load = async () => {
-    const [tr, gr, ti] = await Promise.all([
+    const [tr, gr, ti, cr] = await Promise.all([
       fetch(`${API}/helpdesk/tickets/${id}`).then(r => r.json()),
       fetch(`${API}/helpdesk/groups`).then(r => r.json()),
       fetch(`${API}/helpdesk/tickets/${id}/teams`).then(r => r.json()).catch(() => ({has_chat:false})),
+      fetch(`${API}/helpdesk/categories`).then(r => r.json()).catch(() => ({categories:[]})),
     ])
     setTicket(tr.ticket)
     setComments(tr.comments || [])
     setGroups(gr.groups || [])
     setTeamsInfo(ti)
+    setCategories(cr.categories || [])
     setEf({
       status: tr.ticket?.status,
+      priority: tr.ticket?.priority || '',
       ticket_type: tr.ticket?.ticket_type || '',
+      category_id: tr.ticket?.category_id || '',
+      subcategory_id: tr.ticket?.subcategory_id || '',
       assignee_email: tr.ticket?.assignee_email || '',
       assignee_name: tr.ticket?.assignee_name || '',
       resolution: tr.ticket?.resolution || '',
@@ -63,22 +90,53 @@ export default function TicketDetailPage() {
 
   const save = async () => {
     setSaving(true)
-    const r = await fetch(`${API}/helpdesk/tickets/${id}`, {
-      method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(ef)
-    })
-    const d = await r.json()
+    const ok = await patch(ef, { silent: true })
     setSaving(false); setEditing(false)
-    if (d.teams?.status === 'created') {
-      setSaveMsg({ text: '✅ Ticket updated & Teams chat created!', type: 'success' })
-    } else if (d.teams?.status === 'existing') {
-      setSaveMsg({ text: '✅ Ticket updated & requester added to Teams chat', type: 'success' })
-    } else if (d.teams?.status === 'error') {
-      setSaveMsg({ text: `⚠️ Ticket saved but Teams error: ${d.teams.message}`, type: 'error' })
-    } else {
-      setSaveMsg({ text: '✅ Ticket updated', type: 'success' })
-    }
+    if (!ok) return
+    setSaveMsg({ text: '✅ Ticket updated', type: 'success' })
     setTimeout(() => setSaveMsg(null), 5000)
-    load()
+  }
+
+  // Single-field (or partial) inline save. Merges over the full ef payload since the
+  // backend expects every field on every PUT. Returns true on success.
+  const patch = async (fields: any, opts: { silent?: boolean } = {}) => {
+    const payload = { ...ef, ...fields }
+    setEf(payload)
+    let r: Response
+    try {
+      r = await fetch(`${API}/helpdesk/tickets/${id}`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
+      })
+    } catch {
+      setSaveMsg({ text: '⚠️ Could not reach the server. Change not saved.', type: 'error' })
+      setTimeout(() => setSaveMsg(null), 6000)
+      return false
+    }
+    if (!r.ok) {
+      setSaveMsg({ text: '⚠️ Failed to save change. Please try again.', type: 'error' })
+      setTimeout(() => setSaveMsg(null), 6000)
+      return false
+    }
+    const d = await r.json()
+    if (d.status && d.status !== 'ok') {
+      setSaveMsg({ text: `⚠️ ${d.message || 'Failed to save change.'}`, type: 'error' })
+      setTimeout(() => setSaveMsg(null), 6000)
+      return false
+    }
+    if (!opts.silent) {
+      if (d.teams?.status === 'created') {
+        setSaveMsg({ text: '✅ Saved & Teams chat created!', type: 'success' })
+      } else if (d.teams?.status === 'existing') {
+        setSaveMsg({ text: '✅ Saved & requester added to Teams chat', type: 'success' })
+      } else if (d.teams?.status === 'error') {
+        setSaveMsg({ text: `⚠️ Saved but Teams error: ${d.teams.message}`, type: 'error' })
+      } else {
+        setSaveMsg({ text: '✅ Saved', type: 'success' })
+      }
+      setTimeout(() => setSaveMsg(null), 4000)
+    }
+    await load()
+    return true
   }
 
   const syncTeams = async () => {
@@ -104,6 +162,8 @@ export default function TicketDetailPage() {
   const p = PRIORITY_STYLE[ticket.priority] || PRIORITY_STYLE.medium
   const breached = ticket.sla_deadline && new Date(ticket.sla_deadline) < new Date() && !['resolved', 'closed'].includes(ticket.status)
   const selectedGroup = groups.find((g: any) => g.id === (ef.group_id || ticket.group_id))
+  const selectedCategory = categories.find((c: any) => c.id === (ef.category_id || ticket.category_id))
+  const selectFieldStyle: React.CSSProperties = { fontSize: '12px', padding: '4px 6px', borderRadius: '5px', border: '1px solid #BAE6FD', width: '100%', fontFamily: 'Montserrat, sans-serif' }
 
   return (
     <HelpdeskLayout>
@@ -169,7 +229,7 @@ export default function TicketDetailPage() {
               {editing && (
                 <div style={{ marginTop: '14px', padding: '16px', background: '#F0F9FF', borderRadius: '10px', border: '1px solid #BAE6FD', display: 'flex', flexDirection: 'column', gap: '12px' }}>
                   <div style={{ fontSize: '11px', color: '#156082', fontWeight: '600' }}>
-                    💡 Setting an assignee will automatically create a Teams chat between the requester and assignee.
+                    💡 Priority, category, subcategory and assignment can be changed directly from the boxes on the right — just click a field.
                   </div>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                     <div>
@@ -186,29 +246,6 @@ export default function TicketDetailPage() {
                         <option value="information_request">Information Request</option>
                         <option value="development_request">Development Request</option>
                       </select>
-                    </div>
-                    <div>
-                      <label className="form-label">Assign to Group</label>
-                      <select className="form-input" value={ef.group_id} onChange={e => setEf((p: any) => ({ ...p, group_id: e.target.value }))}>
-                        <option value="">No group</option>
-                        {groups.map((g: any) => <option key={g.id} value={g.id}>{g.name}</option>)}
-                      </select>
-                    </div>
-                    {selectedGroup?.members?.length > 0 && (
-                      <div>
-                        <label className="form-label">Assign to Person 💬 Teams chat will be created</label>
-                        <select className="form-input" value={ef.assignee_name} onChange={e => {
-                          const m = selectedGroup.members.find((mm: any) => mm.user_name === e.target.value)
-                          setEf((p: any) => ({ ...p, assignee_name: e.target.value, assignee_email: m?.user_email || '' }))
-                        }}>
-                          <option value="">Select person...</option>
-                          {selectedGroup.members.map((m: any) => <option key={m.user_email} value={m.user_name}>{m.user_name}{m.is_responsible ? ' ⭐' : ''}</option>)}
-                        </select>
-                      </div>
-                    )}
-                    <div>
-                      <label className="form-label">Assignee Email</label>
-                      <input className="form-input" value={ef.assignee_email} onChange={e => setEf((p: any) => ({ ...p, assignee_email: e.target.value }))} placeholder="agent@wcomply.com" />
                     </div>
                   </div>
                   {['resolved', 'closed'].includes(ef.status) && (
@@ -300,19 +337,100 @@ export default function TicketDetailPage() {
               {ticket.sla_deadline && <div style={{ fontSize: '11px', color: '#45B6E4', marginTop: '4px' }}>{new Date(ticket.sla_deadline).toLocaleString()}</div>}
             </div>
 
+            {/* Classification */}
+            <div style={{ background: 'white', borderRadius: '12px', border: '1px solid #EDF2F7', padding: '14px' }}>
+              <div style={{ fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', color: '#45B6E4', marginBottom: '10px' }}>Classification</div>
+
+              <EditableField
+                label="Priority"
+                editing={editingField === 'priority'}
+                onStartEdit={() => setEditingField('priority')}
+                display={<span style={{ textTransform: 'capitalize' }}>{ticket.priority}</span>}
+              >
+                <select autoFocus style={selectFieldStyle} value={ef.priority}
+                  onChange={e => { patch({ priority: e.target.value }); setEditingField(null) }}
+                  onBlur={() => setEditingField(null)}>
+                  {Object.keys(PRIORITY_STYLE).map(k => <option key={k} value={k}>{k[0].toUpperCase() + k.slice(1)}</option>)}
+                </select>
+              </EditableField>
+
+              <EditableField
+                label="Category"
+                editing={editingField === 'category'}
+                onStartEdit={() => setEditingField('category')}
+                display={ticket.category_name ? `${ticket.category_icon || ''} ${ticket.category_name}` : '—'}
+              >
+                <select autoFocus style={selectFieldStyle} value={ef.category_id}
+                  onChange={e => { patch({ category_id: e.target.value || '__clear__', subcategory_id: '__clear__' }); setEditingField(null) }}
+                  onBlur={() => setEditingField(null)}>
+                  <option value="">No category</option>
+                  {categories.map((c: any) => <option key={c.id} value={c.id}>{c.icon} {c.name}</option>)}
+                </select>
+              </EditableField>
+
+              {selectedCategory?.subcategories?.length > 0 && (
+                <EditableField
+                  label="Subcategory"
+                  editing={editingField === 'subcategory'}
+                  onStartEdit={() => setEditingField('subcategory')}
+                  display={ticket.subcategory_name || '—'}
+                >
+                  <select autoFocus style={selectFieldStyle} value={ef.subcategory_id}
+                    onChange={e => { patch({ subcategory_id: e.target.value || '__clear__' }); setEditingField(null) }}
+                    onBlur={() => setEditingField(null)}>
+                    <option value="">No subcategory</option>
+                    {selectedCategory.subcategories.map((sc: any) => <option key={sc.id} value={sc.id}>{sc.name}</option>)}
+                  </select>
+                </EditableField>
+              )}
+            </div>
+
             {/* Assignment */}
             <div style={{ background: 'white', borderRadius: '12px', border: '1px solid #EDF2F7', padding: '14px' }}>
               <div style={{ fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', color: '#45B6E4', marginBottom: '10px' }}>Assignment</div>
-              {[
-                { label: 'Group', value: ticket.group_name || '—' },
-                { label: 'Responsible', value: ticket.responsible_name ? `⭐ ${ticket.responsible_name}` : '—' },
-                { label: 'Assignee', value: ticket.assignee_name || ticket.assignee_email || 'Unassigned' },
-              ].map(item => (
-                <div key={item.label} style={{ padding: '6px 0', borderBottom: '1px solid #F1F5F9' }}>
-                  <div style={{ fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', color: '#45B6E4', marginBottom: '2px' }}>{item.label}</div>
-                  <div style={{ fontSize: '12px', color: '#3F3F3F', fontWeight: '500' }}>{item.value}</div>
-                </div>
-              ))}
+
+              <EditableField
+                label="Group"
+                editing={editingField === 'group'}
+                onStartEdit={() => setEditingField('group')}
+                display={ticket.group_name || '—'}
+              >
+                <select autoFocus style={selectFieldStyle} value={ef.group_id}
+                  onChange={e => { patch({ group_id: e.target.value || '__clear__' }); setEditingField(null) }}
+                  onBlur={() => setEditingField(null)}>
+                  <option value="">No group</option>
+                  {groups.map((g: any) => <option key={g.id} value={g.id}>{g.name}</option>)}
+                </select>
+              </EditableField>
+
+              <div style={{ padding: '6px 0', borderBottom: '1px solid #F1F5F9' }}>
+                <div style={{ fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', color: '#45B6E4', marginBottom: '2px' }}>Responsible</div>
+                <div style={{ fontSize: '12px', color: '#3F3F3F', fontWeight: '500' }}>{ticket.responsible_name ? `⭐ ${ticket.responsible_name}` : '—'}</div>
+              </div>
+
+              <EditableField
+                label="Assignee 💬"
+                editing={editingField === 'assignee'}
+                onStartEdit={() => setEditingField('assignee')}
+                display={ticket.assignee_name || ticket.assignee_email || 'Unassigned'}
+              >
+                {selectedGroup?.members?.length > 0 ? (
+                  <select autoFocus style={selectFieldStyle} value={ef.assignee_name}
+                    onChange={e => {
+                      const m = selectedGroup.members.find((mm: any) => mm.user_name === e.target.value)
+                      patch({ assignee_name: e.target.value, assignee_email: m?.user_email || '' })
+                      setEditingField(null)
+                    }}
+                    onBlur={() => setEditingField(null)}>
+                    <option value="">Select person...</option>
+                    {selectedGroup.members.map((m: any) => <option key={m.user_email} value={m.user_name}>{m.user_name}{m.is_responsible ? ' ⭐' : ''}</option>)}
+                  </select>
+                ) : (
+                  <input autoFocus style={selectFieldStyle} defaultValue={ef.assignee_email} placeholder="agent@wcomply.com"
+                    onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
+                    onBlur={e => { const v = e.target.value.trim(); setEditingField(null); if (v && v !== ef.assignee_email) patch({ assignee_email: v }) }} />
+                )}
+              </EditableField>
             </div>
 
             {/* Details */}
