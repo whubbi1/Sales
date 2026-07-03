@@ -819,6 +819,17 @@ async def startup():
                           sync_to_outlook, outlook_task_id, created_by_email, created_at, updated_at
                    FROM sales_tasks
                    WHERE NOT EXISTS (SELECT 1 FROM tasks t WHERE t.id = sales_tasks.id)""",
+
+                # Task Manager — free-text grouping label, and links/files attached to a task
+                "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS subject VARCHAR(255)",
+                """CREATE TABLE IF NOT EXISTS task_links (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    task_id UUID NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+                    label VARCHAR(255) NOT NULL,
+                    url TEXT NOT NULL,
+                    added_by_email VARCHAR(255),
+                    created_at TIMESTAMP DEFAULT NOW()
+                )""",
             ]
             for sql in sqls:
                 try:

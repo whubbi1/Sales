@@ -122,7 +122,7 @@ async def list_tasks(
         where.append("parent_task_id IS NULL")
     if scope in ("own", "team") and email:
         where.append("""(owner_email = :email OR assignee_email = :email
-                          OR EXISTS (SELECT 1 FROM task_watchers w WHERE w.task_id = tasks.id AND w.user_email = :email))""")
+                          OR EXISTS (SELECT 1 FROM task_watchers w WHERE w.task_id = t.id AND w.user_email = :email))""")
         params["email"] = email
     if source:
         where.append("source = :source")
@@ -155,16 +155,16 @@ async def create_task(data: dict, db: AsyncSession = Depends(get_db)):
     assignee_name = data.get("assignee_name") or data.get("owner_name") or ""
 
     await db.execute(text("""
-        INSERT INTO tasks (id, title, description, status, source, owner_email, owner_name,
+        INSERT INTO tasks (id, title, description, status, source, subject, owner_email, owner_name,
                             assignee_email, assignee_name, due_date, entity_type, entity_id,
                             sync_to_outlook, created_by_email, created_at, updated_at)
-        VALUES (CAST(:id AS UUID), :title, :description, 'new', :source, :owner_email, :owner_name,
+        VALUES (CAST(:id AS UUID), :title, :description, 'new', :source, :subject, :owner_email, :owner_name,
                 :assignee_email, :assignee_name, CAST(NULLIF(:due_date,'') AS TIMESTAMP),
                 :entity_type, CAST(NULLIF(:entity_id,'') AS UUID),
                 :sync_to_outlook, :created_by_email, NOW(), NOW())
     """), {
         "id": task_id, "title": data["title"], "description": data.get("description", ""),
-        "source": data.get("source") or "manual",
+        "source": data.get("source") or "manual", "subject": data.get("subject") or None,
         "owner_email": owner_email, "owner_name": data.get("owner_name", ""),
         "assignee_email": assignee_email, "assignee_name": assignee_name,
         "due_date": data.get("due_date") or "", "entity_type": data.get("entity_type"),
@@ -229,10 +229,12 @@ async def get_task(task_id: str, db: AsyncSession = Depends(get_db)):
     subtasks = await db.execute(text("SELECT * FROM tasks WHERE parent_task_id = CAST(:id AS UUID) ORDER BY created_at ASC"), {"id": task_id})
     watchers = await db.execute(text("SELECT * FROM task_watchers WHERE task_id = CAST(:id AS UUID) ORDER BY created_at ASC"), {"id": task_id})
     comments = await db.execute(text("SELECT * FROM task_comments WHERE task_id = CAST(:id AS UUID) ORDER BY created_at ASC"), {"id": task_id})
+    links = await db.execute(text("SELECT * FROM task_links WHERE task_id = CAST(:id AS UUID) ORDER BY created_at ASC"), {"id": task_id})
 
     task["subtasks"] = [_row(dict(r._mapping)) for r in subtasks.fetchall()]
     task["watchers"] = [_row(dict(r._mapping)) for r in watchers.fetchall()]
     task["comments"] = [_row(dict(r._mapping)) for r in comments.fetchall()]
+    task["links"] = [_row(dict(r._mapping)) for r in links.fetchall()]
     return task
 
 
@@ -250,13 +252,15 @@ async def update_task(task_id: str, data: dict, db: AsyncSession = Depends(get_d
             title = COALESCE(NULLIF(:title,''), title),
             description = COALESCE(:description, description),
             due_date = CAST(NULLIF(:due_date,'') AS TIMESTAMP),
+            subject = COALESCE(:subject, subject),
             entity_type = COALESCE(:entity_type, entity_type),
             entity_id = COALESCE(CAST(NULLIF(:entity_id,'') AS UUID), entity_id),
             updated_at = NOW()
         WHERE id = CAST(:id AS UUID)
     """), {
         "title": data.get("title", ""), "description": data.get("description"),
-        "due_date": data.get("due_date") or "", "entity_type": data.get("entity_type"),
+        "due_date": data.get("due_date") or "", "subject": data.get("subject"),
+        "entity_type": data.get("entity_type"),
         "entity_id": data.get("entity_id") or "", "id": task_id,
     })
     await db.commit()
@@ -330,5 +334,32 @@ async def list_comments(task_id: str, db: AsyncSession = Depends(get_db)):
 async def add_comment(task_id: str, data: dict, db: AsyncSession = Depends(get_db)):
     await _log_comment(db, task_id, data.get("content", ""), data.get("author_email", ""), data.get("author_name", ""), "web")
     await db.execute(text("UPDATE tasks SET updated_at = NOW() WHERE id = CAST(:id AS UUID)"), {"id": task_id})
+    await db.commit()
+    return {"status": "ok"}
+
+
+# ─── Links & Files ──────────────────────────────────────────────────────────────
+@router.get("/tasks/{task_id}/links")
+async def list_links(task_id: str, db: AsyncSession = Depends(get_db)):
+    r = await db.execute(text("SELECT * FROM task_links WHERE task_id = CAST(:id AS UUID) ORDER BY created_at ASC"), {"id": task_id})
+    return {"links": [_row(dict(row._mapping)) for row in r.fetchall()]}
+
+
+@router.post("/tasks/{task_id}/links")
+async def add_link(task_id: str, data: dict, db: AsyncSession = Depends(get_db)):
+    if not data.get("label") or not data.get("url"):
+        raise HTTPException(status_code=400, detail="label and url are required")
+    link_id = str(uuid.uuid4())
+    await db.execute(text("""
+        INSERT INTO task_links (id, task_id, label, url, added_by_email, created_at)
+        VALUES (CAST(:id AS UUID), CAST(:tid AS UUID), :label, :url, :by, NOW())
+    """), {"id": link_id, "tid": task_id, "label": data["label"], "url": data["url"], "by": data.get("acting_email", "")})
+    await db.commit()
+    return {"status": "ok", "id": link_id}
+
+
+@router.delete("/tasks/{task_id}/links/{link_id}")
+async def delete_link(task_id: str, link_id: str, db: AsyncSession = Depends(get_db)):
+    await db.execute(text("DELETE FROM task_links WHERE id = CAST(:id AS UUID) AND task_id = CAST(:tid AS UUID)"), {"id": link_id, "tid": task_id})
     await db.commit()
     return {"status": "ok"}

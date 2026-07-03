@@ -28,6 +28,17 @@ function fmtDateTime(d: string) {
   return d ? new Date(d).toLocaleString('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : ''
 }
 
+function EditableCell({ display, editing, canEdit, onStartEdit, children }: any) {
+  return editing ? children : (
+    <div onClick={() => canEdit && onStartEdit()} title={canEdit ? 'Click to edit' : undefined}
+      style={{ fontSize: '12px', color: '#3F3F3F', cursor: canEdit ? 'pointer' : 'default', padding: '4px 6px', margin: '-4px -6px', borderRadius: '5px', minHeight: '18px' }}
+      onMouseEnter={e => canEdit && (e.currentTarget.style.background = '#F1F5F9')}
+      onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
+      {display || <span style={{ color: '#94A3B8' }}>—</span>}
+    </div>
+  )
+}
+
 function TaskDetailContent() {
   const { id } = useParams()
   const router = useRouter()
@@ -40,6 +51,10 @@ function TaskDetailContent() {
   const [watcherEmail, setWatcherEmail] = useState('')
   const [comment, setComment] = useState('')
   const [teamsInfo, setTeamsInfo] = useState<{ has_chat: boolean; chat_url?: string }>({ has_chat: false })
+  const [editingField, setEditingField] = useState<string | null>(null)
+  const [showAddLink, setShowAddLink] = useState(false)
+  const [linkLabel, setLinkLabel] = useState('')
+  const [linkUrl, setLinkUrl] = useState('')
   const me = getStoredUser()?.email || ''
 
   const load = async () => {
@@ -101,6 +116,24 @@ function TaskDetailContent() {
     load()
   }
 
+  const canEditFields = isOwner || isAssignee
+  const updateField = async (fields: any) => {
+    setError('')
+    try { await taskManagerAPI.update(task.id, { acting_email: me, title: task.title, description: task.description, due_date: task.due_date, subject: task.subject, ...fields }); setEditingField(null); load() }
+    catch (e: any) { setError(e.message) }
+  }
+
+  const addLink = async () => {
+    if (!linkLabel.trim() || !linkUrl.trim()) return
+    await taskManagerAPI.addLink(task.id, { label: linkLabel.trim(), url: linkUrl.trim(), acting_email: me })
+    setLinkLabel(''); setLinkUrl(''); setShowAddLink(false)
+    load()
+  }
+  const removeLink = async (linkId: string) => {
+    await taskManagerAPI.removeLink(task.id, linkId)
+    load()
+  }
+
   const syncTeams = async () => { await taskManagerAPI.syncTeams(task.id); load() }
 
   return (
@@ -109,13 +142,29 @@ function TaskDetailContent() {
 
       <div style={card}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-          <div>
+          <div style={{ flex: 1 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
               <span style={{ background: '#F1F5F9', color: '#3F3F3F', padding: '2px 9px', borderRadius: '10px', fontSize: '10px', fontWeight: '700', textTransform: 'capitalize' }}>{task.source}</span>
               {isSubtask && <span style={{ background: '#EEF2FF', color: '#156082', padding: '2px 9px', borderRadius: '10px', fontSize: '10px', fontWeight: '700' }}>Subtask</span>}
+              <EditableCell display={task.subject && <span style={{ background: '#F5F3FF', color: '#7C3AED', padding: '2px 9px', borderRadius: '10px', fontSize: '10px', fontWeight: '700' }}>📁 {task.subject}</span>}
+                editing={editingField === 'subject'} canEdit={canEditFields} onStartEdit={() => setEditingField('subject')}>
+                <input autoFocus style={inp} defaultValue={task.subject || ''} placeholder="Subject (for grouping)…"
+                  onBlur={e => updateField({ subject: e.target.value })} onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }} />
+              </EditableCell>
+              {!task.subject && editingField !== 'subject' && canEditFields && (
+                <button onClick={() => setEditingField('subject')} style={{ fontSize: '10px', color: '#94A3B8', background: 'none', border: '1px dashed #E2E8F0', borderRadius: '10px', padding: '2px 9px', cursor: 'pointer', fontFamily: 'Montserrat, sans-serif' }}>+ Subject</button>
+              )}
             </div>
-            <h1 style={{ fontSize: '19px', fontWeight: '800', color: '#156082', margin: '0 0 6px' }}>{task.title}</h1>
-            <p style={{ fontSize: '12px', color: '#64748B', margin: 0, whiteSpace: 'pre-wrap' }}>{task.description || 'No description.'}</p>
+            <EditableCell display={<h1 style={{ fontSize: '19px', fontWeight: '800', color: '#156082', margin: '0 0 6px' }}>{task.title}</h1>}
+              editing={editingField === 'title'} canEdit={canEditFields} onStartEdit={() => setEditingField('title')}>
+              <input autoFocus style={{ ...inp, fontSize: '15px', fontWeight: '700', width: '100%', boxSizing: 'border-box' as const, marginBottom: '6px' }} defaultValue={task.title}
+                onBlur={e => updateField({ title: e.target.value })} onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }} />
+            </EditableCell>
+            <EditableCell display={<p style={{ fontSize: '12px', color: '#64748B', margin: 0, whiteSpace: 'pre-wrap' }}>{task.description || 'No description.'}</p>}
+              editing={editingField === 'description'} canEdit={canEditFields} onStartEdit={() => setEditingField('description')}>
+              <textarea autoFocus style={{ ...inp, width: '100%', boxSizing: 'border-box' as const, minHeight: '60px', resize: 'vertical' as const }} defaultValue={task.description}
+                onBlur={e => updateField({ description: e.target.value })} />
+            </EditableCell>
           </div>
           <span style={{ background: STATUS_COLOR[task.status]?.bg, color: STATUS_COLOR[task.status]?.color, padding: '4px 12px', borderRadius: '10px', fontSize: '11px', fontWeight: '700', flexShrink: 0 }}>{STATUS_LABEL[task.status]}</span>
         </div>
@@ -123,7 +172,12 @@ function TaskDetailContent() {
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '14px', marginTop: '16px', paddingTop: '16px', borderTop: '1px solid #F1F5F9' }}>
           <div><div style={lbl}>Owner</div><div style={{ fontSize: '12px', color: '#3F3F3F' }}>{task.owner_name || task.owner_email}</div></div>
           <div><div style={lbl}>Assignee</div><div style={{ fontSize: '12px', color: '#3F3F3F' }}>{task.assignee_name || task.assignee_email || '—'}</div></div>
-          <div><div style={lbl}>Due Date</div><div style={{ fontSize: '12px', color: '#3F3F3F' }}>{fmtDate(task.due_date)}</div></div>
+          <div>
+            <div style={lbl}>Due Date</div>
+            <EditableCell display={fmtDate(task.due_date)} editing={editingField === 'due_date'} canEdit={canEditFields} onStartEdit={() => setEditingField('due_date')}>
+              <input autoFocus type="date" style={inp} defaultValue={task.due_date ? task.due_date.slice(0, 10) : ''} onBlur={e => updateField({ due_date: e.target.value })} />
+            </EditableCell>
+          </div>
         </div>
 
         {canAct && (
@@ -202,6 +256,33 @@ function TaskDetailContent() {
               {users.map(u => <option key={u.email} value={u.email}>{u.display_name || `${u.first_name} ${u.last_name}`}</option>)}
             </select>
             <button onClick={addWatcher} style={{ ...btn, background: '#156082', color: 'white' }}>Add</button>
+          </div>
+        )}
+      </div>
+
+      <div style={card}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+          <div style={lbl}>Links & Files ({(task.links || []).length})</div>
+          {canEditFields && !showAddLink && <button onClick={() => setShowAddLink(true)} style={{ ...btn, background: '#EFF6FF', color: '#156082' }}>+ Add Link</button>}
+        </div>
+        {(task.links || []).length === 0 && !showAddLink ? (
+          <p style={{ fontSize: '12px', color: '#94A3B8', margin: 0 }}>No links or files attached yet.</p>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: showAddLink ? '10px' : 0 }}>
+            {(task.links || []).map((l: any) => (
+              <div key={l.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', border: '1px solid #EDF2F7', borderRadius: '8px' }}>
+                <a href={l.url} target="_blank" rel="noopener noreferrer" style={{ fontSize: '12px', color: '#156082', fontWeight: '600', textDecoration: 'none' }}>🔗 {l.label}</a>
+                {canEditFields && <button onClick={() => removeLink(l.id)} style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#94A3B8', fontSize: '14px', padding: 0, lineHeight: 1 }}>×</button>}
+              </div>
+            ))}
+          </div>
+        )}
+        {showAddLink && (
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <input style={{ ...inp, width: '160px' }} placeholder="Label…" value={linkLabel} onChange={e => setLinkLabel(e.target.value)} />
+            <input style={{ ...inp, flex: 1 }} placeholder="https://…" value={linkUrl} onChange={e => setLinkUrl(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') addLink() }} />
+            <button onClick={addLink} style={{ ...btn, background: '#156082', color: 'white' }}>Add</button>
+            <button onClick={() => { setShowAddLink(false); setLinkLabel(''); setLinkUrl('') }} style={{ ...btn, background: '#F1F5F9', color: '#64748B' }}>Cancel</button>
           </div>
         )}
       </div>

@@ -29,6 +29,7 @@ function TaskManagerContent() {
   const [statusFilter, setStatusFilter] = useState('')
   const [scope, setScope] = useState<'own' | 'company'>(dataScope === 'company' ? 'company' : 'own')
   const [showNew, setShowNew] = useState(false)
+  const [groupBySubject, setGroupBySubject] = useState(false)
   const userEmail = getStoredUser()?.email || ''
 
   const load = async () => {
@@ -41,6 +42,36 @@ function TaskManagerContent() {
   }
 
   useEffect(() => { load() }, [scope, statusFilter])
+
+  const groups = groupBySubject
+    ? tasks.reduce((acc: Record<string, any[]>, t) => {
+        const key = t.subject || 'No Subject'
+        acc[key] = acc[key] || []
+        acc[key].push(t)
+        return acc
+      }, {})
+    : null
+  const groupNames = groups ? Object.keys(groups).sort((a, b) => a === 'No Subject' ? 1 : b === 'No Subject' ? -1 : a.localeCompare(b)) : []
+
+  const Row = (t: any) => (
+    <tr key={t.id} onClick={() => router.push(`/task-manager/${t.id}`)} style={{ borderBottom: '1px solid #F1F5F9', cursor: 'pointer' }}
+      onMouseEnter={e => (e.currentTarget.style.background = '#FAFBFC')} onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
+      <td style={{ padding: '10px 12px', minWidth: '200px', fontWeight: '700', color: '#156082' }}>{t.title}</td>
+      <td style={{ padding: '10px 12px' }}><span style={{ background: '#F1F5F9', color: '#3F3F3F', padding: '2px 9px', borderRadius: '10px', fontSize: '10px', fontWeight: '700', textTransform: 'capitalize' }}>{t.source}</span></td>
+      <td style={{ padding: '10px 12px', color: '#3F3F3F' }}>{t.owner_name || t.owner_email || '—'}</td>
+      <td style={{ padding: '10px 12px', color: '#3F3F3F' }}>{t.assignee_name || t.assignee_email || '—'}</td>
+      <td style={{ padding: '10px 12px', color: '#64748B' }}>{fmtDate(t.due_date)}</td>
+      <td style={{ padding: '10px 12px' }}><span style={{ background: STATUS_COLOR[t.status]?.bg, color: STATUS_COLOR[t.status]?.color, padding: '2px 9px', borderRadius: '10px', fontSize: '10px', fontWeight: '700' }}>{STATUS_LABEL[t.status]}</span></td>
+      <td style={{ padding: '10px 12px', color: '#64748B' }}>{t.subtask_count > 0 ? t.subtask_count : '—'}</td>
+    </tr>
+  )
+  const headerRow = (
+    <tr>
+      {['Title', 'Source', 'Owner', 'Assignee', 'Due Date', 'Status', 'Subtasks'].map(h => (
+        <th key={h} style={{ padding: '10px 12px', textAlign: 'left', fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#45B6E4', borderBottom: '1px solid #EDF2F7', whiteSpace: 'nowrap' }}>{h}</th>
+      ))}
+    </tr>
+  )
 
   return (
     <div style={{ padding: '24px 28px' }}>
@@ -65,40 +96,41 @@ function TaskManagerContent() {
           <option value="">All statuses</option>
           {Object.entries(STATUS_LABEL).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
         </select>
+        <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: '#3F3F3F', cursor: 'pointer', padding: '0 4px' }}>
+          <input type="checkbox" checked={groupBySubject} onChange={e => setGroupBySubject(e.target.checked)} />
+          Group by Subject
+        </label>
       </div>
 
-      <div style={{ background: 'white', borderRadius: '12px', border: '1px solid #EDF2F7', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
-          <thead style={{ background: '#FAFBFC' }}>
-            <tr>
-              {['Title', 'Source', 'Owner', 'Assignee', 'Due Date', 'Status', 'Subtasks'].map(h => (
-                <th key={h} style={{ padding: '10px 12px', textAlign: 'left', fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#45B6E4', borderBottom: '1px solid #EDF2F7', whiteSpace: 'nowrap' }}>{h}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {loading ? (
-              <tr><td colSpan={7} style={{ textAlign: 'center', padding: '48px', color: '#45B6E4' }}>Loading…</td></tr>
-            ) : tasks.length === 0 ? (
-              <tr><td colSpan={7} style={{ textAlign: 'center', padding: '48px', color: '#94A3B8' }}>No tasks found.</td></tr>
-            ) : tasks.map(t => (
-              <tr key={t.id} onClick={() => router.push(`/task-manager/${t.id}`)} style={{ borderBottom: '1px solid #F1F5F9', cursor: 'pointer' }}
-                onMouseEnter={e => (e.currentTarget.style.background = '#FAFBFC')} onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
-                <td style={{ padding: '10px 12px', minWidth: '200px', fontWeight: '700', color: '#156082' }}>{t.title}</td>
-                <td style={{ padding: '10px 12px' }}><span style={{ background: '#F1F5F9', color: '#3F3F3F', padding: '2px 9px', borderRadius: '10px', fontSize: '10px', fontWeight: '700', textTransform: 'capitalize' }}>{t.source}</span></td>
-                <td style={{ padding: '10px 12px', color: '#3F3F3F' }}>{t.owner_name || t.owner_email || '—'}</td>
-                <td style={{ padding: '10px 12px', color: '#3F3F3F' }}>{t.assignee_name || t.assignee_email || '—'}</td>
-                <td style={{ padding: '10px 12px', color: '#64748B' }}>{fmtDate(t.due_date)}</td>
-                <td style={{ padding: '10px 12px' }}><span style={{ background: STATUS_COLOR[t.status]?.bg, color: STATUS_COLOR[t.status]?.color, padding: '2px 9px', borderRadius: '10px', fontSize: '10px', fontWeight: '700' }}>{STATUS_LABEL[t.status]}</span></td>
-                <td style={{ padding: '10px 12px', color: '#64748B' }}>{t.subtask_count > 0 ? t.subtask_count : '—'}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      {loading ? (
+        <div style={{ background: 'white', borderRadius: '12px', border: '1px solid #EDF2F7', padding: '48px', textAlign: 'center', color: '#45B6E4', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>Loading…</div>
+      ) : tasks.length === 0 ? (
+        <div style={{ background: 'white', borderRadius: '12px', border: '1px solid #EDF2F7', padding: '48px', textAlign: 'center', color: '#94A3B8', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>No tasks found.</div>
+      ) : groups ? (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
+          {groupNames.map(name => (
+            <div key={name}>
+              <div style={{ fontSize: '11px', fontWeight: '800', color: '#7C3AED', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '8px' }}>📁 {name} ({groups[name].length})</div>
+              <div style={{ background: 'white', borderRadius: '12px', border: '1px solid #EDF2F7', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
+                  <thead style={{ background: '#FAFBFC' }}>{headerRow}</thead>
+                  <tbody>{groups[name].map(Row)}</tbody>
+                </table>
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div style={{ background: 'white', borderRadius: '12px', border: '1px solid #EDF2F7', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
+            <thead style={{ background: '#FAFBFC' }}>{headerRow}</thead>
+            <tbody>{tasks.map(Row)}</tbody>
+          </table>
+        </div>
+      )}
 
       {showNew && (
-        <TaskModal hideEntity source="manual" onClose={() => setShowNew(false)} onSave={() => { setShowNew(false); load() }} />
+        <TaskModal quick source="manual" onClose={() => setShowNew(false)} onSave={id => { setShowNew(false); if (id) router.push(`/task-manager/${id}`); else load() }} />
       )}
     </div>
   )

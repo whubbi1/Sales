@@ -108,4 +108,8 @@ export const taskManagerAPI = {
 
   getTeamsInfo: (id: string) => fetchAPI(`/task-manager/tasks/${id}/teams`),
   syncTeams:    (id: string) => fetchAPI(`/task-manager/tasks/${id}/teams/sync`, { method: 'POST' }),
+
+  getLinks:   (id: string) => fetchAPI(`/task-manager/tasks/${id}/links`),
+  addLink:    (id: string, d: any) => fetchAPI(`/task-manager/tasks/${id}/links`, { method: 'POST', body: JSON.stringify(d) }),
+  removeLink: (id: string, linkId: string) => fetchAPI(`/task-manager/tasks/${id}/links/${linkId}`, { method: 'DELETE' }),
 }

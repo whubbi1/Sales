@@ -41,14 +41,15 @@ interface TaskModalProps {
   source?: string
   parentTaskId?: string
   hideEntity?: boolean
+  quick?: boolean
   onClose: () => void
-  onSave: () => void
+  onSave: (id?: string) => void
 }
 
-export function TaskModal({ task, entityType, entityId, entityLabel, source, parentTaskId, hideEntity, onClose, onSave }: TaskModalProps) {
+export function TaskModal({ task, entityType, entityId, entityLabel, source, parentTaskId, hideEntity, quick, onClose, onSave }: TaskModalProps) {
   const locked = !!entityType && !!entityId
   const isSubtask = !!parentTaskId || !!task?.parent_task_id
-  const showEntity = !hideEntity
+  const showEntity = !hideEntity && !quick
   const [users, setUsers] = useState<any[]>([])
   const [entityOptions, setEntityOptions] = useState<any[]>([])
   const [saving, setSaving] = useState(false)
@@ -92,14 +93,20 @@ export function TaskModal({ task, entityType, entityId, entityLabel, source, par
 
   const handleSave = async () => {
     if (!form.title.trim()) { setError('Title is required'); return }
-    if (!task && !form.owner_email) { setError('An owner is required'); return }
+    if (!quick && !task && !form.owner_email) { setError('An owner is required'); return }
     if (showEntity && !form.entity_id) { setError('Please select what this task is linked to'); return }
     setSaving(true); setError(''); setOutlookStatus('')
     try {
       const currentUser = getStoredUser()
       const actingEmail = currentUser?.email || ''
+      const ownerEmail = quick && !task ? actingEmail : form.owner_email
+      const ownerName = quick && !task ? (currentUser?.name || actingEmail) : form.owner_name
       const payload = {
         ...form,
+        owner_email: ownerEmail,
+        owner_name: ownerName,
+        assignee_email: quick && !task ? ownerEmail : form.assignee_email,
+        assignee_name: quick && !task ? ownerName : form.assignee_name,
         entity_type: showEntity ? form.entity_type : undefined,
         entity_id: showEntity ? form.entity_id : undefined,
         due_date: form.due_date || null,
@@ -140,7 +147,7 @@ export function TaskModal({ task, entityType, entityId, entityLabel, source, par
           return
         }
       }
-      onSave()
+      onSave(saved.id)
     } catch (e: any) { setError(e.message) }
     finally { setSaving(false) }
   }
@@ -180,39 +187,47 @@ export function TaskModal({ task, entityType, entityId, entityLabel, source, par
             </div>
           ))}
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-            <FormField label="Due Date">
-              <input className="form-input" type="date" value={form.due_date} onChange={e => setForm(p => ({ ...p, due_date: e.target.value }))} />
+          {quick ? (
+            <FormField label="Due Date" full>
+              <input className="form-input" type="date" value={form.due_date} onChange={e => setForm(p => ({ ...p, due_date: e.target.value }))} style={{ width: '100%', boxSizing: 'border-box' }} />
             </FormField>
-            <FormField label={`Owner${task ? ' (stays responsible, cannot be changed)' : ''}`}>
-              <select className="form-input" value={form.owner_email} onChange={e => handleOwnerChange(e.target.value)} disabled={!!task}>
-                <option value="">Select owner…</option>
-                {users.map((u: any) => <option key={u.email} value={u.email}>{u.display_name || `${u.first_name} ${u.last_name}`}</option>)}
-              </select>
-            </FormField>
-          </div>
+          ) : (
+            <>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                <FormField label="Due Date">
+                  <input className="form-input" type="date" value={form.due_date} onChange={e => setForm(p => ({ ...p, due_date: e.target.value }))} />
+                </FormField>
+                <FormField label={`Owner${task ? ' (stays responsible, cannot be changed)' : ''}`}>
+                  <select className="form-input" value={form.owner_email} onChange={e => handleOwnerChange(e.target.value)} disabled={!!task}>
+                    <option value="">Select owner…</option>
+                    {users.map((u: any) => <option key={u.email} value={u.email}>{u.display_name || `${u.first_name} ${u.last_name}`}</option>)}
+                  </select>
+                </FormField>
+              </div>
 
-          <FormField label="Assignee (who currently does the work)">
-            <select className="form-input" value={form.assignee_email} onChange={e => handleAssigneeChange(e.target.value)}>
-              <option value="">Same as owner</option>
-              {users.map((u: any) => <option key={u.email} value={u.email}>{u.display_name || `${u.first_name} ${u.last_name}`}</option>)}
-            </select>
-          </FormField>
+              <FormField label="Assignee (who currently does the work)">
+                <select className="form-input" value={form.assignee_email} onChange={e => handleAssigneeChange(e.target.value)}>
+                  <option value="">Same as owner</option>
+                  {users.map((u: any) => <option key={u.email} value={u.email}>{u.display_name || `${u.first_name} ${u.last_name}`}</option>)}
+                </select>
+              </FormField>
 
-          {task && (
-            <FormField label="Status">
-              <select className="form-input" value={form.status} onChange={e => setForm(p => ({ ...p, status: e.target.value }))}>
-                {(isSubtask ? SUB_STATUSES : TOP_STATUSES).map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
-              </select>
-            </FormField>
+              {task && (
+                <FormField label="Status">
+                  <select className="form-input" value={form.status} onChange={e => setForm(p => ({ ...p, status: e.target.value }))}>
+                    {(isSubtask ? SUB_STATUSES : TOP_STATUSES).map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+                  </select>
+                </FormField>
+              )}
+
+              <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', color: '#3F3F3F', cursor: isMsalConfigured() ? 'pointer' : 'not-allowed' }}>
+                <input type="checkbox" checked={form.sync_to_outlook} disabled={!isMsalConfigured()} onChange={e => setForm(p => ({ ...p, sync_to_outlook: e.target.checked }))} style={{ accentColor: '#219BD6', width: '14px', height: '14px' }} />
+                Also create this as an Outlook task {!isMsalConfigured() && '(Microsoft sign-in not configured)'}
+              </label>
+              {task?.outlook_task_id && <p style={{ fontSize: '11px', color: '#059669', margin: 0 }}>✓ Already synced to Outlook</p>}
+              {outlookStatus && <p style={{ fontSize: '11px', color: '#219BD6', margin: 0 }}>{outlookStatus}</p>}
+            </>
           )}
-
-          <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', color: '#3F3F3F', cursor: isMsalConfigured() ? 'pointer' : 'not-allowed' }}>
-            <input type="checkbox" checked={form.sync_to_outlook} disabled={!isMsalConfigured()} onChange={e => setForm(p => ({ ...p, sync_to_outlook: e.target.checked }))} style={{ accentColor: '#219BD6', width: '14px', height: '14px' }} />
-            Also create this as an Outlook task {!isMsalConfigured() && '(Microsoft sign-in not configured)'}
-          </label>
-          {task?.outlook_task_id && <p style={{ fontSize: '11px', color: '#059669', margin: 0 }}>✓ Already synced to Outlook</p>}
-          {outlookStatus && <p style={{ fontSize: '11px', color: '#219BD6', margin: 0 }}>{outlookStatus}</p>}
 
           {error && <div style={{ background: '#FEF2F2', color: '#DC2626', padding: '10px 14px', borderRadius: '8px', fontSize: '12px' }}>{error}</div>}
         </div>
