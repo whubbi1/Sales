@@ -827,6 +827,11 @@ async def startup():
 
                 # Task Manager — free-text grouping label, and links/files attached to a task
                 "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS subject VARCHAR(255)",
+                "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS task_number VARCHAR(50)",
+                # Backfill task_number for any tasks created before the column existed
+                # (including the sales_tasks import above) — id-derived, so it's stable and idempotent.
+                """UPDATE tasks SET task_number = 'TSK-' || to_char(created_at, 'YYYYMM') || '-' || upper(substr(replace(id::text,'-',''), 1, 4))
+                   WHERE task_number IS NULL""",
                 """CREATE TABLE IF NOT EXISTS task_links (
                     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                     task_id UUID NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,

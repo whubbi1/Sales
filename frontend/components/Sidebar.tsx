@@ -37,13 +37,8 @@ export function Sidebar() {
 
   return (
     <aside style={{ width: '220px', minHeight: '100vh', background: '#156082', position: 'fixed', left: 0, top: 0, zIndex: 100, display: 'flex', flexDirection: 'column', borderRight: '1px solid rgba(255,255,255,0.06)' }}>
-      {/* Logo */}
-      <div style={{ padding: '18px 16px 14px', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
-        <img src="/logo.png" alt="WHUBBI" style={{ width: '110px', height: '44px', objectFit: 'contain' }} />
-      </div>
-
       {/* Module label */}
-      <div style={{ padding: '8px 16px 4px' }}>
+      <div style={{ padding: '18px 16px 14px', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
         <span style={{ fontSize: '9px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.1em', color: 'rgba(255,255,255,0.35)' }}>Sales</span>
       </div>
 

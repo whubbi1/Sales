@@ -4,12 +4,18 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
 from app.database import get_db
+from datetime import datetime
 import uuid
 
 router = APIRouter()
 
 TOP_STATUSES = {"new", "open", "in_progress", "resolved", "closed"}
 SUB_STATUSES = {"new", "in_progress", "resolved"}
+
+
+def gen_task_number() -> str:
+    n = datetime.utcnow()
+    return f"TSK-{n.year}{n.month:02d}-{str(uuid.uuid4())[:4].upper()}"
 
 
 def _row(d: dict) -> dict:
@@ -109,6 +115,31 @@ async def reassign_task_internal(db: AsyncSession, task_id: str, acting_email: s
     return {"status": "ok"}
 
 
+async def transfer_owner_internal(db: AsyncSession, task_id: str, acting_email: str, new_owner_email: str, new_owner_name: str) -> dict:
+    task = await _get_task(db, task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    if acting_email != task["owner_email"]:
+        raise HTTPException(status_code=403, detail="Only the current owner can transfer ownership of a task")
+    if not new_owner_email:
+        raise HTTPException(status_code=400, detail="new_owner_email is required")
+
+    await db.execute(text("""
+        UPDATE tasks SET owner_email = :email, owner_name = :name, updated_at = NOW() WHERE id = CAST(:id AS UUID)
+    """), {"email": new_owner_email, "name": new_owner_name, "id": task_id})
+    await _log_comment(db, task_id, f"Ownership transferred from {task['owner_email']} to {new_owner_email}")
+    await db.commit()
+
+    try:
+        from app.routers.task_teams import add_member_to_task_chat
+        if task["teams_chat_id"]:
+            await add_member_to_task_chat(task["teams_chat_id"], new_owner_email)
+    except Exception as e:
+        print(f"Task Teams member add skipped: {e}")
+
+    return {"status": "ok"}
+
+
 # ─── Tasks ──────────────────────────────────────────────────────────────────────
 @router.get("/tasks")
 async def list_tasks(
@@ -154,16 +185,17 @@ async def create_task(data: dict, db: AsyncSession = Depends(get_db)):
     assignee_email = data.get("assignee_email") or owner_email
     assignee_name = data.get("assignee_name") or data.get("owner_name") or ""
 
+    task_number = gen_task_number()
     await db.execute(text("""
-        INSERT INTO tasks (id, title, description, status, source, subject, owner_email, owner_name,
+        INSERT INTO tasks (id, task_number, title, description, status, source, subject, owner_email, owner_name,
                             assignee_email, assignee_name, due_date, entity_type, entity_id,
                             sync_to_outlook, created_by_email, created_at, updated_at)
-        VALUES (CAST(:id AS UUID), :title, :description, 'new', :source, :subject, :owner_email, :owner_name,
+        VALUES (CAST(:id AS UUID), :task_number, :title, :description, 'new', :source, :subject, :owner_email, :owner_name,
                 :assignee_email, :assignee_name, CAST(NULLIF(:due_date,'') AS TIMESTAMP),
                 :entity_type, CAST(NULLIF(:entity_id,'') AS UUID),
                 :sync_to_outlook, :created_by_email, NOW(), NOW())
     """), {
-        "id": task_id, "title": data["title"], "description": data.get("description", ""),
+        "id": task_id, "task_number": task_number, "title": data["title"], "description": data.get("description", ""),
         "source": data.get("source") or "manual", "subject": data.get("subject") or None,
         "owner_email": owner_email, "owner_name": data.get("owner_name", ""),
         "assignee_email": assignee_email, "assignee_name": assignee_name,
@@ -180,7 +212,7 @@ async def create_task(data: dict, db: AsyncSession = Depends(get_db)):
     except Exception as e:
         print(f"Task Teams chat creation skipped: {e}")
 
-    return {"status": "ok", "id": task_id}
+    return {"status": "ok", "id": task_id, "task_number": task_number}
 
 
 @router.post("/tasks/{parent_id}/subtasks")
@@ -198,16 +230,17 @@ async def create_subtask(parent_id: str, data: dict, db: AsyncSession = Depends(
     assignee_email = data.get("assignee_email") or owner_email
     assignee_name = data.get("assignee_name") or data.get("owner_name") or ""
 
+    task_number = gen_task_number()
     await db.execute(text("""
-        INSERT INTO tasks (id, parent_task_id, title, description, status, source, owner_email, owner_name,
+        INSERT INTO tasks (id, task_number, parent_task_id, title, description, status, source, owner_email, owner_name,
                             assignee_email, assignee_name, due_date, entity_type, entity_id,
                             created_by_email, created_at, updated_at)
-        VALUES (CAST(:id AS UUID), CAST(:parent_id AS UUID), :title, :description, 'new', :source,
+        VALUES (CAST(:id AS UUID), :task_number, CAST(:parent_id AS UUID), :title, :description, 'new', :source,
                 :owner_email, :owner_name, :assignee_email, :assignee_name,
                 CAST(NULLIF(:due_date,'') AS TIMESTAMP), :entity_type, CAST(NULLIF(:entity_id,'') AS UUID),
                 :created_by_email, NOW(), NOW())
     """), {
-        "id": task_id, "parent_id": parent_id, "title": data["title"], "description": data.get("description", ""),
+        "id": task_id, "task_number": task_number, "parent_id": parent_id, "title": data["title"], "description": data.get("description", ""),
         "source": data.get("source") or parent["source"],
         "owner_email": owner_email, "owner_name": data.get("owner_name", ""),
         "assignee_email": assignee_email, "assignee_name": assignee_name,
@@ -217,7 +250,7 @@ async def create_subtask(parent_id: str, data: dict, db: AsyncSession = Depends(
     })
     await _log_comment(db, parent_id, f"Subtask \"{data['title']}\" added, owned by {owner_email}")
     await db.commit()
-    return {"status": "ok", "id": task_id}
+    return {"status": "ok", "id": task_id, "task_number": task_number}
 
 
 @router.get("/tasks/{task_id}")
@@ -277,6 +310,14 @@ async def reassign_task(task_id: str, data: dict, db: AsyncSession = Depends(get
     return await reassign_task_internal(
         db, task_id, data.get("acting_email", ""),
         data.get("new_assignee_email", ""), data.get("new_assignee_name", ""),
+    )
+
+
+@router.post("/tasks/{task_id}/transfer-owner")
+async def transfer_owner(task_id: str, data: dict, db: AsyncSession = Depends(get_db)):
+    return await transfer_owner_internal(
+        db, task_id, data.get("acting_email", ""),
+        data.get("new_owner_email", ""), data.get("new_owner_name", ""),
     )
 
 

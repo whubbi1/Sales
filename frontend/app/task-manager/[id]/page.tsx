@@ -47,7 +47,6 @@ function TaskDetailContent() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [showSubtaskModal, setShowSubtaskModal] = useState(false)
-  const [reassignTo, setReassignTo] = useState('')
   const [watcherEmail, setWatcherEmail] = useState('')
   const [comment, setComment] = useState('')
   const [teamsInfo, setTeamsInfo] = useState<{ has_chat: boolean; chat_url?: string }>({ has_chat: false })
@@ -62,7 +61,6 @@ function TaskDetailContent() {
     try {
       const t = await taskManagerAPI.get(id as string)
       setTask(t)
-      setReassignTo(t.assignee_email || '')
       taskManagerAPI.getTeamsInfo(id as string).then(setTeamsInfo).catch(() => {})
     } catch (e: any) { setError(e.message) }
     finally { setLoading(false) }
@@ -89,10 +87,15 @@ function TaskDetailContent() {
     catch (e: any) { setError(e.message) }
   }
 
-  const reassign = async () => {
-    if (!reassignTo || reassignTo === task.assignee_email) return
-    const u = users.find(u => u.email === reassignTo)
-    try { await taskManagerAPI.reassign(task.id, { acting_email: me, new_assignee_email: reassignTo, new_assignee_name: u?.display_name || '' }); load() }
+  const reassignAction = async (email: string, name: string) => {
+    setError('')
+    try { await taskManagerAPI.reassign(task.id, { acting_email: me, new_assignee_email: email, new_assignee_name: name }); load() }
+    catch (e: any) { setError(e.message) }
+  }
+
+  const transferOwnerAction = async (email: string, name: string) => {
+    setError('')
+    try { await taskManagerAPI.transferOwner(task.id, { acting_email: me, new_owner_email: email, new_owner_name: name }); load() }
     catch (e: any) { setError(e.message) }
   }
 
@@ -144,6 +147,7 @@ function TaskDetailContent() {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
           <div style={{ flex: 1 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
+              {task.task_number && <span style={{ color: '#94A3B8', fontFamily: 'monospace', fontSize: '11px', fontWeight: '700' }}>{task.task_number}</span>}
               <span style={{ background: '#F1F5F9', color: '#3F3F3F', padding: '2px 9px', borderRadius: '10px', fontSize: '10px', fontWeight: '700', textTransform: 'capitalize' }}>{task.source}</span>
               {isSubtask && <span style={{ background: '#EEF2FF', color: '#156082', padding: '2px 9px', borderRadius: '10px', fontSize: '10px', fontWeight: '700' }}>Subtask</span>}
               <EditableCell display={task.subject && <span style={{ background: '#F5F3FF', color: '#7C3AED', padding: '2px 9px', borderRadius: '10px', fontSize: '10px', fontWeight: '700' }}>📁 {task.subject}</span>}
@@ -170,8 +174,40 @@ function TaskDetailContent() {
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '14px', marginTop: '16px', paddingTop: '16px', borderTop: '1px solid #F1F5F9' }}>
-          <div><div style={lbl}>Owner</div><div style={{ fontSize: '12px', color: '#3F3F3F' }}>{task.owner_name || task.owner_email}</div></div>
-          <div><div style={lbl}>Assignee</div><div style={{ fontSize: '12px', color: '#3F3F3F' }}>{task.assignee_name || task.assignee_email || '—'}</div></div>
+          <div>
+            <div style={lbl}>Owner</div>
+            <EditableCell display={task.owner_name || task.owner_email} editing={editingField === 'owner'} canEdit={isOwner} onStartEdit={() => setEditingField('owner')}>
+              <select autoFocus style={inp} defaultValue=""
+                onChange={e => {
+                  const email = e.target.value
+                  setEditingField(null)
+                  if (!email) return
+                  const u = users.find(u => u.email === email)
+                  transferOwnerAction(email, u?.display_name || '')
+                }}
+                onBlur={() => setEditingField(null)}>
+                <option value="">Keep {task.owner_name || task.owner_email}</option>
+                {users.filter(u => u.email !== task.owner_email).map(u => <option key={u.email} value={u.email}>{u.display_name || `${u.first_name} ${u.last_name}`}</option>)}
+              </select>
+            </EditableCell>
+          </div>
+          <div>
+            <div style={lbl}>Assignee</div>
+            <EditableCell display={task.assignee_name || task.assignee_email || '—'} editing={editingField === 'assignee'} canEdit={isOwner || isAssignee} onStartEdit={() => setEditingField('assignee')}>
+              <select autoFocus style={inp} defaultValue=""
+                onChange={e => {
+                  const email = e.target.value
+                  setEditingField(null)
+                  if (!email) return
+                  const u = users.find(u => u.email === email)
+                  reassignAction(email, u?.display_name || '')
+                }}
+                onBlur={() => setEditingField(null)}>
+                <option value="">{task.assignee_email ? `Keep ${task.assignee_name || task.assignee_email}` : 'Select…'}</option>
+                {users.filter(u => u.email !== task.assignee_email).map(u => <option key={u.email} value={u.email}>{u.display_name || `${u.first_name} ${u.last_name}`}</option>)}
+              </select>
+            </EditableCell>
+          </div>
           <div>
             <div style={lbl}>Due Date</div>
             <EditableCell display={fmtDate(task.due_date)} editing={editingField === 'due_date'} canEdit={canEditFields} onStartEdit={() => setEditingField('due_date')}>
@@ -196,19 +232,6 @@ function TaskDetailContent() {
         )}
         {error && <div style={{ marginTop: '12px', background: '#FEF2F2', color: '#DC2626', padding: '10px 14px', borderRadius: '8px', fontSize: '12px' }}>{error}</div>}
       </div>
-
-      {(isOwner || isAssignee) && (
-        <div style={card}>
-          <div style={lbl}>Reassign</div>
-          <div style={{ display: 'flex', gap: '8px' }}>
-            <select style={{ ...inp, flex: 1 }} value={reassignTo} onChange={e => setReassignTo(e.target.value)}>
-              <option value="">Select a person…</option>
-              {users.map(u => <option key={u.email} value={u.email}>{u.display_name || `${u.first_name} ${u.last_name}`}</option>)}
-            </select>
-            <button onClick={reassign} style={{ ...btn, background: '#156082', color: 'white' }}>Reassign</button>
-          </div>
-        </div>
-      )}
 
       {!isSubtask && (
         <div style={card}>

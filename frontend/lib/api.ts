@@ -98,6 +98,7 @@ export const taskManagerAPI = {
   update: (id: string, d: any) => fetchAPI(`/task-manager/tasks/${id}`, { method: 'PUT', body: JSON.stringify(d) }),
   setStatus: (id: string, d: any) => fetchAPI(`/task-manager/tasks/${id}/status`, { method: 'PUT', body: JSON.stringify(d) }),
   reassign: (id: string, d: any) => fetchAPI(`/task-manager/tasks/${id}/reassign`, { method: 'POST', body: JSON.stringify(d) }),
+  transferOwner: (id: string, d: any) => fetchAPI(`/task-manager/tasks/${id}/transfer-owner`, { method: 'POST', body: JSON.stringify(d) }),
   delete: (id: string, actingEmail: string) => fetchAPI(`/task-manager/tasks/${id}${qs({ acting_email: actingEmail })}`, { method: 'DELETE' }),
 
   addWatcher:    (id: string, d: any) => fetchAPI(`/task-manager/tasks/${id}/watchers`, { method: 'POST', body: JSON.stringify(d) }),
