@@ -7,19 +7,20 @@ const API = 'https://api.whubbi.wcomply.com'
 const MODULE_LINE_COLOR = '#156082'
 
 const MODULES = [
+  { id:'settings', title:'MyWHUBBI', description:'Manage your profile, preferences, notifications and account settings.',           icon:'⚙️', href:'/settings',  color:'#45B6E4', available:true  },
+  { id:'task-manager', title:'Task Manager',    description:'Cross-module workflow tasks, subtasks, delegation and Teams-connected updates.',      icon:'✅', href:'/task-manager', color:'#219BD6', available:true  },
   { id:'sales',    title:'Sales',            description:'Manage companies, contacts and opportunities. Track your commercial pipeline.',   icon:'💼', href:'/dashboard', color:'#156082', available:true  },
   { id:'finance',  title:'Finance',           description:'Financial management, invoicing, budgets and cash flow monitoring.',              icon:'💰', href:'/finance',   color:'#e97132', available:false },
+  { id:'legal',       title:'Legal',            description:'Legal entities, template documents and compliance. Manage WCOMPLY legal structure.', icon:'⚖️', href:'/legal',        color:'#1a2744', available:true  },
   { id:'rh',       title:'Human Resources',   description:'Manage employees, contracts, onboarding and HR processes.',                       icon:'👥', href:'/rh',        color:'#45B6E4', available:true  },
   { id:'grc',      title:'GRC',               description:'Governance, Risk and Compliance. Manage audits, risks and regulatory frameworks.', icon:'🛡️', href:'/grc',       color:'#7C3AED', available:true  },
   { id:'it',       title:'IT',                description:'IT asset management, incidents, access control and infrastructure monitoring.',    icon:'🖥️', href:'/it',        color:'#45B6E4', available:true  },
+  { id:'training',    title:'Training',         description:'Training catalogue, function-based plans, assignments and completion follow-up.',    icon:'🎓', href:'/training',    color:'#7C3AED', available:true  },
   { id:'helpdesk',    title:'Helpdesk',          description:'Support tickets, incident tracking and knowledge base management.',               icon:'🎧', href:'/helpdesk',     color:'#45B6E4', available:true  },
   { id:'development', title:'Development',      description:'Development requests, pipelines, test scripts and test execution tracking.',        icon:'💻', href:'/development', color:'#156082', available:true  },
-  { id:'training',    title:'Training',         description:'Training catalogue, function-based plans, assignments and completion follow-up.',    icon:'🎓', href:'/training',    color:'#7C3AED', available:true  },
-  { id:'legal',       title:'Legal',            description:'Legal entities, template documents and compliance. Manage WCOMPLY legal structure.', icon:'⚖️', href:'/legal',        color:'#1a2744', available:true  },
-  { id:'task-manager', title:'Task Manager',    description:'Cross-module workflow tasks, subtasks, delegation and Teams-connected updates.',      icon:'✅', href:'/task-manager', color:'#219BD6', available:true  },
-  { id:'settings', title:'MyWHUBBI', description:'Manage your profile, preferences, notifications and account settings.',           icon:'⚙️', href:'/settings',  color:'#45B6E4', available:true  },
   { id:'admin',    title:'Admin Cockpit',     description:'Service health, cost tracking, error logs and system administration.',             icon:'🔧', href:'/admin',     color:'#45B6E4', available:true  },
 ]
+const DEFAULT_ORDER = MODULES.map(m => m.id)
 
 interface CompanyLink { id: string; label: string; url: string; icon: string; location_id: string | null; location_name: string }
 
@@ -28,6 +29,9 @@ export default function HomePage() {
   const [backendStatus, setBackendStatus] = useState<'checking'|'up'|'down'>('checking')
   const [companyLinks, setCompanyLinks] = useState<CompanyLink[]>([])
   const [userName, setUserName] = useState('')
+  const [userEmail, setUserEmail] = useState('')
+  const [order, setOrder] = useState<string[]>(DEFAULT_ORDER)
+  const [dragId, setDragId] = useState<string | null>(null)
 
   useEffect(() => {
     fetch(`${API}/health`, { signal: AbortSignal.timeout(5000) })
@@ -37,6 +41,19 @@ export default function HomePage() {
     const user = getStoredUser()
     if (user) {
       setUserName(user.name || user.email)
+      setUserEmail(user.email)
+
+      try {
+        const raw = localStorage.getItem(`home_module_order_${user.email}`)
+        if (raw) {
+          const saved: string[] = JSON.parse(raw)
+          const validIds = new Set(DEFAULT_ORDER)
+          if (Array.isArray(saved) && saved.length === DEFAULT_ORDER.length && saved.every(id => validIds.has(id))) {
+            setOrder(saved)
+          }
+        }
+      } catch {}
+
       fetch(`${API}/settings/main-location/${encodeURIComponent(user.email)}`)
         .then(r => r.json())
         .then(loc => {
@@ -52,6 +69,24 @@ export default function HomePage() {
         .catch(() => {})
     }
   }, [])
+
+  const orderedModules = order.map(id => MODULES.find(m => m.id === id)).filter((m): m is typeof MODULES[number] => !!m)
+
+  const reorder = (overId: string) => {
+    if (!dragId || dragId === overId) return
+    setOrder(prev => {
+      const next = [...prev]
+      const from = next.indexOf(dragId)
+      const to = next.indexOf(overId)
+      if (from === -1 || to === -1) return prev
+      next.splice(from, 1)
+      next.splice(to, 0, dragId)
+      return next
+    })
+  }
+  const persistOrder = (finalOrder: string[]) => {
+    if (userEmail) localStorage.setItem(`home_module_order_${userEmail}`, JSON.stringify(finalOrder))
+  }
 
   return (
     <div style={{ minHeight:'100vh', background:'#F5F7FA', fontFamily:'Montserrat, sans-serif' }}>
@@ -99,22 +134,31 @@ export default function HomePage() {
         </div>
 
         {/* Modules grid */}
-        <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:'18px' }}>
-          {MODULES.map(mod => (
-            <div key={mod.id} onClick={() => mod.available && router.push(mod.href)}
-              style={{ background:'white', borderRadius:'14px', border:'1px solid #EDF2F7', padding:'24px', cursor:mod.available?'pointer':'default', opacity:mod.available?1:0.7, boxShadow:'0 1px 3px rgba(0,0,0,0.06)', transition:'all 0.15s', position:'relative', overflow:'hidden' }}
-              onMouseEnter={e => { if (mod.available) { e.currentTarget.style.boxShadow='0 8px 24px rgba(21,96,130,0.15)'; e.currentTarget.style.transform='translateY(-2px)' }}}
-              onMouseLeave={e => { e.currentTarget.style.boxShadow='0 1px 3px rgba(0,0,0,0.06)'; e.currentTarget.style.transform='none' }}>
-              <div style={{ position:'absolute', top:0, left:0, right:0, height:'3px', background:MODULE_LINE_COLOR }}/>
-              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:'14px' }}>
-                <div style={{ width:'44px', height:'44px', borderRadius:'10px', background:mod.color+'18', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'20px' }}>{mod.icon}</div>
-                <span style={{ background:mod.available?mod.color+'15':'#F1F5F9', color:mod.available?mod.color:'#45B6E4', padding:'2px 8px', borderRadius:'20px', fontSize:'9px', fontWeight:'700', textTransform:'uppercase' }}>{mod.available?'Active':'Soon'}</span>
+        <div>
+          <p style={{ fontSize:'11px', color:'#94A3B8', margin:'0 0 10px' }}>Drag a tile to reorder your modules.</p>
+          <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:'18px' }}>
+            {orderedModules.map(mod => (
+              <div key={mod.id} onClick={() => mod.available && router.push(mod.href)}
+                draggable
+                onDragStart={() => setDragId(mod.id)}
+                onDragOver={e => e.preventDefault()}
+                onDragEnter={() => reorder(mod.id)}
+                onDrop={() => { persistOrder(order); setDragId(null) }}
+                onDragEnd={() => { persistOrder(order); setDragId(null) }}
+                style={{ background:'white', borderRadius:'14px', border:'1px solid #EDF2F7', padding:'24px', cursor:'grab', opacity:dragId===mod.id?0.4:mod.available?1:0.7, boxShadow:'0 1px 3px rgba(0,0,0,0.06)', transition:'box-shadow 0.15s, transform 0.15s', position:'relative', overflow:'hidden' }}
+                onMouseEnter={e => { if (mod.available) { e.currentTarget.style.boxShadow='0 8px 24px rgba(21,96,130,0.15)'; e.currentTarget.style.transform='translateY(-2px)' }}}
+                onMouseLeave={e => { e.currentTarget.style.boxShadow='0 1px 3px rgba(0,0,0,0.06)'; e.currentTarget.style.transform='none' }}>
+                <div style={{ position:'absolute', top:0, left:0, right:0, height:'3px', background:MODULE_LINE_COLOR }}/>
+                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:'14px' }}>
+                  <div style={{ width:'44px', height:'44px', borderRadius:'10px', background:mod.color+'18', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'20px' }}>{mod.icon}</div>
+                  <span style={{ background:mod.available?mod.color+'15':'#F1F5F9', color:mod.available?mod.color:'#45B6E4', padding:'2px 8px', borderRadius:'20px', fontSize:'9px', fontWeight:'700', textTransform:'uppercase' }}>{mod.available?'Active':'Soon'}</span>
+                </div>
+                <h2 style={{ fontSize:'13px', fontWeight:'800', color:'#156082', margin:'0 0 6px' }}>{mod.title}</h2>
+                <p style={{ fontSize:'11px', color:'#45B6E4', margin:0, lineHeight:'1.6' }}>{mod.description}</p>
+                {mod.available && <div style={{ marginTop:'16px', display:'flex', alignItems:'center', gap:'5px', color:mod.color, fontSize:'11px', fontWeight:'700' }}>Open<svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path d="M5 12h14M12 5l7 7-7 7"/></svg></div>}
               </div>
-              <h2 style={{ fontSize:'13px', fontWeight:'800', color:'#156082', margin:'0 0 6px' }}>{mod.title}</h2>
-              <p style={{ fontSize:'11px', color:'#45B6E4', margin:0, lineHeight:'1.6' }}>{mod.description}</p>
-              {mod.available && <div style={{ marginTop:'16px', display:'flex', alignItems:'center', gap:'5px', color:mod.color, fontSize:'11px', fontWeight:'700' }}>Open<svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path d="M5 12h14M12 5l7 7-7 7"/></svg></div>}
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
       </div>
     </div>

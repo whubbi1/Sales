@@ -1,6 +1,7 @@
 'use client'
 import { useState, useEffect } from 'react'
 import TrainingLayout, { useTrainingPerm } from '@/components/TrainingLayout'
+import { useReportBuilder, applyReport, ReportPanel, ReportColumn } from '@/components/it/ReportBuilder'
 import { getStoredUser } from '@/lib/auth'
 
 const API = 'https://api.whubbi.wcomply.com'
@@ -120,6 +121,15 @@ function NewAssignmentModal({ catalog, plans, users, onClose, onSave }: any) {
   )
 }
 
+const COLUMNS: ReportColumn[] = [
+  { key: 'user_email', label: 'Employee', filterable: 'text' },
+  { key: 'training_name', label: 'Training', filterable: 'text' },
+  { key: 'due_date', label: 'Due Date' },
+  { key: 'recurrence_display', label: 'Recurring', filterable: 'select', options: ['Yearly', '—'] },
+  { key: 'status', label: 'Status', filterable: 'select', options: ['assigned', 'completed'] },
+  { key: 'assigned_by_name', label: 'Assigned By', filterable: 'text' },
+]
+
 function AssignmentsContent() {
   const { canEdit } = useTrainingPerm()
   const [assignments, setAssignments] = useState<any[]>([])
@@ -128,9 +138,15 @@ function AssignmentsContent() {
   const [users, setUsers] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [showNew, setShowNew] = useState(false)
-  const [statusFilter, setStatusFilter] = useState('')
+  const [userEmail, setUserEmail] = useState('')
 
-  useEffect(() => { load() }, [])
+  useEffect(() => {
+    load()
+    const u = getStoredUser()
+    if (u?.email) setUserEmail(u.email)
+  }, [])
+
+  const rb = useReportBuilder('training_assignments', COLUMNS, userEmail)
 
   const load = async () => {
     setLoading(true)
@@ -159,7 +175,9 @@ function AssignmentsContent() {
     load()
   }
 
-  const filtered = assignments.filter(a => !statusFilter || a.status === statusFilter)
+  const withDisplay = assignments.map(a => ({ ...a, recurrence_display: a.recurrence ? 'Yearly' : '—', assigned_by_name: a.assigned_by_name || a.assigned_by_email || '' }))
+  const filtered = applyReport(withDisplay, COLUMNS, rb.filters, rb.sortField, rb.sortDir)
+  const isVisible = (key: string) => rb.visibleCols.includes(key)
 
   return (
     <div style={{ padding: '24px 28px' }}>
@@ -168,47 +186,45 @@ function AssignmentsContent() {
           <h1 style={{ fontSize: '20px', fontWeight: '800', color: '#156082', margin: '0 0 4px' }}>📋 Training Assignments</h1>
           <p style={{ fontSize: '12px', color: '#94A3B8', margin: 0 }}>{filtered.length} assignment{filtered.length !== 1 ? 's' : ''}</p>
         </div>
-        {canEdit && (
-          <button onClick={() => setShowNew(true)} style={{ padding: '9px 18px', background: '#156082', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '700', fontFamily: 'Montserrat, sans-serif' }}>+ New Assignment</button>
-        )}
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <ReportPanel columns={COLUMNS} rb={rb} />
+          {canEdit && (
+            <button onClick={() => setShowNew(true)} style={{ padding: '9px 18px', background: '#156082', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '700', fontFamily: 'Montserrat, sans-serif' }}>+ New Assignment</button>
+          )}
+        </div>
       </div>
 
-      <div style={{ marginBottom: '14px' }}>
-        <select style={inp} value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
-          <option value="">All statuses</option>
-          <option value="assigned">Assigned</option>
-          <option value="completed">Completed</option>
-        </select>
-      </div>
-
-      <div style={{ background: 'white', borderRadius: '12px', border: '1px solid #EDF2F7', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
+      <div style={{ background: 'white', borderRadius: '12px', border: '1px solid #EDF2F7', overflowX: 'auto', overflowY: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.06)', maxWidth: '100%' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
           <thead style={{ background: '#FAFBFC' }}>
             <tr>
-              {['Employee', 'Training', 'Due Date', 'Recurring', 'Status', 'Assigned By', canEdit ? '' : null].filter(x => x !== null).map(h => (
-                <th key={h as string} style={{ padding: '10px 16px', textAlign: 'left', fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#45B6E4', borderBottom: '1px solid #EDF2F7' }}>{h}</th>
+              {COLUMNS.filter(c => isVisible(c.key)).map(c => (
+                <th key={c.key} style={{ padding: '10px 16px', textAlign: 'left', fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#45B6E4', borderBottom: '1px solid #EDF2F7' }}>{c.label}</th>
               ))}
+              {canEdit && <th style={{ padding: '10px 16px', borderBottom: '1px solid #EDF2F7' }} />}
             </tr>
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={7} style={{ textAlign: 'center', padding: '32px', color: '#45B6E4' }}>Loading…</td></tr>
+              <tr><td colSpan={COLUMNS.filter(c => isVisible(c.key)).length + (canEdit ? 1 : 0)} style={{ textAlign: 'center', padding: '32px', color: '#45B6E4' }}>Loading…</td></tr>
             ) : filtered.length === 0 ? (
-              <tr><td colSpan={7} style={{ textAlign: 'center', padding: '32px', color: '#94A3B8' }}>No assignments found.</td></tr>
+              <tr><td colSpan={COLUMNS.filter(c => isVisible(c.key)).length + (canEdit ? 1 : 0)} style={{ textAlign: 'center', padding: '32px', color: '#94A3B8' }}>No assignments found.</td></tr>
             ) : filtered.map(a => {
               const overdue = a.status === 'assigned' && a.due_date && new Date(a.due_date) < new Date()
               return (
                 <tr key={a.id} style={{ borderBottom: '1px solid #F1F5F9' }}>
-                  <td style={{ padding: '10px 16px', color: '#3F3F3F' }}>{a.user_email}</td>
-                  <td style={{ padding: '10px 16px', fontWeight: '700', color: '#156082' }}>{a.training_name}</td>
-                  <td style={{ padding: '10px 16px', color: overdue ? '#DC2626' : '#94A3B8', fontWeight: overdue ? '700' : '400' }}>{a.due_date ? new Date(a.due_date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}</td>
-                  <td style={{ padding: '10px 16px' }}>{a.recurrence ? <span style={{ background: '#F5F3FF', color: '#7C3AED', padding: '2px 9px', borderRadius: '10px', fontSize: '10px', fontWeight: '700' }}>🔁 Yearly</span> : '—'}</td>
-                  <td style={{ padding: '10px 16px' }}>
-                    <span style={{ background: a.status === 'completed' ? '#ECFDF5' : overdue ? '#FEF2F2' : '#FFF7ED', color: a.status === 'completed' ? '#059669' : overdue ? '#DC2626' : '#D97706', padding: '2px 9px', borderRadius: '10px', fontSize: '10px', fontWeight: '700' }}>
-                      {a.status === 'completed' ? 'Completed' : overdue ? 'Overdue' : 'Assigned'}
-                    </span>
-                  </td>
-                  <td style={{ padding: '10px 16px', color: '#64748B' }}>{a.assigned_by_name || a.assigned_by_email || '—'}</td>
+                  {isVisible('user_email') && <td style={{ padding: '10px 16px', color: '#3F3F3F' }}>{a.user_email}</td>}
+                  {isVisible('training_name') && <td style={{ padding: '10px 16px', fontWeight: '700', color: '#156082' }}>{a.training_name}</td>}
+                  {isVisible('due_date') && <td style={{ padding: '10px 16px', color: overdue ? '#DC2626' : '#94A3B8', fontWeight: overdue ? '700' : '400' }}>{a.due_date ? new Date(a.due_date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}</td>}
+                  {isVisible('recurrence_display') && <td style={{ padding: '10px 16px' }}>{a.recurrence ? <span style={{ background: '#F5F3FF', color: '#7C3AED', padding: '2px 9px', borderRadius: '10px', fontSize: '10px', fontWeight: '700' }}>🔁 Yearly</span> : '—'}</td>}
+                  {isVisible('status') && (
+                    <td style={{ padding: '10px 16px' }}>
+                      <span style={{ background: a.status === 'completed' ? '#ECFDF5' : overdue ? '#FEF2F2' : '#FFF7ED', color: a.status === 'completed' ? '#059669' : overdue ? '#DC2626' : '#D97706', padding: '2px 9px', borderRadius: '10px', fontSize: '10px', fontWeight: '700' }}>
+                        {a.status === 'completed' ? 'Completed' : overdue ? 'Overdue' : 'Assigned'}
+                      </span>
+                    </td>
+                  )}
+                  {isVisible('assigned_by_name') && <td style={{ padding: '10px 16px', color: '#64748B' }}>{a.assigned_by_name || a.assigned_by_email || '—'}</td>}
                   {canEdit && (
                     <td style={{ padding: '10px 16px' }}>
                       {a.status !== 'completed' && (

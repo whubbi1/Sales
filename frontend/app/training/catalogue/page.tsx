@@ -1,6 +1,8 @@
 'use client'
 import { useState, useEffect } from 'react'
 import TrainingLayout, { useTrainingPerm } from '@/components/TrainingLayout'
+import { useReportBuilder, applyReport, ReportPanel, ReportColumn } from '@/components/it/ReportBuilder'
+import { getStoredUser } from '@/lib/auth'
 
 const API = 'https://api.whubbi.wcomply.com'
 const TRAINING_TYPES = ['wcomply', 'external']
@@ -19,6 +21,17 @@ const lbl: React.CSSProperties = {
 }
 
 const EMPTY_FORM = { training_type: 'wcomply', company: '', title: '', description: '', duration: '', material_link: '', languages: [] as string[], expertise_level: 'beginner' }
+
+const COLUMNS: ReportColumn[] = [
+  { key: 'training_type', label: 'Type', filterable: 'select', options: TRAINING_TYPES },
+  { key: 'company', label: 'Company', filterable: 'text' },
+  { key: 'title', label: 'Title', filterable: 'text' },
+  { key: 'description', label: 'Description', filterable: 'text' },
+  { key: 'duration', label: 'Duration', filterable: 'text' },
+  { key: 'languages_display', label: 'Languages', filterable: 'text' },
+  { key: 'expertise_level', label: 'Expertise', filterable: 'select', options: EXPERTISE_LEVELS },
+  { key: 'material_link', label: 'Material Link' },
+]
 
 function LanguageChecklist({ selected, onToggle }: { selected: string[]; onToggle: (lang: string) => void }) {
   return (
@@ -150,8 +163,15 @@ function CatalogueContent() {
   const [showNew, setShowNew] = useState(false)
   const [editing, setEditing] = useState<{ id: string; field: string } | null>(null)
   const [search, setSearch] = useState('')
+  const [userEmail, setUserEmail] = useState('')
 
-  useEffect(() => { load() }, [])
+  useEffect(() => {
+    load()
+    const u = getStoredUser()
+    if (u?.email) setUserEmail(u.email)
+  }, [])
+
+  const rb = useReportBuilder('training_catalogue', COLUMNS, userEmail)
 
   const load = async () => {
     setLoading(true)
@@ -160,7 +180,10 @@ function CatalogueContent() {
     setLoading(false)
   }
 
-  const filtered = catalog.filter(c => !search || `${c.title} ${c.company}`.toLowerCase().includes(search.toLowerCase()))
+  const withDisplay = catalog.map(c => ({ ...c, languages_display: (c.languages || []).join(', ') }))
+  const searched = withDisplay.filter(c => !search || `${c.title} ${c.company}`.toLowerCase().includes(search.toLowerCase()))
+  const filtered = applyReport(searched, COLUMNS, rb.filters, rb.sortField, rb.sortDir)
+  const isVisible = (key: string) => rb.visibleCols.includes(key)
 
   const createItem = async (form: any) => {
     await fetch(`${API}/training/catalog`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form) })
@@ -192,32 +215,38 @@ function CatalogueContent() {
           <h1 style={{ fontSize: '20px', fontWeight: '800', color: '#156082', margin: '0 0 4px' }}>📚 Training Catalogue</h1>
           <p style={{ fontSize: '12px', color: '#94A3B8', margin: 0 }}>{filtered.length} training{filtered.length !== 1 ? 's' : ''} · click any field to edit</p>
         </div>
-        {canEdit && (
-          <button onClick={() => setShowNew(true)} style={{ padding: '9px 18px', background: '#156082', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '700', fontFamily: 'Montserrat, sans-serif' }}>+ New Training</button>
-        )}
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <ReportPanel columns={COLUMNS} rb={rb} />
+          {canEdit && (
+            <button onClick={() => setShowNew(true)} style={{ padding: '9px 18px', background: '#156082', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '700', fontFamily: 'Montserrat, sans-serif' }}>+ New Training</button>
+          )}
+        </div>
       </div>
 
       <div style={{ marginBottom: '14px' }}>
         <input style={{ ...inp, width: '260px' }} placeholder="Search title or company…" value={search} onChange={e => setSearch(e.target.value)} />
       </div>
 
-      <div style={{ background: 'white', borderRadius: '12px', border: '1px solid #EDF2F7', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
+      <div style={{ background: 'white', borderRadius: '12px', border: '1px solid #EDF2F7', overflowX: 'auto', overflowY: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.06)', maxWidth: '100%' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
           <thead style={{ background: '#FAFBFC' }}>
             <tr>
-              {['ID', 'Type', 'Company', 'Title', 'Description', 'Duration', 'Languages', 'Expertise', 'Material Link', canEdit ? '' : null].filter(x => x !== null).map(h => (
-                <th key={h as string} style={{ padding: '10px 12px', textAlign: 'left', fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#45B6E4', borderBottom: '1px solid #EDF2F7', whiteSpace: 'nowrap' }}>{h}</th>
+              <th style={{ padding: '10px 12px', textAlign: 'left', fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#45B6E4', borderBottom: '1px solid #EDF2F7', whiteSpace: 'nowrap' }}>ID</th>
+              {COLUMNS.filter(c => isVisible(c.key)).map(c => (
+                <th key={c.key} style={{ padding: '10px 12px', textAlign: 'left', fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#45B6E4', borderBottom: '1px solid #EDF2F7', whiteSpace: 'nowrap' }}>{c.label}</th>
               ))}
+              {canEdit && <th style={{ padding: '10px 12px', borderBottom: '1px solid #EDF2F7' }} />}
             </tr>
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={10} style={{ textAlign: 'center', padding: '48px', color: '#45B6E4' }}>Loading…</td></tr>
+              <tr><td colSpan={COLUMNS.filter(c => isVisible(c.key)).length + 1 + (canEdit ? 1 : 0)} style={{ textAlign: 'center', padding: '48px', color: '#45B6E4' }}>Loading…</td></tr>
             ) : filtered.length === 0 ? (
-              <tr><td colSpan={10} style={{ textAlign: 'center', padding: '48px', color: '#94A3B8' }}>No trainings in the catalogue yet.</td></tr>
+              <tr><td colSpan={COLUMNS.filter(c => isVisible(c.key)).length + 1 + (canEdit ? 1 : 0)} style={{ textAlign: 'center', padding: '48px', color: '#94A3B8' }}>No trainings in the catalogue yet.</td></tr>
             ) : filtered.map(item => (
               <tr key={item.id} style={{ borderBottom: '1px solid #F1F5F9' }}>
                 <td style={{ padding: '10px 12px', color: '#94A3B8', fontFamily: 'monospace', fontSize: '11px' }} title={item.id}>{item.id.slice(0, 8)}</td>
+                {isVisible('training_type') && (
                 <td style={{ padding: '10px 12px', minWidth: '90px' }}>
                   <EditableCell display={<span style={{ background: '#F1F5F9', color: '#3F3F3F', padding: '2px 9px', borderRadius: '10px', fontSize: '10px', fontWeight: '700' }}>{TYPE_LABEL[item.training_type] || item.training_type}</span>}
                     editing={isEditing(item.id, 'training_type')} onStartEdit={() => canEdit && setEditing({ id: item.id, field: 'training_type' })}>
@@ -226,31 +255,43 @@ function CatalogueContent() {
                     </select>
                   </EditableCell>
                 </td>
+                )}
+                {isVisible('company') && (
                 <td style={{ padding: '10px 12px', minWidth: '120px' }}>
                   <EditableCell display={item.company} editing={isEditing(item.id, 'company')} onStartEdit={() => canEdit && setEditing({ id: item.id, field: 'company' })}>
                     <input autoFocus style={inp} defaultValue={item.company} onBlur={e => patchItem(item, { company: e.target.value })} onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }} />
                   </EditableCell>
                 </td>
+                )}
+                {isVisible('title') && (
                 <td style={{ padding: '10px 12px', minWidth: '160px', fontWeight: '700', color: '#156082' }}>
                   <EditableCell display={item.title} editing={isEditing(item.id, 'title')} onStartEdit={() => canEdit && setEditing({ id: item.id, field: 'title' })}>
                     <input autoFocus style={inp} defaultValue={item.title} onBlur={e => patchItem(item, { title: e.target.value })} onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }} />
                   </EditableCell>
                 </td>
+                )}
+                {isVisible('description') && (
                 <td style={{ padding: '10px 12px', minWidth: '200px', color: '#64748B' }}>
                   <EditableCell display={item.description} editing={isEditing(item.id, 'description')} onStartEdit={() => canEdit && setEditing({ id: item.id, field: 'description' })}>
                     <textarea autoFocus style={{ ...inp, width: '100%', minWidth: '200px', boxSizing: 'border-box' as const, minHeight: '50px', resize: 'vertical' }} defaultValue={item.description} onBlur={e => patchItem(item, { description: e.target.value })} />
                   </EditableCell>
                 </td>
+                )}
+                {isVisible('duration') && (
                 <td style={{ padding: '10px 12px', minWidth: '90px' }}>
                   <EditableCell display={item.duration} editing={isEditing(item.id, 'duration')} onStartEdit={() => canEdit && setEditing({ id: item.id, field: 'duration' })}>
                     <input autoFocus style={inp} defaultValue={item.duration} onBlur={e => patchItem(item, { duration: e.target.value })} onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }} />
                   </EditableCell>
                 </td>
+                )}
+                {isVisible('languages_display') && (
                 <td style={{ padding: '10px 12px', minWidth: '160px' }}>
                   <EditableLanguages item={item} editing={isEditing(item.id, 'languages')}
                     onStartEdit={() => canEdit && setEditing({ id: item.id, field: 'languages' })}
                     onSave={(langs: string[]) => patchItem(item, { languages: langs })} />
                 </td>
+                )}
+                {isVisible('expertise_level') && (
                 <td style={{ padding: '10px 12px', minWidth: '110px' }}>
                   <EditableCell display={<span style={{ background: '#EEF2FF', color: '#156082', padding: '2px 9px', borderRadius: '10px', fontSize: '10px', fontWeight: '700' }}>{EXPERTISE_LABEL[item.expertise_level] || 'Beginner'}</span>}
                     editing={isEditing(item.id, 'expertise_level')} onStartEdit={() => canEdit && setEditing({ id: item.id, field: 'expertise_level' })}>
@@ -259,12 +300,15 @@ function CatalogueContent() {
                     </select>
                   </EditableCell>
                 </td>
+                )}
+                {isVisible('material_link') && (
                 <td style={{ padding: '10px 12px', minWidth: '140px' }}>
                   <EditableCell display={item.material_link ? <a href={item.material_link} target="_blank" rel="noopener noreferrer" style={{ color: '#3B82F6' }} onClick={e => e.stopPropagation()}>🔗 Link</a> : null}
                     editing={isEditing(item.id, 'material_link')} onStartEdit={() => canEdit && setEditing({ id: item.id, field: 'material_link' })}>
                     <input autoFocus style={inp} defaultValue={item.material_link} onBlur={e => patchItem(item, { material_link: e.target.value })} onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }} />
                   </EditableCell>
                 </td>
+                )}
                 {canEdit && (
                   <td style={{ padding: '10px 12px' }}>
                     <button onClick={() => deleteItem(item)} style={{ padding: '5px 10px', background: '#FEF2F2', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '11px', color: '#EF4444', fontWeight: '700', fontFamily: 'Montserrat, sans-serif' }}>Delete</button>

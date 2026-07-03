@@ -1,6 +1,8 @@
 'use client'
 import { useState, useEffect, Fragment } from 'react'
 import TrainingLayout from '@/components/TrainingLayout'
+import { useReportBuilder, applyReport, ReportPanel, ReportColumn } from '@/components/it/ReportBuilder'
+import { getStoredUser } from '@/lib/auth'
 
 const API = 'https://api.whubbi.wcomply.com'
 
@@ -9,16 +11,30 @@ const inp: React.CSSProperties = {
   borderRadius: '8px', fontFamily: 'Montserrat, sans-serif', outline: 'none', background: 'white',
 }
 
+const EMPLOYEE_COLUMNS: ReportColumn[] = [
+  { key: 'employee_display', label: 'Employee', filterable: 'text' },
+  { key: 'department', label: 'Department', filterable: 'text' },
+  { key: 'trainings_count', label: 'Trainings' },
+  { key: 'certifications_count', label: 'Certifications' },
+  { key: 'active_assignments_count', label: 'Active Assignments' },
+  { key: 'late_assignments_count', label: 'Overdue' },
+]
+
 function ByEmployee() {
   const [overview, setOverview] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [expandedEmail, setExpandedEmail] = useState<string | null>(null)
   const [expandedTrainings, setExpandedTrainings] = useState<any[]>([])
+  const [userEmail, setUserEmail] = useState('')
 
   useEffect(() => {
     fetch(`${API}/training/overview`).then(r => r.json()).then(d => { setOverview(d.users || []); setLoading(false) }).catch(() => setLoading(false))
+    const u = getStoredUser()
+    if (u?.email) setUserEmail(u.email)
   }, [])
+
+  const rb = useReportBuilder('training_execution_by_employee', EMPLOYEE_COLUMNS, userEmail)
 
   const toggleExpand = async (email: string) => {
     if (expandedEmail === email) { setExpandedEmail(null); return }
@@ -27,43 +43,53 @@ function ByEmployee() {
     setExpandedTrainings(d.trainings || [])
   }
 
-  const filtered = overview.filter((u: any) => {
+  const withDisplay = overview.map((u: any) => ({ ...u, employee_display: u.display_name || `${u.first_name} ${u.last_name}` }))
+  const searched = withDisplay.filter((u: any) => {
     if (!search) return true
     const name = `${u.display_name || ''} ${u.first_name || ''} ${u.last_name || ''} ${u.email || ''}`.toLowerCase()
     return name.includes(search.toLowerCase())
   })
+  const filtered = applyReport(searched, EMPLOYEE_COLUMNS, rb.filters, rb.sortField, rb.sortDir)
+  const isVisible = (key: string) => rb.visibleCols.includes(key)
 
   if (loading) return <div style={{ textAlign: 'center', padding: '32px', color: '#45B6E4' }}>Loading…</div>
 
   return (
     <div>
-      <div style={{ padding: '16px 16px 0' }}>
+      <div style={{ padding: '16px 16px 0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
         <input style={{ ...inp, width: '280px' }} placeholder="Search employee…" value={search} onChange={e => setSearch(e.target.value)} />
+        <ReportPanel columns={EMPLOYEE_COLUMNS} rb={rb} />
       </div>
+      <div style={{ overflowX: 'auto' }}>
       <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
         <thead style={{ background: '#FAFBFC' }}>
           <tr>
-            {['Employee', 'Department', 'Trainings', 'Certifications', 'Active Assignments', 'Overdue', ''].map(h => (
-              <th key={h} style={{ padding: '10px 16px', textAlign: 'left', fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#45B6E4', borderBottom: '1px solid #EDF2F7' }}>{h}</th>
+            {EMPLOYEE_COLUMNS.filter(c => isVisible(c.key)).map(c => (
+              <th key={c.key} style={{ padding: '10px 16px', textAlign: 'left', fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#45B6E4', borderBottom: '1px solid #EDF2F7' }}>{c.label}</th>
             ))}
+            <th style={{ padding: '10px 16px', borderBottom: '1px solid #EDF2F7' }} />
           </tr>
         </thead>
         <tbody>
           {filtered.length === 0 ? (
-            <tr><td colSpan={7} style={{ textAlign: 'center', padding: '32px', color: '#94A3B8' }}>No employees match your search.</td></tr>
+            <tr><td colSpan={EMPLOYEE_COLUMNS.filter(c => isVisible(c.key)).length + 1} style={{ textAlign: 'center', padding: '32px', color: '#94A3B8' }}>No employees match your search.</td></tr>
           ) : filtered.map((u: any) => (
             <Fragment key={u.email}>
               <tr style={{ borderBottom: '1px solid #F1F5F9' }}>
-                <td style={{ padding: '10px 16px', fontWeight: '700', color: '#156082' }}>{u.display_name || `${u.first_name} ${u.last_name}`}</td>
-                <td style={{ padding: '10px 16px', color: '#64748B' }}>{u.department || '—'}</td>
-                <td style={{ padding: '10px 16px' }}>{u.trainings_count}</td>
-                <td style={{ padding: '10px 16px' }}>{u.certifications_count}</td>
+                {isVisible('employee_display') && <td style={{ padding: '10px 16px', fontWeight: '700', color: '#156082' }}>{u.display_name || `${u.first_name} ${u.last_name}`}</td>}
+                {isVisible('department') && <td style={{ padding: '10px 16px', color: '#64748B' }}>{u.department || '—'}</td>}
+                {isVisible('trainings_count') && <td style={{ padding: '10px 16px' }}>{u.trainings_count}</td>}
+                {isVisible('certifications_count') && <td style={{ padding: '10px 16px' }}>{u.certifications_count}</td>}
+                {isVisible('active_assignments_count') && (
                 <td style={{ padding: '10px 16px' }}>
                   {u.active_assignments_count > 0 ? <span style={{ background: '#FFF7ED', color: '#D97706', padding: '2px 9px', borderRadius: '10px', fontSize: '10px', fontWeight: '700' }}>{u.active_assignments_count}</span> : '—'}
                 </td>
+                )}
+                {isVisible('late_assignments_count') && (
                 <td style={{ padding: '10px 16px' }}>
                   {u.late_assignments_count > 0 ? <span style={{ background: '#FEF2F2', color: '#DC2626', padding: '2px 9px', borderRadius: '10px', fontSize: '10px', fontWeight: '700' }}>{u.late_assignments_count}</span> : '—'}
                 </td>
+                )}
                 <td style={{ padding: '10px 16px' }}>
                   <button onClick={() => toggleExpand(u.email)} style={{ padding: '4px 10px', background: '#F1F5F9', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '11px', color: '#64748B', fontWeight: '600', fontFamily: 'Montserrat, sans-serif' }}>
                     {expandedEmail === u.email ? '▲ Hide' : '▼ View'}
@@ -72,7 +98,7 @@ function ByEmployee() {
               </tr>
               {expandedEmail === u.email && (
                 <tr>
-                  <td colSpan={7} style={{ padding: '0', background: '#F8FAFC' }}>
+                  <td colSpan={EMPLOYEE_COLUMNS.filter(c => isVisible(c.key)).length + 1} style={{ padding: '0', background: '#F8FAFC' }}>
                     <div style={{ padding: '12px 20px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
                       <div>
                         <div style={{ fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#DC2626', marginBottom: '6px' }}>Overdue Trainings</div>
@@ -108,19 +134,32 @@ function ByEmployee() {
           ))}
         </tbody>
       </table>
+      </div>
     </div>
   )
 }
+
+const BY_TRAINING_COLUMNS: ReportColumn[] = [
+  { key: 'employee_display', label: 'Employee', filterable: 'text' },
+  { key: 'due_date', label: 'Due Date' },
+  { key: 'status', label: 'Status', filterable: 'select', options: ['assigned', 'completed'] },
+  { key: 'assigned_by_name', label: 'Assigned By', filterable: 'text' },
+]
 
 function ByTraining() {
   const [catalog, setCatalog] = useState<any[]>([])
   const [selected, setSelected] = useState('')
   const [assignments, setAssignments] = useState<any[]>([])
   const [loading, setLoading] = useState(false)
+  const [userEmail, setUserEmail] = useState('')
 
   useEffect(() => {
     fetch(`${API}/training/catalog`).then(r => r.json()).then(d => setCatalog(d.catalog || [])).catch(() => {})
+    const u = getStoredUser()
+    if (u?.email) setUserEmail(u.email)
   }, [])
+
+  const rb = useReportBuilder('training_execution_by_training', BY_TRAINING_COLUMNS, userEmail)
 
   useEffect(() => {
     if (!selected) { setAssignments([]); return }
@@ -128,47 +167,56 @@ function ByTraining() {
     fetch(`${API}/training/overview/training/${selected}`).then(r => r.json()).then(d => { setAssignments(d.assignments || []); setLoading(false) }).catch(() => setLoading(false))
   }, [selected])
 
+  const withDisplay = assignments.map((a: any) => ({ ...a, employee_display: (a.first_name || a.last_name) ? `${a.first_name} ${a.last_name}`.trim() : a.user_email, assigned_by_name: a.assigned_by_name || a.assigned_by_email || '' }))
+  const filtered = applyReport(withDisplay, BY_TRAINING_COLUMNS, rb.filters, rb.sortField, rb.sortDir)
+  const isVisible = (key: string) => rb.visibleCols.includes(key)
+
   return (
     <div>
-      <div style={{ marginBottom: '14px' }}>
+      <div style={{ marginBottom: '14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
         <select style={{ ...inp, width: '320px' }} value={selected} onChange={e => setSelected(e.target.value)}>
           <option value="">Select a training…</option>
           {catalog.map(c => <option key={c.id} value={c.id}>{c.title} · {c.company}</option>)}
         </select>
+        {selected && <ReportPanel columns={BY_TRAINING_COLUMNS} rb={rb} />}
       </div>
       {!selected ? (
         <div style={{ textAlign: 'center', padding: '32px', color: '#94A3B8' }}>Pick a training to see who it's assigned to.</div>
       ) : loading ? (
         <div style={{ textAlign: 'center', padding: '32px', color: '#45B6E4' }}>Loading…</div>
       ) : (
+        <div style={{ overflowX: 'auto' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
           <thead style={{ background: '#FAFBFC' }}>
             <tr>
-              {['Employee', 'Due Date', 'Status', 'Assigned By'].map(h => (
-                <th key={h} style={{ padding: '10px 16px', textAlign: 'left', fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#45B6E4', borderBottom: '1px solid #EDF2F7' }}>{h}</th>
+              {BY_TRAINING_COLUMNS.filter(c => isVisible(c.key)).map(c => (
+                <th key={c.key} style={{ padding: '10px 16px', textAlign: 'left', fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#45B6E4', borderBottom: '1px solid #EDF2F7' }}>{c.label}</th>
               ))}
             </tr>
           </thead>
           <tbody>
-            {assignments.length === 0 ? (
-              <tr><td colSpan={4} style={{ textAlign: 'center', padding: '32px', color: '#94A3B8' }}>No one has been assigned this training yet.</td></tr>
-            ) : assignments.map((a: any) => {
+            {filtered.length === 0 ? (
+              <tr><td colSpan={BY_TRAINING_COLUMNS.filter(c => isVisible(c.key)).length} style={{ textAlign: 'center', padding: '32px', color: '#94A3B8' }}>No one has been assigned this training yet.</td></tr>
+            ) : filtered.map((a: any) => {
               const overdue = a.status === 'assigned' && a.due_date && new Date(a.due_date) < new Date()
               return (
                 <tr key={a.id} style={{ borderBottom: '1px solid #F1F5F9' }}>
-                  <td style={{ padding: '10px 16px', color: '#3F3F3F' }}>{(a.first_name || a.last_name) ? `${a.first_name} ${a.last_name}`.trim() : a.user_email}</td>
-                  <td style={{ padding: '10px 16px', color: overdue ? '#DC2626' : '#94A3B8' }}>{a.due_date ? new Date(a.due_date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}</td>
-                  <td style={{ padding: '10px 16px' }}>
-                    <span style={{ background: a.status === 'completed' ? '#ECFDF5' : overdue ? '#FEF2F2' : '#FFF7ED', color: a.status === 'completed' ? '#059669' : overdue ? '#DC2626' : '#D97706', padding: '2px 9px', borderRadius: '10px', fontSize: '10px', fontWeight: '700' }}>
-                      {a.status === 'completed' ? 'Completed' : overdue ? 'Overdue' : 'Assigned'}
-                    </span>
-                  </td>
-                  <td style={{ padding: '10px 16px', color: '#64748B' }}>{a.assigned_by_name || a.assigned_by_email || '—'}</td>
+                  {isVisible('employee_display') && <td style={{ padding: '10px 16px', color: '#3F3F3F' }}>{a.employee_display}</td>}
+                  {isVisible('due_date') && <td style={{ padding: '10px 16px', color: overdue ? '#DC2626' : '#94A3B8' }}>{a.due_date ? new Date(a.due_date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}</td>}
+                  {isVisible('status') && (
+                    <td style={{ padding: '10px 16px' }}>
+                      <span style={{ background: a.status === 'completed' ? '#ECFDF5' : overdue ? '#FEF2F2' : '#FFF7ED', color: a.status === 'completed' ? '#059669' : overdue ? '#DC2626' : '#D97706', padding: '2px 9px', borderRadius: '10px', fontSize: '10px', fontWeight: '700' }}>
+                        {a.status === 'completed' ? 'Completed' : overdue ? 'Overdue' : 'Assigned'}
+                      </span>
+                    </td>
+                  )}
+                  {isVisible('assigned_by_name') && <td style={{ padding: '10px 16px', color: '#64748B' }}>{a.assigned_by_name}</td>}
                 </tr>
               )
             })}
           </tbody>
         </table>
+        </div>
       )}
     </div>
   )
