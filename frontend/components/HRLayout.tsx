@@ -9,11 +9,11 @@ const NAV = [
   { href: '/rh/recrutement', icon: '👥', label: 'Recrutement' },
   { href: '/rh/positions',   icon: '💼', label: 'Job Positions' },
   { href: '/rh/jobs',        icon: '📋', label: 'Job Descriptions' },
-  { href: '/rh/permissions', icon: '🔐', label: 'Permissions' },
+  { href: '/rh/permissions', icon: '🔐', label: 'WHUBBI Permissions' },
   { href: '/rh/chat',        icon: '💬', label: 'WHUBBI Chat' },
 ]
 const HR_MANAGER_NAV = [
-  { href: '/rh/admin', icon: '⚙️', label: 'Admin Cockpit' },
+  { href: '/rh/admin', icon: '⚙️', label: 'HR Admin Cockpit' },
 ]
 
 export function HRLayout({ children }: { children: React.ReactNode }) {
@@ -88,7 +88,7 @@ export function HRLayout({ children }: { children: React.ReactNode }) {
             All Modules
           </button>
           <button onClick={handleSignOut}
-            style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 12px', borderRadius: '8px', color: '#F87171', background: 'rgba(239,68,68,0.1)', border: 'none', cursor: 'pointer', fontSize: '12px', fontFamily: 'Montserrat, sans-serif', textAlign: 'left', fontWeight: '600' }}>
+            style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 12px', borderRadius: '8px', color: 'rgba(255,255,255,0.55)', background: 'transparent', border: 'none', cursor: 'pointer', fontSize: '12px', fontFamily: 'Montserrat, sans-serif', textAlign: 'left' }}>
             <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
             Sign out
           </button>

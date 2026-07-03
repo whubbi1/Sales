@@ -93,6 +93,11 @@ async def startup():
                 "ALTER TABLE legal_locations ADD COLUMN IF NOT EXISTS phone VARCHAR(50)",
                 "ALTER TABLE legal_locations ADD COLUMN IF NOT EXISTS email VARCHAR(255)",
                 "ALTER TABLE legal_templates ADD COLUMN IF NOT EXISTS entity_id UUID",
+                # Legal Templates — optionally scope a template to several specific entities
+                # instead of just one (defaults to applying to all entities, like it_applications' locations)
+                "ALTER TABLE legal_templates ADD COLUMN IF NOT EXISTS all_entities BOOLEAN NOT NULL DEFAULT true",
+                "ALTER TABLE legal_templates ADD COLUMN IF NOT EXISTS entity_ids JSONB NOT NULL DEFAULT '[]'",
+                "ALTER TABLE legal_templates ADD COLUMN IF NOT EXISTS entity_names JSONB NOT NULL DEFAULT '[]'",
                 "ALTER TABLE legal_doc_types ADD COLUMN IF NOT EXISTS scope VARCHAR(20) DEFAULT 'both'",
                 "ALTER TABLE helpdesk_groups ADD COLUMN IF NOT EXISTS is_default BOOLEAN DEFAULT false",
                 # Seed missing subcategories without dropping existing data

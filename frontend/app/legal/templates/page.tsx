@@ -8,12 +8,34 @@ const FILTER_KEY = 'legal_template_filters'
 
 interface Template {
   id: string; title: string; description: string; doc_type: string
-  entity_id: string; entity_name: string; sharepoint_url: string; sort_order: number; created_at: string
+  all_entities: boolean; entity_ids: string[]; entity_names: string[]
+  sharepoint_url: string; sort_order: number; created_at: string
 }
 interface Entity { id: string; legal_name: string }
 
 const DEFAULT_FILTERS = { search: '', entity_id: '', doc_type: '' }
-const EMPTY_FORM = { title: '', description: '', doc_type: '', entity_id: '', sharepoint_url: '', sort_order: 0 }
+const EMPTY_FORM = { title: '', description: '', doc_type: '', all_entities: true, entity_ids: [] as string[], entity_names: [] as string[], sharepoint_url: '', sort_order: 0 }
+
+function EntityChecklist({ allEntities, selectedIds, entities, onToggleAll, onToggleEntity }: { allEntities: boolean; selectedIds: string[]; entities: Entity[]; onToggleAll: () => void; onToggleEntity: (id: string) => void }) {
+  return (
+    <div>
+      <label style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '4px 8px', marginBottom: '6px', background: allEntities ? '#EFF6FF' : '#F8FAFC', border: `1px solid ${allEntities ? '#156082' : '#E2E8F0'}`, borderRadius: '8px', fontSize: '11px', cursor: 'pointer', color: allEntities ? '#156082' : '#64748B', fontWeight: '700' }}>
+        <input type="checkbox" checked={allEntities} onChange={onToggleAll} style={{ margin: 0 }} />
+        All Legal Entities
+      </label>
+      {!allEntities && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+          {entities.map(e => (
+            <label key={e.id} style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '4px 8px', background: selectedIds.includes(e.id) ? '#EFF6FF' : '#F8FAFC', border: `1px solid ${selectedIds.includes(e.id) ? '#156082' : '#E2E8F0'}`, borderRadius: '14px', fontSize: '11px', cursor: 'pointer', color: selectedIds.includes(e.id) ? '#156082' : '#64748B' }}>
+              <input type="checkbox" checked={selectedIds.includes(e.id)} onChange={() => onToggleEntity(e.id)} style={{ margin: 0 }} />
+              {e.legal_name}
+            </label>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
 
 export default function LegalTemplatesPage() {
   const [templates, setTemplates] = useState<Template[]>([])
@@ -75,10 +97,20 @@ export default function LegalTemplatesPage() {
 
   const displayed = templates.filter(t => {
     if (filters.search && !t.title.toLowerCase().includes(filters.search.toLowerCase()) && !(t.doc_type || '').toLowerCase().includes(filters.search.toLowerCase())) return false
-    if (filters.entity_id && t.entity_id !== filters.entity_id) return false
+    if (filters.entity_id && !t.all_entities && !(t.entity_ids || []).includes(filters.entity_id)) return false
     if (filters.doc_type && t.doc_type !== filters.doc_type) return false
     return true
   })
+
+  const toggleFormEntityAll = () => setForm(f => ({ ...f, all_entities: !f.all_entities, entity_ids: [], entity_names: [] }))
+  const toggleFormEntity = (id: string) => {
+    setForm(f => {
+      const has = f.entity_ids.includes(id)
+      const ids = has ? f.entity_ids.filter(x => x !== id) : [...f.entity_ids, id]
+      const names = ids.map(i => entities.find(e => e.id === i)?.legal_name).filter(Boolean) as string[]
+      return { ...f, entity_ids: ids, entity_names: names }
+    })
+  }
 
   const hasFilter = !!(filters.search || filters.entity_id || filters.doc_type)
 
@@ -153,7 +185,9 @@ export default function LegalTemplatesPage() {
                       : <span style={{ color: '#CBD5E1' }}>—</span>}
                   </td>
                   <td style={{ padding: '10px 14px', color: '#3F3F3F' }}>
-                    {tmpl.entity_name || <span style={{ color: '#CBD5E1' }}>—</span>}
+                    {tmpl.all_entities
+                      ? <span style={{ background: '#EEF2FF', color: '#156082', padding: '2px 9px', borderRadius: '10px', fontSize: '10px', fontWeight: '700' }}>All</span>
+                      : (tmpl.entity_names || []).length > 0 ? (tmpl.entity_names || []).join(', ') : <span style={{ color: '#CBD5E1' }}>—</span>}
                   </td>
                   <td style={{ padding: '10px 14px' }}>
                     {tmpl.sharepoint_url
@@ -168,7 +202,7 @@ export default function LegalTemplatesPage() {
                   <td style={{ padding: '10px 14px' }}>
                     {canEdit && (
                       <div style={{ display: 'flex', gap: '6px' }}>
-                        <button onClick={() => { setEditingTmpl(tmpl); setForm({ title: tmpl.title, description: tmpl.description || '', doc_type: tmpl.doc_type || '', entity_id: tmpl.entity_id || '', sharepoint_url: tmpl.sharepoint_url || '', sort_order: tmpl.sort_order || 0 }); setShowForm(true) }}
+                        <button onClick={() => { setEditingTmpl(tmpl); setForm({ title: tmpl.title, description: tmpl.description || '', doc_type: tmpl.doc_type || '', all_entities: tmpl.all_entities !== false, entity_ids: tmpl.entity_ids || [], entity_names: tmpl.entity_names || [], sharepoint_url: tmpl.sharepoint_url || '', sort_order: tmpl.sort_order || 0 }); setShowForm(true) }}
                           style={{ fontSize: '11px', color: '#64748B', background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: '6px', padding: '4px 10px', cursor: 'pointer', fontFamily: 'Montserrat, sans-serif' }}>Edit</button>
                         <button onClick={() => deleteTemplate(tmpl.id)}
                           style={{ fontSize: '11px', color: '#EF4444', background: '#FEF2F2', border: '1px solid #FCA5A5', borderRadius: '6px', padding: '4px 10px', cursor: 'pointer', fontFamily: 'Montserrat, sans-serif' }}>Del</button>
@@ -193,18 +227,13 @@ export default function LegalTemplatesPage() {
                 <label style={lbl}>Title *</label>
                 <input value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} style={modal_inp} />
               </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-                <div>
-                  <label style={lbl}>Document Type</label>
-                  <input placeholder="e.g. Employment Contract" value={form.doc_type} onChange={e => setForm(f => ({ ...f, doc_type: e.target.value }))} style={modal_inp} />
-                </div>
-                <div>
-                  <label style={lbl}>Legal Entity</label>
-                  <select value={form.entity_id} onChange={e => setForm(f => ({ ...f, entity_id: e.target.value }))} style={modal_inp}>
-                    <option value="">— Select entity —</option>
-                    {entities.map(e => <option key={e.id} value={e.id}>{e.legal_name}</option>)}
-                  </select>
-                </div>
+              <div>
+                <label style={lbl}>Document Type</label>
+                <input placeholder="e.g. Employment Contract" value={form.doc_type} onChange={e => setForm(f => ({ ...f, doc_type: e.target.value }))} style={modal_inp} />
+              </div>
+              <div>
+                <label style={lbl}>Legal Entities</label>
+                <EntityChecklist allEntities={form.all_entities} selectedIds={form.entity_ids} entities={entities} onToggleAll={toggleFormEntityAll} onToggleEntity={toggleFormEntity} />
               </div>
               <div>
                 <label style={lbl}>Description</label>

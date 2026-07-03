@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
 from app.database import get_db
+import json
 
 router = APIRouter()
 
@@ -382,25 +383,31 @@ async def delete_location_website(loc_id: str, web_id: str, db: AsyncSession = D
 async def list_templates(db: AsyncSession = Depends(get_db)):
     r = await db.execute(text("""
         SELECT lt.id::text, lt.title, lt.description, lt.doc_type,
-               lt.entity_id::text, le.legal_name AS entity_name,
+               lt.all_entities, lt.entity_ids, lt.entity_names,
                lt.sharepoint_url, lt.sort_order, lt.created_at
         FROM legal_templates lt
-        LEFT JOIN legal_entities le ON lt.entity_id = le.id
-        ORDER BY le.legal_name NULLS LAST, lt.title
+        ORDER BY lt.title
     """))
     return {"templates": [dict(row._mapping) for row in r.fetchall()]}
 
 
 @router.post("/templates")
 async def create_template(data: dict, db: AsyncSession = Depends(get_db)):
-    entity_id = data.get("entity_id") or None
+    all_entities = data.get("all_entities")
+    if all_entities is None:
+        all_entities = not data.get("entity_ids")
     r = await db.execute(text("""
-        INSERT INTO legal_templates (id, title, description, doc_type, entity_id, sharepoint_url, sort_order, created_by, created_at, updated_at)
-        VALUES (gen_random_uuid(), :title, :description, :doc_type, CAST(:entity_id AS UUID), :sharepoint_url, :sort_order, :created_by, NOW(), NOW())
+        INSERT INTO legal_templates (id, title, description, doc_type, all_entities, entity_ids, entity_names,
+                                      sharepoint_url, sort_order, created_by, created_at, updated_at)
+        VALUES (gen_random_uuid(), :title, :description, :doc_type, :all_entities,
+                CAST(:entity_ids AS JSONB), CAST(:entity_names AS JSONB), :sharepoint_url, :sort_order, :created_by, NOW(), NOW())
         RETURNING id::text
     """), {
         "title": data.get("title", ""), "description": data.get("description", ""),
-        "doc_type": data.get("doc_type", ""), "entity_id": entity_id,
+        "doc_type": data.get("doc_type", ""),
+        "all_entities": bool(all_entities),
+        "entity_ids": json.dumps(data.get("entity_ids") or []),
+        "entity_names": json.dumps(data.get("entity_names") or []),
         "sharepoint_url": data.get("sharepoint_url", ""), "sort_order": data.get("sort_order", 0),
         "created_by": data.get("created_by", ""),
     })
@@ -410,17 +417,24 @@ async def create_template(data: dict, db: AsyncSession = Depends(get_db)):
 
 @router.put("/templates/{tmpl_id}")
 async def update_template(tmpl_id: str, data: dict, db: AsyncSession = Depends(get_db)):
-    entity_id = data.get("entity_id") or None
+    all_entities = data.get("all_entities")
+    if all_entities is None:
+        all_entities = not data.get("entity_ids")
     await db.execute(text("""
         UPDATE legal_templates SET
             title = :title, description = :description, doc_type = :doc_type,
-            entity_id = CAST(:entity_id AS UUID),
+            all_entities = :all_entities,
+            entity_ids = CAST(:entity_ids AS JSONB),
+            entity_names = CAST(:entity_names AS JSONB),
             sharepoint_url = :sharepoint_url,
             sort_order = :sort_order, updated_by = :updated_by, updated_at = NOW()
         WHERE id = CAST(:id AS UUID)
     """), {
         "id": tmpl_id, "title": data.get("title", ""), "description": data.get("description", ""),
-        "doc_type": data.get("doc_type", ""), "entity_id": entity_id,
+        "doc_type": data.get("doc_type", ""),
+        "all_entities": bool(all_entities),
+        "entity_ids": json.dumps(data.get("entity_ids") or []),
+        "entity_names": json.dumps(data.get("entity_names") or []),
         "sharepoint_url": data.get("sharepoint_url", ""), "sort_order": data.get("sort_order", 0),
         "updated_by": data.get("updated_by", ""),
     })
