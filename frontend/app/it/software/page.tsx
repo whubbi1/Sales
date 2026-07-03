@@ -37,8 +37,17 @@ function EditableCell({ display, editing, onStartEdit, children }: any) {
   )
 }
 
-function NewSoftwareModal({ users, locations, onClose, onSave }: any) {
-  const [form, setForm] = useState<any>(EMPTY_FORM)
+function withDefaults(base: any, initial?: any) {
+  if (!initial) return base
+  const out = { ...base }
+  for (const k of Object.keys(base)) {
+    if (initial[k] !== undefined && initial[k] !== null) out[k] = initial[k]
+  }
+  return out
+}
+
+function NewSoftwareModal({ users, locations, initial, title, submitLabel, onClose, onSave }: any) {
+  const [form, setForm] = useState<any>(() => withDefaults(EMPTY_FORM, initial))
   const [saving, setSaving] = useState(false)
   const valid = form.name.trim().length > 0
   const handleOwnerChange = (email: string) => {
@@ -61,7 +70,7 @@ function NewSoftwareModal({ users, locations, onClose, onSave }: any) {
       onClick={e => { if (e.target === e.currentTarget) onClose() }}>
       <div style={{ background: 'white', borderRadius: '14px', width: '520px', maxHeight: '90vh', overflow: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
         <div style={{ padding: '20px 24px', borderBottom: '1px solid #EDF2F7', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <h2 style={{ fontSize: '15px', fontWeight: '800', color: '#156082', margin: 0 }}>New Software</h2>
+          <h2 style={{ fontSize: '15px', fontWeight: '800', color: '#156082', margin: 0 }}>{title || 'New Software'}</h2>
           <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: '20px', cursor: 'pointer', color: '#94A3B8' }}>×</button>
         </div>
         <div style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
@@ -101,7 +110,7 @@ function NewSoftwareModal({ users, locations, onClose, onSave }: any) {
             <button onClick={onClose} style={{ padding: '9px 18px', background: '#F1F5F9', color: '#64748B', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '700', fontFamily: 'Montserrat, sans-serif' }}>Cancel</button>
             <button onClick={submit} disabled={saving || !valid}
               style={{ padding: '9px 18px', background: saving || !valid ? '#94A3B8' : '#156082', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '700', fontFamily: 'Montserrat, sans-serif' }}>
-              {saving ? 'Creating…' : 'Create Software'}
+              {saving ? 'Saving…' : (submitLabel || 'Create Software')}
             </button>
           </div>
         </div>
@@ -168,6 +177,7 @@ function SoftwareContent() {
   const [locations, setLocations] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [showNew, setShowNew] = useState(false)
+  const [editItem, setEditItem] = useState<any | null>(null)
   const [editing, setEditing] = useState<{ id: string; field: string } | null>(null)
   const [search, setSearch] = useState('')
   const [userEmail, setUserEmail] = useState('')
@@ -214,6 +224,11 @@ function SoftwareContent() {
     load()
   }
 
+  const saveEditItem = async (form: any) => {
+    await patchItem(editItem, form)
+    setEditItem(null)
+  }
+
   const isEditing = (id: string, field: string) => editing?.id === id && editing.field === field
 
   return (
@@ -235,7 +250,7 @@ function SoftwareContent() {
         <input style={{ ...inp, width: '260px' }} placeholder="Search name or editor…" value={search} onChange={e => setSearch(e.target.value)} />
       </div>
 
-      <div style={{ background: 'white', borderRadius: '12px', border: '1px solid #EDF2F7', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
+      <div style={{ background: 'white', borderRadius: '12px', border: '1px solid #EDF2F7', overflowX: 'auto', overflowY: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.06)', maxWidth: '100%' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
           <thead style={{ background: '#FAFBFC' }}>
             <tr>
@@ -296,7 +311,8 @@ function SoftwareContent() {
                   </td>
                 )}
                 {canEdit && (
-                  <td style={{ padding: '10px 12px' }}>
+                  <td style={{ padding: '10px 12px', whiteSpace: 'nowrap' }}>
+                    <button onClick={() => setEditItem(item)} style={{ padding: '5px 10px', marginRight: '6px', background: '#EFF6FF', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '11px', color: '#156082', fontWeight: '700', fontFamily: 'Montserrat, sans-serif' }}>Edit</button>
                     <button onClick={() => deleteItem(item)} style={{ padding: '5px 10px', background: '#FEF2F2', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '11px', color: '#EF4444', fontWeight: '700', fontFamily: 'Montserrat, sans-serif' }}>Delete</button>
                   </td>
                 )}
@@ -307,6 +323,10 @@ function SoftwareContent() {
       </div>
 
       {showNew && <NewSoftwareModal users={users} locations={locations} onClose={() => setShowNew(false)} onSave={createItem} />}
+      {editItem && (
+        <NewSoftwareModal users={users} locations={locations} initial={editItem} title="Edit Software" submitLabel="Save Changes"
+          onClose={() => setEditItem(null)} onSave={saveEditItem} />
+      )}
     </div>
   )
 }

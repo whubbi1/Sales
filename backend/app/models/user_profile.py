@@ -24,6 +24,7 @@ class UserProfile(Base):
     ms_roles        = Column(JSON, default=list)
     main_location_id   = Column(UUID(as_uuid=True))
     main_location_name = Column(String(255), default="All")
+    is_excluded         = Column(Boolean, default=False)
     last_sync       = Column(DateTime)
     created_at      = Column(DateTime, default=datetime.utcnow)
     updated_at      = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

@@ -62,6 +62,7 @@ export default function PermissionsPage() {
   const [locations, setLocations] = useState<any[]>([])
   const [mainLocationId, setMainLocationId] = useState('')
   const [mainLocationSaving, setMainLocationSaving] = useState(false)
+  const [isExcluded, setIsExcluded] = useState(false)
 
   const loadUsers = () => {
     fetch(`${API}/settings/users`).then(r=>r.json()).then(d=>setUsers(d.users||[])).catch(()=>{})
@@ -75,21 +76,29 @@ export default function PermissionsPage() {
   useEffect(() => {
     if (selectedUser) {
       loadPermissions(selectedUser)
-      fetch(`${API}/settings/main-location/${encodeURIComponent(selectedUser)}`).then(r=>r.json()).then(d=>setMainLocationId(d.main_location_id || '')).catch(()=>setMainLocationId(''))
+      fetch(`${API}/settings/main-location/${encodeURIComponent(selectedUser)}`).then(r=>r.json()).then(d=>{
+        setMainLocationId(d.main_location_id || '')
+        setIsExcluded(!!d.is_excluded)
+      }).catch(()=>{ setMainLocationId(''); setIsExcluded(false) })
     }
   }, [selectedUser])
 
-  const saveMainLocation = async (locationId: string) => {
+  const saveMainLocationCard = async (patch: { locationId?: string; excluded?: boolean }) => {
+    const locationId = patch.locationId !== undefined ? patch.locationId : mainLocationId
+    const excluded = patch.excluded !== undefined ? patch.excluded : isExcluded
     setMainLocationId(locationId)
+    setIsExcluded(excluded)
     setMainLocationSaving(true)
     const loc = locations.find(l => l.id === locationId)
     try {
       await fetch(`${API}/settings/main-location/${encodeURIComponent(selectedUser)}`, {
         method: 'PUT', headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({ main_location_id: locationId || null, main_location_name: loc?.location_name || 'All' }),
+        body: JSON.stringify({ main_location_id: locationId || null, main_location_name: loc?.location_name || 'All', is_excluded: excluded }),
       })
     } finally { setMainLocationSaving(false) }
   }
+  const saveMainLocation = (locationId: string) => saveMainLocationCard({ locationId })
+  const saveExcluded = (excluded: boolean) => saveMainLocationCard({ excluded })
 
   const loadPermissions = async (email: string) => {
     setLoading(true)
@@ -203,10 +212,13 @@ export default function PermissionsPage() {
                   <div style={{ width:'34px', height:'34px', borderRadius:'50%', background:'#156082', display:'flex', alignItems:'center', justifyContent:'center', color:'white', fontSize:'13px', fontWeight:'700', flexShrink:0 }}>
                     {(u.first_name||u.email||'?')[0].toUpperCase()}
                   </div>
-                  <div style={{ overflow:'hidden' }}>
+                  <div style={{ overflow:'hidden', flex:1 }}>
                     <div style={{ fontSize:'12px', fontWeight:'700', color:'#3F3F3F', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{u.display_name||`${u.first_name} ${u.last_name}`}</div>
                     <div style={{ fontSize:'10px', color:'#45B6E4', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{u.job_title || u.department || u.email}</div>
                   </div>
+                  {u.is_excluded && (
+                    <span style={{ fontSize:'9px', fontWeight:'700', color:'#DC2626', background:'#FEF2F2', padding:'2px 7px', borderRadius:'10px', flexShrink:0 }}>Excluded</span>
+                  )}
                 </div>
               </div>
             ))}
@@ -228,16 +240,28 @@ export default function PermissionsPage() {
             {selectedUser && !loading && permissions && (
               <div>
                 {/* Main Location */}
-                <div style={{ background:'white', borderRadius:'12px', border:'1px solid #EDF2F7', padding:'14px 20px', marginBottom:'14px', boxShadow:'0 1px 3px rgba(0,0,0,0.06)', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-                  <div>
-                    <div style={{ fontSize:'10px', fontWeight:'700', textTransform:'uppercase', letterSpacing:'0.07em', color:'#45B6E4', marginBottom:'4px' }}>Main Location</div>
-                    <div style={{ fontSize:'11px', color:'#94A3B8' }}>Drives which company links this user sees on the home page</div>
+                <div style={{ background:'white', borderRadius:'12px', border:'1px solid #EDF2F7', padding:'14px 20px', marginBottom:'14px', boxShadow:'0 1px 3px rgba(0,0,0,0.06)' }}>
+                  <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+                    <div>
+                      <div style={{ fontSize:'10px', fontWeight:'700', textTransform:'uppercase', letterSpacing:'0.07em', color:'#45B6E4', marginBottom:'4px' }}>Main Location</div>
+                      <div style={{ fontSize:'11px', color:'#94A3B8' }}>Drives which company links this user sees on the home page</div>
+                    </div>
+                    <select value={mainLocationId} onChange={e => saveMainLocation(e.target.value)} disabled={mainLocationSaving || isExcluded}
+                      style={{ padding:'7px 12px', border:'1.5px solid #EDF2F7', borderRadius:'7px', fontFamily:'Montserrat, sans-serif', fontSize:'12px', outline:'none', minWidth:'200px' }}>
+                      <option value="">All Locations</option>
+                      {locations.map((l:any) => <option key={l.id} value={l.id}>{l.location_name}</option>)}
+                    </select>
                   </div>
-                  <select value={mainLocationId} onChange={e => saveMainLocation(e.target.value)} disabled={mainLocationSaving}
-                    style={{ padding:'7px 12px', border:'1.5px solid #EDF2F7', borderRadius:'7px', fontFamily:'Montserrat, sans-serif', fontSize:'12px', outline:'none', minWidth:'200px' }}>
-                    <option value="">All Locations</option>
-                    {locations.map((l:any) => <option key={l.id} value={l.id}>{l.location_name}</option>)}
-                  </select>
+                  <div style={{ marginTop:'12px', paddingTop:'12px', borderTop:'1px solid #F1F5F9', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+                    <div>
+                      <div style={{ fontSize:'10px', fontWeight:'700', textTransform:'uppercase', letterSpacing:'0.07em', color: isExcluded ? '#DC2626' : '#45B6E4', marginBottom:'4px' }}>🚫 Exclude from WHUBBI Access</div>
+                      <div style={{ fontSize:'11px', color:'#94A3B8' }}>When enabled, this person cannot log in to WHUBBI or access any module or document</div>
+                    </div>
+                    <label style={{ display:'flex', alignItems:'center', gap:'8px', cursor: mainLocationSaving ? 'default' : 'pointer', padding:'6px 12px', borderRadius:'20px', background: isExcluded ? '#FEF2F2' : '#F1F5F9' }}>
+                      <input type="checkbox" checked={isExcluded} disabled={mainLocationSaving} onChange={e => saveExcluded(e.target.checked)} style={{ margin:0 }} />
+                      <span style={{ fontSize:'11px', fontWeight:'700', color: isExcluded ? '#DC2626' : '#64748B' }}>{isExcluded ? 'Excluded' : 'Has Access'}</span>
+                    </label>
+                  </div>
                 </div>
 
                 {/* Header */}

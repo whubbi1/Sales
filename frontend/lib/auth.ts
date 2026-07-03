@@ -26,3 +26,16 @@ export function getStoredUser(): StoredUser | null {
 export function clearStoredUser(): void {
   if (typeof window !== 'undefined') localStorage.removeItem('whubbi_user')
 }
+
+const API = 'https://api.whubbi.wcomply.com'
+
+// Checked at login and on every navigation — an excluded user must not reach any module or document.
+export async function isAccessExcluded(email: string): Promise<boolean> {
+  try {
+    const r = await fetch(`${API}/settings/main-location/${encodeURIComponent(email)}`)
+    const d = await r.json()
+    return !!d.is_excluded
+  } catch {
+    return false
+  }
+}

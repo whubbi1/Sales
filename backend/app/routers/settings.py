@@ -224,11 +224,12 @@ async def update_permissions(email: str, data: dict, db: AsyncSession = Depends(
 
 
 async def _main_location_by_email(db: AsyncSession) -> dict:
-    r = await db.execute(text("SELECT email, main_location_id, main_location_name FROM user_profiles"))
+    r = await db.execute(text("SELECT email, main_location_id, main_location_name, is_excluded FROM user_profiles"))
     return {
         row.email: {
             "main_location_id": str(row.main_location_id) if row.main_location_id else None,
             "main_location_name": row.main_location_name or "All",
+            "is_excluded": bool(row.is_excluded),
         }
         for row in r.fetchall()
     }
@@ -257,7 +258,7 @@ async def list_users(db: AsyncSession = Depends(get_db)):
                         "display_name": u.get("displayName", ""),
                         "job_title": u.get("jobTitle", ""),
                         "department": u.get("department", ""),
-                        **locations.get(u.get("mail", ""), {"main_location_id": None, "main_location_name": "All"}),
+                        **locations.get(u.get("mail", ""), {"main_location_id": None, "main_location_name": "All", "is_excluded": False}),
                     }
                     for u in ms_users if u.get("mail")
                 ]
@@ -268,7 +269,7 @@ async def list_users(db: AsyncSession = Depends(get_db)):
     # Fallback: return cached DB users
     result = await db.execute(text("""
         SELECT email, first_name, last_name, display_name, job_title, department, last_sync,
-               main_location_id, main_location_name
+               main_location_id, main_location_name, is_excluded
         FROM user_profiles ORDER BY last_name, first_name
     """))
     rows = result.fetchall()
@@ -351,23 +352,29 @@ async def delete_company_link(link_id: str, db: AsyncSession = Depends(get_db)):
 # ─── Per-user main location (drives which company links appear on the home page) ─
 @router.get("/main-location/{email}")
 async def get_main_location(email: str, db: AsyncSession = Depends(get_db)):
-    r = await db.execute(text("SELECT main_location_id, main_location_name FROM user_profiles WHERE email = :email"), {"email": email})
+    r = await db.execute(text("SELECT main_location_id, main_location_name, is_excluded FROM user_profiles WHERE email = :email"), {"email": email})
     row = r.fetchone()
     if not row:
-        return {"main_location_id": None, "main_location_name": "All"}
-    return {"main_location_id": str(row.main_location_id) if row.main_location_id else None, "main_location_name": row.main_location_name or "All"}
+        return {"main_location_id": None, "main_location_name": "All", "is_excluded": False}
+    return {
+        "main_location_id": str(row.main_location_id) if row.main_location_id else None,
+        "main_location_name": row.main_location_name or "All",
+        "is_excluded": bool(row.is_excluded),
+    }
 
 @router.put("/main-location/{email}")
 async def set_main_location(email: str, data: dict, db: AsyncSession = Depends(get_db)):
     location_id = data.get("main_location_id") or ""
     location_name = data.get("main_location_name") or "All"
+    is_excluded = bool(data.get("is_excluded", False))
     await db.execute(text("""
-        INSERT INTO user_profiles (id, email, main_location_id, main_location_name, created_at, updated_at)
-        VALUES (gen_random_uuid(), :email, CAST(NULLIF(:location_id,'') AS UUID), :location_name, NOW(), NOW())
+        INSERT INTO user_profiles (id, email, main_location_id, main_location_name, is_excluded, created_at, updated_at)
+        VALUES (gen_random_uuid(), :email, CAST(NULLIF(:location_id,'') AS UUID), :location_name, :is_excluded, NOW(), NOW())
         ON CONFLICT (email) DO UPDATE SET
             main_location_id = CAST(NULLIF(:location_id,'') AS UUID),
             main_location_name = :location_name,
+            is_excluded = :is_excluded,
             updated_at = NOW()
-    """), {"email": email, "location_id": location_id, "location_name": location_name})
+    """), {"email": email, "location_id": location_id, "location_name": location_name, "is_excluded": is_excluded})
     await db.commit()
     return {"status": "ok"}

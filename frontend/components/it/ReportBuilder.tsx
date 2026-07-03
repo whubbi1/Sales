@@ -10,6 +10,10 @@ export interface ReportColumn {
   options?: string[]
 }
 
+function storageKeyFor(module: string, userEmail: string) {
+  return userEmail ? `it_report_state_${module}_${userEmail}` : ''
+}
+
 export function useReportBuilder(module: string, columns: ReportColumn[], userEmail: string) {
   const allKeys = columns.map(c => c.key)
   const [visibleCols, setVisibleCols] = useState<string[]>(allKeys)
@@ -18,13 +22,41 @@ export function useReportBuilder(module: string, columns: ReportColumn[], userEm
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
   const [savedViews, setSavedViews] = useState<any[]>([])
   const [activeViewId, setActiveViewId] = useState<string>('')
+  const [restored, setRestored] = useState(false)
 
   const reload = () => {
     if (!userEmail) return
     fetch(`${API}/it/report-views?module=${encodeURIComponent(module)}&user_email=${encodeURIComponent(userEmail)}`)
       .then(r => r.json()).then(d => setSavedViews(d.views || [])).catch(() => {})
   }
-  useEffect(() => { reload() }, [userEmail])
+
+  // Restore whatever report setup (saved view, columns, filters, sort) was active when the
+  // user last left this page, so it doesn't silently reset to defaults on return.
+  useEffect(() => {
+    const key = storageKeyFor(module, userEmail)
+    if (key) {
+      try {
+        const raw = localStorage.getItem(key)
+        if (raw) {
+          const saved = JSON.parse(raw)
+          if (Array.isArray(saved.visibleCols) && saved.visibleCols.length) setVisibleCols(saved.visibleCols)
+          if (saved.filters) setFilters(saved.filters)
+          if (saved.sortField) setSortField(saved.sortField)
+          if (saved.sortDir) setSortDir(saved.sortDir)
+          if (saved.activeViewId) setActiveViewId(saved.activeViewId)
+        }
+      } catch {}
+    }
+    setRestored(true)
+    reload()
+  }, [userEmail])
+
+  useEffect(() => {
+    if (!restored) return
+    const key = storageKeyFor(module, userEmail)
+    if (!key) return
+    localStorage.setItem(key, JSON.stringify({ visibleCols, filters, sortField, sortDir, activeViewId }))
+  }, [restored, module, userEmail, visibleCols, filters, sortField, sortDir, activeViewId])
 
   const toggleCol = (key: string) => {
     setVisibleCols(v => v.includes(key) ? v.filter(k => k !== key) : [...v, key])

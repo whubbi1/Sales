@@ -41,6 +41,9 @@ async def startup():
                 "ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS main_location_id UUID",
                 "ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS main_location_name VARCHAR(255) DEFAULT 'All'",
 
+                # Access control — excludes a person from logging in or reaching any module/document
+                "ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS is_excluded BOOLEAN DEFAULT false",
+
                 # Company Links — shown on the home page, scoped to a location or to all
                 """CREATE TABLE IF NOT EXISTS company_links (
                     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

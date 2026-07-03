@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { isAccessExcluded } from '@/lib/auth'
 
 function decodeJwtPayload(token: string): Record<string, any> {
   const b64 = token.split('.')[1] ?? ''
@@ -66,6 +67,12 @@ export default function CallbackPage() {
             payload['cognito:username'] ||
             email
           )
+
+          if (email && await isAccessExcluded(email)) {
+            setStatus('Your access to WHUBBI has been revoked. Contact your administrator.')
+            setTimeout(() => router.push('/auth/login'), 3500)
+            return
+          }
 
           localStorage.setItem('whubbi_user', JSON.stringify({
             email,
