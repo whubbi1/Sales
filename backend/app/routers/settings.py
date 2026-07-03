@@ -223,9 +223,20 @@ async def update_permissions(email: str, data: dict, db: AsyncSession = Depends(
     return {"status": "ok", "updated": sum(len(v) for v in permissions.values())}
 
 
+async def _main_location_by_email(db: AsyncSession) -> dict:
+    r = await db.execute(text("SELECT email, main_location_id, main_location_name FROM user_profiles"))
+    return {
+        row.email: {
+            "main_location_id": str(row.main_location_id) if row.main_location_id else None,
+            "main_location_name": row.main_location_name or "All",
+        }
+        for row in r.fetchall()
+    }
+
 @router.get("/users")
 async def list_users(db: AsyncSession = Depends(get_db)):
     """List all wcomply users — tries MS AD first, falls back to DB cache."""
+    locations = await _main_location_by_email(db)
     try:
         token = await get_ms_token()
         async with httpx.AsyncClient(timeout=15) as client:
@@ -246,6 +257,7 @@ async def list_users(db: AsyncSession = Depends(get_db)):
                         "display_name": u.get("displayName", ""),
                         "job_title": u.get("jobTitle", ""),
                         "department": u.get("department", ""),
+                        **locations.get(u.get("mail", ""), {"main_location_id": None, "main_location_name": "All"}),
                     }
                     for u in ms_users if u.get("mail")
                 ]
@@ -255,24 +267,32 @@ async def list_users(db: AsyncSession = Depends(get_db)):
 
     # Fallback: return cached DB users
     result = await db.execute(text("""
-        SELECT email, first_name, last_name, display_name, job_title, department, last_sync
+        SELECT email, first_name, last_name, display_name, job_title, department, last_sync,
+               main_location_id, main_location_name
         FROM user_profiles ORDER BY last_name, first_name
     """))
     rows = result.fetchall()
-    return {"users": [dict(r._mapping) for r in rows], "source": "db_cache"}
+    users = []
+    for r in rows:
+        d = dict(r._mapping)
+        if d.get("main_location_id"): d["main_location_id"] = str(d["main_location_id"])
+        users.append(d)
+    return {"users": users, "source": "db_cache"}
 
 
-# ─── Company Links (admin only) ────────────────────────────────────────────────
+# ─── Company Links (shown on the home page, managed from the IT module) ───────
 @router.get("/company-links")
 async def get_company_links(db: AsyncSession = Depends(get_db)):
     try:
         result = await db.execute(text("""
-            SELECT id, label, url, icon, sort_order
+            SELECT id, label, url, icon, sort_order, location_id, location_name
             FROM company_links WHERE active = true
             ORDER BY sort_order ASC, label ASC
         """))
         links = [dict(r._mapping) for r in result.fetchall()]
-        for l in links: l["id"] = str(l["id"])
+        for l in links:
+            l["id"] = str(l["id"])
+            if l.get("location_id"): l["location_id"] = str(l["location_id"])
         return {"links": links}
     except Exception:
         return {"links": []}
@@ -280,11 +300,13 @@ async def get_company_links(db: AsyncSession = Depends(get_db)):
 @router.get("/company-links/all")
 async def get_all_company_links(db: AsyncSession = Depends(get_db)):
     result = await db.execute(text("""
-        SELECT id, label, url, icon, active, sort_order
+        SELECT id, label, url, icon, active, sort_order, location_id, location_name
         FROM company_links ORDER BY sort_order ASC, label ASC
     """))
     links = [dict(r._mapping) for r in result.fetchall()]
-    for l in links: l["id"] = str(l["id"])
+    for l in links:
+        l["id"] = str(l["id"])
+        if l.get("location_id"): l["location_id"] = str(l["location_id"])
     return {"links": links}
 
 @router.post("/company-links")
@@ -292,11 +314,12 @@ async def create_company_link(data: dict, db: AsyncSession = Depends(get_db)):
     import uuid
     link_id = str(uuid.uuid4())
     await db.execute(text("""
-        INSERT INTO company_links (id, label, url, icon, active, sort_order, created_at)
-        VALUES (CAST(:id AS UUID), :label, :url, :icon, :active, :sort_order, NOW())
+        INSERT INTO company_links (id, label, url, icon, active, sort_order, location_id, location_name, created_at)
+        VALUES (CAST(:id AS UUID), :label, :url, :icon, :active, :sort_order, CAST(NULLIF(:location_id,'') AS UUID), :location_name, NOW())
     """), {"id": link_id, "label": data.get("label",""), "url": data.get("url",""),
            "icon": data.get("icon","🔗"), "active": data.get("active", True),
-           "sort_order": data.get("sort_order", 0)})
+           "sort_order": data.get("sort_order", 0),
+           "location_id": data.get("location_id",""), "location_name": data.get("location_name") or "All"})
     await db.commit()
     return {"status": "ok", "id": link_id}
 
@@ -306,14 +329,45 @@ async def update_company_link(link_id: str, data: dict, db: AsyncSession = Depen
         UPDATE company_links SET
             label = COALESCE(:label, label), url = COALESCE(:url, url),
             icon = COALESCE(:icon, icon), active = COALESCE(:active, active),
-            sort_order = COALESCE(:sort_order, sort_order)
+            sort_order = COALESCE(:sort_order, sort_order),
+            location_id = CAST(NULLIF(:location_id,'') AS UUID),
+            location_name = COALESCE(NULLIF(:location_name,''), location_name)
         WHERE id = CAST(:id AS UUID)
-    """), {**data, "id": link_id})
+    """), {
+        "label": data.get("label"), "url": data.get("url"), "icon": data.get("icon"),
+        "active": data.get("active"), "sort_order": data.get("sort_order"),
+        "location_id": data.get("location_id",""), "location_name": data.get("location_name",""),
+        "id": link_id,
+    })
     await db.commit()
     return {"status": "ok"}
 
 @router.delete("/company-links/{link_id}")
 async def delete_company_link(link_id: str, db: AsyncSession = Depends(get_db)):
     await db.execute(text("DELETE FROM company_links WHERE id = CAST(:id AS UUID)"), {"id": link_id})
+    await db.commit()
+    return {"status": "ok"}
+
+# ─── Per-user main location (drives which company links appear on the home page) ─
+@router.get("/main-location/{email}")
+async def get_main_location(email: str, db: AsyncSession = Depends(get_db)):
+    r = await db.execute(text("SELECT main_location_id, main_location_name FROM user_profiles WHERE email = :email"), {"email": email})
+    row = r.fetchone()
+    if not row:
+        return {"main_location_id": None, "main_location_name": "All"}
+    return {"main_location_id": str(row.main_location_id) if row.main_location_id else None, "main_location_name": row.main_location_name or "All"}
+
+@router.put("/main-location/{email}")
+async def set_main_location(email: str, data: dict, db: AsyncSession = Depends(get_db)):
+    location_id = data.get("main_location_id") or ""
+    location_name = data.get("main_location_name") or "All"
+    await db.execute(text("""
+        INSERT INTO user_profiles (id, email, main_location_id, main_location_name, created_at, updated_at)
+        VALUES (gen_random_uuid(), :email, CAST(NULLIF(:location_id,'') AS UUID), :location_name, NOW(), NOW())
+        ON CONFLICT (email) DO UPDATE SET
+            main_location_id = CAST(NULLIF(:location_id,'') AS UUID),
+            main_location_name = :location_name,
+            updated_at = NOW()
+    """), {"email": email, "location_id": location_id, "location_name": location_name})
     await db.commit()
     return {"status": "ok"}

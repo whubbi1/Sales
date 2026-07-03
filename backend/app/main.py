@@ -37,6 +37,23 @@ async def startup():
                 # Sales — link a SharePoint site/folder to an opportunity
                 "ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS sharepoint_site_url TEXT",
 
+                # Home page — each user's main office location (drives which company links they see)
+                "ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS main_location_id UUID",
+                "ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS main_location_name VARCHAR(255) DEFAULT 'All'",
+
+                # Company Links — shown on the home page, scoped to a location or to all
+                """CREATE TABLE IF NOT EXISTS company_links (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    label VARCHAR(255) NOT NULL,
+                    url TEXT NOT NULL,
+                    icon VARCHAR(20) DEFAULT '🔗',
+                    active BOOLEAN DEFAULT true,
+                    sort_order INTEGER DEFAULT 0,
+                    created_at TIMESTAMP DEFAULT NOW()
+                )""",
+                "ALTER TABLE company_links ADD COLUMN IF NOT EXISTS location_id UUID",
+                "ALTER TABLE company_links ADD COLUMN IF NOT EXISTS location_name VARCHAR(255) DEFAULT 'All'",
+
                 # Helpdesk migrations
                 """CREATE TABLE IF NOT EXISTS helpdesk_groups (
                     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

@@ -22,6 +22,8 @@ class UserProfile(Base):
     ms_licenses     = Column(JSON, default=list)
     ms_groups       = Column(JSON, default=list)
     ms_roles        = Column(JSON, default=list)
+    main_location_id   = Column(UUID(as_uuid=True))
+    main_location_name = Column(String(255), default="All")
     last_sync       = Column(DateTime)
     created_at      = Column(DateTime, default=datetime.utcnow)
     updated_at      = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

@@ -59,16 +59,37 @@ export default function PermissionsPage() {
   const [message, setMessage] = useState<{text:string;type:'success'|'error'}|null>(null)
   const [search, setSearch] = useState('')
   const [syncing, setSyncing] = useState(false)
+  const [locations, setLocations] = useState<any[]>([])
+  const [mainLocationId, setMainLocationId] = useState('')
+  const [mainLocationSaving, setMainLocationSaving] = useState(false)
 
   const loadUsers = () => {
     fetch(`${API}/settings/users`).then(r=>r.json()).then(d=>setUsers(d.users||[])).catch(()=>{})
   }
 
-  useEffect(() => { loadUsers() }, [])
+  useEffect(() => {
+    loadUsers()
+    fetch(`${API}/legal/locations`).then(r=>r.json()).then(d=>setLocations(d.locations||[])).catch(()=>{})
+  }, [])
 
   useEffect(() => {
-    if (selectedUser) loadPermissions(selectedUser)
+    if (selectedUser) {
+      loadPermissions(selectedUser)
+      fetch(`${API}/settings/main-location/${encodeURIComponent(selectedUser)}`).then(r=>r.json()).then(d=>setMainLocationId(d.main_location_id || '')).catch(()=>setMainLocationId(''))
+    }
   }, [selectedUser])
+
+  const saveMainLocation = async (locationId: string) => {
+    setMainLocationId(locationId)
+    setMainLocationSaving(true)
+    const loc = locations.find(l => l.id === locationId)
+    try {
+      await fetch(`${API}/settings/main-location/${encodeURIComponent(selectedUser)}`, {
+        method: 'PUT', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ main_location_id: locationId || null, main_location_name: loc?.location_name || 'All' }),
+      })
+    } finally { setMainLocationSaving(false) }
+  }
 
   const loadPermissions = async (email: string) => {
     setLoading(true)
@@ -206,6 +227,19 @@ export default function PermissionsPage() {
 
             {selectedUser && !loading && permissions && (
               <div>
+                {/* Main Location */}
+                <div style={{ background:'white', borderRadius:'12px', border:'1px solid #EDF2F7', padding:'14px 20px', marginBottom:'14px', boxShadow:'0 1px 3px rgba(0,0,0,0.06)', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+                  <div>
+                    <div style={{ fontSize:'10px', fontWeight:'700', textTransform:'uppercase', letterSpacing:'0.07em', color:'#45B6E4', marginBottom:'4px' }}>Main Location</div>
+                    <div style={{ fontSize:'11px', color:'#94A3B8' }}>Drives which company links this user sees on the home page</div>
+                  </div>
+                  <select value={mainLocationId} onChange={e => saveMainLocation(e.target.value)} disabled={mainLocationSaving}
+                    style={{ padding:'7px 12px', border:'1.5px solid #EDF2F7', borderRadius:'7px', fontFamily:'Montserrat, sans-serif', fontSize:'12px', outline:'none', minWidth:'200px' }}>
+                    <option value="">All Locations</option>
+                    {locations.map((l:any) => <option key={l.id} value={l.id}>{l.location_name}</option>)}
+                  </select>
+                </div>
+
                 {/* Header */}
                 <div style={{ background:'white', borderRadius:'12px', border:'1px solid #EDF2F7', padding:'16px 20px', marginBottom:'14px', boxShadow:'0 1px 3px rgba(0,0,0,0.06)', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
                   <div>
