@@ -149,7 +149,9 @@ async def list_tasks(
 ):
     where = ["1=1"]
     params = {}
-    if not include_subtasks:
+    # "own"/"team" scope means "show me what's mine" — a subtask assigned to me is mine too,
+    # so only top-level-only filtering applies to the unscoped/company-wide browse view.
+    if not include_subtasks and scope not in ("own", "team"):
         where.append("parent_task_id IS NULL")
     if scope in ("own", "team") and email:
         where.append("""(owner_email = :email OR assignee_email = :email

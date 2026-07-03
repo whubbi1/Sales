@@ -1,15 +1,35 @@
 'use client'
 import { useRouter, usePathname } from 'next/navigation'
-import { useEffect, useRef, useState } from 'react'
+import { createContext, useContext, useEffect, useRef, useState } from 'react'
 import { getStoredUser, clearStoredUser } from '@/lib/auth'
 
+const API = 'https://api.whubbi.wcomply.com'
+
 const NAV = [
-  { href: '/grc',            icon: '📊', label: 'Dashboard' },
-  { href: '/grc/frameworks', icon: '📋', label: 'Frameworks' },
-  { href: '/grc/mapping',    icon: '🔗', label: 'Mapping' },
-  { href: '/grc/risks',      icon: '⚠️', label: 'Risk Register' },
-  { href: '/grc/audits',     icon: '🔍', label: 'Audits' },
+  { href: '/grc',              icon: '📊', label: 'Dashboard' },
+  { href: '/grc/frameworks',   icon: '📋', label: 'Frameworks' },
+  { href: '/grc/mapping',      icon: '🔗', label: 'Mapping' },
+  { href: '/grc/risks',        icon: '⚠️', label: 'Risk Register' },
+  { href: '/grc/audits',       icon: '🔍', label: 'Audits' },
+  { href: '/grc/access-review', icon: '🔑', label: 'Access Review' },
+  { href: '/grc/tprm',            icon: '🏢', label: 'TPRM' },
+  { href: '/grc/whistleblowing',  icon: '📢', label: 'Whistleblowing & Ethics' },
 ]
+
+type PermLevel = 'loading' | 'none' | 'view' | 'edit'
+type GRCPerms = Record<string, { access_mode?: string; id?: string | null }> | null
+const GRCPermContext = createContext<GRCPerms>(null)
+
+// Only the newly-added GRC pages (Access Review, TPRM, Whistleblowing) call this to gate
+// themselves — the pre-existing Dashboard/Frameworks/Mapping/Risks/Audits pages stay ungated.
+export function useGRCPerm(submodule: string): { level: PermLevel; canEdit: boolean } {
+  const perms = useContext(GRCPermContext)
+  if (perms === null) return { level: 'loading', canEdit: false }
+  const p = perms[submodule]
+  if (!p || p.id == null) return { level: 'edit', canEdit: true }
+  const level = (p.access_mode as PermLevel) || 'none'
+  return { level, canEdit: level === 'edit' }
+}
 
 export function GRCLayout({ children }: { children: React.ReactNode }) {
   const router      = useRouter()
@@ -17,6 +37,7 @@ export function GRCLayout({ children }: { children: React.ReactNode }) {
   const redirecting = useRef(false)
   const [userEmail, setUserEmail] = useState('')
   const [userName,  setUserName]  = useState('')
+  const [grcPerms, setGrcPerms]   = useState<GRCPerms>(null)
 
   useEffect(() => {
     const user = getStoredUser()
@@ -29,6 +50,11 @@ export function GRCLayout({ children }: { children: React.ReactNode }) {
     }
     setUserEmail(user.email)
     setUserName(user.name)
+
+    fetch(`${API}/settings/permissions/${encodeURIComponent(user.email)}`)
+      .then(r => r.json())
+      .then(d => setGrcPerms(d.permissions?.grc || {}))
+      .catch(() => setGrcPerms({}))
   }, [])
 
   const handleSignOut = () => {
@@ -91,7 +117,9 @@ export function GRCLayout({ children }: { children: React.ReactNode }) {
       </div>
 
       <main style={{ marginLeft: '220px', width: 'calc(100vw - 220px)', background: '#F5F7FA', minHeight: '100vh', overflowX: 'hidden' }}>
-        {children}
+        <GRCPermContext.Provider value={grcPerms}>
+          {children}
+        </GRCPermContext.Provider>
       </main>
     </div>
   )

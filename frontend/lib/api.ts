@@ -114,3 +114,23 @@ export const taskManagerAPI = {
   addLink:    (id: string, d: any) => fetchAPI(`/task-manager/tasks/${id}/links`, { method: 'POST', body: JSON.stringify(d) }),
   removeLink: (id: string, linkId: string) => fetchAPI(`/task-manager/tasks/${id}/links/${linkId}`, { method: 'DELETE' }),
 }
+
+// ─── GRC Access Review ──────────────────────────────────────────────────────────
+export const grcAccessReviewAPI = {
+  list:   () => fetchAPI('/grc/access-review'),
+  get:    (id: string) => fetchAPI(`/grc/access-review/${id}`),
+  create: (d: any) => fetchAPI('/grc/access-review', { method: 'POST', body: JSON.stringify(d) }),
+  update: (id: string, d: any) => fetchAPI(`/grc/access-review/${id}`, { method: 'PUT', body: JSON.stringify(d) }),
+  delete: (id: string) => fetchAPI(`/grc/access-review/${id}`, { method: 'DELETE' }),
+  setStatus: (id: string, d: any) => fetchAPI(`/grc/access-review/${id}/status`, { method: 'PUT', body: JSON.stringify(d) }),
+  setScope:  (id: string, d: any) => fetchAPI(`/grc/access-review/${id}/scope`, { method: 'PUT', body: JSON.stringify(d) }),
+
+  getLinks:   (id: string) => fetchAPI(`/grc/access-review/${id}/links`),
+  addLink:    (id: string, d: any) => fetchAPI(`/grc/access-review/${id}/links`, { method: 'POST', body: JSON.stringify(d) }),
+  removeLink: (id: string, linkId: string) => fetchAPI(`/grc/access-review/${id}/links/${linkId}`, { method: 'DELETE' }),
+
+  requirements: (showAll?: boolean) => fetchAPI(`/grc/access-review/requirements${qs({ show_all: showAll || undefined })}`),
+  setRequirementCategory: (reqId: string, category: string) => fetchAPI(`/grc/requirements/${reqId}/category`, { method: 'PUT', body: JSON.stringify({ category }) }),
+
+  overview: () => fetchAPI('/grc/overview'),
+}

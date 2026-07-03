@@ -840,6 +840,36 @@ async def startup():
                     added_by_email VARCHAR(255),
                     created_at TIMESTAMP DEFAULT NOW()
                 )""",
+
+                # GRC — Access Review cycles
+                """CREATE TABLE IF NOT EXISTS grc_access_review_cycles (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    cycle_number VARCHAR(30) UNIQUE NOT NULL,
+                    review_type VARCHAR(20) NOT NULL DEFAULT 'adhoc',
+                    cycle_name VARCHAR(255) NOT NULL,
+                    cycle_description TEXT,
+                    owner_email VARCHAR(255),
+                    owner_name VARCHAR(255),
+                    status VARCHAR(20) NOT NULL DEFAULT 'open',
+                    due_date TIMESTAMP,
+                    scope JSONB NOT NULL DEFAULT '[]',
+                    requirement_id UUID,
+                    created_by_email VARCHAR(255),
+                    created_at TIMESTAMP DEFAULT NOW(),
+                    updated_at TIMESTAMP DEFAULT NOW(),
+                    closed_at TIMESTAMP
+                )""",
+                """CREATE TABLE IF NOT EXISTS grc_access_review_links (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    cycle_id UUID NOT NULL REFERENCES grc_access_review_cycles(id) ON DELETE CASCADE,
+                    label VARCHAR(255) NOT NULL,
+                    url TEXT NOT NULL,
+                    added_by_email VARCHAR(255),
+                    created_at TIMESTAMP DEFAULT NOW()
+                )""",
+                # Lets the Access Review Requirements view filter grc_requirements down to
+                # access-control-related ones, without touching grc_extended.py's existing endpoints.
+                "ALTER TABLE grc_requirements ADD COLUMN IF NOT EXISTS category VARCHAR(50)",
             ]
             for sql in sqls:
                 try:
@@ -903,6 +933,7 @@ _include("app.routers.settings",       "/settings",     "Settings")
 _include("app.routers.hr",             "/hr",           "HR")
 _include("app.routers.grc",            "/grc",          "GRC")
 _include("app.routers.grc_extended",   "/grc",          "GRCExt")
+_include("app.routers.grc_access_review", "/grc",       "GRCAccessReview")
 _include("app.routers.helpdesk",       "/helpdesk",     "Helpdesk")
 _include("app.routers.helpdesk_teams", "/helpdesk",     "Teams")
 _include("app.routers.admin_audit",    "/admin",        "Audit")
