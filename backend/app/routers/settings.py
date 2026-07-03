@@ -27,6 +27,7 @@ MODULES = {
     "legal":        ["entities", "templates", "admin"],
     "development":  ["general"],
     "training":     ["manager"],
+    "tasks":        ["manager"],
 }
 
 LEGAL_ENTITIES = ["all", "france", "portugal", "czech_republic", "romania", "spain"]

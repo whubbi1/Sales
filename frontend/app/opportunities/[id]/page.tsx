@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import { opportunitiesAPI, companiesAPI, tasksAPI } from '@/lib/api'
+import { opportunitiesAPI, companiesAPI, taskManagerAPI } from '@/lib/api'
 import { getStoredUser } from '@/lib/auth'
 import { RecordLayout, PropertyRow, SidebarSection, SidebarCard, TabNav } from '@/components/shared/RecordLayout'
 import { OpportunityModal } from '@/components/opportunities/OpportunityModal'
@@ -17,10 +17,12 @@ const STATUS_COLORS: Record<string, { bg: string; color: string }> = {
   'PO Received':                  { bg: '#D1FAE5', color: '#047857' },
   'Contract Lost':                { bg: '#FEF2F2', color: '#DC2626' },
 }
-const STATUS_LABEL: Record<string, string> = { todo: 'To Do', in_progress: 'In Progress', done: 'Done' }
+const STATUS_LABEL: Record<string, string> = { new: 'New', open: 'Open', in_progress: 'In Progress', resolved: 'Resolved', closed: 'Closed' }
 const STATUS_COLOR: Record<string, { bg: string; color: string }> = {
-  todo: { bg: '#F1F5F9', color: '#475569' }, in_progress: { bg: '#FFF7ED', color: '#D97706' }, done: { bg: '#ECFDF5', color: '#059669' },
+  new: { bg: '#F1F5F9', color: '#475569' }, open: { bg: '#EFF6FF', color: '#219BD6' },
+  in_progress: { bg: '#FFF7ED', color: '#D97706' }, resolved: { bg: '#ECFDF5', color: '#059669' }, closed: { bg: '#F1F5F9', color: '#64748B' },
 }
+const TASK_DONE_STATUSES = ['resolved', 'closed']
 
 export default function OpportunityDetailPage() {
   const { id } = useParams()
@@ -68,13 +70,13 @@ export default function OpportunityDetailPage() {
         opportunitiesAPI.getStaffing(id as string),
         opportunitiesAPI.getChecklist(id as string),
         opportunitiesAPI.getComments(id as string),
-        tasksAPI.list({ entity_type: 'opportunity', entity_id: id }),
+        taskManagerAPI.list({ entity_type: 'opportunity', entity_id: id, source: 'sales' }),
         fetch('https://api.whubbi.wcomply.com/settings/users').then(r => r.json()),
       ])
       setStaffing(staffingRows)
       setChecklist(checklistRows)
       setComments(commentRows)
-      setTasks(taskRows)
+      setTasks(taskRows.tasks || [])
       setUsers(usersResp.users || [])
     } catch {
       router.push('/opportunities')
@@ -154,9 +156,18 @@ export default function OpportunityDetailPage() {
     setComments(await opportunitiesAPI.getComments(opp.id))
   }
 
-  const reloadTasks = async () => setTasks(await tasksAPI.list({ entity_type: 'opportunity', entity_id: id }))
-  const toggleTaskDone = async (task: any) => { await tasksAPI.update(task.id, { status: task.status === 'done' ? 'todo' : 'done' }); reloadTasks() }
-  const deleteTask = async (task: any) => { if (!confirm(`Delete task "${task.title}"?`)) return; await tasksAPI.delete(task.id); reloadTasks() }
+  const reloadTasks = async () => setTasks((await taskManagerAPI.list({ entity_type: 'opportunity', entity_id: id, source: 'sales' })).tasks || [])
+  const toggleTaskDone = async (task: any) => {
+    const done = TASK_DONE_STATUSES.includes(task.status)
+    try { await taskManagerAPI.setStatus(task.id, { acting_email: getStoredUser()?.email || '', status: done ? 'new' : 'resolved' }) }
+    catch (e: any) { alert(e.message) }
+    reloadTasks()
+  }
+  const deleteTask = async (task: any) => {
+    if (!confirm(`Delete task "${task.title}"?`)) return
+    try { await taskManagerAPI.delete(task.id, getStoredUser()?.email || '') } catch (e: any) { alert(e.message); return }
+    reloadTasks()
+  }
 
   const checkedCount = checklist.filter(c => c.is_checked).length
 
@@ -315,9 +326,9 @@ export default function OpportunityDetailPage() {
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                   {tasks.map((t: any) => (
                     <div key={t.id} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 14px', border: '1px solid #EDF2F7', borderRadius: '8px' }}>
-                      <input type="checkbox" checked={t.status === 'done'} onChange={() => toggleTaskDone(t)} style={{ accentColor: '#219BD6', width: '15px', height: '15px', cursor: 'pointer' }} />
+                      <input type="checkbox" checked={TASK_DONE_STATUSES.includes(t.status)} onChange={() => toggleTaskDone(t)} style={{ accentColor: '#219BD6', width: '15px', height: '15px', cursor: 'pointer' }} />
                       <div style={{ flex: 1, cursor: 'pointer' }} onClick={() => { setEditingTask(t); setShowTaskModal(true) }}>
-                        <div style={{ fontWeight: '700', color: t.status === 'done' ? '#9B9B9B' : '#144766', fontSize: '13px', textDecoration: t.status === 'done' ? 'line-through' : 'none' }}>{t.title}</div>
+                        <div style={{ fontWeight: '700', color: TASK_DONE_STATUSES.includes(t.status) ? '#9B9B9B' : '#144766', fontSize: '13px', textDecoration: TASK_DONE_STATUSES.includes(t.status) ? 'line-through' : 'none' }}>{t.title}</div>
                         <div style={{ fontSize: '11px', color: '#9B9B9B' }}>
                           {t.owner_name || t.owner_email || 'Unassigned'}{t.due_date && ` · Due ${fmt(t.due_date)}`}{t.outlook_task_id && ' · ✓ Outlook'}
                         </div>
@@ -427,6 +438,7 @@ export default function OpportunityDetailPage() {
           entityType="opportunity"
           entityId={opp.id}
           entityLabel={opp.deal_name}
+          source="sales"
           onClose={() => setShowTaskModal(false)}
           onSave={() => { setShowTaskModal(false); reloadTasks() }}
         />

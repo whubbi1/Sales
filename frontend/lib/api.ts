@@ -80,11 +80,32 @@ export const opportunitiesAPI = {
   getSharepointFiles: (id: string) => fetchAPI(`/opportunities/${id}/sharepoint-files`),
 }
 
-// ─── Sales Tasks (generic — company / contact / opportunity) ──────────────────
+// ─── Sales Tasks (legacy — superseded by taskManagerAPI, kept for rollback safety) ─
 export const tasksAPI = {
   list:   (p?: any) => fetchAPI(`/tasks/${qs(p)}`),
   get:    (id: string) => fetchAPI(`/tasks/${id}`),
   create: (d: any) => fetchAPI('/tasks/', { method: 'POST', body: JSON.stringify(d) }),
   update: (id: string, d: any) => fetchAPI(`/tasks/${id}`, { method: 'PUT', body: JSON.stringify(d) }),
   delete: (id: string) => fetchAPI(`/tasks/${id}`, { method: 'DELETE' }),
+}
+
+// ─── Task Manager (unified cross-module tasks: workflows, subtasks, watchers, Teams) ─
+export const taskManagerAPI = {
+  list:   (p?: any) => fetchAPI(`/task-manager/tasks${qs(p)}`),
+  get:    (id: string) => fetchAPI(`/task-manager/tasks/${id}`),
+  create: (d: any) => fetchAPI('/task-manager/tasks', { method: 'POST', body: JSON.stringify(d) }),
+  createSubtask: (parentId: string, d: any) => fetchAPI(`/task-manager/tasks/${parentId}/subtasks`, { method: 'POST', body: JSON.stringify(d) }),
+  update: (id: string, d: any) => fetchAPI(`/task-manager/tasks/${id}`, { method: 'PUT', body: JSON.stringify(d) }),
+  setStatus: (id: string, d: any) => fetchAPI(`/task-manager/tasks/${id}/status`, { method: 'PUT', body: JSON.stringify(d) }),
+  reassign: (id: string, d: any) => fetchAPI(`/task-manager/tasks/${id}/reassign`, { method: 'POST', body: JSON.stringify(d) }),
+  delete: (id: string, actingEmail: string) => fetchAPI(`/task-manager/tasks/${id}${qs({ acting_email: actingEmail })}`, { method: 'DELETE' }),
+
+  addWatcher:    (id: string, d: any) => fetchAPI(`/task-manager/tasks/${id}/watchers`, { method: 'POST', body: JSON.stringify(d) }),
+  removeWatcher: (id: string, email: string, actingEmail: string) => fetchAPI(`/task-manager/tasks/${id}/watchers/${encodeURIComponent(email)}${qs({ acting_email: actingEmail })}`, { method: 'DELETE' }),
+
+  getComments: (id: string) => fetchAPI(`/task-manager/tasks/${id}/comments`),
+  addComment:  (id: string, d: any) => fetchAPI(`/task-manager/tasks/${id}/comments`, { method: 'POST', body: JSON.stringify(d) }),
+
+  getTeamsInfo: (id: string) => fetchAPI(`/task-manager/tasks/${id}/teams`),
+  syncTeams:    (id: string) => fetchAPI(`/task-manager/tasks/${id}/teams/sync`, { method: 'POST' }),
 }

@@ -757,6 +757,68 @@ async def startup():
                 "ALTER TABLE training_catalog ADD COLUMN IF NOT EXISTS languages JSON DEFAULT '[]'",
                 "ALTER TABLE training_plan_items ADD COLUMN IF NOT EXISTS sequence INTEGER NOT NULL DEFAULT 0",
                 "ALTER TABLE training_catalog ADD COLUMN IF NOT EXISTS expertise_level VARCHAR(20) DEFAULT 'beginner'",
+
+                # Task Manager — unified cross-module tasks (absorbs sales_tasks, see backfill below)
+                """CREATE TABLE IF NOT EXISTS tasks (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    parent_task_id UUID REFERENCES tasks(id) ON DELETE CASCADE,
+                    title VARCHAR(255) NOT NULL,
+                    description TEXT,
+                    status VARCHAR(20) NOT NULL DEFAULT 'new',
+                    source VARCHAR(50) NOT NULL DEFAULT 'manual',
+                    owner_email VARCHAR(255) NOT NULL,
+                    owner_name VARCHAR(255),
+                    assignee_email VARCHAR(255),
+                    assignee_name VARCHAR(255),
+                    due_date TIMESTAMP,
+                    entity_type VARCHAR(50),
+                    entity_id UUID,
+                    sync_to_outlook BOOLEAN DEFAULT false,
+                    outlook_task_id VARCHAR(255),
+                    teams_chat_id TEXT,
+                    created_by_email VARCHAR(255),
+                    resolved_at TIMESTAMP,
+                    closed_at TIMESTAMP,
+                    created_at TIMESTAMP DEFAULT NOW(),
+                    updated_at TIMESTAMP DEFAULT NOW()
+                )""",
+                """CREATE TABLE IF NOT EXISTS task_watchers (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    task_id UUID NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+                    user_email VARCHAR(255) NOT NULL,
+                    user_name VARCHAR(255),
+                    added_by_email VARCHAR(255),
+                    created_at TIMESTAMP DEFAULT NOW(),
+                    UNIQUE(task_id, user_email)
+                )""",
+                """CREATE TABLE IF NOT EXISTS task_comments (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    task_id UUID NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+                    author_email VARCHAR(255),
+                    author_name VARCHAR(255),
+                    content TEXT NOT NULL,
+                    source VARCHAR(20) DEFAULT 'web',
+                    created_at TIMESTAMP DEFAULT NOW()
+                )""",
+                """CREATE TABLE IF NOT EXISTS task_teams_subscriptions (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    task_id UUID REFERENCES tasks(id) ON DELETE CASCADE,
+                    chat_id TEXT NOT NULL UNIQUE,
+                    subscription_id TEXT,
+                    expires_at TIMESTAMP,
+                    created_at TIMESTAMP DEFAULT NOW()
+                )""",
+                # One-time, idempotent backfill of existing Sales tasks into the unified table.
+                # sales_tasks itself is left untouched as a non-destructive historical copy.
+                """INSERT INTO tasks (id, title, description, status, source, owner_email, owner_name,
+                                     assignee_email, assignee_name, due_date, entity_type, entity_id,
+                                     sync_to_outlook, outlook_task_id, created_by_email, created_at, updated_at)
+                   SELECT id, title, description,
+                          CASE status WHEN 'todo' THEN 'new' WHEN 'in_progress' THEN 'in_progress' WHEN 'done' THEN 'resolved' ELSE 'new' END,
+                          'sales', owner_email, owner_name, owner_email, owner_name, due_date, entity_type, entity_id,
+                          sync_to_outlook, outlook_task_id, created_by_email, created_at, updated_at
+                   FROM sales_tasks
+                   WHERE NOT EXISTS (SELECT 1 FROM tasks t WHERE t.id = sales_tasks.id)""",
             ]
             for sql in sqls:
                 try:
@@ -828,6 +890,8 @@ _include("app.routers.development",    "/development",  "Development")
 _include("app.routers.it",             "/it",           "IT")
 _include("app.routers.cv",             "/cv",           "CV")
 _include("app.routers.training",       "/training",     "Training")
+_include("app.routers.task_manager",   "/task-manager", "TaskManager")
+_include("app.routers.task_teams",     "/task-manager", "TaskTeams")
 
 try:
     from app.routers import auth, outlook, copilot

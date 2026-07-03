@@ -1,7 +1,7 @@
 'use client'
 // components/tasks/TaskModal.tsx
 import { useState, useEffect } from 'react'
-import { tasksAPI, companiesAPI, contactsAPI, opportunitiesAPI } from '@/lib/api'
+import { taskManagerAPI, companiesAPI, contactsAPI, opportunitiesAPI } from '@/lib/api'
 import { getStoredUser } from '@/lib/auth'
 import { createOutlookTask, isMsalConfigured } from '@/lib/msalTasks'
 
@@ -9,6 +9,19 @@ const ENTITY_TYPES = [
   { value: 'company', label: 'Customer (Company)' },
   { value: 'contact', label: 'Contact' },
   { value: 'opportunity', label: 'Opportunity' },
+]
+
+const TOP_STATUSES = [
+  { value: 'new', label: 'New' },
+  { value: 'open', label: 'Open' },
+  { value: 'in_progress', label: 'In Progress' },
+  { value: 'resolved', label: 'Resolved' },
+  { value: 'closed', label: 'Closed' },
+]
+const SUB_STATUSES = [
+  { value: 'new', label: 'New' },
+  { value: 'in_progress', label: 'In Progress' },
+  { value: 'resolved', label: 'Resolved' },
 ]
 
 function FormField({ label, children, full }: { label: string; children: React.ReactNode; full?: boolean }) {
@@ -25,12 +38,17 @@ interface TaskModalProps {
   entityType?: string
   entityId?: string
   entityLabel?: string
+  source?: string
+  parentTaskId?: string
+  hideEntity?: boolean
   onClose: () => void
   onSave: () => void
 }
 
-export function TaskModal({ task, entityType, entityId, entityLabel, onClose, onSave }: TaskModalProps) {
+export function TaskModal({ task, entityType, entityId, entityLabel, source, parentTaskId, hideEntity, onClose, onSave }: TaskModalProps) {
   const locked = !!entityType && !!entityId
+  const isSubtask = !!parentTaskId || !!task?.parent_task_id
+  const showEntity = !hideEntity
   const [users, setUsers] = useState<any[]>([])
   const [entityOptions, setEntityOptions] = useState<any[]>([])
   const [saving, setSaving] = useState(false)
@@ -43,9 +61,11 @@ export function TaskModal({ task, entityType, entityId, entityLabel, onClose, on
     due_date: task?.due_date ? task.due_date.slice(0, 10) : '',
     owner_email: task?.owner_email || '',
     owner_name: task?.owner_name || '',
-    status: task?.status || 'todo',
-    entity_type: task?.entity_type || entityType || 'company',
-    entity_id: task?.entity_id || entityId || '',
+    assignee_email: task?.assignee_email || '',
+    assignee_name: task?.assignee_name || '',
+    status: task?.status || 'new',
+    entity_type: task?.entity_type || (showEntity ? (entityType || 'company') : ''),
+    entity_id: task?.entity_id || (showEntity ? (entityId || '') : ''),
     sync_to_outlook: task?.sync_to_outlook || false,
   })
 
@@ -54,10 +74,10 @@ export function TaskModal({ task, entityType, entityId, entityLabel, onClose, on
   }, [])
 
   useEffect(() => {
-    if (locked) return
+    if (locked || !showEntity) return
     const loader = form.entity_type === 'company' ? companiesAPI.list({}) : form.entity_type === 'contact' ? contactsAPI.list({}) : opportunitiesAPI.list({})
     loader.then((rows: any[]) => setEntityOptions(rows)).catch(() => setEntityOptions([]))
-  }, [form.entity_type, locked])
+  }, [form.entity_type, locked, showEntity])
 
   const entityDisplayName = (e: any) => form.entity_type === 'company' ? e.name : form.entity_type === 'contact' ? `${e.first_name} ${e.last_name}` : e.deal_name
 
@@ -65,27 +85,53 @@ export function TaskModal({ task, entityType, entityId, entityLabel, onClose, on
     const u = users.find((uu: any) => uu.email === email)
     setForm(p => ({ ...p, owner_email: email, owner_name: u?.display_name || (u ? `${u.first_name} ${u.last_name}` : '') }))
   }
+  const handleAssigneeChange = (email: string) => {
+    const u = users.find((uu: any) => uu.email === email)
+    setForm(p => ({ ...p, assignee_email: email, assignee_name: u?.display_name || (u ? `${u.first_name} ${u.last_name}` : '') }))
+  }
 
   const handleSave = async () => {
     if (!form.title.trim()) { setError('Title is required'); return }
-    if (!form.entity_id) { setError('Please select what this task is linked to'); return }
+    if (!task && !form.owner_email) { setError('An owner is required'); return }
+    if (showEntity && !form.entity_id) { setError('Please select what this task is linked to'); return }
     setSaving(true); setError(''); setOutlookStatus('')
     try {
       const currentUser = getStoredUser()
+      const actingEmail = currentUser?.email || ''
       const payload = {
         ...form,
+        entity_type: showEntity ? form.entity_type : undefined,
+        entity_id: showEntity ? form.entity_id : undefined,
         due_date: form.due_date || null,
-        created_by_email: currentUser?.email || '',
+        source: source || task?.source || 'manual',
+        created_by_email: actingEmail,
+        acting_email: actingEmail,
       }
       let saved
-      if (task) { saved = await tasksAPI.update(task.id, payload) }
-      else { saved = await tasksAPI.create(payload) }
+      if (task) {
+        saved = await taskManagerAPI.update(task.id, payload)
+        if (form.status !== task.status) {
+          try { await taskManagerAPI.setStatus(task.id, { acting_email: actingEmail, status: form.status }) }
+          catch (e: any) { setError(e.message); setSaving(false); return }
+        }
+        if (form.assignee_email !== task.assignee_email) {
+          try { await taskManagerAPI.reassign(task.id, { acting_email: actingEmail, new_assignee_email: form.assignee_email, new_assignee_name: form.assignee_name }) }
+          catch (e: any) { setError(e.message); setSaving(false); return }
+        }
+        saved = { id: task.id, outlook_task_id: task.outlook_task_id }
+      } else if (parentTaskId) {
+        const r = await taskManagerAPI.createSubtask(parentTaskId, payload)
+        saved = { id: r.id }
+      } else {
+        const r = await taskManagerAPI.create(payload)
+        saved = { id: r.id }
+      }
 
       if (form.sync_to_outlook && !saved.outlook_task_id) {
         setOutlookStatus('Signing in to Microsoft…')
         try {
           const outlookId = await createOutlookTask({ title: form.title, description: form.description, dueDate: form.due_date })
-          await tasksAPI.update(saved.id, { outlook_task_id: outlookId })
+          await taskManagerAPI.update(saved.id, { acting_email: actingEmail, outlook_task_id: outlookId })
           setOutlookStatus('')
         } catch (e: any) {
           setOutlookStatus('')
@@ -114,7 +160,7 @@ export function TaskModal({ task, entityType, entityId, entityLabel, onClose, on
             <textarea className="form-input" value={form.description} onChange={e => setForm(p => ({ ...p, description: e.target.value }))} rows={3} style={{ resize: 'vertical' }} />
           </FormField>
 
-          {locked ? (
+          {showEntity && (locked ? (
             <FormField label="Linked To" full>
               <input className="form-input" value={entityLabel || ''} disabled />
             </FormField>
@@ -132,26 +178,31 @@ export function TaskModal({ task, entityType, entityId, entityLabel, onClose, on
                 </select>
               </FormField>
             </div>
-          )}
+          ))}
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
             <FormField label="Due Date">
               <input className="form-input" type="date" value={form.due_date} onChange={e => setForm(p => ({ ...p, due_date: e.target.value }))} />
             </FormField>
-            <FormField label="Owner">
-              <select className="form-input" value={form.owner_email} onChange={e => handleOwnerChange(e.target.value)}>
-                <option value="">Unassigned</option>
+            <FormField label={`Owner${task ? ' (stays responsible, cannot be changed)' : ''}`}>
+              <select className="form-input" value={form.owner_email} onChange={e => handleOwnerChange(e.target.value)} disabled={!!task}>
+                <option value="">Select owner…</option>
                 {users.map((u: any) => <option key={u.email} value={u.email}>{u.display_name || `${u.first_name} ${u.last_name}`}</option>)}
               </select>
             </FormField>
           </div>
 
+          <FormField label="Assignee (who currently does the work)">
+            <select className="form-input" value={form.assignee_email} onChange={e => handleAssigneeChange(e.target.value)}>
+              <option value="">Same as owner</option>
+              {users.map((u: any) => <option key={u.email} value={u.email}>{u.display_name || `${u.first_name} ${u.last_name}`}</option>)}
+            </select>
+          </FormField>
+
           {task && (
             <FormField label="Status">
               <select className="form-input" value={form.status} onChange={e => setForm(p => ({ ...p, status: e.target.value }))}>
-                <option value="todo">To Do</option>
-                <option value="in_progress">In Progress</option>
-                <option value="done">Done</option>
+                {(isSubtask ? SUB_STATUSES : TOP_STATUSES).map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
               </select>
             </FormField>
           )}

@@ -1,18 +1,22 @@
 'use client'
-// app/tasks/page.tsx
+// app/tasks/page.tsx — Sales' own view of the Task Manager, scoped to source='sales'
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { Sidebar } from '@/components/Sidebar'
-import { tasksAPI, companiesAPI, contactsAPI, opportunitiesAPI } from '@/lib/api'
+import { taskManagerAPI, companiesAPI, contactsAPI, opportunitiesAPI } from '@/lib/api'
+import { getStoredUser } from '@/lib/auth'
 import { PageHeader, EmptyState } from '@/components/shared/RecordLayout'
 import { TaskModal } from '@/components/tasks/TaskModal'
 
-const STATUS_LABEL: Record<string, string> = { todo: 'To Do', in_progress: 'In Progress', done: 'Done' }
+const STATUS_LABEL: Record<string, string> = { new: 'New', open: 'Open', in_progress: 'In Progress', resolved: 'Resolved', closed: 'Closed' }
 const STATUS_COLOR: Record<string, { bg: string; color: string }> = {
-  todo: { bg: '#F1F5F9', color: '#475569' },
+  new: { bg: '#F1F5F9', color: '#475569' },
+  open: { bg: '#EFF6FF', color: '#219BD6' },
   in_progress: { bg: '#FFF7ED', color: '#D97706' },
-  done: { bg: '#ECFDF5', color: '#059669' },
+  resolved: { bg: '#ECFDF5', color: '#059669' },
+  closed: { bg: '#F1F5F9', color: '#64748B' },
 }
+const DONE_STATUSES = ['resolved', 'closed']
 const ENTITY_LABEL: Record<string, string> = { company: 'Customer', contact: 'Contact', opportunity: 'Opportunity' }
 const ENTITY_HREF: Record<string, string> = { company: '/companies', contact: '/contacts', opportunity: '/opportunities' }
 
@@ -26,15 +30,16 @@ export default function TasksPage() {
   const [statusFilter, setStatusFilter] = useState('')
   const [showModal, setShowModal] = useState(false)
   const [editing, setEditing] = useState<any>(null)
+  const actingEmail = getStoredUser()?.email || ''
 
   const load = async () => {
     setLoading(true)
     try {
       const [t, c, ct, o] = await Promise.all([
-        tasksAPI.list({ status_filter: statusFilter || undefined }),
+        taskManagerAPI.list({ source: 'sales', status: statusFilter || undefined }),
         companiesAPI.list({}), contactsAPI.list({}), opportunitiesAPI.list({}),
       ])
-      setTasks(t); setCompanies(c); setContacts(ct); setOpportunities(o)
+      setTasks(t.tasks || []); setCompanies(c); setContacts(ct); setOpportunities(o)
     } catch (e) { console.error(e) }
     finally { setLoading(false) }
   }
@@ -50,17 +55,20 @@ export default function TasksPage() {
   }
 
   const toggleDone = async (task: any) => {
-    await tasksAPI.update(task.id, { status: task.status === 'done' ? 'todo' : 'done' })
+    const done = DONE_STATUSES.includes(task.status)
+    try { await taskManagerAPI.setStatus(task.id, { acting_email: actingEmail, status: done ? 'new' : 'resolved' }) }
+    catch (e: any) { alert(e.message) }
     load()
   }
 
   const deleteTask = async (task: any) => {
     if (!confirm(`Delete task "${task.title}"?`)) return
-    await tasksAPI.delete(task.id)
+    try { await taskManagerAPI.delete(task.id, actingEmail) }
+    catch (e: any) { alert(e.message); return }
     load()
   }
 
-  const overdue = (task: any) => task.status !== 'done' && task.due_date && new Date(task.due_date) < new Date()
+  const overdue = (task: any) => !DONE_STATUSES.includes(task.status) && task.due_date && new Date(task.due_date) < new Date()
 
   return (
     <div style={{ display: 'flex' }}>
@@ -81,9 +89,7 @@ export default function TasksPage() {
           <div style={{ display: 'flex', gap: '10px', marginBottom: '14px' }}>
             <select className="form-input" style={{ width: '200px' }} value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
               <option value="">All statuses</option>
-              <option value="todo">To Do</option>
-              <option value="in_progress">In Progress</option>
-              <option value="done">Done</option>
+              {Object.entries(STATUS_LABEL).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
             </select>
           </div>
 
@@ -106,10 +112,10 @@ export default function TasksPage() {
                   return (
                     <tr key={task.id} style={{ borderBottom: '1px solid #F1F5F9' }}>
                       <td style={{ padding: '11px 16px' }}>
-                        <input type="checkbox" checked={task.status === 'done'} onChange={() => toggleDone(task)} style={{ accentColor: '#219BD6', width: '15px', height: '15px', cursor: 'pointer' }} />
+                        <input type="checkbox" checked={DONE_STATUSES.includes(task.status)} onChange={() => toggleDone(task)} style={{ accentColor: '#219BD6', width: '15px', height: '15px', cursor: 'pointer' }} />
                       </td>
                       <td style={{ padding: '11px 16px' }}>
-                        <div style={{ fontWeight: '700', color: task.status === 'done' ? '#9B9B9B' : '#144766', fontSize: '12px', textDecoration: task.status === 'done' ? 'line-through' : 'none' }}>{task.title}</div>
+                        <div style={{ fontWeight: '700', color: DONE_STATUSES.includes(task.status) ? '#9B9B9B' : '#144766', fontSize: '12px', textDecoration: DONE_STATUSES.includes(task.status) ? 'line-through' : 'none' }}>{task.title}</div>
                         {task.description && <div style={{ fontSize: '11px', color: '#9B9B9B', maxWidth: '260px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{task.description}</div>}
                       </td>
                       <td style={{ padding: '11px 16px', fontSize: '12px' }}>
@@ -140,7 +146,7 @@ export default function TasksPage() {
           </div>
         </div>
       </main>
-      {showModal && <TaskModal task={editing} onClose={() => setShowModal(false)} onSave={() => { setShowModal(false); load() }} />}
+      {showModal && <TaskModal task={editing} source="sales" onClose={() => setShowModal(false)} onSave={() => { setShowModal(false); load() }} />}
     </div>
   )
 }
