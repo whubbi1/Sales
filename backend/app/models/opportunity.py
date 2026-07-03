@@ -40,6 +40,7 @@ class Opportunity(Base):
     ))
     notes               = Column(Text)
     assigned_to         = Column(String(255))
+    sharepoint_site_url = Column(Text)
 
     created_at          = Column(DateTime, default=datetime.utcnow)
     updated_at          = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

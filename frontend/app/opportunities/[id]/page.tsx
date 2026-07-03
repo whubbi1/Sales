@@ -1,9 +1,11 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import { opportunitiesAPI, companiesAPI } from '@/lib/api'
+import { opportunitiesAPI, companiesAPI, tasksAPI } from '@/lib/api'
+import { getStoredUser } from '@/lib/auth'
 import { RecordLayout, PropertyRow, SidebarSection, SidebarCard, TabNav } from '@/components/shared/RecordLayout'
 import { OpportunityModal } from '@/components/opportunities/OpportunityModal'
+import { TaskModal } from '@/components/tasks/TaskModal'
 
 const STATUS_COLORS: Record<string, { bg: string; color: string }> = {
   'Presentation To Be Scheduled': { bg: '#EEF2FF', color: '#4F46E5' },
@@ -14,6 +16,10 @@ const STATUS_COLORS: Record<string, { bg: string; color: string }> = {
   'Contract Finalised':           { bg: '#D1FAE5', color: '#047857' },
   'PO Received':                  { bg: '#D1FAE5', color: '#047857' },
   'Contract Lost':                { bg: '#FEF2F2', color: '#DC2626' },
+}
+const STATUS_LABEL: Record<string, string> = { todo: 'To Do', in_progress: 'In Progress', done: 'Done' }
+const STATUS_COLOR: Record<string, { bg: string; color: string }> = {
+  todo: { bg: '#F1F5F9', color: '#475569' }, in_progress: { bg: '#FFF7ED', color: '#D97706' }, done: { bg: '#ECFDF5', color: '#059669' },
 }
 
 export default function OpportunityDetailPage() {
@@ -28,14 +34,48 @@ export default function OpportunityDetailPage() {
   const [deleteConfirm, setDeleteConfirm] = useState('')
   const [deleting, setDeleting] = useState(false)
 
+  const [users, setUsers] = useState<any[]>([])
+  const [staffing, setStaffing] = useState<any[]>([])
+  const [addStaffEmail, setAddStaffEmail] = useState('')
+  const [addStaffRole, setAddStaffRole] = useState('')
+
+  const [checklist, setChecklist] = useState<any[]>([])
+  const [newChecklistText, setNewChecklistText] = useState('')
+
+  const [comments, setComments] = useState<any[]>([])
+  const [newComment, setNewComment] = useState('')
+
+  const [tasks, setTasks] = useState<any[]>([])
+  const [showTaskModal, setShowTaskModal] = useState(false)
+  const [editingTask, setEditingTask] = useState<any>(null)
+
+  const [sharepointUrl, setSharepointUrl] = useState('')
+  const [editingSharepoint, setEditingSharepoint] = useState(false)
+  const [files, setFiles] = useState<any[]>([]);
+  const [filesError, setFilesError] = useState('')
+  const [filesLoading, setFilesLoading] = useState(false)
+
   const load = async () => {
     try {
       const o = await opportunitiesAPI.get(id as string)
       setOpp(o)
+      setSharepointUrl(o.sharepoint_site_url || '')
       if (o.company_id) {
         const deals = await companiesAPI.getOpportunities(o.company_id)
         setCompanyDeals(deals.filter((d: any) => d.id !== id))
       }
+      const [staffingRows, checklistRows, commentRows, taskRows, usersResp] = await Promise.all([
+        opportunitiesAPI.getStaffing(id as string),
+        opportunitiesAPI.getChecklist(id as string),
+        opportunitiesAPI.getComments(id as string),
+        tasksAPI.list({ entity_type: 'opportunity', entity_id: id }),
+        fetch('https://api.whubbi.wcomply.com/settings/users').then(r => r.json()),
+      ])
+      setStaffing(staffingRows)
+      setChecklist(checklistRows)
+      setComments(commentRows)
+      setTasks(taskRows)
+      setUsers(usersResp.users || [])
     } catch {
       router.push('/opportunities')
     } finally {
@@ -44,6 +84,18 @@ export default function OpportunityDetailPage() {
   }
 
   useEffect(() => { load() }, [id])
+
+  const loadFiles = async () => {
+    setFilesLoading(true); setFilesError('')
+    try {
+      const d = await opportunitiesAPI.getSharepointFiles(id as string)
+      if (d.error) setFilesError(d.error)
+      setFiles(d.files || [])
+    } catch (e: any) { setFilesError(e.message) }
+    finally { setFilesLoading(false) }
+  }
+
+  useEffect(() => { if (tab === 'Files' && opp?.sharepoint_site_url) loadFiles() }, [tab])
 
   if (loading) return (
     <RecordLayout
@@ -56,6 +108,57 @@ export default function OpportunityDetailPage() {
 
   const statusStyle = STATUS_COLORS[opp.deal_status] || { bg: '#F1F5F9', color: '#475569' }
   const fmt = (d?: string) => d ? new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'
+
+  const saveSharepointUrl = async () => {
+    await opportunitiesAPI.update(opp.id, { sharepoint_site_url: sharepointUrl })
+    setOpp((o: any) => ({ ...o, sharepoint_site_url: sharepointUrl }))
+    setEditingSharepoint(false)
+  }
+
+  const addStaffing = async () => {
+    if (!addStaffEmail) return
+    const u = users.find((uu: any) => uu.email === addStaffEmail)
+    await opportunitiesAPI.addStaffing(opp.id, { user_email: addStaffEmail, user_name: u?.display_name || `${u?.first_name} ${u?.last_name}`, role: addStaffRole })
+    setAddStaffEmail(''); setAddStaffRole('')
+    setStaffing(await opportunitiesAPI.getStaffing(opp.id))
+  }
+  const removeStaffing = async (sid: string) => {
+    await opportunitiesAPI.removeStaffing(opp.id, sid)
+    setStaffing(await opportunitiesAPI.getStaffing(opp.id))
+  }
+
+  const addChecklistItem = async () => {
+    if (!newChecklistText.trim()) return
+    await opportunitiesAPI.addChecklistItem(opp.id, { text: newChecklistText.trim(), position: checklist.length })
+    setNewChecklistText('')
+    setChecklist(await opportunitiesAPI.getChecklist(opp.id))
+  }
+  const toggleChecklistItem = async (item: any) => {
+    await opportunitiesAPI.updateChecklistItem(opp.id, item.id, { is_checked: !item.is_checked })
+    setChecklist(await opportunitiesAPI.getChecklist(opp.id))
+  }
+  const deleteChecklistItem = async (item: any) => {
+    await opportunitiesAPI.deleteChecklistItem(opp.id, item.id)
+    setChecklist(await opportunitiesAPI.getChecklist(opp.id))
+  }
+
+  const postComment = async () => {
+    if (!newComment.trim()) return
+    const user = getStoredUser()
+    await opportunitiesAPI.addComment(opp.id, { author_email: user?.email || '', author_name: user?.name || user?.email || '', comment: newComment.trim() })
+    setNewComment('')
+    setComments(await opportunitiesAPI.getComments(opp.id))
+  }
+  const deleteComment = async (c: any) => {
+    await opportunitiesAPI.deleteComment(opp.id, c.id)
+    setComments(await opportunitiesAPI.getComments(opp.id))
+  }
+
+  const reloadTasks = async () => setTasks(await tasksAPI.list({ entity_type: 'opportunity', entity_id: id }))
+  const toggleTaskDone = async (task: any) => { await tasksAPI.update(task.id, { status: task.status === 'done' ? 'todo' : 'done' }); reloadTasks() }
+  const deleteTask = async (task: any) => { if (!confirm(`Delete task "${task.title}"?`)) return; await tasksAPI.delete(task.id); reloadTasks() }
+
+  const checkedCount = checklist.filter(c => c.is_checked).length
 
   const leftColumn = (
     <div>
@@ -96,7 +199,7 @@ export default function OpportunityDetailPage() {
 
       <div style={{ background: 'white', borderRadius: '10px', border: '1px solid #EDF2F7', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
         <div style={{ padding: '0 20px', background: '#FAFBFC', borderBottom: '2px solid #E2E8F0' }}>
-          <TabNav tabs={['Overview', 'Contacts']} active={tab} onChange={setTab} />
+          <TabNav tabs={['Overview', 'Contacts', 'Staffing', 'Checklist', 'Comments', 'Tasks', 'Files']} active={tab} onChange={setTab} />
         </div>
         <div style={{ padding: '20px' }}>
           {tab === 'Overview' && (
@@ -112,6 +215,7 @@ export default function OpportunityDetailPage() {
               )}
             </div>
           )}
+
           {tab === 'Contacts' && (
             <div>
               {(!opp.contacts || opp.contacts.length === 0) ? <p style={{ color: '#9B9B9B', fontSize: '13px' }}>No contacts linked.</p> : (
@@ -126,6 +230,144 @@ export default function OpportunityDetailPage() {
                     </div>
                   ))}
                 </div>
+              )}
+            </div>
+          )}
+
+          {tab === 'Staffing' && (
+            <div>
+              <div style={{ display: 'flex', gap: '8px', marginBottom: '14px' }}>
+                <select className="form-input" style={{ width: '220px' }} value={addStaffEmail} onChange={e => setAddStaffEmail(e.target.value)}>
+                  <option value="">Select employee…</option>
+                  {users.map((u: any) => <option key={u.email} value={u.email}>{u.display_name || `${u.first_name} ${u.last_name}`}</option>)}
+                </select>
+                <input className="form-input" style={{ width: '180px' }} placeholder="Role (optional)" value={addStaffRole} onChange={e => setAddStaffRole(e.target.value)} />
+                <button className="btn-primary" onClick={addStaffing} disabled={!addStaffEmail}>+ Add</button>
+              </div>
+              {staffing.length === 0 ? <p style={{ color: '#9B9B9B', fontSize: '13px' }}>No one staffed on this opportunity yet.</p> : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {staffing.map((s: any) => (
+                    <div key={s.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', border: '1px solid #EDF2F7', borderRadius: '8px' }}>
+                      <div>
+                        <div style={{ fontWeight: '700', color: '#144766', fontSize: '13px' }}>{s.user_name || s.user_email}</div>
+                        {s.role && <div style={{ fontSize: '11px', color: '#9B9B9B' }}>{s.role}</div>}
+                      </div>
+                      <button onClick={() => removeStaffing(s.id)} style={{ padding: '5px 10px', background: '#FEF2F2', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '11px', color: '#DC2626', fontWeight: '700' }}>Remove</button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {tab === 'Checklist' && (
+            <div>
+              <p style={{ fontSize: '11px', color: '#9B9B9B', marginBottom: '10px' }}>{checkedCount}/{checklist.length} done</p>
+              <div style={{ display: 'flex', gap: '8px', marginBottom: '14px' }}>
+                <input className="form-input" style={{ flex: 1 }} placeholder="Add a checklist item…" value={newChecklistText} onChange={e => setNewChecklistText(e.target.value)} onKeyDown={e => e.key === 'Enter' && addChecklistItem()} />
+                <button className="btn-primary" onClick={addChecklistItem}>Add</button>
+              </div>
+              {checklist.length === 0 ? <p style={{ color: '#9B9B9B', fontSize: '13px' }}>No checklist items yet.</p> : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  {checklist.map((item: any) => (
+                    <div key={item.id} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '8px 10px', borderRadius: '6px' }}>
+                      <input type="checkbox" checked={item.is_checked} onChange={() => toggleChecklistItem(item)} style={{ accentColor: '#219BD6', width: '15px', height: '15px', cursor: 'pointer' }} />
+                      <span style={{ flex: 1, fontSize: '13px', color: item.is_checked ? '#9B9B9B' : '#3F3F3F', textDecoration: item.is_checked ? 'line-through' : 'none' }}>{item.text}</span>
+                      <button onClick={() => deleteChecklistItem(item)} style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#DC2626', fontSize: '15px', padding: 0, lineHeight: 1 }}>×</button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {tab === 'Comments' && (
+            <div>
+              <div style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
+                <textarea className="form-input" style={{ flex: 1, resize: 'vertical' }} rows={2} placeholder="Write a comment…" value={newComment} onChange={e => setNewComment(e.target.value)} />
+                <button className="btn-primary" onClick={postComment} style={{ alignSelf: 'flex-end' }}>Post</button>
+              </div>
+              {comments.length === 0 ? <p style={{ color: '#9B9B9B', fontSize: '13px' }}>No comments yet.</p> : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  {comments.map((c: any) => (
+                    <div key={c.id} style={{ padding: '10px 14px', border: '1px solid #EDF2F7', borderRadius: '8px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                        <span style={{ fontWeight: '700', color: '#144766', fontSize: '12px' }}>{c.author_name || c.author_email}</span>
+                        <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                          <span style={{ fontSize: '10px', color: '#9B9B9B' }}>{new Date(c.created_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
+                          <button onClick={() => deleteComment(c)} style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#DC2626', fontSize: '14px', padding: 0, lineHeight: 1 }}>×</button>
+                        </div>
+                      </div>
+                      <p style={{ fontSize: '13px', color: '#3F3F3F', margin: 0, whiteSpace: 'pre-wrap' }}>{c.comment}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {tab === 'Tasks' && (
+            <div>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '14px' }}>
+                <button className="btn-primary" onClick={() => { setEditingTask(null); setShowTaskModal(true) }}>+ New Task</button>
+              </div>
+              {tasks.length === 0 ? <p style={{ color: '#9B9B9B', fontSize: '13px' }}>No tasks yet.</p> : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {tasks.map((t: any) => (
+                    <div key={t.id} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 14px', border: '1px solid #EDF2F7', borderRadius: '8px' }}>
+                      <input type="checkbox" checked={t.status === 'done'} onChange={() => toggleTaskDone(t)} style={{ accentColor: '#219BD6', width: '15px', height: '15px', cursor: 'pointer' }} />
+                      <div style={{ flex: 1, cursor: 'pointer' }} onClick={() => { setEditingTask(t); setShowTaskModal(true) }}>
+                        <div style={{ fontWeight: '700', color: t.status === 'done' ? '#9B9B9B' : '#144766', fontSize: '13px', textDecoration: t.status === 'done' ? 'line-through' : 'none' }}>{t.title}</div>
+                        <div style={{ fontSize: '11px', color: '#9B9B9B' }}>
+                          {t.owner_name || t.owner_email || 'Unassigned'}{t.due_date && ` · Due ${fmt(t.due_date)}`}{t.outlook_task_id && ' · ✓ Outlook'}
+                        </div>
+                      </div>
+                      <span style={{ background: STATUS_COLOR[t.status]?.bg, color: STATUS_COLOR[t.status]?.color, padding: '2px 8px', borderRadius: '10px', fontSize: '10px', fontWeight: '700' }}>{STATUS_LABEL[t.status]}</span>
+                      <button onClick={() => deleteTask(t)} style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#DC2626', fontSize: '15px', padding: 0, lineHeight: 1 }}>×</button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {tab === 'Files' && (
+            <div>
+              <div style={{ marginBottom: '14px' }}>
+                <p className="section-label" style={{ marginBottom: '6px' }}>SharePoint Link</p>
+                {editingSharepoint ? (
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <input className="form-input" style={{ flex: 1 }} placeholder="https://wcomply.sharepoint.com/..." value={sharepointUrl} onChange={e => setSharepointUrl(e.target.value)} autoFocus />
+                    <button className="btn-primary" onClick={saveSharepointUrl}>Save</button>
+                    <button className="btn-secondary" onClick={() => { setSharepointUrl(opp.sharepoint_site_url || ''); setEditingSharepoint(false) }}>Cancel</button>
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    {opp.sharepoint_site_url ? (
+                      <a href={opp.sharepoint_site_url} target="_blank" rel="noopener noreferrer" style={{ color: '#219BD6', fontSize: '13px', fontWeight: '600' }}>Open in SharePoint ↗</a>
+                    ) : <span style={{ color: '#9B9B9B', fontSize: '13px' }}>No SharePoint site linked yet.</span>}
+                    <button onClick={() => setEditingSharepoint(true)} style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#156082', fontSize: '12px', fontWeight: '600', padding: 0 }}>{opp.sharepoint_site_url ? 'Edit' : '+ Link SharePoint'}</button>
+                    {opp.sharepoint_site_url && <button onClick={loadFiles} style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#219BD6', fontSize: '12px', fontWeight: '600', padding: 0 }}>↻ Refresh</button>}
+                  </div>
+                )}
+              </div>
+              {opp.sharepoint_site_url && (
+                filesLoading ? (
+                  <p style={{ color: '#9B9B9B', fontSize: '13px' }}>Loading files…</p>
+                ) : filesError ? (
+                  <div style={{ background: '#FEF2F2', color: '#DC2626', padding: '10px 14px', borderRadius: '8px', fontSize: '12px' }}>{filesError}</div>
+                ) : files.length === 0 ? (
+                  <p style={{ color: '#9B9B9B', fontSize: '13px' }}>No files found at this SharePoint link.</p>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    {files.map((f: any) => (
+                      <a key={f.id} href={f.web_url} target="_blank" rel="noopener noreferrer" style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 10px', border: '1px solid #EDF2F7', borderRadius: '6px', textDecoration: 'none', color: '#3F3F3F', fontSize: '12px' }}>
+                        <span>{f.is_folder ? '📁' : '📄'} {f.name}</span>
+                        <span style={{ color: '#9B9B9B' }}>{f.last_modified ? fmt(f.last_modified) : ''}</span>
+                      </a>
+                    ))}
+                  </div>
+                )
               )}
             </div>
           )}
@@ -153,6 +395,9 @@ export default function OpportunityDetailPage() {
       <SidebarSection title={`Contacts (${opp.contacts?.length || 0})`}>
         {(!opp.contacts || opp.contacts.length === 0) ? <p style={{ fontSize: '12px', color: '#9B9B9B' }}>No contacts.</p> : opp.contacts.map((c: any) => <SidebarCard key={c.id} title={`${c.first_name} ${c.last_name}`} subtitle={c.job_type || c.email} href={`/contacts/${c.id}`} color="#e97132" />)}
       </SidebarSection>
+      <SidebarSection title={`Staffing (${staffing.length})`}>
+        {staffing.length === 0 ? <p style={{ fontSize: '12px', color: '#9B9B9B' }}>No one staffed yet.</p> : staffing.map((s: any) => <SidebarCard key={s.id} title={s.user_name || s.user_email} subtitle={s.role || 'Staffed'} href="/staffing" color="#059669" />)}
+      </SidebarSection>
       {opp.company && (
         <SidebarSection title={`Other ${opp.company.name} Deals (${companyDeals.length})`}>
           {companyDeals.length === 0 ? <p style={{ fontSize: '12px', color: '#9B9B9B' }}>No other deals.</p> : companyDeals.map((d: any) => <SidebarCard key={d.id} title={d.deal_name} subtitle={d.deal_status} href={`/opportunities/${d.id}`} color="#219BD6" />)}
@@ -176,6 +421,16 @@ export default function OpportunityDetailPage() {
     <>
       <RecordLayout leftColumn={leftColumn} rightColumn={rightColumn} />
       {showEdit && <OpportunityModal opportunity={opp} onClose={() => setShowEdit(false)} onSave={() => { setShowEdit(false); load() }} />}
+      {showTaskModal && (
+        <TaskModal
+          task={editingTask}
+          entityType="opportunity"
+          entityId={opp.id}
+          entityLabel={opp.deal_name}
+          onClose={() => setShowTaskModal(false)}
+          onSave={() => { setShowTaskModal(false); reloadTasks() }}
+        />
+      )}
       {showDelete && (
         <div className="modal-overlay" onClick={() => setShowDelete(false)}>
           <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '420px' }}>

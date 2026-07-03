@@ -62,6 +62,29 @@ export const opportunitiesAPI = {
   create: (d: any) => fetchAPI('/opportunities/', { method: 'POST', body: JSON.stringify(d) }),
   update: (id: string, d: any) => fetchAPI(`/opportunities/${id}/`, { method: 'PUT', body: JSON.stringify(d) }),
   delete: (id: string) => fetchAPI(`/opportunities/${id}/`, { method: 'DELETE' }),
+
+  getStaffing:    (id: string) => fetchAPI(`/opportunities/${id}/staffing/`),
+  addStaffing:    (id: string, d: any) => fetchAPI(`/opportunities/${id}/staffing/`, { method: 'POST', body: JSON.stringify(d) }),
+  removeStaffing: (id: string, sid: string) => fetchAPI(`/opportunities/${id}/staffing/${sid}/`, { method: 'DELETE' }),
+  getAllStaffing: () => fetchAPI(`/opportunities/staffing/all`),
+
+  getChecklist:      (id: string) => fetchAPI(`/opportunities/${id}/checklist/`),
+  addChecklistItem:  (id: string, d: any) => fetchAPI(`/opportunities/${id}/checklist/`, { method: 'POST', body: JSON.stringify(d) }),
+  updateChecklistItem: (id: string, cid: string, d: any) => fetchAPI(`/opportunities/${id}/checklist/${cid}/`, { method: 'PUT', body: JSON.stringify(d) }),
+  deleteChecklistItem: (id: string, cid: string) => fetchAPI(`/opportunities/${id}/checklist/${cid}/`, { method: 'DELETE' }),
+
+  getComments:   (id: string) => fetchAPI(`/opportunities/${id}/comments/`),
+  addComment:    (id: string, d: any) => fetchAPI(`/opportunities/${id}/comments/`, { method: 'POST', body: JSON.stringify(d) }),
+  deleteComment: (id: string, cid: string) => fetchAPI(`/opportunities/${id}/comments/${cid}/`, { method: 'DELETE' }),
+
+  getSharepointFiles: (id: string) => fetchAPI(`/opportunities/${id}/sharepoint-files`),
 }
- 
- 
+
+// ─── Sales Tasks (generic — company / contact / opportunity) ──────────────────
+export const tasksAPI = {
+  list:   (p?: any) => fetchAPI(`/tasks/${qs(p)}`),
+  get:    (id: string) => fetchAPI(`/tasks/${id}`),
+  create: (d: any) => fetchAPI('/tasks/', { method: 'POST', body: JSON.stringify(d) }),
+  update: (id: string, d: any) => fetchAPI(`/tasks/${id}`, { method: 'PUT', body: JSON.stringify(d) }),
+  delete: (id: string) => fetchAPI(`/tasks/${id}`, { method: 'DELETE' }),
+}

@@ -24,7 +24,7 @@ async def global_exception_handler(request: Request, exc: Exception):
 async def startup():
     try:
         from app.database import engine, Base
-        from app.models import company, contact, opportunity, error_log, url_monitor, user_profile, helpdesk, background_jobs, grc, hr
+        from app.models import company, contact, opportunity, opportunity_extra, error_log, url_monitor, user_profile, helpdesk, background_jobs, grc, hr
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
 
@@ -34,6 +34,9 @@ async def startup():
         S = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
         async with S() as session:
             sqls = [
+                # Sales — link a SharePoint site/folder to an opportunity
+                "ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS sharepoint_site_url TEXT",
+
                 # Helpdesk migrations
                 """CREATE TABLE IF NOT EXISTS helpdesk_groups (
                     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -788,6 +791,7 @@ def _include(module_path: str, prefix: str, tag: str):
 _include("app.routers.companies",      "/companies",    "Companies")
 _include("app.routers.contacts",       "/contacts",     "Contacts")
 _include("app.routers.opportunities",  "/opportunities","Opportunities")
+_include("app.routers.tasks",          "/tasks",        "Tasks")
 _include("app.routers.admin",          "/admin",        "Admin")
 _include("app.routers.admin_ops",      "/admin",        "AdminOps")
 _include("app.routers.microsoft",      "/microsoft",    "Microsoft")

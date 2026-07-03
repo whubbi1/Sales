@@ -153,6 +153,7 @@ class OpportunityBase(BaseModel):
     deal_type: Optional[str] = None
     notes: Optional[str] = None
     assigned_to: Optional[str] = None
+    sharepoint_site_url: Optional[str] = None
 
 class OpportunityCreate(OpportunityBase):
     contact_ids: Optional[List[UUID]] = []
@@ -174,6 +175,94 @@ class OpportunityResponse(OpportunityBase):
     id: UUID
     company: Optional[CompanySummary] = None
     contacts: Optional[List[ContactSummary]] = []
+    created_at: datetime
+    updated_at: datetime
+    class Config:
+        from_attributes = True
+
+# ─── Opportunity Staffing ───────────────────────────────────────────────────────
+class StaffingCreate(BaseModel):
+    user_email: str
+    user_name: Optional[str] = None
+    role: Optional[str] = None
+
+class StaffingResponse(StaffingCreate):
+    id: UUID
+    opportunity_id: UUID
+    created_at: datetime
+    class Config:
+        from_attributes = True
+
+# ─── Opportunity Checklist ──────────────────────────────────────────────────────
+class ChecklistItemCreate(BaseModel):
+    text: str
+    position: Optional[int] = 0
+
+class ChecklistItemUpdate(BaseModel):
+    text: Optional[str] = None
+    is_checked: Optional[bool] = None
+    position: Optional[int] = None
+
+class ChecklistItemResponse(BaseModel):
+    id: UUID
+    opportunity_id: UUID
+    text: str
+    is_checked: bool
+    position: int
+    created_at: datetime
+    updated_at: datetime
+    class Config:
+        from_attributes = True
+
+# ─── Opportunity Comments ───────────────────────────────────────────────────────
+class CommentCreate(BaseModel):
+    author_email: str
+    author_name: Optional[str] = None
+    comment: str
+
+class CommentResponse(CommentCreate):
+    id: UUID
+    opportunity_id: UUID
+    created_at: datetime
+    class Config:
+        from_attributes = True
+
+# ─── Sales Tasks (generic — company / contact / opportunity) ──────────────────
+class SalesTaskBase(BaseModel):
+    title: str
+    description: Optional[str] = None
+    due_date: Optional[datetime] = None
+    owner_email: Optional[str] = None
+    owner_name: Optional[str] = None
+    status: Optional[str] = "todo"
+    entity_type: str
+    entity_id: UUID
+    sync_to_outlook: Optional[bool] = False
+
+    @field_validator("status", mode="before")
+    @classmethod
+    def _blank_to_none(cls, v):
+        return v or "todo"
+
+class SalesTaskCreate(SalesTaskBase):
+    created_by_email: Optional[str] = None
+
+class SalesTaskUpdate(BaseModel):
+    title: Optional[str] = None
+    description: Optional[str] = None
+    due_date: Optional[datetime] = None
+    owner_email: Optional[str] = None
+    owner_name: Optional[str] = None
+    status: Optional[str] = None
+    entity_type: Optional[str] = None
+    entity_id: Optional[UUID] = None
+    sync_to_outlook: Optional[bool] = None
+    outlook_task_id: Optional[str] = None
+
+class SalesTaskResponse(SalesTaskBase):
+    id: UUID
+    created_by_email: Optional[str] = None
+    outlook_task_id: Optional[str] = None
     created_at: datetime
     updated_at: datetime
     class Config:

@@ -99,16 +99,16 @@ export default function OpportunitiesPage() {
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead style={{ background: '#FAFBFC' }}>
                 <tr>
-                  {['Deal', 'Company', 'Type', 'Amount', 'Status', 'Closing Date', 'Project Status', 'Contacts'].map(h => (
+                  {['Deal', 'Company', 'Type', 'Amount', 'Status', 'Closing Date', 'Project Status', 'Contacts', ''].map(h => (
                     <th key={h} style={{ textAlign: 'left', padding: '10px 16px', fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#9B9B9B', borderBottom: '1px solid #E2E8F0', whiteSpace: 'nowrap' }}>{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
                 {loading ? (
-                  <tr><td colSpan={8} style={{ textAlign: 'center', padding: '48px', color: '#9B9B9B', fontSize: '13px' }}>Loading...</td></tr>
+                  <tr><td colSpan={9} style={{ textAlign: 'center', padding: '48px', color: '#9B9B9B', fontSize: '13px' }}>Loading...</td></tr>
                 ) : opportunities.length === 0 ? (
-                  <tr><td colSpan={8}><EmptyState icon="💼" title="No opportunities yet" description="Create your first deal by clicking New Opportunity" /></td></tr>
+                  <tr><td colSpan={9}><EmptyState icon="💼" title="No opportunities yet" description="Create your first deal by clicking New Opportunity" /></td></tr>
                 ) : opportunities.map(opp => (
                   <tr key={opp.id} onClick={() => router.push(`/opportunities/${opp.id}`)} style={{ cursor: 'pointer' }}
                     onMouseEnter={e => (e.currentTarget.style.background = '#FAFBFC')}
@@ -154,6 +154,12 @@ export default function OpportunitiesPage() {
                     </td>
                     <td style={{ padding: '11px 16px', borderBottom: '1px solid #F1F5F9', fontSize: '11px', color: '#9B9B9B' }}>
                       {opp.contacts?.length || 0} contact{(opp.contacts?.length || 0) !== 1 ? 's' : ''}
+                    </td>
+                    <td style={{ padding: '11px 16px', borderBottom: '1px solid #F1F5F9' }}>
+                      <button onClick={e => { e.stopPropagation(); router.push(`/opportunities/${opp.id}`) }}
+                        style={{ padding: '5px 12px', background: '#EFF6FF', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '11px', color: '#219BD6', fontWeight: '700' }}>
+                        Details
+                      </button>
                     </td>
                   </tr>
                 ))}
