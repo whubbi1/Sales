@@ -870,6 +870,41 @@ async def startup():
                 # Lets the Access Review Requirements view filter grc_requirements down to
                 # access-control-related ones, without touching grc_extended.py's existing endpoints.
                 "ALTER TABLE grc_requirements ADD COLUMN IF NOT EXISTS category VARCHAR(50)",
+
+                # HR — Onboarding/Offboarding checklists per location
+                """CREATE TABLE IF NOT EXISTS hr_checklist_tasks (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    kind VARCHAR(20) NOT NULL,
+                    location_id UUID NOT NULL,
+                    location_name VARCHAR(255),
+                    title VARCHAR(255) NOT NULL,
+                    description TEXT,
+                    url TEXT,
+                    sharepoint_url TEXT,
+                    responsible_email VARCHAR(255),
+                    responsible_name VARCHAR(255),
+                    sort_order INTEGER DEFAULT 0,
+                    created_by_email VARCHAR(255),
+                    created_at TIMESTAMP DEFAULT NOW(),
+                    updated_at TIMESTAMP DEFAULT NOW()
+                )""",
+                """CREATE TABLE IF NOT EXISTS hr_checklist_cases (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    kind VARCHAR(20) NOT NULL,
+                    user_email VARCHAR(255) NOT NULL,
+                    user_name VARCHAR(255),
+                    location_id UUID,
+                    location_name VARCHAR(255),
+                    started_by_email VARCHAR(255),
+                    created_at TIMESTAMP DEFAULT NOW()
+                )""",
+                """CREATE TABLE IF NOT EXISTS hr_checklist_case_tasks (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    case_id UUID NOT NULL REFERENCES hr_checklist_cases(id) ON DELETE CASCADE,
+                    checklist_task_id UUID,
+                    task_id UUID NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+                    created_at TIMESTAMP DEFAULT NOW()
+                )""",
             ]
             for sql in sqls:
                 try:
@@ -931,6 +966,7 @@ _include("app.routers.microsoft",      "/microsoft",    "Microsoft")
 _include("app.routers.ecs_control",    "/ecs",          "ECS")
 _include("app.routers.settings",       "/settings",     "Settings")
 _include("app.routers.hr",             "/hr",           "HR")
+_include("app.routers.hr_checklists",  "/hr",           "HRChecklists")
 _include("app.routers.grc",            "/grc",          "GRC")
 _include("app.routers.grc_extended",   "/grc",          "GRCExt")
 _include("app.routers.grc_access_review", "/grc",       "GRCAccessReview")

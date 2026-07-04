@@ -134,3 +134,15 @@ export const grcAccessReviewAPI = {
 
   overview: () => fetchAPI('/grc/overview'),
 }
+
+// ─── HR Onboarding/Offboarding Checklists ──────────────────────────────────────
+export const hrChecklistAPI = {
+  listTasks:   (p?: any) => fetchAPI(`/hr/checklist-tasks${qs(p)}`),
+  createTask:  (d: any) => fetchAPI('/hr/checklist-tasks', { method: 'POST', body: JSON.stringify(d) }),
+  updateTask:  (id: string, d: any) => fetchAPI(`/hr/checklist-tasks/${id}`, { method: 'PUT', body: JSON.stringify(d) }),
+  deleteTask:  (id: string) => fetchAPI(`/hr/checklist-tasks/${id}`, { method: 'DELETE' }),
+
+  listCases: (p?: any) => fetchAPI(`/hr/checklist-cases${qs(p)}`),
+  getCase:   (id: string) => fetchAPI(`/hr/checklist-cases/${id}`),
+  startCase: (d: any) => fetchAPI('/hr/checklist-cases', { method: 'POST', body: JSON.stringify(d) }),
+}

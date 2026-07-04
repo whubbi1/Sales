@@ -19,7 +19,7 @@ CLIENT_SECRET = os.getenv("MS_CLIENT_SECRET", "")
 MODULES = {
     "sales":     ["companies", "contacts", "opportunities", "tasks", "cv_database"],
     "finance":   ["invoices", "budgets", "reports"],
-    "hr":        ["freelancers", "recrutement", "positions", "jobs", "permissions", "chat", "admin"],
+    "hr":        ["freelancers", "recrutement", "positions", "jobs", "permissions", "chat", "admin", "onboarding", "offboarding"],
     "grc":       ["compliance", "risks", "audits", "certifications", "access_review", "tprm", "whistleblowing"],
     "it":        ["assets", "incidents", "access", "infrastructure"],
     "helpdesk":     ["tickets", "knowledge", "sla", "admin_cockpit"],

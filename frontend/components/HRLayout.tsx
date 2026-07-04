@@ -1,7 +1,9 @@
 'use client'
 import { useRouter, usePathname } from 'next/navigation'
-import { useEffect, useRef, useState } from 'react'
+import { createContext, useContext, useEffect, useRef, useState } from 'react'
 import { getStoredUser, clearStoredUser } from '@/lib/auth'
+
+const API = 'https://api.whubbi.wcomply.com'
 
 const NAV = [
   { href: '/rh',             icon: '📊', label: 'Dashboard' },
@@ -9,6 +11,8 @@ const NAV = [
   { href: '/rh/recrutement', icon: '👥', label: 'Recrutement' },
   { href: '/rh/positions',   icon: '💼', label: 'Job Positions' },
   { href: '/rh/jobs',        icon: '📋', label: 'Job Descriptions' },
+  { href: '/rh/onboarding-checklist',  icon: '🎒', label: 'Onboarding' },
+  { href: '/rh/offboarding-checklist', icon: '📤', label: 'Offboarding' },
   { href: '/rh/permissions', icon: '🔐', label: 'WHUBBI Permissions' },
   { href: '/rh/chat',        icon: '💬', label: 'WHUBBI Chat' },
 ]
@@ -16,12 +20,28 @@ const HR_MANAGER_NAV = [
   { href: '/rh/admin', icon: '⚙️', label: 'HR Admin Cockpit' },
 ]
 
+type PermLevel = 'loading' | 'none' | 'view' | 'edit'
+type HRPerms = Record<string, { access_mode?: string; id?: string | null }> | null
+const HRPermContext = createContext<HRPerms>(null)
+
+// Only the newly-added HR pages (Onboarding, Offboarding) call this to gate
+// themselves — the pre-existing HR pages stay ungated, same convention as GRC.
+export function useHRPerm(submodule: string): { level: PermLevel; canEdit: boolean } {
+  const perms = useContext(HRPermContext)
+  if (perms === null) return { level: 'loading', canEdit: false }
+  const p = perms[submodule]
+  if (!p || p.id == null) return { level: 'edit', canEdit: true }
+  const level = (p.access_mode as PermLevel) || 'none'
+  return { level, canEdit: level === 'edit' }
+}
+
 export function HRLayout({ children }: { children: React.ReactNode }) {
   const router      = useRouter()
   const path        = usePathname()
   const redirecting = useRef(false)
   const [userEmail, setUserEmail] = useState('')
   const [userName,  setUserName]  = useState('')
+  const [hrPerms, setHrPerms]     = useState<HRPerms>(null)
 
   useEffect(() => {
     const user = getStoredUser()
@@ -34,6 +54,11 @@ export function HRLayout({ children }: { children: React.ReactNode }) {
     }
     setUserEmail(user.email)
     setUserName(user.name)
+
+    fetch(`${API}/settings/permissions/${encodeURIComponent(user.email)}`)
+      .then(r => r.json())
+      .then(d => setHrPerms(d.permissions?.hr || {}))
+      .catch(() => setHrPerms({}))
   }, [])
 
   const handleSignOut = () => {
@@ -96,7 +121,9 @@ export function HRLayout({ children }: { children: React.ReactNode }) {
       </div>
 
       <main style={{ marginLeft: '220px', width: 'calc(100vw - 220px)', background: '#F5F7FA', minHeight: '100vh', overflowX: 'hidden' }}>
-        {children}
+        <HRPermContext.Provider value={hrPerms}>
+          {children}
+        </HRPermContext.Provider>
       </main>
     </div>
   )
