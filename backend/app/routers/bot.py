@@ -58,7 +58,7 @@ async def _get_bf_token() -> str:
     print("[Bot] All token endpoints failed")
     return ""
 
-async def _reply(service_url: str, conv_id: str, reply_to_id: str, text: str):
+async def _reply(service_url: str, conv_id: str, reply_to_id: str, text: str, bot_from: dict | None = None):
     token = await _get_bf_token()
     if not token:
         print("[Bot] Cannot reply — no token")
@@ -67,7 +67,7 @@ async def _reply(service_url: str, conv_id: str, reply_to_id: str, text: str):
     async with httpx.AsyncClient(timeout=30) as c:
         r = await c.post(url,
             headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
-            json={"type": "message", "text": text},
+            json={"type": "message", "text": text, "from": bot_from or {"id": BOT_APP_ID}},
         )
         if r.status_code >= 400:
             print(f"[Bot] Reply failed {r.status_code}: {r.text[:300]}")
@@ -491,17 +491,19 @@ async def messages(request: Request):
     from_obj      = body.get("from") or {}
     user_name     = from_obj.get("name", "Unknown") or "Unknown"
     aad_id        = from_obj.get("aadObjectId")
+    recipient     = body.get("recipient") or {}
 
     # Welcome message when bot is added
     if activity_type == "conversationUpdate":
         members = body.get("membersAdded", [])
-        bot_id  = (body.get("recipient") or {}).get("id", "")
+        bot_id  = recipient.get("id", "")
         for m in members:
             if m.get("id") != bot_id:
                 await _reply(service_url, conv_id, activity_id,
                     "Hi! I'm the WHUBBI assistant.\n\n"
                     "I can help you with HR data — freelancers, recruitment pipeline, job positions and more.\n\n"
-                    "Try: 'Show me available freelancers in France' or 'What's the recruitment pipeline?'")
+                    "Try: 'Show me available freelancers in France' or 'What's the recruitment pipeline?'",
+                    bot_from=recipient)
         return Response(status_code=200)
 
     if activity_type != "message":
@@ -528,7 +530,7 @@ async def messages(request: Request):
         print(f"[Bot] Chat error: {e}")
         reply_text = "Sorry, something went wrong. Please try again."
 
-    await _reply(service_url, conv_id, activity_id, reply_text)
+    await _reply(service_url, conv_id, activity_id, reply_text, bot_from=recipient)
     return Response(status_code=200)
 
 @router.get("/status")
