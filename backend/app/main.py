@@ -1028,7 +1028,7 @@ try:
         async with _mcp_app.session_manager.run():
             await asyncio.Event().wait()
 
-    app.mount("/mcp", _mcp_app.streamable_http_app())
+    app.mount("/", _mcp_app.streamable_http_app())
     print("✓ MCP")
 except Exception as e:
     import traceback

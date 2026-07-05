@@ -12,17 +12,30 @@ via GET /settings/mcp-whoami on every request.
 """
 
 import os
+from urllib.parse import urlparse
+
 import httpx
 import mcp.types as types
 from mcp.server.fastmcp import FastMCP
+from mcp.server.transport_security import TransportSecuritySettings
 
 from app.routers.bot_tools import fetch_perms, available_tools, run_tool, ToolCtx
 
 WHUBBI_API = os.getenv("WHUBBI_API_URL", "https://api.whubbi.wcomply.com")
+_api_host = urlparse(WHUBBI_API).netloc
 
-# streamable_http_path="/" because this app gets mounted at /mcp on the main FastAPI app —
-# leaving the default "/mcp" here would double the prefix to /mcp/mcp.
-mcp_app = FastMCP("whubbi", streamable_http_path="/")
+# Left at the SDK's default streamable_http_path ("/mcp") and mounted at "/" in main.py (rather
+# than mounted at "/mcp" with this path overridden to "/") so the documented URL
+# (https://api.whubbi.wcomply.com/mcp, no trailing slash) matches exactly with no redirect —
+# some MCP clients don't replay a POST correctly across a 307.
+#
+# transport_security must explicitly allowlist our real host: the SDK's DNS-rebinding protection
+# defaults to an empty allowed_hosts list, which rejects every real Host header (421) unless the
+# app is only ever accessed as localhost.
+mcp_app = FastMCP("whubbi", transport_security=TransportSecuritySettings(
+    allowed_hosts=[_api_host, "localhost", "localhost:*", "127.0.0.1", "127.0.0.1:*"],
+    allowed_origins=["https://claude.ai"],
+))
 _server = mcp_app._mcp_server
 
 
