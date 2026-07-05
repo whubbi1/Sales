@@ -919,6 +919,78 @@ async def startup():
                     last_used_at TIMESTAMP,
                     revoked_at TIMESTAMP
                 )""",
+
+                # Sales — Partners (same shape as companies) + linking Opportunities/Contacts to a Partner
+                """CREATE TABLE IF NOT EXISTS partners (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    name VARCHAR(255) NOT NULL,
+                    contact_name VARCHAR(255),
+                    domain_names JSONB DEFAULT '[]',
+                    phone VARCHAR(50),
+                    sector VARCHAR(255),
+                    country VARCHAR(100),
+                    status VARCHAR(50) DEFAULT 'active',
+                    main_erp JSONB DEFAULT '[]',
+                    cybersecurity_solutions JSONB DEFAULT '[]',
+                    sap_hosting_partner JSONB DEFAULT '[]',
+                    linkedin_url VARCHAR(500),
+                    notes TEXT,
+                    assigned_to VARCHAR(255),
+                    created_at TIMESTAMP DEFAULT NOW(),
+                    updated_at TIMESTAMP DEFAULT NOW()
+                )""",
+                "ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS partner_id UUID REFERENCES partners(id) ON DELETE SET NULL",
+                "ALTER TABLE contacts ADD COLUMN IF NOT EXISTS partner_id UUID REFERENCES partners(id) ON DELETE SET NULL",
+                """CREATE TABLE IF NOT EXISTS partner_action_items (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    partner_id UUID NOT NULL REFERENCES partners(id) ON DELETE CASCADE,
+                    title VARCHAR(500) NOT NULL,
+                    description TEXT,
+                    company_id UUID REFERENCES companies(id) ON DELETE SET NULL,
+                    contact_id UUID REFERENCES contacts(id) ON DELETE SET NULL,
+                    owner_email VARCHAR(255),
+                    owner_name VARCHAR(255),
+                    due_date DATE,
+                    status VARCHAR(50) DEFAULT 'open',
+                    task_id UUID,
+                    created_by_email VARCHAR(255),
+                    created_at TIMESTAMP DEFAULT NOW(),
+                    updated_at TIMESTAMP DEFAULT NOW()
+                )""",
+
+                # Marketing — Events with contributors, named URLs, and links to Partners
+                """CREATE TABLE IF NOT EXISTS marketing_events (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    title VARCHAR(500) NOT NULL,
+                    event_date DATE,
+                    description TEXT,
+                    event_type VARCHAR(50) DEFAULT 'other',
+                    location VARCHAR(255),
+                    owner_email VARCHAR(255),
+                    owner_name VARCHAR(255),
+                    created_by_email VARCHAR(255),
+                    created_at TIMESTAMP DEFAULT NOW(),
+                    updated_at TIMESTAMP DEFAULT NOW()
+                )""",
+                """CREATE TABLE IF NOT EXISTS marketing_event_contributors (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    event_id UUID NOT NULL REFERENCES marketing_events(id) ON DELETE CASCADE,
+                    user_email VARCHAR(255) NOT NULL,
+                    user_name VARCHAR(255),
+                    created_at TIMESTAMP DEFAULT NOW()
+                )""",
+                """CREATE TABLE IF NOT EXISTS marketing_event_urls (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    event_id UUID NOT NULL REFERENCES marketing_events(id) ON DELETE CASCADE,
+                    label VARCHAR(255) NOT NULL,
+                    url TEXT NOT NULL,
+                    created_at TIMESTAMP DEFAULT NOW()
+                )""",
+                """CREATE TABLE IF NOT EXISTS marketing_event_partners (
+                    event_id UUID NOT NULL REFERENCES marketing_events(id) ON DELETE CASCADE,
+                    partner_id UUID NOT NULL REFERENCES partners(id) ON DELETE CASCADE,
+                    PRIMARY KEY (event_id, partner_id)
+                )""",
             ]
             for sql in sqls:
                 try:
@@ -974,6 +1046,8 @@ _include("app.routers.companies",      "/companies",    "Companies")
 _include("app.routers.contacts",       "/contacts",     "Contacts")
 _include("app.routers.opportunities",  "/opportunities","Opportunities")
 _include("app.routers.tasks",          "/tasks",        "Tasks")
+_include("app.routers.partners",       "/partners",     "Partners")
+_include("app.routers.marketing",      "/marketing",    "Marketing")
 _include("app.routers.admin",          "/admin",        "Admin")
 _include("app.routers.admin_ops",      "/admin",        "AdminOps")
 _include("app.routers.microsoft",      "/microsoft",    "Microsoft")

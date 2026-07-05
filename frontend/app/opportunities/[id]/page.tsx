@@ -398,10 +398,13 @@ export default function OpportunityDetailPage() {
         <PropertyRow label="Contract Start" value={fmt(opp.contract_start_date)} />
         <PropertyRow label="Contract End" value={fmt(opp.contract_end_date)} />
         <PropertyRow label="Contracting Party" value={opp.contracting_party} />
-        <PropertyRow label="Assigned To" value={opp.assigned_to} />
+        <PropertyRow label="Owner" value={opp.assigned_to} />
       </SidebarSection>
       <SidebarSection title="Company">
         {opp.company ? <SidebarCard title={opp.company.name} subtitle={`Status: ${opp.company.status}`} href={`/companies/${opp.company.id}`} color="#144766" /> : <p style={{ fontSize: '12px', color: '#9B9B9B' }}>No company.</p>}
+      </SidebarSection>
+      <SidebarSection title="Partner">
+        {opp.partner ? <SidebarCard title={opp.partner.name} subtitle={`Status: ${opp.partner.status}`} href={`/partners/${opp.partner.id}`} color="#7C3AED" /> : <p style={{ fontSize: '12px', color: '#9B9B9B' }}>No partner.</p>}
       </SidebarSection>
       <SidebarSection title={`Contacts (${opp.contacts?.length || 0})`}>
         {(!opp.contacts || opp.contacts.length === 0) ? <p style={{ fontSize: '12px', color: '#9B9B9B' }}>No contacts.</p> : opp.contacts.map((c: any) => <SidebarCard key={c.id} title={`${c.first_name} ${c.last_name}`} subtitle={c.job_type || c.email} href={`/contacts/${c.id}`} color="#e97132" />)}

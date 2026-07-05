@@ -45,6 +45,41 @@ export const companiesAPI = {
   deleteTask: (cid: string, tid: string) => fetchAPI(`/companies/${cid}/tasks/${tid}/`, { method: 'DELETE' }),
 }
 
+// ─── Partners ─────────────────────────────────────────────────────────────────
+export const partnersAPI = {
+  list:   (p?: any) => fetchAPI(`/partners/${qs(p)}`),
+  get:    (id: string) => fetchAPI(`/partners/${id}`),
+  create: (d: any) => fetchAPI('/partners/', { method: 'POST', body: JSON.stringify(d) }),
+  update: (id: string, d: any) => fetchAPI(`/partners/${id}`, { method: 'PUT', body: JSON.stringify(d) }),
+  delete: (id: string) => fetchAPI(`/partners/${id}`, { method: 'DELETE' }),
+
+  getContacts:      (id: string) => fetchAPI(`/partners/${id}/contacts`),
+  getOpportunities: (id: string) => fetchAPI(`/partners/${id}/opportunities`),
+
+  getActionItems:   (id: string) => fetchAPI(`/partners/${id}/action-items`),
+  createActionItem: (id: string, d: any) => fetchAPI(`/partners/${id}/action-items`, { method: 'POST', body: JSON.stringify(d) }),
+  updateActionItem: (id: string, itemId: string, d: any) => fetchAPI(`/partners/${id}/action-items/${itemId}`, { method: 'PUT', body: JSON.stringify(d) }),
+  deleteActionItem: (id: string, itemId: string) => fetchAPI(`/partners/${id}/action-items/${itemId}`, { method: 'DELETE' }),
+}
+
+// ─── Marketing ────────────────────────────────────────────────────────────────
+export const marketingAPI = {
+  listEvents:  (p?: any) => fetchAPI(`/marketing/events${qs(p)}`),
+  getEvent:    (id: string) => fetchAPI(`/marketing/events/${id}`),
+  createEvent: (d: any) => fetchAPI('/marketing/events', { method: 'POST', body: JSON.stringify(d) }),
+  updateEvent: (id: string, d: any) => fetchAPI(`/marketing/events/${id}`, { method: 'PUT', body: JSON.stringify(d) }),
+  deleteEvent: (id: string) => fetchAPI(`/marketing/events/${id}`, { method: 'DELETE' }),
+
+  addContributor:    (id: string, d: any) => fetchAPI(`/marketing/events/${id}/contributors`, { method: 'POST', body: JSON.stringify(d) }),
+  removeContributor: (id: string, cid: string) => fetchAPI(`/marketing/events/${id}/contributors/${cid}`, { method: 'DELETE' }),
+
+  addUrl:    (id: string, d: any) => fetchAPI(`/marketing/events/${id}/urls`, { method: 'POST', body: JSON.stringify(d) }),
+  removeUrl: (id: string, uid: string) => fetchAPI(`/marketing/events/${id}/urls/${uid}`, { method: 'DELETE' }),
+
+  linkPartner:   (id: string, partnerId: string) => fetchAPI(`/marketing/events/${id}/partners/${partnerId}`, { method: 'POST' }),
+  unlinkPartner: (id: string, partnerId: string) => fetchAPI(`/marketing/events/${id}/partners/${partnerId}`, { method: 'DELETE' }),
+}
+
 // ─── Contacts ─────────────────────────────────────────────────────────────────
 export const contactsAPI = {
   list:   (p?: any) => fetchAPI(`/contacts/${qs(p)}`),

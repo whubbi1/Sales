@@ -1,7 +1,7 @@
 'use client'
 // components/contacts/ContactModal.tsx
 import { useState, useEffect } from 'react'
-import { contactsAPI, companiesAPI } from '@/lib/api'
+import { contactsAPI, companiesAPI, partnersAPI } from '@/lib/api'
 
 const JOB_TYPES = ['CIO','CTO','CISO','SAP Manager','SAP Architect','SAP GRC','SAP Security Manager','SAP Technical Manager','Cybersecurity Architect','SOC Manager','Internal Audit','CFO','Partner','Buyer','Other']
 const SUBSCRIPTIONS = ['Marketing Information','Customer Service Communication','One to One']
@@ -19,10 +19,12 @@ function FormField({ label, children, full }: { label: string; children: React.R
 
 export function ContactModal({ contact, onClose, onSave }: any) {
   const [companies, setCompanies] = useState<any[]>([])
+  const [partners, setPartners] = useState<any[]>([])
   const [form, setForm] = useState({
     first_name: contact?.first_name || '',
     last_name: contact?.last_name || '',
     company_id: contact?.company_id || contact?.company?.id || '',
+    partner_id: contact?.partner_id || contact?.partner?.id || '',
     email: contact?.email || '',
     mobile_phone: contact?.mobile_phone || '',
     office_phone: contact?.office_phone || '',
@@ -40,6 +42,7 @@ export function ContactModal({ contact, onClose, onSave }: any) {
 
   useEffect(() => {
     companiesAPI.list({}).then(setCompanies).catch(() => {})
+    partnersAPI.list({}).then(setPartners).catch(() => {})
   }, [])
 
   const toggleSub = (sub: string) => {
@@ -55,7 +58,7 @@ export function ContactModal({ contact, onClose, onSave }: any) {
     if (!form.first_name.trim() || !form.last_name.trim()) { setError('First and last name are required'); return }
     setSaving(true); setError('')
     try {
-      const payload = { ...form, company_id: form.company_id || null }
+      const payload = { ...form, company_id: form.company_id || null, partner_id: form.partner_id || null }
       if (contact) { await contactsAPI.update(contact.id, payload) }
       else { await contactsAPI.create(payload) }
       onSave()
@@ -85,6 +88,12 @@ export function ContactModal({ contact, onClose, onSave }: any) {
                 <select className="form-input" value={form.company_id} onChange={e => setForm(p => ({ ...p, company_id: e.target.value }))}>
                   <option value="">No company</option>
                   {companies.map((c: any) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                </select>
+              </FormField>
+              <FormField label="Partner">
+                <select className="form-input" value={form.partner_id} onChange={e => setForm(p => ({ ...p, partner_id: e.target.value }))}>
+                  <option value="">No partner</option>
+                  {partners.map((p: any) => <option key={p.id} value={p.id}>{p.name}</option>)}
                 </select>
               </FormField>
               <FormField label="Lead Status">

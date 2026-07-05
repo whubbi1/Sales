@@ -1,0 +1,228 @@
+# backend/app/routers/partners.py
+# Partners — same information as a Company, plus flat action items (each targeting a
+# company/contact with an owner; an internal wcomply owner auto-creates a Task Manager task).
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import text
+from app.database import get_db
+import uuid, json
+
+router = APIRouter()
+
+PARTNER_FIELDS = [
+    "name", "contact_name", "domain_names", "phone", "sector", "country", "status",
+    "main_erp", "cybersecurity_solutions", "sap_hosting_partner", "linkedin_url", "notes", "assigned_to",
+]
+
+
+def _row(d: dict) -> dict:
+    for k, v in d.items():
+        if isinstance(v, uuid.UUID):
+            d[k] = str(v)
+    return d
+
+
+async def _get_partner(db: AsyncSession, partner_id: str) -> dict | None:
+    r = await db.execute(text("SELECT * FROM partners WHERE id = CAST(:id AS UUID)"), {"id": partner_id})
+    row = r.fetchone()
+    return _row(dict(row._mapping)) if row else None
+
+
+# ─── Partner CRUD ────────────────────────────────────────────────────────────────
+@router.get("/")
+async def list_partners(search: str = None, db: AsyncSession = Depends(get_db)):
+    where = ""
+    params = {}
+    if search:
+        where = "WHERE name ILIKE :q OR contact_name ILIKE :q"
+        params["q"] = f"%{search}%"
+    r = await db.execute(text(f"SELECT * FROM partners {where} ORDER BY name"), params)
+    return [_row(dict(row._mapping)) for row in r.fetchall()]
+
+
+@router.post("/")
+async def create_partner(data: dict, db: AsyncSession = Depends(get_db)):
+    if not data.get("name"):
+        raise HTTPException(status_code=400, detail="name is required")
+    partner_id = str(uuid.uuid4())
+    await db.execute(text("""
+        INSERT INTO partners (id, name, contact_name, domain_names, phone, sector, country, status,
+                               main_erp, cybersecurity_solutions, sap_hosting_partner, linkedin_url, notes, assigned_to,
+                               created_at, updated_at)
+        VALUES (CAST(:id AS UUID), :name, :contact_name, CAST(:domain_names AS JSONB), :phone, :sector, :country, :status,
+                CAST(:main_erp AS JSONB), CAST(:cybersecurity_solutions AS JSONB), CAST(:sap_hosting_partner AS JSONB),
+                :linkedin_url, :notes, :assigned_to, NOW(), NOW())
+    """), {
+        "id": partner_id,
+        "name": data["name"], "contact_name": data.get("contact_name"),
+        "domain_names": json.dumps(data.get("domain_names") or []),
+        "phone": data.get("phone"), "sector": data.get("sector"), "country": data.get("country"),
+        "status": data.get("status") or "active",
+        "main_erp": json.dumps(data.get("main_erp") or []),
+        "cybersecurity_solutions": json.dumps(data.get("cybersecurity_solutions") or []),
+        "sap_hosting_partner": json.dumps(data.get("sap_hosting_partner") or []),
+        "linkedin_url": data.get("linkedin_url"), "notes": data.get("notes"), "assigned_to": data.get("assigned_to"),
+    })
+    await db.commit()
+    return await _get_partner(db, partner_id)
+
+
+@router.get("/{partner_id}")
+async def get_partner(partner_id: str, db: AsyncSession = Depends(get_db)):
+    partner = await _get_partner(db, partner_id)
+    if not partner:
+        raise HTTPException(status_code=404, detail="Partner not found")
+    return partner
+
+
+@router.put("/{partner_id}")
+async def update_partner(partner_id: str, data: dict, db: AsyncSession = Depends(get_db)):
+    partner = await _get_partner(db, partner_id)
+    if not partner:
+        raise HTTPException(status_code=404, detail="Partner not found")
+    merged = {**partner, **{k: v for k, v in data.items() if k in PARTNER_FIELDS}}
+    await db.execute(text("""
+        UPDATE partners SET name=:name, contact_name=:contact_name, domain_names=CAST(:domain_names AS JSONB),
+            phone=:phone, sector=:sector, country=:country, status=:status,
+            main_erp=CAST(:main_erp AS JSONB), cybersecurity_solutions=CAST(:cybersecurity_solutions AS JSONB),
+            sap_hosting_partner=CAST(:sap_hosting_partner AS JSONB), linkedin_url=:linkedin_url,
+            notes=:notes, assigned_to=:assigned_to, updated_at=NOW()
+        WHERE id = CAST(:id AS UUID)
+    """), {
+        "id": partner_id, "name": merged["name"], "contact_name": merged.get("contact_name"),
+        "domain_names": json.dumps(merged.get("domain_names") or []),
+        "phone": merged.get("phone"), "sector": merged.get("sector"), "country": merged.get("country"),
+        "status": merged.get("status") or "active",
+        "main_erp": json.dumps(merged.get("main_erp") or []),
+        "cybersecurity_solutions": json.dumps(merged.get("cybersecurity_solutions") or []),
+        "sap_hosting_partner": json.dumps(merged.get("sap_hosting_partner") or []),
+        "linkedin_url": merged.get("linkedin_url"), "notes": merged.get("notes"), "assigned_to": merged.get("assigned_to"),
+    })
+    await db.commit()
+    return await _get_partner(db, partner_id)
+
+
+@router.delete("/{partner_id}")
+async def delete_partner(partner_id: str, db: AsyncSession = Depends(get_db)):
+    await db.execute(text("DELETE FROM partners WHERE id = CAST(:id AS UUID)"), {"id": partner_id})
+    await db.commit()
+    return {"status": "ok"}
+
+
+# ─── Related records ─────────────────────────────────────────────────────────────
+@router.get("/{partner_id}/contacts")
+async def get_partner_contacts(partner_id: str, db: AsyncSession = Depends(get_db)):
+    r = await db.execute(text("SELECT * FROM contacts WHERE partner_id = CAST(:id AS UUID)"), {"id": partner_id})
+    return [_row(dict(row._mapping)) for row in r.fetchall()]
+
+
+@router.get("/{partner_id}/opportunities")
+async def get_partner_opportunities(partner_id: str, db: AsyncSession = Depends(get_db)):
+    r = await db.execute(text("SELECT * FROM opportunities WHERE partner_id = CAST(:id AS UUID)"), {"id": partner_id})
+    return [_row(dict(row._mapping)) for row in r.fetchall()]
+
+
+# ─── Action items — flat, each optionally auto-creates a Task Manager task ──────
+@router.get("/{partner_id}/action-items")
+async def list_action_items(partner_id: str, db: AsyncSession = Depends(get_db)):
+    r = await db.execute(text("""
+        SELECT a.*, c.name AS company_name, ct.first_name AS contact_first_name, ct.last_name AS contact_last_name
+        FROM partner_action_items a
+        LEFT JOIN companies c ON c.id = a.company_id
+        LEFT JOIN contacts ct ON ct.id = a.contact_id
+        WHERE a.partner_id = CAST(:id AS UUID)
+        ORDER BY a.created_at DESC
+    """), {"id": partner_id})
+    return [_row(dict(row._mapping)) for row in r.fetchall()]
+
+
+async def _maybe_create_task(db: AsyncSession, item_id: str, partner_id: str, title: str,
+                              description: str, owner_email: str, owner_name: str, created_by_email: str) -> str | None:
+    if not owner_email or not owner_email.lower().endswith("@wcomply.com"):
+        return None
+    from app.routers.task_manager import create_task
+    created = await create_task({
+        "title": title, "description": description or "",
+        "owner_email": owner_email, "owner_name": owner_name,
+        "source": "partner_action", "entity_type": "partner_action_item", "entity_id": item_id,
+        "created_by_email": created_by_email or owner_email, "acting_email": created_by_email or owner_email,
+    }, db)
+    return created["id"]
+
+
+@router.post("/{partner_id}/action-items")
+async def create_action_item(partner_id: str, data: dict, db: AsyncSession = Depends(get_db)):
+    if not data.get("title"):
+        raise HTTPException(status_code=400, detail="title is required")
+    item_id = str(uuid.uuid4())
+    owner_email = data.get("owner_email") or ""
+    task_id = await _maybe_create_task(
+        db, item_id, partner_id, data["title"], data.get("description", ""),
+        owner_email, data.get("owner_name") or "", data.get("created_by_email") or "",
+    )
+    await db.execute(text("""
+        INSERT INTO partner_action_items (id, partner_id, title, description, company_id, contact_id,
+                                           owner_email, owner_name, due_date, status, task_id, created_by_email,
+                                           created_at, updated_at)
+        VALUES (CAST(:id AS UUID), CAST(:pid AS UUID), :title, :description,
+                CAST(NULLIF(:company_id,'') AS UUID), CAST(NULLIF(:contact_id,'') AS UUID),
+                :owner_email, :owner_name, CAST(NULLIF(:due_date,'') AS DATE), :status,
+                CAST(:task_id AS UUID), :created_by_email, NOW(), NOW())
+    """), {
+        "id": item_id, "pid": partner_id, "title": data["title"], "description": data.get("description", ""),
+        "company_id": data.get("company_id") or "", "contact_id": data.get("contact_id") or "",
+        "owner_email": owner_email, "owner_name": data.get("owner_name", ""),
+        "due_date": data.get("due_date") or "", "status": data.get("status") or "open",
+        "task_id": task_id, "created_by_email": data.get("created_by_email", ""),
+    })
+    await db.commit()
+    r = await db.execute(text("SELECT * FROM partner_action_items WHERE id = CAST(:id AS UUID)"), {"id": item_id})
+    return _row(dict(r.fetchone()._mapping))
+
+
+@router.put("/{partner_id}/action-items/{item_id}")
+async def update_action_item(partner_id: str, item_id: str, data: dict, db: AsyncSession = Depends(get_db)):
+    r = await db.execute(text("SELECT * FROM partner_action_items WHERE id = CAST(:id AS UUID) AND partner_id = CAST(:pid AS UUID)"),
+                          {"id": item_id, "pid": partner_id})
+    row = r.fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Action item not found")
+    item = _row(dict(row._mapping))
+
+    new_owner = data.get("owner_email", item.get("owner_email") or "")
+    task_id = item.get("task_id")
+    if new_owner != (item.get("owner_email") or "") and not task_id:
+        task_id = await _maybe_create_task(
+            db, item_id, partner_id, data.get("title", item["title"]), data.get("description", item.get("description", "")),
+            new_owner, data.get("owner_name", item.get("owner_name") or ""), item.get("created_by_email") or "",
+        )
+
+    await db.execute(text("""
+        UPDATE partner_action_items SET
+            title = COALESCE(NULLIF(:title,''), title),
+            description = COALESCE(:description, description),
+            company_id = COALESCE(CAST(NULLIF(:company_id,'') AS UUID), company_id),
+            contact_id = COALESCE(CAST(NULLIF(:contact_id,'') AS UUID), contact_id),
+            owner_email = :owner_email, owner_name = COALESCE(:owner_name, owner_name),
+            due_date = COALESCE(CAST(NULLIF(:due_date,'') AS DATE), due_date),
+            status = COALESCE(NULLIF(:status,''), status),
+            task_id = CAST(:task_id AS UUID),
+            updated_at = NOW()
+        WHERE id = CAST(:id AS UUID)
+    """), {
+        "id": item_id, "title": data.get("title", ""), "description": data.get("description"),
+        "company_id": data.get("company_id", ""), "contact_id": data.get("contact_id", ""),
+        "owner_email": new_owner, "owner_name": data.get("owner_name"),
+        "due_date": data.get("due_date", ""), "status": data.get("status", ""), "task_id": task_id,
+    })
+    await db.commit()
+    r = await db.execute(text("SELECT * FROM partner_action_items WHERE id = CAST(:id AS UUID)"), {"id": item_id})
+    return _row(dict(r.fetchone()._mapping))
+
+
+@router.delete("/{partner_id}/action-items/{item_id}")
+async def delete_action_item(partner_id: str, item_id: str, db: AsyncSession = Depends(get_db)):
+    await db.execute(text("DELETE FROM partner_action_items WHERE id = CAST(:id AS UUID) AND partner_id = CAST(:pid AS UUID)"),
+                      {"id": item_id, "pid": partner_id})
+    await db.commit()
+    return {"status": "ok"}

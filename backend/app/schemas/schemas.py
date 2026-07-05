@@ -87,11 +87,20 @@ class TaskResponse(TaskCreate):
     class Config:
         from_attributes = True
 
+# ─── Partner (summary only — Partner itself is a raw-SQL entity, see routers/partners.py) ──
+class PartnerSummary(BaseModel):
+    id: UUID
+    name: str
+    status: Optional[str] = None
+    class Config:
+        from_attributes = True
+
 # ─── Contact ──────────────────────────────────────────────────────────────────
 class ContactBase(BaseModel):
     first_name: str
     last_name: str
     company_id: Optional[UUID] = None
+    partner_id: Optional[UUID] = None
     email: Optional[str] = None
     mobile_phone: Optional[str] = None
     office_phone: Optional[str] = None
@@ -131,6 +140,7 @@ class ContactSummary(BaseModel):
 class ContactResponse(ContactBase):
     id: UUID
     company: Optional[CompanySummary] = None
+    partner: Optional[PartnerSummary] = None
     created_at: datetime
     updated_at: datetime
     class Config:
@@ -140,6 +150,7 @@ class ContactResponse(ContactBase):
 class OpportunityBase(BaseModel):
     deal_name: str
     company_id: Optional[UUID] = None
+    partner_id: Optional[UUID] = None
     deal_id: Optional[str] = None
     project_name: Optional[str] = None
     deal_amount: Optional[float] = None
@@ -174,6 +185,7 @@ class OpportunitySummary(BaseModel):
 class OpportunityResponse(OpportunityBase):
     id: UUID
     company: Optional[CompanySummary] = None
+    partner: Optional[PartnerSummary] = None
     contacts: Optional[List[ContactSummary]] = []
     created_at: datetime
     updated_at: datetime

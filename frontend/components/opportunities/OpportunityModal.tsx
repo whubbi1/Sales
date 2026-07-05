@@ -1,7 +1,7 @@
 'use client'
 // components/opportunities/OpportunityModal.tsx
 import { useState, useEffect } from 'react'
-import { opportunitiesAPI, companiesAPI, contactsAPI } from '@/lib/api'
+import { opportunitiesAPI, companiesAPI, contactsAPI, partnersAPI } from '@/lib/api'
 
 const DEAL_STATUSES = ['Presentation To Be Scheduled','Presentation Done','Proposition Ongoing','Proposition Accepted','Contract Ongoing','Contract Finalised','PO Received','Contract Lost']
 const PROJECT_STATUSES = ['Daily Invoicing','Project','Software Licenses']
@@ -19,6 +19,7 @@ function FormField({ label, children, full }: { label: string; children: React.R
 
 export function OpportunityModal({ opportunity, onClose, onSave }: any) {
   const [companies, setCompanies] = useState<any[]>([])
+  const [partners, setPartners] = useState<any[]>([])
   const [contacts, setContacts] = useState<any[]>([])
   const [consultantInput, setConsultantInput] = useState('')
   const [saving, setSaving] = useState(false)
@@ -29,6 +30,7 @@ export function OpportunityModal({ opportunity, onClose, onSave }: any) {
   const [form, setForm] = useState({
     deal_name: opportunity?.deal_name || '',
     company_id: opportunity?.company_id || opportunity?.company?.id || '',
+    partner_id: opportunity?.partner_id || opportunity?.partner?.id || '',
     deal_id: opportunity?.deal_id || '',
     project_name: opportunity?.project_name || '',
     deal_amount: opportunity?.deal_amount || '',
@@ -46,8 +48,8 @@ export function OpportunityModal({ opportunity, onClose, onSave }: any) {
   })
 
   useEffect(() => {
-    Promise.all([companiesAPI.list({}), contactsAPI.list({})]).then(([c, ct]) => {
-      setCompanies(c); setContacts(ct)
+    Promise.all([companiesAPI.list({}), contactsAPI.list({}), partnersAPI.list({})]).then(([c, ct, p]) => {
+      setCompanies(c); setContacts(ct); setPartners(p)
     }).catch(() => {})
   }, [])
 
@@ -75,6 +77,7 @@ export function OpportunityModal({ opportunity, onClose, onSave }: any) {
       const payload = {
         ...form,
         company_id: form.company_id && form.company_id.trim() !== '' ? form.company_id : null,
+        partner_id: form.partner_id && form.partner_id.trim() !== '' ? form.partner_id : null,
         deal_amount: form.deal_amount ? Number(form.deal_amount) : null,
         closing_date: form.closing_date || null,
         contract_start_date: form.contract_start_date || null,
@@ -114,6 +117,12 @@ export function OpportunityModal({ opportunity, onClose, onSave }: any) {
                 <select className="form-input" value={form.company_id} onChange={e => setForm(p => ({ ...p, company_id: e.target.value }))}>
                   <option value="">No company</option>
                   {companies.map((c: any) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                </select>
+              </FormField>
+              <FormField label="Partner">
+                <select className="form-input" value={form.partner_id} onChange={e => setForm(p => ({ ...p, partner_id: e.target.value }))}>
+                  <option value="">No partner</option>
+                  {partners.map((p: any) => <option key={p.id} value={p.id}>{p.name}</option>)}
                 </select>
               </FormField>
               <FormField label="Deal Type">

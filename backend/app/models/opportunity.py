@@ -13,6 +13,9 @@ class Opportunity(Base):
 
     id                  = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     company_id          = Column(UUID(as_uuid=True), ForeignKey("companies.id", ondelete="SET NULL"), nullable=True)
+    # Partner isn't an ORM model (raw-SQL table, see partners.py) — plain column, FK enforced at the DB
+    # level by the ALTER TABLE migration in main.py, not declared here to avoid mapper-resolution issues.
+    partner_id          = Column(UUID(as_uuid=True), nullable=True)
 
     deal_id             = Column(String(100))
     deal_name           = Column(String(500), nullable=False)

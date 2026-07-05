@@ -1,7 +1,7 @@
 # backend/app/routers/opportunities.py
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, or_
+from sqlalchemy import select, or_, text
 from sqlalchemy.orm import selectinload
 from typing import List
 from uuid import UUID
@@ -14,15 +14,30 @@ from app.schemas.schemas import (
     OpportunityCreate, OpportunityUpdate, OpportunityResponse, OpportunitySummary,
     StaffingCreate, StaffingResponse,
     ChecklistItemCreate, ChecklistItemUpdate, ChecklistItemResponse,
-    CommentCreate, CommentResponse,
+    CommentCreate, CommentResponse, PartnerSummary,
 )
 
 router = APIRouter()
 
+
+async def _attach_partners(db: AsyncSession, objs: list):
+    # Partner isn't an ORM relationship (raw-SQL entity) — attach it as a plain instance
+    # attribute so OpportunityResponse's from_attributes picks it up like a real relationship would.
+    ids = {str(o.partner_id) for o in objs if getattr(o, "partner_id", None)}
+    partners = {}
+    for pid in ids:
+        r = await db.execute(text("SELECT id, name, status FROM partners WHERE id = CAST(:id AS UUID)"), {"id": pid})
+        row = r.fetchone()
+        if row:
+            partners[pid] = PartnerSummary(id=row.id, name=row.name, status=row.status)
+    for o in objs:
+        o.partner = partners.get(str(o.partner_id)) if getattr(o, "partner_id", None) else None
+
+
 @router.get("/", response_model=List[OpportunityResponse])
 async def list_opportunities(
     skip: int = 0, limit: int = 100,
-    search: str = None, company_id: str = None, deal_status: str = None,
+    search: str = None, company_id: str = None, partner_id: str = None, deal_status: str = None,
     db: AsyncSession = Depends(get_db)
 ):
     query = select(Opportunity).options(
@@ -36,11 +51,15 @@ async def list_opportunities(
         ))
     if company_id:
         query = query.where(Opportunity.company_id == company_id)
+    if partner_id:
+        query = query.where(Opportunity.partner_id == partner_id)
     if deal_status:
         query = query.where(Opportunity.deal_status == deal_status)
     query = query.offset(skip).limit(limit).order_by(Opportunity.created_at.desc())
     result = await db.execute(query)
-    return result.scalars().all()
+    opps = result.scalars().all()
+    await _attach_partners(db, opps)
+    return opps
 
 @router.post("/", response_model=OpportunityResponse, status_code=status.HTTP_201_CREATED)
 async def create_opportunity(opp: OpportunityCreate, db: AsyncSession = Depends(get_db)):
@@ -55,7 +74,9 @@ async def create_opportunity(opp: OpportunityCreate, db: AsyncSession = Depends(
     db.add(db_opp)
     await db.commit()
     r = await db.execute(select(Opportunity).options(selectinload(Opportunity.company), selectinload(Opportunity.contacts)).where(Opportunity.id == db_opp.id))
-    return r.scalar_one()
+    row = r.scalar_one()
+    await _attach_partners(db, [row])
+    return row
 
 @router.get("/{opportunity_id}", response_model=OpportunityResponse)
 async def get_opportunity(opportunity_id: UUID, db: AsyncSession = Depends(get_db)):
@@ -63,6 +84,7 @@ async def get_opportunity(opportunity_id: UUID, db: AsyncSession = Depends(get_d
     opp = r.scalar_one_or_none()
     if not opp:
         raise HTTPException(status_code=404, detail="Opportunity not found")
+    await _attach_partners(db, [opp])
     return opp
 
 @router.put("/{opportunity_id}", response_model=OpportunityResponse)
@@ -84,7 +106,9 @@ async def update_opportunity(opportunity_id: UUID, data: OpportunityUpdate, db: 
 
     await db.commit()
     r = await db.execute(select(Opportunity).options(selectinload(Opportunity.company), selectinload(Opportunity.contacts)).where(Opportunity.id == opportunity_id))
-    return r.scalar_one()
+    row = r.scalar_one()
+    await _attach_partners(db, [row])
+    return row
 
 @router.delete("/{opportunity_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_opportunity(opportunity_id: UUID, db: AsyncSession = Depends(get_db)):
