@@ -1,5 +1,5 @@
 # backend/app/routers/settings.py
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Header
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
 from app.database import get_db
@@ -8,6 +8,8 @@ import os
 import base64
 import json
 from datetime import datetime
+import secrets
+import hashlib
 
 router = APIRouter()
 
@@ -222,6 +224,66 @@ async def update_permissions(email: str, data: dict, db: AsyncSession = Depends(
             })
     await db.commit()
     return {"status": "ok", "updated": sum(len(v) for v in permissions.values())}
+
+
+# ─── MCP personal access tokens ────────────────────────────────────────────────
+@router.post("/mcp-tokens")
+async def create_mcp_token(data: dict, db: AsyncSession = Depends(get_db)):
+    email = data.get("email")
+    if not email:
+        raise HTTPException(400, "email is required")
+    raw_token = "whmcp_" + secrets.token_urlsafe(24)
+    token_hash = hashlib.sha256(raw_token.encode()).hexdigest()
+    row = await db.execute(text("""
+        INSERT INTO mcp_tokens (id, user_email, user_name, label, token_hash, token_prefix, created_at)
+        VALUES (gen_random_uuid(), :email, :name, :label, :hash, :prefix, NOW())
+        RETURNING id, created_at
+    """), {
+        "email": email, "name": data.get("name", ""), "label": data.get("label", "My token"),
+        "hash": token_hash, "prefix": raw_token[:14],
+    })
+    await db.commit()
+    r = row.fetchone()
+    return {"id": str(r.id), "token": raw_token, "token_prefix": raw_token[:14],
+            "label": data.get("label", "My token"), "created_at": str(r.created_at)}
+
+
+@router.get("/mcp-tokens/{email}")
+async def list_mcp_tokens(email: str, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(text("""
+        SELECT id, label, token_prefix, created_at, last_used_at, revoked_at
+        FROM mcp_tokens WHERE user_email = :email ORDER BY created_at DESC
+    """), {"email": email})
+    return {"tokens": [{
+        "id": str(r.id), "label": r.label, "token_prefix": r.token_prefix,
+        "created_at": str(r.created_at), "last_used_at": str(r.last_used_at) if r.last_used_at else None,
+        "revoked": r.revoked_at is not None,
+    } for r in result.fetchall()]}
+
+
+@router.delete("/mcp-tokens/{token_id}")
+async def revoke_mcp_token(token_id: str, db: AsyncSession = Depends(get_db)):
+    await db.execute(text("UPDATE mcp_tokens SET revoked_at = NOW() WHERE id = CAST(:id AS UUID)"), {"id": token_id})
+    await db.commit()
+    return {"status": "ok"}
+
+
+@router.get("/mcp-whoami")
+async def mcp_whoami(authorization: str = Header(default=""), db: AsyncSession = Depends(get_db)):
+    token = authorization.removeprefix("Bearer ").strip() if authorization else ""
+    if not token:
+        raise HTTPException(401, "Missing bearer token")
+    token_hash = hashlib.sha256(token.encode()).hexdigest()
+    row = await db.execute(text("""
+        SELECT id, user_email, user_name FROM mcp_tokens
+        WHERE token_hash = :hash AND revoked_at IS NULL
+    """), {"hash": token_hash})
+    r = row.fetchone()
+    if not r:
+        raise HTTPException(401, "Invalid or revoked token")
+    await db.execute(text("UPDATE mcp_tokens SET last_used_at = NOW() WHERE id = :id"), {"id": r.id})
+    await db.commit()
+    return {"email": r.user_email, "name": r.user_name or r.user_email}
 
 
 async def _main_location_by_email(db: AsyncSession) -> dict:

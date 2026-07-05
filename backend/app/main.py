@@ -905,6 +905,20 @@ async def startup():
                     task_id UUID NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
                     created_at TIMESTAMP DEFAULT NOW()
                 )""",
+
+                # MCP personal access tokens — lets a WHUBBI user connect an MCP client
+                # (Claude Code/Desktop) to the same permission-gated tools the Teams bot uses.
+                """CREATE TABLE IF NOT EXISTS mcp_tokens (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    user_email VARCHAR(255) NOT NULL,
+                    user_name VARCHAR(255),
+                    label VARCHAR(255),
+                    token_hash VARCHAR(64) NOT NULL UNIQUE,
+                    token_prefix VARCHAR(16) NOT NULL,
+                    created_at TIMESTAMP DEFAULT NOW(),
+                    last_used_at TIMESTAMP,
+                    revoked_at TIMESTAMP
+                )""",
             ]
             for sql in sqls:
                 try:
@@ -996,4 +1010,27 @@ try:
 except Exception as e:
     import traceback
     print(f"✗ ROUTER FAILED [Bot]: {e}")
+    traceback.print_exc()
+
+try:
+    from app.routers.mcp_server import mcp_app as _mcp_app
+
+    @app.on_event("startup")
+    async def _start_mcp_session_manager():
+        import asyncio
+        asyncio.create_task(_hold_mcp_session_manager())
+
+    async def _hold_mcp_session_manager():
+        import asyncio
+        # StreamableHTTPSessionManager.run() must stay entered for the app's lifetime — this app
+        # still uses @app.on_event("startup") rather than a lifespan= context manager, so it's
+        # held open here via a background task instead of the usual `async with ...: yield` pattern.
+        async with _mcp_app.session_manager.run():
+            await asyncio.Event().wait()
+
+    app.mount("/mcp", _mcp_app.streamable_http_app())
+    print("✓ MCP")
+except Exception as e:
+    import traceback
+    print(f"✗ ROUTER FAILED [MCP]: {e}")
     traceback.print_exc()

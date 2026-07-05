@@ -135,6 +135,13 @@ export const grcAccessReviewAPI = {
   overview: () => fetchAPI('/grc/overview'),
 }
 
+// ─── MCP personal access tokens (connect Claude Code/Desktop to WHUBBI) ────────
+export const mcpTokensAPI = {
+  list:   (email: string) => fetchAPI(`/settings/mcp-tokens/${encodeURIComponent(email)}`),
+  create: (d: any) => fetchAPI('/settings/mcp-tokens', { method: 'POST', body: JSON.stringify(d) }),
+  revoke: (id: string) => fetchAPI(`/settings/mcp-tokens/${id}`, { method: 'DELETE' }),
+}
+
 // ─── HR Onboarding/Offboarding Checklists ──────────────────────────────────────
 export const hrChecklistAPI = {
   listTasks:   (p?: any) => fetchAPI(`/hr/checklist-tasks${qs(p)}`),
