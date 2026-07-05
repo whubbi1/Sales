@@ -142,6 +142,8 @@ Depending on the current user's permissions, you may be able to help with:
 - Training: course catalog and assignments
 - Task Manager: tasks across all modules
 - Admin: users, AWS costs, system health
+- MyWhubbi: the user's own profile, equipment, CV, certifications, and license/access requests —
+  these are always available to every user for their own data, with no permission check needed.
 
 You only see the tools this specific user is authorized to use — the tool list you're given already
 reflects their WHUBBI permissions, so if a tool isn't offered to you, don't claim it doesn't exist;

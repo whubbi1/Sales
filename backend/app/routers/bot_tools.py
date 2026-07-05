@@ -28,8 +28,31 @@ async def fetch_perms(http: httpx.AsyncClient, api: str, user_email: str) -> dic
     return {}
 
 
+# Modules/submodules whose frontend page has no permission gate at all, or gates via a hook that
+# defaults an absent whubbi_permissions row to full "edit" access (id === null -> edit) — confirmed
+# by reading each layout: HRLayout (freelancers/recrutement/positions/jobs pages have no gate at
+# all), GRCLayout (risks/audits/compliance pages ungated), ITLayout/DevelopmentLayout/TasksLayout
+# (id-null -> edit), Sales and Helpdesk (no layout-level gate at all). An explicit row with
+# access_mode="none" is still honored as a deliberate admin restriction — this only changes the
+# *default* when no row exists, matching what a real user already experiences on the website.
+# Legal (bot enforces its own strict gate independent of the frontend) and Training (TrainingLayout
+# is the one module that genuinely defaults to deny) are deliberately excluded from this set.
+FAIL_OPEN_DEFAULT = {
+    ("sales", "companies"), ("sales", "contacts"), ("sales", "opportunities"),
+    ("helpdesk", "tickets"), ("helpdesk", "knowledge"),
+    ("hr", "freelancers"), ("hr", "recrutement"), ("hr", "positions"), ("hr", "jobs"),
+    ("grc", "compliance"), ("grc", "risks"), ("grc", "audits"), ("grc", "access_review"),
+    ("it", "assets"),
+    ("development", "general"),
+    ("tasks", "manager"),
+}
+
+
 def access(perms: dict, module: str, submodule: str) -> str:
-    return ((perms.get(module) or {}).get(submodule) or {}).get("access_mode", "none")
+    rec = (perms.get(module) or {}).get(submodule) or {}
+    if rec.get("id") is None and (module, submodule) in FAIL_OPEN_DEFAULT:
+        return "edit"
+    return rec.get("access_mode", "none")
 
 
 def allowed(perms: dict, module: str, submodule: str, level: str) -> bool:
@@ -660,9 +683,11 @@ async def _training_catalog(inp, ctx: ToolCtx) -> str:
 
 
 async def _training_list_assignments(inp, ctx: ToolCtx) -> str:
-    if not allowed(ctx.perms, "training", "manager", "view"):
-        return deny("Training")
     email = inp.get("user_email") or ctx.email
+    # Viewing your own assignments is always allowed (MyWhubbi self-service, no permission gate
+    # on /settings/training) — only looking up someone else's requires the Training module permission.
+    if email.lower() != ctx.email.lower() and not allowed(ctx.perms, "training", "manager", "view"):
+        return deny("Training")
     r = await ctx.http.get(f"{ctx.api}/training/assignments/{email}")
     rows = r.json().get("assignments", [])
     return json.dumps([{
@@ -689,7 +714,11 @@ async def _training_assign(inp, ctx: ToolCtx) -> str:
 async def _tm_list_tasks(inp, ctx: ToolCtx) -> str:
     if not allowed(ctx.perms, "tasks", "manager", "view"):
         return deny("Task Manager")
-    r = await ctx.http.get(f"{ctx.api}/task-manager/tasks")
+    scope = inp.get("scope", "own")
+    params = {"scope": scope}
+    if scope in ("own", "team"):
+        params["email"] = ctx.email
+    r = await ctx.http.get(f"{ctx.api}/task-manager/tasks", params=params)
     rows = r.json().get("tasks", [])
     if inp.get("status"):
         rows = [x for x in rows if (x.get("status") or "").lower() == inp["status"].lower()]
@@ -748,6 +777,85 @@ async def _tm_add_task_comment(inp, ctx: ToolCtx) -> str:
         "content": inp["content"], "author_email": ctx.email, "author_name": ctx.name,
     })
     return json.dumps(r.json())
+
+
+# ─── MyWhubbi (personal, self-scoped — no module permission gate, matches ProfileLayout
+# having no permission check at all: it's your own identity-scoped data, always yours to see) ───
+async def _my_profile(inp, ctx: ToolCtx) -> str:
+    r = await ctx.http.get(f"{ctx.api}/settings/profile/{ctx.email}")
+    d = r.json()
+    return json.dumps({
+        "display_name": d.get("display_name"), "job_title": d.get("job_title"),
+        "department": d.get("department"), "manager_name": d.get("manager_name"),
+        "mobile_phone": d.get("mobile_phone"), "office_phone": d.get("office_phone"),
+        "main_location_name": d.get("main_location_name"),
+        "licenses": d.get("ms_licenses") or [], "groups": d.get("ms_groups") or [],
+    })
+
+
+async def _my_equipments(inp, ctx: ToolCtx) -> str:
+    r = await ctx.http.get(f"{ctx.api}/it/equipments")
+    rows = [x for x in r.json().get("equipments", [])
+            if (x.get("assigned_email") or "").lower() == ctx.email.lower()]
+    return json.dumps([{
+        "id": x["id"], "name": x.get("name"), "equipment_type": x.get("equipment_type"),
+        "serial_number": x.get("serial_number"), "location_name": x.get("location_name"),
+    } for x in rows])
+
+
+async def _my_cv(inp, ctx: ToolCtx) -> str:
+    r = await ctx.http.get(f"{ctx.api}/cv/{ctx.email}")
+    cv = r.json().get("cv", {})
+    return json.dumps({
+        "name": f"{cv.get('first_name','')} {cv.get('last_name','')}".strip(),
+        "title": cv.get("title"), "summary": cv.get("short_description"),
+        "skills": cv.get("skills", []), "languages": cv.get("languages", []),
+        "experience_count": len(cv.get("experiences") or []),
+    })
+
+
+async def _my_certifications(inp, ctx: ToolCtx) -> str:
+    r = await ctx.http.get(f"{ctx.api}/training/certifications/{ctx.email}")
+    body = r.json()
+    rows = body.get("certifications", []) if isinstance(body, dict) else body
+    return json.dumps([{
+        "name": x.get("name"), "cert_date": str(x.get("cert_date", ""))[:10] or None,
+        "description": x.get("description"),
+    } for x in (rows or [])[:20]])
+
+
+async def _request_access_change(inp, ctx: ToolCtx) -> str:
+    item_name = inp["item_name"]
+    action = inp.get("action", "add")
+    owner_email, owner_name = "", ""
+    try:
+        sr = await ctx.http.get(f"{ctx.api}/it/software")
+        for s in sr.json().get("software", []):
+            if item_name.lower() in (s.get("name") or "").lower():
+                owner_email = s.get("owner_email") or ""
+                owner_name = s.get("owner_name") or ""
+                break
+    except Exception:
+        pass
+    body = {
+        "title": f"{'Add' if action == 'add' else 'Remove'} access: {item_name}",
+        "description": inp.get("notes") or f"Requested via WHUBBI bot by {ctx.name}.",
+        "source": "mywhubbi",
+        "owner_email": owner_email or ctx.email, "owner_name": owner_name or ctx.name,
+        "assignee_email": owner_email or ctx.email, "assignee_name": owner_name or ctx.name,
+        "created_by_email": ctx.email,
+    }
+    r = await ctx.http.post(f"{ctx.api}/task-manager/tasks", json=body)
+    result = r.json()
+    task_id = result.get("id")
+    if task_id and owner_email and owner_email.lower() != ctx.email.lower():
+        try:
+            await ctx.http.post(f"{ctx.api}/task-manager/tasks/{task_id}/watchers", json={
+                "acting_email": owner_email, "user_email": ctx.email, "user_name": ctx.name,
+            })
+        except Exception:
+            pass
+    return json.dumps(result)
 
 
 # ─── Tool catalog ────────────────────────────────────────────────────────────────
@@ -1083,9 +1191,9 @@ TOOL_DEFS = [
         "description": "List available training courses in the catalog.",
         "input_schema": {"type": "object", "properties": {"search": {"type": "string"}}},
     }, _training_catalog),
-    ("training", "manager", "view", {
+    (None, None, None, {
         "name": "training_list_assignments",
-        "description": "List training assignments for a user (defaults to the current user).",
+        "description": "List training assignments for a user. Defaults to the current user's own (always allowed); looking up someone else requires Training module permission.",
         "input_schema": {"type": "object", "properties": {"user_email": {"type": "string"}}},
     }, _training_list_assignments),
     ("training", "manager", "edit", {
@@ -1101,8 +1209,9 @@ TOOL_DEFS = [
     # Task Manager
     ("tasks", "manager", "view", {
         "name": "tm_list_tasks",
-        "description": "List WHUBBI tasks. Optional status and/or assignee email filter.",
+        "description": "List WHUBBI tasks. Defaults to the current user's own tasks (owner, assignee, or watcher) — pass scope='company' to see all tasks platform-wide.",
         "input_schema": {"type": "object", "properties": {
+            "scope": {"type": "string", "enum": ["own", "team", "company"], "description": "Defaults to 'own'"},
             "status": {"type": "string"}, "assignee_email": {"type": "string"}}},
     }, _tm_list_tasks),
     ("tasks", "manager", "view", {
@@ -1142,6 +1251,37 @@ TOOL_DEFS = [
             "task_id": {"type": "string"}, "content": {"type": "string"},
         }, "required": ["task_id", "content"]},
     }, _tm_add_task_comment),
+
+    # MyWhubbi — always available, self-scoped to the requesting user, no module permission gate
+    (None, None, None, {
+        "name": "my_profile",
+        "description": "Get the current user's own WHUBBI profile: job title, department, manager, phone, licenses, groups.",
+        "input_schema": {"type": "object", "properties": {}},
+    }, _my_profile),
+    (None, None, None, {
+        "name": "my_equipments",
+        "description": "List IT equipment assigned to the current user.",
+        "input_schema": {"type": "object", "properties": {}},
+    }, _my_equipments),
+    (None, None, None, {
+        "name": "my_cv",
+        "description": "Get the current user's own CV/bio: title, summary, skills, languages, experience count.",
+        "input_schema": {"type": "object", "properties": {}},
+    }, _my_cv),
+    (None, None, None, {
+        "name": "my_certifications",
+        "description": "List the current user's own certifications.",
+        "input_schema": {"type": "object", "properties": {}},
+    }, _my_certifications),
+    (None, None, None, {
+        "name": "request_access_change",
+        "description": "Request a license/group/role be added or removed for the current user (creates a task for the item's owner, e.g. IT). Always confirm with the user before calling this.",
+        "input_schema": {"type": "object", "properties": {
+            "item_name": {"type": "string", "description": "e.g. 'Microsoft 365 E5', 'Sales Team' group"},
+            "action": {"type": "string", "enum": ["add", "remove"]},
+            "notes": {"type": "string"},
+        }, "required": ["item_name"]},
+    }, _request_access_change),
 ]
 
 TOOLS = [d[3] for d in TOOL_DEFS]
