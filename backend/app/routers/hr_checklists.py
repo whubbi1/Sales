@@ -95,15 +95,47 @@ async def delete_checklist_task(task_id: str, db: AsyncSession = Depends(get_db)
     return {"status": "ok"}
 
 
+KIND_META = {"onboarding": "Onboard", "offboarding": "Offboard"}
+
+
+async def _get_case(db: AsyncSession, case_id: str) -> dict | None:
+    r = await db.execute(text("SELECT * FROM hr_checklist_cases WHERE id = CAST(:id AS UUID)"), {"id": case_id})
+    row = r.fetchone()
+    return _row(dict(row._mapping)) if row else None
+
+
+async def _assign_responsible(db: AsyncSession, case: dict, responsible_email: str, responsible_name: str, acting_email: str):
+    if not responsible_email or responsible_email == (case.get("responsible_email") or ""):
+        return
+    from app.routers.task_manager import create_task, add_watcher
+    created = await create_task({
+        "title": f"{KIND_META.get(case['kind'], case['kind'])} {case.get('user_name') or case['user_email']}",
+        "description": f"You've been assigned as the responsible person for this {case['kind']} case.",
+        "owner_email": responsible_email, "owner_name": responsible_name,
+        "source": f"hr_{case['kind']}_responsible", "entity_type": "hr_checklist_case", "entity_id": case["id"],
+        "created_by_email": acting_email or responsible_email, "acting_email": acting_email or responsible_email,
+    }, db)
+    if case["user_email"] != responsible_email:
+        try:
+            await add_watcher(created["id"], {
+                "acting_email": responsible_email, "user_email": case["user_email"], "user_name": case.get("user_name") or case["user_email"],
+            }, db)
+        except Exception as e:
+            print(f"Checklist responsible-task watcher add skipped: {e}")
+
+
 # ─── Cases — one run of a checklist for one real person ────────────────────────
 @router.get("/checklist-cases")
-async def list_checklist_cases(kind: str = None, db: AsyncSession = Depends(get_db)):
+async def list_checklist_cases(kind: str = None, status: str = None, db: AsyncSession = Depends(get_db)):
     where = ["1=1"]
     params = {}
     if kind:
         _validate_kind(kind)
         where.append("kind = :kind")
         params["kind"] = kind
+    if status:
+        where.append("status = :status")
+        params["status"] = status
     r = await db.execute(text(f"""
         SELECT c.*,
                (SELECT COUNT(*) FROM hr_checklist_case_tasks ct JOIN tasks t ON t.id = ct.task_id WHERE ct.case_id = c.id) AS tasks_total,
@@ -142,14 +174,23 @@ async def start_checklist_case(data: dict, db: AsyncSession = Depends(get_db)):
         raise HTTPException(status_code=400, detail=f"No {kind} checklist tasks are configured for this location yet")
 
     case_id = str(uuid.uuid4())
+    responsible_email = data.get("responsible_email", "")
+    responsible_name = data.get("responsible_name", "")
     await db.execute(text("""
-        INSERT INTO hr_checklist_cases (id, kind, user_email, user_name, location_id, location_name, started_by_email, created_at)
-        VALUES (CAST(:id AS UUID), :kind, :user_email, :user_name, CAST(:location_id AS UUID), :location_name, :started_by_email, NOW())
+        INSERT INTO hr_checklist_cases (id, kind, user_email, user_name, location_id, location_name, started_by_email,
+                                          responsible_email, responsible_name, status, created_at)
+        VALUES (CAST(:id AS UUID), :kind, :user_email, :user_name, CAST(:location_id AS UUID), :location_name, :started_by_email,
+                :responsible_email, :responsible_name, 'ongoing', NOW())
     """), {
         "id": case_id, "kind": kind, "user_email": user_email, "user_name": data.get("user_name", ""),
         "location_id": location_id, "location_name": location_name, "started_by_email": data.get("started_by_email", ""),
+        "responsible_email": responsible_email, "responsible_name": responsible_name,
     })
     await db.commit()
+
+    if responsible_email:
+        case_row = await _get_case(db, case_id)
+        await _assign_responsible(db, {**case_row, "responsible_email": ""}, responsible_email, responsible_name, data.get("started_by_email", ""))
 
     from app.routers.task_manager import create_task, add_watcher
 
@@ -218,3 +259,71 @@ async def get_checklist_case(case_id: str, db: AsyncSession = Depends(get_db)):
     """), {"id": case_id})
     case["tasks"] = [_row(dict(r._mapping)) for r in tasks.fetchall()]
     return case
+
+
+@router.put("/checklist-cases/{case_id}")
+async def update_checklist_case(case_id: str, data: dict, db: AsyncSession = Depends(get_db)):
+    case = await _get_case(db, case_id)
+    if not case:
+        raise HTTPException(status_code=404, detail="Case not found")
+    responsible_email = data.get("responsible_email", case.get("responsible_email") or "")
+    responsible_name = data.get("responsible_name", case.get("responsible_name") or "")
+    if responsible_email != (case.get("responsible_email") or ""):
+        await _assign_responsible(db, case, responsible_email, responsible_name, data.get("acting_email", ""))
+    await db.execute(text("""
+        UPDATE hr_checklist_cases SET responsible_email = :responsible_email, responsible_name = :responsible_name
+        WHERE id = CAST(:id AS UUID)
+    """), {"id": case_id, "responsible_email": responsible_email, "responsible_name": responsible_name})
+    await db.commit()
+    return await _get_case(db, case_id)
+
+
+@router.put("/checklist-cases/{case_id}/close")
+async def close_checklist_case(case_id: str, db: AsyncSession = Depends(get_db)):
+    case = await _get_case(db, case_id)
+    if not case:
+        raise HTTPException(status_code=404, detail="Case not found")
+    await db.execute(text("""
+        UPDATE hr_checklist_cases SET status = 'closed', closed_at = NOW() WHERE id = CAST(:id AS UUID)
+    """), {"id": case_id})
+    await db.commit()
+    return {"status": "ok"}
+
+
+# ─── Equipment — assigned directly on it_equipment.assigned_email, locked once closed ─
+@router.get("/checklist-cases/{case_id}/equipments")
+async def list_case_equipments(case_id: str, db: AsyncSession = Depends(get_db)):
+    case = await _get_case(db, case_id)
+    if not case:
+        raise HTTPException(status_code=404, detail="Case not found")
+    r = await db.execute(text("SELECT * FROM it_equipment WHERE assigned_email = :email ORDER BY name"), {"email": case["user_email"]})
+    return {"equipments": [_row(dict(row._mapping)) for row in r.fetchall()]}
+
+
+@router.post("/checklist-cases/{case_id}/equipments/{equipment_id}")
+async def assign_case_equipment(case_id: str, equipment_id: str, db: AsyncSession = Depends(get_db)):
+    case = await _get_case(db, case_id)
+    if not case:
+        raise HTTPException(status_code=404, detail="Case not found")
+    if case.get("status") == "closed":
+        raise HTTPException(status_code=400, detail="This case is closed — equipment can no longer be changed")
+    await db.execute(text("""
+        UPDATE it_equipment SET assigned_email = :email, assigned_name = :name, updated_at = NOW() WHERE id = CAST(:id AS UUID)
+    """), {"id": equipment_id, "email": case["user_email"], "name": case.get("user_name") or case["user_email"]})
+    await db.commit()
+    return {"status": "ok"}
+
+
+@router.delete("/checklist-cases/{case_id}/equipments/{equipment_id}")
+async def unassign_case_equipment(case_id: str, equipment_id: str, db: AsyncSession = Depends(get_db)):
+    case = await _get_case(db, case_id)
+    if not case:
+        raise HTTPException(status_code=404, detail="Case not found")
+    if case.get("status") == "closed":
+        raise HTTPException(status_code=400, detail="This case is closed — equipment can no longer be changed")
+    await db.execute(text("""
+        UPDATE it_equipment SET assigned_email = NULL, assigned_name = NULL, updated_at = NOW()
+        WHERE id = CAST(:id AS UUID) AND assigned_email = :email
+    """), {"id": equipment_id, "email": case["user_email"]})
+    await db.commit()
+    return {"status": "ok"}

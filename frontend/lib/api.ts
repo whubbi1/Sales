@@ -184,7 +184,13 @@ export const hrChecklistAPI = {
   updateTask:  (id: string, d: any) => fetchAPI(`/hr/checklist-tasks/${id}`, { method: 'PUT', body: JSON.stringify(d) }),
   deleteTask:  (id: string) => fetchAPI(`/hr/checklist-tasks/${id}`, { method: 'DELETE' }),
 
-  listCases: (p?: any) => fetchAPI(`/hr/checklist-cases${qs(p)}`),
-  getCase:   (id: string) => fetchAPI(`/hr/checklist-cases/${id}`),
-  startCase: (d: any) => fetchAPI('/hr/checklist-cases', { method: 'POST', body: JSON.stringify(d) }),
+  listCases:  (p?: any) => fetchAPI(`/hr/checklist-cases${qs(p)}`),
+  getCase:    (id: string) => fetchAPI(`/hr/checklist-cases/${id}`),
+  startCase:  (d: any) => fetchAPI('/hr/checklist-cases', { method: 'POST', body: JSON.stringify(d) }),
+  updateCase: (id: string, d: any) => fetchAPI(`/hr/checklist-cases/${id}`, { method: 'PUT', body: JSON.stringify(d) }),
+  closeCase:  (id: string) => fetchAPI(`/hr/checklist-cases/${id}/close`, { method: 'PUT' }),
+
+  getCaseEquipments:  (id: string) => fetchAPI(`/hr/checklist-cases/${id}/equipments`),
+  assignEquipment:    (id: string, equipmentId: string) => fetchAPI(`/hr/checklist-cases/${id}/equipments/${equipmentId}`, { method: 'POST' }),
+  unassignEquipment:  (id: string, equipmentId: string) => fetchAPI(`/hr/checklist-cases/${id}/equipments/${equipmentId}`, { method: 'DELETE' }),
 }

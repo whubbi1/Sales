@@ -991,6 +991,12 @@ async def startup():
                     partner_id UUID NOT NULL REFERENCES partners(id) ON DELETE CASCADE,
                     PRIMARY KEY (event_id, partner_id)
                 )""",
+
+                # HR checklist cases — ongoing/closed status, case-level responsible person
+                "ALTER TABLE hr_checklist_cases ADD COLUMN IF NOT EXISTS status VARCHAR(20) DEFAULT 'ongoing'",
+                "ALTER TABLE hr_checklist_cases ADD COLUMN IF NOT EXISTS closed_at TIMESTAMP",
+                "ALTER TABLE hr_checklist_cases ADD COLUMN IF NOT EXISTS responsible_email VARCHAR(255)",
+                "ALTER TABLE hr_checklist_cases ADD COLUMN IF NOT EXISTS responsible_name VARCHAR(255)",
             ]
             for sql in sqls:
                 try:

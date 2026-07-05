@@ -117,7 +117,7 @@ function ChecklistContent({ kind }: { kind: 'onboarding' | 'offboarding' }) {
   const router = useRouter()
   const meta = KIND_META[kind]
   const { level, canEdit } = useHRPerm(kind)
-  const [tab, setTab] = useState<'templates' | 'start' | 'history'>('templates')
+  const [tab, setTab] = useState<'templates' | 'start' | 'ongoing' | 'history'>('templates')
   const [locations, setLocations] = useState<any[]>([])
   const [users, setUsers] = useState<any[]>([])
   const [locationId, setLocationId] = useState('')
@@ -131,6 +131,7 @@ function ChecklistContent({ kind }: { kind: 'onboarding' | 'offboarding' }) {
   const [startLocationId, setStartLocationId] = useState('')
   const [startTasks, setStartTasks] = useState<any[]>([])
   const [overrides, setOverrides] = useState<Record<string, string>>({})
+  const [startResponsibleEmail, setStartResponsibleEmail] = useState('')
   const [starting, setStarting] = useState(false)
   const [startError, setStartError] = useState('')
   const [startWarning, setStartWarning] = useState('')
@@ -154,7 +155,8 @@ function ChecklistContent({ kind }: { kind: 'onboarding' | 'offboarding' }) {
   }, [locationId])
 
   useEffect(() => {
-    if (tab === 'history') loadCases()
+    if (tab === 'ongoing') loadCases('ongoing')
+    if (tab === 'history') loadCases('closed')
   }, [tab])
 
   const loadTemplateTasks = async (locId: string) => {
@@ -166,10 +168,10 @@ function ChecklistContent({ kind }: { kind: 'onboarding' | 'offboarding' }) {
     finally { setLoadingTasks(false) }
   }
 
-  const loadCases = async () => {
+  const loadCases = async (status: 'ongoing' | 'closed') => {
     setLoadingCases(true)
     try {
-      const d = await hrChecklistAPI.listCases({ kind })
+      const d = await hrChecklistAPI.listCases({ kind, status })
       setCases(d.cases || [])
     } catch (e) { console.error(e) }
     finally { setLoadingCases(false) }
@@ -234,10 +236,12 @@ function ChecklistContent({ kind }: { kind: 'onboarding' | 'offboarding' }) {
         }
       }
       const loc = locations.find((l: any) => l.id === startLocationId)
+      const ru = users.find((u: any) => u.email === startResponsibleEmail)
       const r = await hrChecklistAPI.startCase({
         kind, user_email: startUserEmail, user_name: su?.display_name || (su ? `${su.first_name} ${su.last_name}` : ''),
         location_id: startLocationId, location_name: loc?.location_name || '',
         started_by_email: me?.email || '', overrides: overridePayload,
+        responsible_email: startResponsibleEmail, responsible_name: ru?.display_name || (ru ? `${ru.first_name} ${ru.last_name}` : ''),
       })
       if (r.warnings?.length) setStartWarning(r.warnings.join('; '))
       router.push(`/rh/checklist-cases/${r.id}`)
@@ -266,7 +270,7 @@ function ChecklistContent({ kind }: { kind: 'onboarding' | 'offboarding' }) {
       </div>
 
       <div style={{ display: 'flex', gap: '3px', marginBottom: '20px', background: 'white', padding: '4px', borderRadius: '10px', border: '1px solid #EDF2F7', width: 'fit-content' }}>
-        {[{ id: 'templates', label: 'Checklist Tasks' }, { id: 'start', label: `${meta.verb} Someone` }, { id: 'history', label: 'History' }].map(t => (
+        {[{ id: 'templates', label: 'Checklist Tasks' }, { id: 'start', label: `${meta.verb} Someone` }, { id: 'ongoing', label: 'Ongoing' }, { id: 'history', label: 'History' }].map(t => (
           <button key={t.id} onClick={() => setTab(t.id as any)} style={{ padding: '8px 18px', borderRadius: '7px', border: 'none', background: tab === t.id ? '#156082' : 'transparent', color: tab === t.id ? 'white' : '#45B6E4', fontSize: '12px', fontWeight: '600', cursor: 'pointer', fontFamily: 'Montserrat, sans-serif' }}>
             {t.label}
           </button>
@@ -378,6 +382,15 @@ function ChecklistContent({ kind }: { kind: 'onboarding' | 'offboarding' }) {
             <p style={{ fontSize: '11px', color: '#94A3B8', margin: 0 }}>The location defaults to the person's main location (set on WHUBBI Permissions), but can be changed here.</p>
           </div>
 
+          <div style={{ background: 'white', borderRadius: '12px', border: '1px solid #EDF2F7', padding: '20px', boxShadow: '0 1px 3px rgba(0,0,0,0.06)', marginBottom: '14px' }}>
+            <label style={lbl}>Responsible Person</label>
+            <select style={{ ...inp, width: '100%' }} value={startResponsibleEmail} onChange={e => setStartResponsibleEmail(e.target.value)}>
+              <option value="">Unassigned</option>
+              {users.map((u: any) => <option key={u.email} value={u.email}>{u.display_name || `${u.first_name} ${u.last_name}`}</option>)}
+            </select>
+            <p style={{ fontSize: '11px', color: '#94A3B8', margin: '6px 0 0' }}>The person accountable for the overall {kind} case — assigning them creates a task in their Task Manager.</p>
+          </div>
+
           {startUserEmail && startLocationId && (
             <div style={{ background: 'white', borderRadius: '12px', border: '1px solid #EDF2F7', padding: '20px', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
               <div style={{ ...lbl, marginBottom: '10px' }}>Tasks to be created ({startTasks.length})</div>
@@ -409,7 +422,7 @@ function ChecklistContent({ kind }: { kind: 'onboarding' | 'offboarding' }) {
         </div>
       )}
 
-      {tab === 'history' && (
+      {(tab === 'ongoing' || tab === 'history') && (
         <div>
           <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '14px' }}>
             <ReportPanel columns={CASE_COLUMNS} rb={rb} />
@@ -427,7 +440,7 @@ function ChecklistContent({ kind }: { kind: 'onboarding' | 'offboarding' }) {
                 {loadingCases ? (
                   <tr><td colSpan={CASE_COLUMNS.length} style={{ textAlign: 'center', padding: '48px', color: '#45B6E4' }}>Loading…</td></tr>
                 ) : reportedCases.length === 0 ? (
-                  <tr><td colSpan={CASE_COLUMNS.length} style={{ textAlign: 'center', padding: '48px', color: '#94A3B8' }}>No {kind} cases yet.</td></tr>
+                  <tr><td colSpan={CASE_COLUMNS.length} style={{ textAlign: 'center', padding: '48px', color: '#94A3B8' }}>No {tab === 'ongoing' ? 'ongoing' : 'closed'} {kind} cases.</td></tr>
                 ) : reportedCases.map(c => (
                   <tr key={c.id} onClick={() => router.push(`/rh/checklist-cases/${c.id}`)} style={{ borderBottom: '1px solid #F1F5F9', cursor: 'pointer' }}
                     onMouseEnter={e => (e.currentTarget.style.background = '#FAFBFC')} onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
