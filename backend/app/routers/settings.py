@@ -31,6 +31,7 @@ MODULES = {
     "training":     ["manager"],
     "tasks":        ["manager"],
     "marketing":    ["events", "company_website", "competitor_analysis", "social_marketing", "marketing_plan", "marketing_material"],
+    "testing":      ["plans", "campaigns", "remediation"],
 }
 
 LEGAL_ENTITIES = ["all", "france", "portugal", "czech_republic", "romania", "spain"]

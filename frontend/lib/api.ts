@@ -194,3 +194,30 @@ export const hrChecklistAPI = {
   assignEquipment:    (id: string, equipmentId: string) => fetchAPI(`/hr/checklist-cases/${id}/equipments/${equipmentId}`, { method: 'POST' }),
   unassignEquipment:  (id: string, equipmentId: string) => fetchAPI(`/hr/checklist-cases/${id}/equipments/${equipmentId}`, { method: 'DELETE' }),
 }
+
+// ─── Testing module ─────────────────────────────────────────────────────────────
+export const testingAPI = {
+  listPlans:  (p?: any) => fetchAPI(`/testing/plans${qs(p)}`),
+  getPlan:    (id: string) => fetchAPI(`/testing/plans/${id}`),
+  createPlan: (d: any) => fetchAPI('/testing/plans', { method: 'POST', body: JSON.stringify(d) }),
+  updatePlan: (id: string, d: any) => fetchAPI(`/testing/plans/${id}`, { method: 'PUT', body: JSON.stringify(d) }),
+  deletePlan: (id: string) => fetchAPI(`/testing/plans/${id}`, { method: 'DELETE' }),
+
+  createScript: (planId: string, d: any) => fetchAPI(`/testing/plans/${planId}/scripts`, { method: 'POST', body: JSON.stringify(d) }),
+  updateScript: (planId: string, scriptId: string, d: any) => fetchAPI(`/testing/plans/${planId}/scripts/${scriptId}`, { method: 'PUT', body: JSON.stringify(d) }),
+  deleteScript: (planId: string, scriptId: string) => fetchAPI(`/testing/plans/${planId}/scripts/${scriptId}`, { method: 'DELETE' }),
+
+  listCampaigns:  (p?: any) => fetchAPI(`/testing/campaigns${qs(p)}`),
+  getCampaign:    (id: string) => fetchAPI(`/testing/campaigns/${id}`),
+  createCampaign: (d: any) => fetchAPI('/testing/campaigns', { method: 'POST', body: JSON.stringify(d) }),
+  updateCampaign: (id: string, d: any) => fetchAPI(`/testing/campaigns/${id}`, { method: 'PUT', body: JSON.stringify(d) }),
+
+  executeStep: (campaignId: string, stepId: string, d: any) => fetchAPI(`/testing/campaigns/${campaignId}/steps/${stepId}/execute`, { method: 'PUT', body: JSON.stringify(d) }),
+  reviewStep:  (campaignId: string, stepId: string, d: any) => fetchAPI(`/testing/campaigns/${campaignId}/steps/${stepId}/review`, { method: 'PUT', body: JSON.stringify(d) }),
+  completeReview: (campaignId: string, d: any) => fetchAPI(`/testing/campaigns/${campaignId}/complete-review`, { method: 'POST', body: JSON.stringify(d) }),
+
+  listRemediationPlans: (p?: any) => fetchAPI(`/testing/remediation-plans${qs(p)}`),
+  getRemediationPlan:   (id: string) => fetchAPI(`/testing/remediation-plans/${id}`),
+  updateRemediationPlan: (id: string, d: any) => fetchAPI(`/testing/remediation-plans/${id}`, { method: 'PUT', body: JSON.stringify(d) }),
+  updateRemediationAction: (id: string, d: any) => fetchAPI(`/testing/remediation-actions/${id}`, { method: 'PUT', body: JSON.stringify(d) }),
+}

@@ -997,6 +997,106 @@ async def startup():
                 "ALTER TABLE hr_checklist_cases ADD COLUMN IF NOT EXISTS closed_at TIMESTAMP",
                 "ALTER TABLE hr_checklist_cases ADD COLUMN IF NOT EXISTS responsible_email VARCHAR(255)",
                 "ALTER TABLE hr_checklist_cases ADD COLUMN IF NOT EXISTS responsible_name VARCHAR(255)",
+
+                # Testing module — application submodules (IT prerequisite)
+                """CREATE TABLE IF NOT EXISTS it_application_submodules (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    application_id UUID NOT NULL REFERENCES it_applications(id) ON DELETE CASCADE,
+                    name VARCHAR(255) NOT NULL,
+                    description TEXT,
+                    created_at TIMESTAMP DEFAULT NOW(),
+                    updated_at TIMESTAMP DEFAULT NOW()
+                )""",
+
+                # Testing module — plans, scripts, campaigns, execution, review, remediation
+                """CREATE TABLE IF NOT EXISTS test_plans (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    plan_number VARCHAR(30) UNIQUE,
+                    title VARCHAR(500) NOT NULL,
+                    description TEXT,
+                    application_id UUID REFERENCES it_applications(id) ON DELETE SET NULL,
+                    submodule_id UUID REFERENCES it_application_submodules(id) ON DELETE SET NULL,
+                    created_by_email VARCHAR(255),
+                    created_at TIMESTAMP DEFAULT NOW(),
+                    updated_at TIMESTAMP DEFAULT NOW()
+                )""",
+                """CREATE TABLE IF NOT EXISTS test_scripts (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    script_number VARCHAR(30) UNIQUE,
+                    plan_id UUID NOT NULL REFERENCES test_plans(id) ON DELETE CASCADE,
+                    position INTEGER DEFAULT 0,
+                    title VARCHAR(500) NOT NULL,
+                    details TEXT,
+                    expected_result TEXT,
+                    url TEXT,
+                    created_at TIMESTAMP DEFAULT NOW(),
+                    updated_at TIMESTAMP DEFAULT NOW()
+                )""",
+                """CREATE TABLE IF NOT EXISTS test_campaigns (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    campaign_number VARCHAR(30) UNIQUE,
+                    title VARCHAR(500) NOT NULL,
+                    execution_date DATE,
+                    owner_email VARCHAR(255),
+                    owner_name VARCHAR(255),
+                    reviewer_email VARCHAR(255),
+                    reviewer_name VARCHAR(255),
+                    status VARCHAR(20) DEFAULT 'planned',
+                    created_by_email VARCHAR(255),
+                    created_at TIMESTAMP DEFAULT NOW(),
+                    updated_at TIMESTAMP DEFAULT NOW()
+                )""",
+                """CREATE TABLE IF NOT EXISTS test_campaign_plans (
+                    campaign_id UUID NOT NULL REFERENCES test_campaigns(id) ON DELETE CASCADE,
+                    plan_id UUID NOT NULL REFERENCES test_plans(id) ON DELETE CASCADE,
+                    PRIMARY KEY (campaign_id, plan_id)
+                )""",
+                """CREATE TABLE IF NOT EXISTS test_campaign_steps (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    campaign_id UUID NOT NULL REFERENCES test_campaigns(id) ON DELETE CASCADE,
+                    plan_id UUID REFERENCES test_plans(id) ON DELETE SET NULL,
+                    script_id UUID REFERENCES test_scripts(id) ON DELETE SET NULL,
+                    position INTEGER DEFAULT 0,
+                    title VARCHAR(500) NOT NULL,
+                    details TEXT,
+                    expected_result TEXT,
+                    url TEXT,
+                    result VARCHAR(20),
+                    screenshot_url TEXT,
+                    deviation TEXT,
+                    remediation TEXT,
+                    criticality VARCHAR(20),
+                    executed_at TIMESTAMP,
+                    reviewed_at TIMESTAMP,
+                    created_at TIMESTAMP DEFAULT NOW(),
+                    updated_at TIMESTAMP DEFAULT NOW()
+                )""",
+                """CREATE TABLE IF NOT EXISTS remediation_plans (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    plan_number VARCHAR(30) UNIQUE,
+                    campaign_id UUID NOT NULL REFERENCES test_campaigns(id) ON DELETE CASCADE,
+                    owner_email VARCHAR(255),
+                    owner_name VARCHAR(255),
+                    status VARCHAR(20) DEFAULT 'new',
+                    created_by_email VARCHAR(255),
+                    created_at TIMESTAMP DEFAULT NOW(),
+                    updated_at TIMESTAMP DEFAULT NOW()
+                )""",
+                """CREATE TABLE IF NOT EXISTS remediation_actions (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    remediation_plan_id UUID NOT NULL REFERENCES remediation_plans(id) ON DELETE CASCADE,
+                    campaign_step_id UUID REFERENCES test_campaign_steps(id) ON DELETE SET NULL,
+                    title VARCHAR(500),
+                    description TEXT,
+                    criticality VARCHAR(20),
+                    owner_email VARCHAR(255),
+                    owner_name VARCHAR(255),
+                    status VARCHAR(20) DEFAULT 'new',
+                    comment TEXT,
+                    task_id UUID,
+                    created_at TIMESTAMP DEFAULT NOW(),
+                    updated_at TIMESTAMP DEFAULT NOW()
+                )""",
             ]
             for sql in sqls:
                 try:
@@ -1054,6 +1154,7 @@ _include("app.routers.opportunities",  "/opportunities","Opportunities")
 _include("app.routers.tasks",          "/tasks",        "Tasks")
 _include("app.routers.partners",       "/partners",     "Partners")
 _include("app.routers.marketing",      "/marketing",    "Marketing")
+_include("app.routers.testing",        "/testing",      "Testing")
 _include("app.routers.admin",          "/admin",        "Admin")
 _include("app.routers.admin_ops",      "/admin",        "AdminOps")
 _include("app.routers.microsoft",      "/microsoft",    "Microsoft")

@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react'
 import ITLayout, { useITPerm } from '@/components/ITLayout'
 import { useReportBuilder, applyReport, ReportPanel, ReportColumn } from '@/components/it/ReportBuilder'
+import { ApplicationSubmodulesModal } from '@/components/it/ApplicationSubmodulesModal'
 import { getStoredUser } from '@/lib/auth'
 
 const API = 'https://api.whubbi.wcomply.com'
@@ -212,6 +213,7 @@ function ApplicationsContent() {
   const [loading, setLoading] = useState(true)
   const [showNew, setShowNew] = useState(false)
   const [editItem, setEditItem] = useState<any | null>(null)
+  const [submodulesItem, setSubmodulesItem] = useState<any | null>(null)
   const [editing, setEditing] = useState<{ id: string; field: string } | null>(null)
   const [search, setSearch] = useState('')
   const [userEmail, setUserEmail] = useState('')
@@ -298,7 +300,7 @@ function ApplicationsContent() {
               {COLUMNS.filter(c => isVisible(c.key)).map(c => (
                 <th key={c.key} style={{ padding: '10px 12px', textAlign: 'left', fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#45B6E4', borderBottom: '1px solid #EDF2F7', whiteSpace: 'nowrap' }}>{c.label}</th>
               ))}
-              {canEdit && <th style={{ padding: '10px 12px', borderBottom: '1px solid #EDF2F7' }} />}
+              <th style={{ padding: '10px 12px', borderBottom: '1px solid #EDF2F7' }} />
             </tr>
           </thead>
           <tbody>
@@ -349,12 +351,15 @@ function ApplicationsContent() {
                       onStartEdit={() => toggleEdit(item.id, 'locations')} onSave={(fields: any) => patchItem(item, fields)} />
                   </td>
                 )}
-                {canEdit && (
-                  <td style={{ padding: '10px 12px', whiteSpace: 'nowrap' }}>
-                    <button onClick={() => setEditItem(item)} style={{ padding: '5px 10px', marginRight: '6px', background: '#EFF6FF', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '11px', color: '#156082', fontWeight: '700', fontFamily: 'Montserrat, sans-serif' }}>Edit</button>
-                    <button onClick={() => deleteItem(item)} style={{ padding: '5px 10px', background: '#FEF2F2', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '11px', color: '#EF4444', fontWeight: '700', fontFamily: 'Montserrat, sans-serif' }}>Delete</button>
-                  </td>
-                )}
+                <td style={{ padding: '10px 12px', whiteSpace: 'nowrap' }}>
+                  <button onClick={() => setSubmodulesItem(item)} style={{ padding: '5px 10px', marginRight: '6px', background: '#F5F3FF', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '11px', color: '#7C3AED', fontWeight: '700', fontFamily: 'Montserrat, sans-serif' }}>Submodules</button>
+                  {canEdit && (
+                    <>
+                      <button onClick={() => setEditItem(item)} style={{ padding: '5px 10px', marginRight: '6px', background: '#EFF6FF', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '11px', color: '#156082', fontWeight: '700', fontFamily: 'Montserrat, sans-serif' }}>Edit</button>
+                      <button onClick={() => deleteItem(item)} style={{ padding: '5px 10px', background: '#FEF2F2', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '11px', color: '#EF4444', fontWeight: '700', fontFamily: 'Montserrat, sans-serif' }}>Delete</button>
+                    </>
+                  )}
+                </td>
               </tr>
             ))}
           </tbody>
@@ -365,6 +370,9 @@ function ApplicationsContent() {
       {editItem && (
         <NewApplicationModal users={users} locations={locations} initial={editItem} title="Edit Application" submitLabel="Save Changes"
           onClose={() => setEditItem(null)} onSave={saveEditItem} />
+      )}
+      {submodulesItem && (
+        <ApplicationSubmodulesModal application={submodulesItem} canEdit={canEdit} onClose={() => setSubmodulesItem(null)} />
       )}
     </div>
   )

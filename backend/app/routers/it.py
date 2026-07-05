@@ -291,6 +291,44 @@ async def delete_application(aid: str, db: AsyncSession = Depends(get_db)):
     await db.commit()
     return {"status": "ok"}
 
+# ─── Application submodules (used by the Testing module to scope a test plan) ──
+@router.get("/applications/{aid}/submodules")
+async def list_application_submodules(aid: str, db: AsyncSession = Depends(get_db)):
+    r = await db.execute(text("""
+        SELECT * FROM it_application_submodules WHERE application_id = CAST(:aid AS UUID) ORDER BY name
+    """), {"aid": aid})
+    return {"submodules": [_stringify_row(dict(row._mapping)) for row in r.fetchall()]}
+
+@router.post("/applications/{aid}/submodules")
+async def create_application_submodule(aid: str, data: dict, db: AsyncSession = Depends(get_db)):
+    sid = str(uuid.uuid4())
+    await db.execute(text("""
+        INSERT INTO it_application_submodules (id, application_id, name, description, created_at, updated_at)
+        VALUES (CAST(:id AS UUID), CAST(:aid AS UUID), :name, :description, NOW(), NOW())
+    """), {"id": sid, "aid": aid, "name": data.get("name", ""), "description": data.get("description", "")})
+    await db.commit()
+    return {"status": "ok", "id": sid}
+
+@router.put("/applications/{aid}/submodules/{sid}")
+async def update_application_submodule(aid: str, sid: str, data: dict, db: AsyncSession = Depends(get_db)):
+    await db.execute(text("""
+        UPDATE it_application_submodules SET
+            name = COALESCE(NULLIF(:name,''), name),
+            description = COALESCE(:description, description),
+            updated_at = NOW()
+        WHERE id = CAST(:id AS UUID) AND application_id = CAST(:aid AS UUID)
+    """), {"id": sid, "aid": aid, "name": data.get("name", ""), "description": data.get("description")})
+    await db.commit()
+    return {"status": "ok"}
+
+@router.delete("/applications/{aid}/submodules/{sid}")
+async def delete_application_submodule(aid: str, sid: str, db: AsyncSession = Depends(get_db)):
+    await db.execute(text("""
+        DELETE FROM it_application_submodules WHERE id = CAST(:id AS UUID) AND application_id = CAST(:aid AS UUID)
+    """), {"id": sid, "aid": aid})
+    await db.commit()
+    return {"status": "ok"}
+
 # ─── Saved report views (Equipment / Software / Application) ──────────────────
 @router.get("/report-views")
 async def list_report_views(module: str, user_email: str, db: AsyncSession = Depends(get_db)):
