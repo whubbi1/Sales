@@ -57,7 +57,7 @@ FRONTEND_URL = os.getenv("FRONTEND_URL", "https://app.whubbi.wcomply.com")
 
 
 # ─── Test Plans ──────────────────────────────────────────────────────────────────
-@router.get("/plans")
+@router.get("/test-plans")
 async def list_plans(application_id: str = None, search: str = None, db: AsyncSession = Depends(get_db)):
     where = ["1=1"]
     params = {}
@@ -69,7 +69,7 @@ async def list_plans(application_id: str = None, search: str = None, db: AsyncSe
         params["q"] = f"%{search}%"
     r = await db.execute(text(f"""
         SELECT p.*, a.name AS application_name, s.name AS submodule_name,
-               (SELECT COUNT(*) FROM test_scripts ts WHERE ts.plan_id = p.id) AS script_count
+               (SELECT COUNT(*) FROM test_plan_scripts ts WHERE ts.plan_id = p.id) AS script_count
         FROM test_plans p
         LEFT JOIN it_applications a ON a.id = p.application_id
         LEFT JOIN it_application_submodules s ON s.id = p.submodule_id
@@ -79,7 +79,7 @@ async def list_plans(application_id: str = None, search: str = None, db: AsyncSe
     return {"plans": [_row(dict(row._mapping)) for row in r.fetchall()]}
 
 
-@router.post("/plans")
+@router.post("/test-plans")
 async def create_plan(data: dict, db: AsyncSession = Depends(get_db)):
     if not data.get("title"):
         raise HTTPException(status_code=400, detail="title is required")
@@ -98,7 +98,7 @@ async def create_plan(data: dict, db: AsyncSession = Depends(get_db)):
     return {"status": "ok", "id": plan_id, "plan_number": plan_number}
 
 
-@router.get("/plans/{plan_id}")
+@router.get("/test-plans/{plan_id}")
 async def get_plan(plan_id: str, db: AsyncSession = Depends(get_db)):
     r = await db.execute(text("""
         SELECT p.*, a.name AS application_name, s.name AS submodule_name
@@ -111,12 +111,12 @@ async def get_plan(plan_id: str, db: AsyncSession = Depends(get_db)):
     if not row:
         raise HTTPException(status_code=404, detail="Test plan not found")
     plan = _row(dict(row._mapping))
-    scripts = await db.execute(text("SELECT * FROM test_scripts WHERE plan_id = CAST(:id AS UUID) ORDER BY position, created_at"), {"id": plan_id})
+    scripts = await db.execute(text("SELECT * FROM test_plan_scripts WHERE plan_id = CAST(:id AS UUID) ORDER BY position, created_at"), {"id": plan_id})
     plan["scripts"] = [_row(dict(r._mapping)) for r in scripts.fetchall()]
     return plan
 
 
-@router.put("/plans/{plan_id}")
+@router.put("/test-plans/{plan_id}")
 async def update_plan(plan_id: str, data: dict, db: AsyncSession = Depends(get_db)):
     await db.execute(text("""
         UPDATE test_plans SET
@@ -134,7 +134,7 @@ async def update_plan(plan_id: str, data: dict, db: AsyncSession = Depends(get_d
     return {"status": "ok"}
 
 
-@router.delete("/plans/{plan_id}")
+@router.delete("/test-plans/{plan_id}")
 async def delete_plan(plan_id: str, db: AsyncSession = Depends(get_db)):
     await db.execute(text("DELETE FROM test_plans WHERE id = CAST(:id AS UUID)"), {"id": plan_id})
     await db.commit()
@@ -142,16 +142,16 @@ async def delete_plan(plan_id: str, db: AsyncSession = Depends(get_db)):
 
 
 # ─── Test Scripts (= steps, belong to exactly one plan) ─────────────────────────
-@router.post("/plans/{plan_id}/scripts")
+@router.post("/test-plans/{plan_id}/scripts")
 async def create_script(plan_id: str, data: dict, db: AsyncSession = Depends(get_db)):
     if not data.get("title"):
         raise HTTPException(status_code=400, detail="title is required")
-    r = await db.execute(text("SELECT COUNT(*) FROM test_scripts WHERE plan_id = CAST(:id AS UUID)"), {"id": plan_id})
+    r = await db.execute(text("SELECT COUNT(*) FROM test_plan_scripts WHERE plan_id = CAST(:id AS UUID)"), {"id": plan_id})
     position = r.scalar() or 0
     script_id = str(uuid.uuid4())
     script_number = _gen_number("TS")
     await db.execute(text("""
-        INSERT INTO test_scripts (id, script_number, plan_id, position, title, details, expected_result, url, created_at, updated_at)
+        INSERT INTO test_plan_scripts (id, script_number, plan_id, position, title, details, expected_result, url, created_at, updated_at)
         VALUES (CAST(:id AS UUID), :script_number, CAST(:plan_id AS UUID), :position, :title, :details, :expected_result, :url, NOW(), NOW())
     """), {
         "id": script_id, "script_number": script_number, "plan_id": plan_id, "position": position,
@@ -162,10 +162,10 @@ async def create_script(plan_id: str, data: dict, db: AsyncSession = Depends(get
     return {"status": "ok", "id": script_id, "script_number": script_number}
 
 
-@router.put("/plans/{plan_id}/scripts/{script_id}")
+@router.put("/test-plans/{plan_id}/scripts/{script_id}")
 async def update_script(plan_id: str, script_id: str, data: dict, db: AsyncSession = Depends(get_db)):
     await db.execute(text("""
-        UPDATE test_scripts SET
+        UPDATE test_plan_scripts SET
             title = COALESCE(NULLIF(:title,''), title),
             details = COALESCE(:details, details),
             expected_result = COALESCE(:expected_result, expected_result),
@@ -178,9 +178,9 @@ async def update_script(plan_id: str, script_id: str, data: dict, db: AsyncSessi
     return {"status": "ok"}
 
 
-@router.delete("/plans/{plan_id}/scripts/{script_id}")
+@router.delete("/test-plans/{plan_id}/scripts/{script_id}")
 async def delete_script(plan_id: str, script_id: str, db: AsyncSession = Depends(get_db)):
-    await db.execute(text("DELETE FROM test_scripts WHERE id = CAST(:id AS UUID) AND plan_id = CAST(:plan_id AS UUID)"), {"id": script_id, "plan_id": plan_id})
+    await db.execute(text("DELETE FROM test_plan_scripts WHERE id = CAST(:id AS UUID) AND plan_id = CAST(:plan_id AS UUID)"), {"id": script_id, "plan_id": plan_id})
     await db.commit()
     return {"status": "ok"}
 
@@ -194,14 +194,14 @@ async def _campaign_task(db: AsyncSession, campaign: dict, role_label: str, owne
         "title": f"{role_label} test campaign: {campaign['title']}",
         "description": f"You've been assigned as the {role_label.lower()} for this test campaign.",
         "owner_email": owner_email, "owner_name": owner_name,
-        "source": "testing_campaign", "entity_type": "test_campaign", "entity_id": campaign["id"],
+        "source": "development_test_campaign", "entity_type": "test_campaign", "entity_id": campaign["id"],
         "created_by_email": created_by_email or owner_email, "acting_email": created_by_email or owner_email,
     }, db)
     await _link_task(db, created["id"], f"{campaign.get('campaign_number','')} — {campaign['title']}",
-                      f"{FRONTEND_URL}/testing/test-campaigns/{campaign['id']}", created_by_email or owner_email)
+                      f"{FRONTEND_URL}/development/test-campaigns/{campaign['id']}", created_by_email or owner_email)
 
 
-@router.get("/campaigns")
+@router.get("/test-campaigns")
 async def list_campaigns(status: str = None, db: AsyncSession = Depends(get_db)):
     where = ["1=1"]
     params = {}
@@ -217,7 +217,7 @@ async def list_campaigns(status: str = None, db: AsyncSession = Depends(get_db))
     return {"campaigns": [_row(dict(row._mapping)) for row in r.fetchall()]}
 
 
-@router.post("/campaigns")
+@router.post("/test-campaigns")
 async def create_campaign(data: dict, db: AsyncSession = Depends(get_db)):
     if not data.get("title"):
         raise HTTPException(status_code=400, detail="title is required")
@@ -247,7 +247,7 @@ async def create_campaign(data: dict, db: AsyncSession = Depends(get_db)):
             INSERT INTO test_campaign_plans (campaign_id, plan_id) VALUES (CAST(:cid AS UUID), CAST(:pid AS UUID))
             ON CONFLICT DO NOTHING
         """), {"cid": campaign_id, "pid": plan_id})
-        scripts = await db.execute(text("SELECT * FROM test_scripts WHERE plan_id = CAST(:id AS UUID) ORDER BY position, created_at"), {"id": plan_id})
+        scripts = await db.execute(text("SELECT * FROM test_plan_scripts WHERE plan_id = CAST(:id AS UUID) ORDER BY position, created_at"), {"id": plan_id})
         for s in scripts.fetchall():
             sd = _row(dict(s._mapping))
             await db.execute(text("""
@@ -273,7 +273,7 @@ async def _get_campaign(db: AsyncSession, campaign_id: str) -> dict | None:
     return _row(dict(row._mapping)) if row else None
 
 
-@router.get("/campaigns/{campaign_id}")
+@router.get("/test-campaigns/{campaign_id}")
 async def get_campaign(campaign_id: str, db: AsyncSession = Depends(get_db)):
     campaign = await _get_campaign(db, campaign_id)
     if not campaign:
@@ -291,7 +291,7 @@ async def get_campaign(campaign_id: str, db: AsyncSession = Depends(get_db)):
     return campaign
 
 
-@router.put("/campaigns/{campaign_id}")
+@router.put("/test-campaigns/{campaign_id}")
 async def update_campaign(campaign_id: str, data: dict, db: AsyncSession = Depends(get_db)):
     campaign = await _get_campaign(db, campaign_id)
     if not campaign:
@@ -324,7 +324,7 @@ async def update_campaign(campaign_id: str, data: dict, db: AsyncSession = Depen
 
 
 # ─── Execution — steps displayed one by one, executor records result/deviation/remediation ─
-@router.put("/campaigns/{campaign_id}/steps/{step_id}/execute")
+@router.put("/test-campaigns/{campaign_id}/steps/{step_id}/execute")
 async def execute_step(campaign_id: str, step_id: str, data: dict, db: AsyncSession = Depends(get_db)):
     campaign = await _get_campaign(db, campaign_id)
     if not campaign:
@@ -353,10 +353,10 @@ async def execute_step(campaign_id: str, step_id: str, data: dict, db: AsyncSess
     return {"status": "ok"}
 
 
-@router.post("/campaigns/{campaign_id}/steps/{step_id}/screenshot")
+@router.post("/test-campaigns/{campaign_id}/steps/{step_id}/screenshot")
 async def upload_step_screenshot(campaign_id: str, step_id: str, file: UploadFile = File(...), db: AsyncSession = Depends(get_db)):
     content = await file.read()
-    key = f"testing/{campaign_id}/{step_id}/{file.filename}"
+    key = f"development/{campaign_id}/{step_id}/{file.filename}"
     ref = await upload_to_s3(key, content, file.content_type or "application/octet-stream")
     await db.execute(text("""
         UPDATE test_campaign_steps SET screenshot_url = :ref, updated_at = NOW()
@@ -367,7 +367,7 @@ async def upload_step_screenshot(campaign_id: str, step_id: str, file: UploadFil
 
 
 # ─── Review — reviewer refines deviation/remediation, sets criticality ──────────
-@router.put("/campaigns/{campaign_id}/steps/{step_id}/review")
+@router.put("/test-campaigns/{campaign_id}/steps/{step_id}/review")
 async def review_step(campaign_id: str, step_id: str, data: dict, db: AsyncSession = Depends(get_db)):
     campaign = await _get_campaign(db, campaign_id)
     if not campaign:
@@ -391,7 +391,7 @@ async def review_step(campaign_id: str, step_id: str, data: dict, db: AsyncSessi
     return {"status": "ok"}
 
 
-@router.post("/campaigns/{campaign_id}/complete-review")
+@router.post("/test-campaigns/{campaign_id}/complete-review")
 async def complete_review(campaign_id: str, data: dict, db: AsyncSession = Depends(get_db)):
     campaign = await _get_campaign(db, campaign_id)
     if not campaign:
@@ -451,7 +451,7 @@ async def _remediation_task(db: AsyncSession, title: str, url_path: str, entity_
     created = await create_task({
         "title": title, "description": "You've been assigned a remediation follow-up from a test campaign.",
         "owner_email": owner_email, "owner_name": owner_name,
-        "source": "testing_remediation", "entity_type": entity_type, "entity_id": entity_id,
+        "source": "development_remediation", "entity_type": entity_type, "entity_id": entity_id,
         "created_by_email": created_by_email or owner_email, "acting_email": created_by_email or owner_email,
     }, db)
     await _link_task(db, created["id"], title, f"{FRONTEND_URL}{url_path}", created_by_email or owner_email)
@@ -501,7 +501,7 @@ async def update_remediation_plan(plan_id: str, data: dict, db: AsyncSession = D
 
     new_owner = data.get("owner_email", plan.get("owner_email") or "")
     if new_owner and new_owner != (plan.get("owner_email") or ""):
-        await _remediation_task(db, f"Remediation plan owner: {plan['plan_number']}", f"/testing/remediation-plans/{plan_id}",
+        await _remediation_task(db, f"Remediation plan owner: {plan['plan_number']}", f"/development/remediation-plans/{plan_id}",
                                  "remediation_plan", plan_id, new_owner, data.get("owner_name", ""), data.get("acting_email", ""))
 
     await db.execute(text("""
@@ -526,7 +526,7 @@ async def update_remediation_action(action_id: str, data: dict, db: AsyncSession
         raise HTTPException(status_code=400, detail=f"status must be one of {sorted(REMEDIATION_ACTION_STATUSES)}")
     new_owner = data.get("owner_email", action.get("owner_email") or "")
     if new_owner and new_owner != (action.get("owner_email") or ""):
-        await _remediation_task(db, f"Remediation: {action['title']}", f"/testing/remediation-plans/{action['remediation_plan_id']}",
+        await _remediation_task(db, f"Remediation: {action['title']}", f"/development/remediation-plans/{action['remediation_plan_id']}",
                                  "remediation_action", action_id, new_owner, data.get("owner_name", ""), data.get("acting_email", ""))
 
     await db.execute(text("""

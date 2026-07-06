@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { TestingLayout, useTestingPerm } from '@/components/TestingLayout'
+import DevelopmentLayout, { useDevPerm } from '@/components/DevelopmentLayout'
 import { testingAPI } from '@/lib/api'
 import { getStoredUser } from '@/lib/auth'
 
@@ -111,7 +111,7 @@ function NewCampaignModal({ plans, users, onClose, onCreated }: any) {
 
 function TestCampaignsContent() {
   const router = useRouter()
-  const { level, canEdit } = useTestingPerm('campaigns')
+  const { level, canEdit } = useDevPerm('test_campaigns')
   const [campaigns, setCampaigns] = useState<any[]>([])
   const [plans, setPlans] = useState<any[]>([])
   const [users, setUsers] = useState<any[]>([])
@@ -170,7 +170,7 @@ function TestCampaignsContent() {
             ) : campaigns.length === 0 ? (
               <tr><td colSpan={7} style={{ textAlign: 'center', padding: '48px', color: '#94A3B8' }}>No test campaigns yet.</td></tr>
             ) : campaigns.map((c: any) => (
-              <tr key={c.id} onClick={() => router.push(`/testing/test-campaigns/${c.id}`)} style={{ borderBottom: '1px solid #F1F5F9', cursor: 'pointer' }}
+              <tr key={c.id} onClick={() => router.push(`/development/test-campaigns/${c.id}`)} style={{ borderBottom: '1px solid #F1F5F9', cursor: 'pointer' }}
                 onMouseEnter={e => (e.currentTarget.style.background = '#FAFBFC')} onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
                 <td style={{ padding: '10px 12px', color: '#94A3B8', fontFamily: 'monospace', fontSize: '11px' }}>{c.campaign_number}</td>
                 <td style={{ padding: '10px 12px', fontWeight: '700', color: '#156082' }}>{c.title}</td>
@@ -185,11 +185,11 @@ function TestCampaignsContent() {
         </table>
       </div>
 
-      {showNew && <NewCampaignModal plans={plans} users={users} onClose={() => setShowNew(false)} onCreated={(id: string) => { setShowNew(false); router.push(`/testing/test-campaigns/${id}`) }} />}
+      {showNew && <NewCampaignModal plans={plans} users={users} onClose={() => setShowNew(false)} onCreated={(id: string) => { setShowNew(false); router.push(`/development/test-campaigns/${id}`) }} />}
     </div>
   )
 }
 
 export default function TestCampaignsPage() {
-  return <TestingLayout><TestCampaignsContent /></TestingLayout>
+  return <DevelopmentLayout><TestCampaignsContent /></DevelopmentLayout>
 }

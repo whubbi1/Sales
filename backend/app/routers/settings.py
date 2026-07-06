@@ -35,11 +35,10 @@ MODULES = {
     "helpdesk":     ["tickets", "knowledge", "sla", "admin_cockpit"],
     "admin":        ["users", "permissions", "monitoring", "costs"],
     "legal":        ["entities", "templates", "admin"],
-    "development":  ["general"],
+    "development":  ["general", "test_plans", "test_campaigns", "remediation"],
     "training":     ["manager"],
     "tasks":        ["manager"],
     "marketing":    ["events", "company_website", "competitor_analysis", "social_marketing", "marketing_plan", "marketing_material"],
-    "testing":      ["plans", "campaigns", "remediation"],
 }
 
 LEGAL_ENTITIES = ["all", "france", "portugal", "czech_republic", "romania", "spain"]
@@ -417,11 +416,13 @@ async def check_whubbi_access(email: str, db: AsyncSession = Depends(get_db)):
 
 
 # ─── Company Links (shown on the home page, managed from the IT module) ───────
+COMPANY_LINK_CATEGORIES = ["WCOMPLY Internal Tools", "Partner Portals"]
+
 @router.get("/company-links")
 async def get_company_links(db: AsyncSession = Depends(get_db)):
     try:
         result = await db.execute(text("""
-            SELECT id, label, url, icon, sort_order, location_id, location_name
+            SELECT id, label, url, icon, sort_order, location_id, location_name, category
             FROM company_links WHERE active = true
             ORDER BY sort_order ASC, label ASC
         """))
@@ -436,7 +437,7 @@ async def get_company_links(db: AsyncSession = Depends(get_db)):
 @router.get("/company-links/all")
 async def get_all_company_links(db: AsyncSession = Depends(get_db)):
     result = await db.execute(text("""
-        SELECT id, label, url, icon, active, sort_order, location_id, location_name
+        SELECT id, label, url, icon, active, sort_order, location_id, location_name, category
         FROM company_links ORDER BY sort_order ASC, label ASC
     """))
     links = [dict(r._mapping) for r in result.fetchall()]
@@ -445,17 +446,22 @@ async def get_all_company_links(db: AsyncSession = Depends(get_db)):
         if l.get("location_id"): l["location_id"] = str(l["location_id"])
     return {"links": links}
 
+@router.get("/company-links/meta")
+async def get_company_links_meta():
+    return {"categories": COMPANY_LINK_CATEGORIES}
+
 @router.post("/company-links")
 async def create_company_link(data: dict, db: AsyncSession = Depends(get_db)):
     import uuid
     link_id = str(uuid.uuid4())
     await db.execute(text("""
-        INSERT INTO company_links (id, label, url, icon, active, sort_order, location_id, location_name, created_at)
-        VALUES (CAST(:id AS UUID), :label, :url, :icon, :active, :sort_order, CAST(NULLIF(:location_id,'') AS UUID), :location_name, NOW())
+        INSERT INTO company_links (id, label, url, icon, active, sort_order, location_id, location_name, category, created_at)
+        VALUES (CAST(:id AS UUID), :label, :url, :icon, :active, :sort_order, CAST(NULLIF(:location_id,'') AS UUID), :location_name, :category, NOW())
     """), {"id": link_id, "label": data.get("label",""), "url": data.get("url",""),
            "icon": data.get("icon","🔗"), "active": data.get("active", True),
            "sort_order": data.get("sort_order", 0),
-           "location_id": data.get("location_id",""), "location_name": data.get("location_name") or "All"})
+           "location_id": data.get("location_id",""), "location_name": data.get("location_name") or "All",
+           "category": data.get("category") or None})
     await db.commit()
     return {"status": "ok", "id": link_id}
 
@@ -467,12 +473,14 @@ async def update_company_link(link_id: str, data: dict, db: AsyncSession = Depen
             icon = COALESCE(:icon, icon), active = COALESCE(:active, active),
             sort_order = COALESCE(:sort_order, sort_order),
             location_id = CAST(NULLIF(:location_id,'') AS UUID),
-            location_name = COALESCE(NULLIF(:location_name,''), location_name)
+            location_name = COALESCE(NULLIF(:location_name,''), location_name),
+            category = :category
         WHERE id = CAST(:id AS UUID)
     """), {
         "label": data.get("label"), "url": data.get("url"), "icon": data.get("icon"),
         "active": data.get("active"), "sort_order": data.get("sort_order"),
         "location_id": data.get("location_id",""), "location_name": data.get("location_name",""),
+        "category": data.get("category") or None,
         "id": link_id,
     })
     await db.commit()

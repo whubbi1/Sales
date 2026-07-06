@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import { TestingLayout, useTestingPerm } from '@/components/TestingLayout'
+import DevelopmentLayout, { useDevPerm } from '@/components/DevelopmentLayout'
 import { testingAPI } from '@/lib/api'
 import { getStoredUser } from '@/lib/auth'
 
@@ -63,7 +63,7 @@ function ExecuteWizard({ campaign, onChanged }: any) {
     try {
       const fd = new FormData()
       fd.append('file', file)
-      await fetch(`${API}/testing/campaigns/${campaign.id}/steps/${step.id}/screenshot`, { method: 'POST', body: fd })
+      await fetch(`${API}/development/test-campaigns/${campaign.id}/steps/${step.id}/screenshot`, { method: 'POST', body: fd })
       await onChanged()
     } finally { setUploading(false) }
   }
@@ -186,14 +186,14 @@ function ReviewTable({ campaign, onChanged }: any) {
 function TestCampaignDetailContent() {
   const { id } = useParams()
   const router = useRouter()
-  const { level, canEdit } = useTestingPerm('campaigns')
+  const { level, canEdit } = useDevPerm('test_campaigns')
   const [campaign, setCampaign] = useState<any>(null)
   const [users, setUsers] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
 
   const load = async () => {
     try { setCampaign(await testingAPI.getCampaign(id as string)) }
-    catch { router.push('/testing/test-campaigns') }
+    catch { router.push('/development/test-campaigns') }
     finally { setLoading(false) }
   }
 
@@ -213,7 +213,7 @@ function TestCampaignDetailContent() {
 
   return (
     <div style={{ padding: '24px 28px', maxWidth: '900px' }}>
-      <button onClick={() => router.push('/testing/test-campaigns')} style={{ background: 'none', border: 'none', color: '#45B6E4', fontSize: '12px', fontWeight: '700', cursor: 'pointer', padding: 0, marginBottom: '14px' }}>← Back to Test Campaigns</button>
+      <button onClick={() => router.push('/development/test-campaigns')} style={{ background: 'none', border: 'none', color: '#45B6E4', fontSize: '12px', fontWeight: '700', cursor: 'pointer', padding: 0, marginBottom: '14px' }}>← Back to Test Campaigns</button>
 
       <div style={card}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
@@ -233,7 +233,7 @@ function TestCampaignDetailContent() {
             <div style={lbl}>Included Plans</div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
               {campaign.plans.map((p: any) => (
-                <a key={p.id} href={`/testing/test-plans/${p.id}`} style={{ fontSize: '11px', color: '#156082', background: '#EFF6FF', padding: '3px 9px', borderRadius: '10px', textDecoration: 'none', fontWeight: '600' }}>{p.title}</a>
+                <a key={p.id} href={`/development/test-plans/${p.id}`} style={{ fontSize: '11px', color: '#156082', background: '#EFF6FF', padding: '3px 9px', borderRadius: '10px', textDecoration: 'none', fontWeight: '600' }}>{p.title}</a>
               ))}
             </div>
           </div>
@@ -247,7 +247,7 @@ function TestCampaignDetailContent() {
           <div>
             <p style={{ fontSize: '13px', color: '#059669', fontWeight: '700' }}>✓ Execution and review complete.</p>
             {campaign.remediation_plan ? (
-              <a href={`/testing/remediation-plans/${campaign.remediation_plan.id}`} style={{ display: 'inline-block', ...btn, background: '#156082', color: 'white', textDecoration: 'none' }}>
+              <a href={`/development/remediation-plans/${campaign.remediation_plan.id}`} style={{ display: 'inline-block', ...btn, background: '#156082', color: 'white', textDecoration: 'none' }}>
                 View Remediation Plan ({campaign.remediation_plan.plan_number}) →
               </a>
             ) : (
@@ -275,5 +275,5 @@ function TestCampaignDetailContent() {
 }
 
 export default function TestCampaignDetailPage() {
-  return <TestingLayout><TestCampaignDetailContent /></TestingLayout>
+  return <DevelopmentLayout><TestCampaignDetailContent /></DevelopmentLayout>
 }

@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { TestingLayout, useTestingPerm } from '@/components/TestingLayout'
+import DevelopmentLayout, { useDevPerm } from '@/components/DevelopmentLayout'
 import { testingAPI } from '@/lib/api'
 
 const STATUS_LABEL: Record<string, string> = { new: 'New', open: 'Open', in_progress: 'In Progress', closed: 'Closed' }
@@ -12,7 +12,7 @@ const STATUS_COLOR: Record<string, { bg: string; color: string }> = {
 
 function RemediationPlansContent() {
   const router = useRouter()
-  const { level } = useTestingPerm('remediation')
+  const { level } = useDevPerm('remediation')
   const [plans, setPlans] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -50,7 +50,7 @@ function RemediationPlansContent() {
             ) : plans.length === 0 ? (
               <tr><td colSpan={5} style={{ textAlign: 'center', padding: '48px', color: '#94A3B8' }}>No remediation plans yet.</td></tr>
             ) : plans.map((p: any) => (
-              <tr key={p.id} onClick={() => router.push(`/testing/remediation-plans/${p.id}`)} style={{ borderBottom: '1px solid #F1F5F9', cursor: 'pointer' }}
+              <tr key={p.id} onClick={() => router.push(`/development/remediation-plans/${p.id}`)} style={{ borderBottom: '1px solid #F1F5F9', cursor: 'pointer' }}
                 onMouseEnter={e => (e.currentTarget.style.background = '#FAFBFC')} onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
                 <td style={{ padding: '10px 12px', color: '#94A3B8', fontFamily: 'monospace', fontSize: '11px' }}>{p.plan_number}</td>
                 <td style={{ padding: '10px 12px', fontWeight: '700', color: '#156082' }}>{p.campaign_title}</td>
@@ -67,5 +67,5 @@ function RemediationPlansContent() {
 }
 
 export default function RemediationPlansPage() {
-  return <TestingLayout><RemediationPlansContent /></TestingLayout>
+  return <DevelopmentLayout><RemediationPlansContent /></DevelopmentLayout>
 }

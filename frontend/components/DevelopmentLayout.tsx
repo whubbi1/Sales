@@ -7,15 +7,28 @@ const API = 'https://api.whubbi.wcomply.com'
 
 type PermLevel = 'loading' | 'none' | 'view' | 'edit'
 
-interface DevPermCtx { canEdit: boolean }
-export const DevPermContext = createContext<DevPermCtx>({ canEdit: false })
-export const useDevPerm = () => useContext(DevPermContext)
+type DevPerms = Record<string, { access_mode?: string; id?: string | null }> | null
+export const DevPermContext = createContext<DevPerms>(null)
+
+// submodule defaults to 'general' so existing call sites (`const {canEdit} = useDevPerm()`)
+// keep working unchanged — Test Plans/Campaigns/Remediation pages pass their own submodule key.
+export function useDevPerm(submodule: string = 'general'): { level: PermLevel; canEdit: boolean } {
+  const perms = useContext(DevPermContext)
+  if (perms === null) return { level: 'loading', canEdit: false }
+  const p = perms[submodule]
+  if (!p || p.id == null) return { level: 'edit', canEdit: true }
+  const level = (p.access_mode as PermLevel) || 'none'
+  return { level, canEdit: level === 'edit' }
+}
 
 const NAV_ITEMS = [
-  { href: '/development/requests',       label: 'Development Requests', icon: '📋' },
-  { href: '/development/pipeline',       label: 'Development Pipeline', icon: '🔄' },
-  { href: '/development/test-scripts',   label: 'Test Scripts',         icon: '📝' },
-  { href: '/development/test-execution', label: 'Test Execution',       icon: '▶️' },
+  { href: '/development/requests',          label: 'Development Requests', icon: '📋' },
+  { href: '/development/pipeline',          label: 'Development Pipeline', icon: '🔄' },
+  { href: '/development/test-scripts',      label: 'Test Scripts',         icon: '📝' },
+  { href: '/development/test-execution',    label: 'Test Execution',       icon: '▶️' },
+  { href: '/development/test-plans',        label: 'Test Plans',           icon: '📋' },
+  { href: '/development/test-campaigns',    label: 'Test Campaigns',       icon: '🧪' },
+  { href: '/development/remediation-plans', label: 'Remediation Plans',    icon: '🛠️' },
 ]
 
 export default function DevelopmentLayout({ children }: { children: React.ReactNode }) {
@@ -23,6 +36,7 @@ export default function DevelopmentLayout({ children }: { children: React.ReactN
   const pathname    = usePathname()
   const redirecting = useRef(false)
   const [permLevel, setPermLevel] = useState<PermLevel>('loading')
+  const [devPerms,  setDevPerms]  = useState<DevPerms>(null)
   const [userName,  setUserName]  = useState('')
   const [userEmail, setUserEmail] = useState('')
 
@@ -41,11 +55,13 @@ export default function DevelopmentLayout({ children }: { children: React.ReactN
     fetch(`${API}/settings/permissions/${encodeURIComponent(user.email)}`)
       .then(r => r.json())
       .then(d => {
-        const p = d.permissions?.development?.general
+        const perms = d.permissions?.development || {}
+        setDevPerms(perms)
+        const p = perms.general
         if (!p || p.id === null) { setPermLevel('edit'); return }
         setPermLevel((p.access_mode as PermLevel) || 'none')
       })
-      .catch(() => setPermLevel('edit'))
+      .catch(() => { setDevPerms({}); setPermLevel('edit') })
   }, [])
 
   const handleSignOut = () => { clearStoredUser(); router.push('/auth/login') }
@@ -121,7 +137,7 @@ export default function DevelopmentLayout({ children }: { children: React.ReactN
   )
 
   return (
-    <DevPermContext.Provider value={{ canEdit: permLevel === 'edit' }}>
+    <DevPermContext.Provider value={devPerms}>
       <div style={{ display: 'flex', minHeight: '100vh', fontFamily: 'Montserrat, sans-serif' }}>
         {sidebar}
         <main style={{ marginLeft: '220px', flex: 1, minHeight: '100vh', background: '#F5F7FA' }}>

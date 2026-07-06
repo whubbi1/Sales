@@ -56,6 +56,7 @@ async def startup():
                 )""",
                 "ALTER TABLE company_links ADD COLUMN IF NOT EXISTS location_id UUID",
                 "ALTER TABLE company_links ADD COLUMN IF NOT EXISTS location_name VARCHAR(255) DEFAULT 'All'",
+                "ALTER TABLE company_links ADD COLUMN IF NOT EXISTS category VARCHAR(100)",
 
                 # Helpdesk migrations
                 """CREATE TABLE IF NOT EXISTS helpdesk_groups (
@@ -648,6 +649,38 @@ async def startup():
                     created_at TIMESTAMP DEFAULT NOW(),
                     updated_at TIMESTAMP DEFAULT NOW()
                 )""",
+                # Use: Demo / Production / Development
+                "ALTER TABLE it_applications ADD COLUMN IF NOT EXISTS use VARCHAR(20)",
+
+                # Environments (definition/hosting/name/url) replace the single app_link field
+                """CREATE TABLE IF NOT EXISTS it_application_environments (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    application_id UUID NOT NULL REFERENCES it_applications(id) ON DELETE CASCADE,
+                    definition VARCHAR(20),
+                    hosting_name VARCHAR(20),
+                    name VARCHAR(255),
+                    url TEXT,
+                    created_at TIMESTAMP DEFAULT NOW(),
+                    updated_at TIMESTAMP DEFAULT NOW()
+                )""",
+
+                # Links — free-form documents/resources attached to an application, each with a description
+                """CREATE TABLE IF NOT EXISTS it_application_links (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    application_id UUID NOT NULL REFERENCES it_applications(id) ON DELETE CASCADE,
+                    url TEXT NOT NULL,
+                    description TEXT,
+                    created_at TIMESTAMP DEFAULT NOW(),
+                    updated_at TIMESTAMP DEFAULT NOW()
+                )""",
+                # app_link is no longer set/read at the application level (superseded by
+                # environments + links) — preserve any pre-existing value as a Link once, rather
+                # than silently discarding it. Guarded so it only fires before any real link exists.
+                """INSERT INTO it_application_links (id, application_id, url, description, created_at, updated_at)
+                   SELECT gen_random_uuid(), a.id, a.app_link, 'Migrated from application link', NOW(), NOW()
+                   FROM it_applications a
+                   WHERE COALESCE(a.app_link, '') != ''
+                     AND NOT EXISTS (SELECT 1 FROM it_application_links l WHERE l.application_id = a.id)""",
 
                 # IT module — per-user saved report views (shared by equipment/software/application reports)
                 """CREATE TABLE IF NOT EXISTS it_report_views (
@@ -998,7 +1031,7 @@ async def startup():
                 "ALTER TABLE hr_checklist_cases ADD COLUMN IF NOT EXISTS responsible_email VARCHAR(255)",
                 "ALTER TABLE hr_checklist_cases ADD COLUMN IF NOT EXISTS responsible_name VARCHAR(255)",
 
-                # Testing module — application submodules (IT prerequisite)
+                # Development module (Testing) — application submodules (IT prerequisite)
                 """CREATE TABLE IF NOT EXISTS it_application_submodules (
                     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                     application_id UUID NOT NULL REFERENCES it_applications(id) ON DELETE CASCADE,
@@ -1008,7 +1041,7 @@ async def startup():
                     updated_at TIMESTAMP DEFAULT NOW()
                 )""",
 
-                # Testing module — plans, scripts, campaigns, execution, review, remediation
+                # Development module (Testing) — plans, scripts, campaigns, execution, review, remediation
                 """CREATE TABLE IF NOT EXISTS test_plans (
                     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                     plan_number VARCHAR(30) UNIQUE,
@@ -1020,7 +1053,10 @@ async def startup():
                     created_at TIMESTAMP DEFAULT NOW(),
                     updated_at TIMESTAMP DEFAULT NOW()
                 )""",
-                """CREATE TABLE IF NOT EXISTS test_scripts (
+                # Named test_plan_scripts (not test_scripts) to avoid colliding with Development's
+                # own pre-existing test_scripts table (different shape — a flat script tied to a
+                # pipeline/request, vs. an ordered step tied to a test plan).
+                """CREATE TABLE IF NOT EXISTS test_plan_scripts (
                     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                     script_number VARCHAR(30) UNIQUE,
                     plan_id UUID NOT NULL REFERENCES test_plans(id) ON DELETE CASCADE,
@@ -1055,7 +1091,7 @@ async def startup():
                     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                     campaign_id UUID NOT NULL REFERENCES test_campaigns(id) ON DELETE CASCADE,
                     plan_id UUID REFERENCES test_plans(id) ON DELETE SET NULL,
-                    script_id UUID REFERENCES test_scripts(id) ON DELETE SET NULL,
+                    script_id UUID REFERENCES test_plan_scripts(id) ON DELETE SET NULL,
                     position INTEGER DEFAULT 0,
                     title VARCHAR(500) NOT NULL,
                     details TEXT,
@@ -1071,6 +1107,24 @@ async def startup():
                     created_at TIMESTAMP DEFAULT NOW(),
                     updated_at TIMESTAMP DEFAULT NOW()
                 )""",
+                # test_campaign_steps.script_id used to point at Development's test_scripts table
+                # (a naming collision with what should have been a separate table) before it was
+                # split out as test_plan_scripts above — repoint the FK on any DB where it's stale.
+                # Looked up dynamically rather than assuming Postgres's auto-generated constraint
+                # name, and safe to re-run: a fresh install's CREATE TABLE already has it right, so
+                # the DROP loop finds nothing and the ADD hits the harmless duplicate_object case.
+                """DO $$
+                DECLARE r RECORD;
+                BEGIN
+                    FOR r IN SELECT conname FROM pg_constraint
+                             WHERE conrelid = 'test_campaign_steps'::regclass
+                               AND confrelid = 'test_scripts'::regclass AND contype = 'f'
+                    LOOP EXECUTE format('ALTER TABLE test_campaign_steps DROP CONSTRAINT %I', r.conname); END LOOP;
+                END $$""",
+                """DO $$ BEGIN
+                    ALTER TABLE test_campaign_steps ADD CONSTRAINT test_campaign_steps_script_id_fkey
+                        FOREIGN KEY (script_id) REFERENCES test_plan_scripts(id) ON DELETE SET NULL;
+                EXCEPTION WHEN duplicate_object THEN NULL; END $$""",
                 """CREATE TABLE IF NOT EXISTS remediation_plans (
                     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                     plan_number VARCHAR(30) UNIQUE,
@@ -1177,7 +1231,6 @@ _include("app.routers.opportunities",  "/opportunities","Opportunities")
 _include("app.routers.tasks",          "/tasks",        "Tasks")
 _include("app.routers.partners",       "/partners",     "Partners")
 _include("app.routers.marketing",      "/marketing",    "Marketing")
-_include("app.routers.testing",        "/testing",      "Testing")
 _include("app.routers.admin",          "/admin",        "Admin")
 _include("app.routers.admin_ops",      "/admin",        "AdminOps")
 _include("app.routers.microsoft",      "/microsoft",    "Microsoft")
@@ -1193,6 +1246,7 @@ _include("app.routers.helpdesk_teams", "/helpdesk",     "Teams")
 _include("app.routers.admin_audit",    "/admin",        "Audit")
 _include("app.routers.legal",          "/legal",        "Legal")
 _include("app.routers.development",    "/development",  "Development")
+_include("app.routers.testing",        "/development",  "Testing")
 _include("app.routers.it",             "/it",           "IT")
 _include("app.routers.cv",             "/cv",           "CV")
 _include("app.routers.training",       "/training",     "Training")

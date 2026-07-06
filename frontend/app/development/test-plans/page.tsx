@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { TestingLayout, useTestingPerm } from '@/components/TestingLayout'
+import DevelopmentLayout, { useDevPerm } from '@/components/DevelopmentLayout'
 import { testingAPI } from '@/lib/api'
 import { getStoredUser } from '@/lib/auth'
 
@@ -93,7 +93,7 @@ function NewPlanModal({ applications, onClose, onCreated }: any) {
 
 function TestPlansContent() {
   const router = useRouter()
-  const { level, canEdit } = useTestingPerm('plans')
+  const { level, canEdit } = useDevPerm('test_plans')
   const [plans, setPlans] = useState<any[]>([])
   const [applications, setApplications] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
@@ -157,7 +157,7 @@ function TestPlansContent() {
             ) : filtered.length === 0 ? (
               <tr><td colSpan={5} style={{ textAlign: 'center', padding: '48px', color: '#94A3B8' }}>No test plans yet.</td></tr>
             ) : filtered.map((p: any) => (
-              <tr key={p.id} onClick={() => router.push(`/testing/test-plans/${p.id}`)} style={{ borderBottom: '1px solid #F1F5F9', cursor: 'pointer' }}
+              <tr key={p.id} onClick={() => router.push(`/development/test-plans/${p.id}`)} style={{ borderBottom: '1px solid #F1F5F9', cursor: 'pointer' }}
                 onMouseEnter={e => (e.currentTarget.style.background = '#FAFBFC')} onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
                 <td style={{ padding: '10px 12px', color: '#94A3B8', fontFamily: 'monospace', fontSize: '11px' }}>{p.plan_number}</td>
                 <td style={{ padding: '10px 12px', fontWeight: '700', color: '#156082' }}>{p.title}</td>
@@ -170,11 +170,11 @@ function TestPlansContent() {
         </table>
       </div>
 
-      {showNew && <NewPlanModal applications={applications} onClose={() => setShowNew(false)} onCreated={(id: string) => { setShowNew(false); router.push(`/testing/test-plans/${id}`) }} />}
+      {showNew && <NewPlanModal applications={applications} onClose={() => setShowNew(false)} onCreated={(id: string) => { setShowNew(false); router.push(`/development/test-plans/${id}`) }} />}
     </div>
   )
 }
 
 export default function TestPlansPage() {
-  return <TestingLayout><TestPlansContent /></TestingLayout>
+  return <DevelopmentLayout><TestPlansContent /></DevelopmentLayout>
 }

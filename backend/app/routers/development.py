@@ -319,7 +319,7 @@ async def update_pipeline(pid: str, data: dict, db: AsyncSession = Depends(get_d
 @router.delete("/pipelines/{pid}")
 async def delete_pipeline(pid: str, db: AsyncSession = Depends(get_db)):
     await db.execute(
-        text("UPDATE development_requests SET pipeline_id = NULL WHERE pipeline_id = CAST(:id AS UUID)"),
+        text("UPDATE tickets SET dev_pipeline_id = NULL WHERE dev_pipeline_id = CAST(:id AS UUID) AND ticket_type = 'development_request'"),
         {"id": pid}
     )
     await db.execute(
@@ -350,10 +350,10 @@ async def list_test_scripts(
                dp.name AS pipeline_name,
                dp.pipeline_code,
                dr.title AS request_title,
-               dr.request_number
+               dr.ticket_number AS request_number
         FROM test_scripts ts
         LEFT JOIN development_pipelines dp ON ts.pipeline_id = dp.id
-        LEFT JOIN development_requests  dr ON ts.request_id  = dr.id
+        LEFT JOIN tickets dr ON ts.request_id = dr.id AND dr.ticket_type = 'development_request'
         WHERE {' AND '.join(where)}
         ORDER BY ts.created_at DESC
     """), params)

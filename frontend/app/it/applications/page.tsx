@@ -3,9 +3,13 @@ import { useState, useEffect } from 'react'
 import ITLayout, { useITPerm } from '@/components/ITLayout'
 import { useReportBuilder, applyReport, ReportPanel, ReportColumn } from '@/components/it/ReportBuilder'
 import { ApplicationSubmodulesModal } from '@/components/it/ApplicationSubmodulesModal'
+import { ApplicationEnvironmentsModal } from '@/components/it/ApplicationEnvironmentsModal'
+import { ApplicationLinksModal } from '@/components/it/ApplicationLinksModal'
 import { getStoredUser } from '@/lib/auth'
 
 const API = 'https://api.whubbi.wcomply.com'
+
+const USE_OPTIONS = ['Demo', 'Production', 'Development']
 
 const inp: React.CSSProperties = {
   fontSize: '12px', padding: '7px 11px', border: '1px solid #E2E8F0',
@@ -16,13 +20,13 @@ const lbl: React.CSSProperties = {
   marginBottom: '4px', textTransform: 'uppercase' as const, letterSpacing: '0.05em',
 }
 
-const EMPTY_FORM = { name: '', editor: '', version: '', app_link: '', owner_email: '', owner_name: '', all_locations: true, location_ids: [] as string[], location_names: [] as string[] }
+const EMPTY_FORM = { name: '', editor: '', version: '', use: '', owner_email: '', owner_name: '', all_locations: true, location_ids: [] as string[], location_names: [] as string[] }
 
 const COLUMNS: ReportColumn[] = [
   { key: 'name', label: 'Application Name', filterable: 'text' },
   { key: 'editor', label: 'Editor', filterable: 'text' },
   { key: 'version', label: 'Version', filterable: 'text' },
-  { key: 'app_link', label: 'Link' },
+  { key: 'use', label: 'Use', filterable: 'select', options: USE_OPTIONS },
   { key: 'owner_name', label: 'Owner', filterable: 'text' },
   { key: 'locations_display', label: 'Locations', filterable: 'text' },
 ]
@@ -117,8 +121,11 @@ function NewApplicationModal({ users, locations, initial, title, submitLabel, on
             </div>
           </div>
           <div>
-            <label style={lbl}>Link to the Application</label>
-            <input style={{ ...inp, width: '100%', boxSizing: 'border-box' as const }} placeholder="https://…" value={form.app_link} onChange={e => setForm((f: any) => ({ ...f, app_link: e.target.value }))} />
+            <label style={lbl}>Use</label>
+            <select style={{ ...inp, width: '100%' }} value={form.use} onChange={e => setForm((f: any) => ({ ...f, use: e.target.value }))}>
+              <option value="">Select…</option>
+              {USE_OPTIONS.map(u => <option key={u} value={u}>{u}</option>)}
+            </select>
           </div>
           <div>
             <label style={lbl}>Owner of the Application</label>
@@ -214,6 +221,8 @@ function ApplicationsContent() {
   const [showNew, setShowNew] = useState(false)
   const [editItem, setEditItem] = useState<any | null>(null)
   const [submodulesItem, setSubmodulesItem] = useState<any | null>(null)
+  const [environmentsItem, setEnvironmentsItem] = useState<any | null>(null)
+  const [linksItem, setLinksItem] = useState<any | null>(null)
   const [editing, setEditing] = useState<{ id: string; field: string } | null>(null)
   const [search, setSearch] = useState('')
   const [userEmail, setUserEmail] = useState('')
@@ -250,7 +259,7 @@ function ApplicationsContent() {
     await fetch(`${API}/it/applications/${item.id}`, {
       method: 'PUT', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        name: item.name, editor: item.editor, version: item.version, app_link: item.app_link,
+        name: item.name, editor: item.editor, version: item.version, use: item.use,
         owner_email: item.owner_email, owner_name: item.owner_name,
         all_locations: item.all_locations, location_ids: item.location_ids, location_names: item.location_names,
         ...fields,
@@ -331,12 +340,21 @@ function ApplicationsContent() {
                     </EditableCell>
                   </td>
                 )}
-                {isVisible('app_link') && (
-                  <td style={{ padding: '10px 12px', minWidth: '160px' }}>
-                    <EditableCell display={item.app_link ? <a href={item.app_link} target="_blank" rel="noopener noreferrer" style={{ color: '#3B82F6' }} onClick={e => e.stopPropagation()}>🔗 Link</a> : null}
-                      editing={isEditing(item.id, 'app_link')} onStartEdit={() => toggleEdit(item.id, 'app_link')}>
-                      <input autoFocus style={inp} defaultValue={item.app_link} onBlur={e => patchItem(item, { app_link: e.target.value })} onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }} />
-                    </EditableCell>
+                {isVisible('use') && (
+                  <td style={{ padding: '10px 12px', minWidth: '130px' }}>
+                    {isEditing(item.id, 'use') ? (
+                      <select autoFocus style={inp} defaultValue={item.use || ''} onChange={e => patchItem(item, { use: e.target.value })} onBlur={() => setEditing(null)}>
+                        <option value="">Select…</option>
+                        {USE_OPTIONS.map(u => <option key={u} value={u}>{u}</option>)}
+                      </select>
+                    ) : (
+                      <div onClick={() => toggleEdit(item.id, 'use')} title="Click to edit"
+                        style={{ cursor: 'pointer', padding: '4px 6px', margin: '-4px -6px', borderRadius: '5px', minHeight: '18px' }}
+                        onMouseEnter={e => (e.currentTarget.style.background = '#F1F5F9')}
+                        onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
+                        {item.use ? <span style={{ background: '#EEF2FF', color: '#4F46E5', padding: '2px 9px', borderRadius: '10px', fontSize: '10px', fontWeight: '700' }}>{item.use}</span> : <span style={{ color: '#94A3B8' }}>—</span>}
+                      </div>
+                    )}
                   </td>
                 )}
                 {isVisible('owner_name') && (
@@ -353,6 +371,8 @@ function ApplicationsContent() {
                 )}
                 <td style={{ padding: '10px 12px', whiteSpace: 'nowrap' }}>
                   <button onClick={() => setSubmodulesItem(item)} style={{ padding: '5px 10px', marginRight: '6px', background: '#F5F3FF', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '11px', color: '#7C3AED', fontWeight: '700', fontFamily: 'Montserrat, sans-serif' }}>Submodules</button>
+                  <button onClick={() => setEnvironmentsItem(item)} style={{ padding: '5px 10px', marginRight: '6px', background: '#ECFDF5', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '11px', color: '#059669', fontWeight: '700', fontFamily: 'Montserrat, sans-serif' }}>Environments</button>
+                  <button onClick={() => setLinksItem(item)} style={{ padding: '5px 10px', marginRight: '6px', background: '#EFF6FF', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '11px', color: '#3B82F6', fontWeight: '700', fontFamily: 'Montserrat, sans-serif' }}>Links</button>
                   {canEdit && (
                     <>
                       <button onClick={() => setEditItem(item)} style={{ padding: '5px 10px', marginRight: '6px', background: '#EFF6FF', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '11px', color: '#156082', fontWeight: '700', fontFamily: 'Montserrat, sans-serif' }}>Edit</button>
@@ -373,6 +393,12 @@ function ApplicationsContent() {
       )}
       {submodulesItem && (
         <ApplicationSubmodulesModal application={submodulesItem} canEdit={canEdit} onClose={() => setSubmodulesItem(null)} />
+      )}
+      {environmentsItem && (
+        <ApplicationEnvironmentsModal application={environmentsItem} canEdit={canEdit} onClose={() => setEnvironmentsItem(null)} />
+      )}
+      {linksItem && (
+        <ApplicationLinksModal application={linksItem} canEdit={canEdit} onClose={() => setLinksItem(null)} />
       )}
     </div>
   )

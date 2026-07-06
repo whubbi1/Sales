@@ -11,7 +11,6 @@ const MODULES = [
   { id:'task-manager', title:'Task Manager',    description:'Cross-module workflow tasks, subtasks, delegation and Teams-connected updates.',      icon:'✅', href:'/task-manager', color:'#219BD6', available:true  },
   { id:'sales',    title:'Sales',            description:'Manage companies, contacts, opportunities and partners. Track your commercial pipeline.',   icon:'💼', href:'/dashboard', color:'#156082', available:true  },
   { id:'marketing', title:'Marketing',       description:'Events, company website, competitor analysis, social marketing and marketing plans.', icon:'📣', href:'/marketing/events', color:'#e97132', available:true  },
-  { id:'testing',  title:'Testing',          description:'Test plans, campaigns, execution, review and remediation tracking.', icon:'🧪', href:'/testing/test-plans', color:'#7C3AED', available:true  },
   { id:'finance',  title:'Finance',           description:'Financial management, invoicing, budgets and cash flow monitoring.',              icon:'💰', href:'/finance',   color:'#e97132', available:false },
   { id:'legal',       title:'Legal',            description:'Legal entities, template documents and compliance. Manage WCOMPLY legal structure.', icon:'⚖️', href:'/legal',        color:'#1a2744', available:true  },
   { id:'rh',       title:'Human Resources',   description:'Manage employees, contracts, onboarding and HR processes.',                       icon:'👥', href:'/rh',        color:'#45B6E4', available:true  },
@@ -19,12 +18,12 @@ const MODULES = [
   { id:'it',       title:'IT',                description:'IT asset management, incidents, access control and infrastructure monitoring.',    icon:'🖥️', href:'/it',        color:'#45B6E4', available:true  },
   { id:'training',    title:'Training',         description:'Training catalogue, function-based plans, assignments and completion follow-up.',    icon:'🎓', href:'/training',    color:'#7C3AED', available:true  },
   { id:'helpdesk',    title:'Helpdesk',          description:'Support tickets, incident tracking and knowledge base management.',               icon:'🎧', href:'/helpdesk',     color:'#45B6E4', available:true  },
-  { id:'development', title:'Development',      description:'Development requests, pipelines, test scripts and test execution tracking.',        icon:'💻', href:'/development', color:'#156082', available:true  },
+  { id:'development', title:'Development',      description:'Development requests, pipelines, test plans, campaigns, execution and remediation tracking.', icon:'💻', href:'/development', color:'#156082', available:true  },
   { id:'admin',    title:'Admin Cockpit',     description:'Service health, cost tracking, error logs and system administration.',             icon:'🔧', href:'/admin',     color:'#45B6E4', available:true  },
 ]
 const DEFAULT_ORDER = MODULES.map(m => m.id)
 
-interface CompanyLink { id: string; label: string; url: string; icon: string; location_id: string | null; location_name: string }
+interface CompanyLink { id: string; label: string; url: string; icon: string; location_id: string | null; location_name: string; category: string | null }
 
 export default function HomePage() {
   const router = useRouter()
@@ -74,6 +73,11 @@ export default function HomePage() {
 
   const orderedModules = order.map(id => MODULES.find(m => m.id === id)).filter((m): m is typeof MODULES[number] => !!m)
 
+  const LINK_CATEGORY_ORDER = ['WCOMPLY Internal Tools', 'Partner Portals', 'Other']
+  const linkGroups = LINK_CATEGORY_ORDER
+    .map(category => ({ category, links: companyLinks.filter(l => (l.category || 'Other') === category) }))
+    .filter(g => g.links.length > 0)
+
   const reorder = (overId: string) => {
     if (!dragId || dragId === overId) return
     setOrder(prev => {
@@ -122,15 +126,20 @@ export default function HomePage() {
           <div style={{ padding:'8px' }}>
             {companyLinks.length === 0 ? (
               <div style={{ padding:'16px 12px', fontSize:'11px', color:'#94A3B8', textAlign:'center' as const }}>No links available.</div>
-            ) : companyLinks.map(link => (
-              <a key={link.id} href={link.url} target="_blank" rel="noopener noreferrer"
-                style={{ display:'flex', alignItems:'center', gap:'10px', padding:'9px 12px', borderRadius:'8px', textDecoration:'none', color:'#3F3F3F', fontSize:'12px', fontWeight:'600', transition:'background 0.12s' }}
-                onMouseEnter={e => e.currentTarget.style.background='#F0F7FF'}
-                onMouseLeave={e => e.currentTarget.style.background='transparent'}>
-                <span style={{ fontSize:'16px' }}>{link.icon || '🔗'}</span>
-                <span style={{ flex:1, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{link.label}</span>
-                <svg width="10" height="10" fill="none" viewBox="0 0 24 24" stroke="#45B6E4" strokeWidth={2.5}><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
-              </a>
+            ) : linkGroups.map((group, gi) => (
+              <div key={group.category} style={{ marginTop: gi > 0 ? '10px' : 0 }}>
+                <div style={{ padding:'8px 12px 4px', fontSize:'9px', fontWeight:'800', textTransform:'uppercase' as const, letterSpacing:'0.06em', color:'#9B9B9B' }}>{group.category}</div>
+                {group.links.map(link => (
+                  <a key={link.id} href={link.url} target="_blank" rel="noopener noreferrer"
+                    style={{ display:'flex', alignItems:'center', gap:'10px', padding:'9px 12px', borderRadius:'8px', textDecoration:'none', color:'#3F3F3F', fontSize:'12px', fontWeight:'600', transition:'background 0.12s' }}
+                    onMouseEnter={e => e.currentTarget.style.background='#F0F7FF'}
+                    onMouseLeave={e => e.currentTarget.style.background='transparent'}>
+                    <span style={{ fontSize:'16px' }}>{link.icon || '🔗'}</span>
+                    <span style={{ flex:1, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{link.label}</span>
+                    <svg width="10" height="10" fill="none" viewBox="0 0 24 24" stroke="#45B6E4" strokeWidth={2.5}><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                  </a>
+                ))}
+              </div>
             ))}
           </div>
         </div>

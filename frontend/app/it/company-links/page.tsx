@@ -13,7 +13,9 @@ const lbl: React.CSSProperties = {
   marginBottom: '4px', textTransform: 'uppercase' as const, letterSpacing: '0.05em',
 }
 
-const EMPTY_FORM = { label: '', url: '', icon: '🔗', active: true, sort_order: 0, location_id: '', location_name: 'All' }
+const CATEGORIES = ['WCOMPLY Internal Tools', 'Partner Portals']
+
+const EMPTY_FORM = { label: '', url: '', icon: '🔗', active: true, sort_order: 0, location_id: '', location_name: 'All', category: '' }
 
 function EditableCell({ display, editing, onStartEdit, children }: any) {
   return editing ? children : (
@@ -71,6 +73,13 @@ function NewLinkModal({ locations, onClose, onSave }: any) {
             <select style={{ ...inp, width: '100%' }} value={form.location_id} onChange={e => handleLocationChange(e.target.value)}>
               <option value="">All</option>
               {locations.map((l: any) => <option key={l.id} value={l.id}>{l.location_name}</option>)}
+            </select>
+          </div>
+          <div>
+            <label style={lbl}>Category</label>
+            <select style={{ ...inp, width: '100%' }} value={form.category} onChange={e => setForm((f: any) => ({ ...f, category: e.target.value }))}>
+              <option value="">Uncategorized</option>
+              {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
             </select>
           </div>
           <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
@@ -141,7 +150,7 @@ function CompanyLinksContent() {
   const patchItem = async (item: any, fields: any) => {
     await fetch(`${API}/settings/company-links/${item.id}`, {
       method: 'PUT', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ label: item.label, url: item.url, icon: item.icon, active: item.active, sort_order: item.sort_order, location_id: item.location_id, location_name: item.location_name, ...fields }),
+      body: JSON.stringify({ label: item.label, url: item.url, icon: item.icon, active: item.active, sort_order: item.sort_order, location_id: item.location_id, location_name: item.location_name, category: item.category, ...fields }),
     })
     setEditing(null)
     load()
@@ -172,16 +181,16 @@ function CompanyLinksContent() {
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
           <thead style={{ background: '#FAFBFC' }}>
             <tr>
-              {['Icon', 'Label', 'URL', 'Location', 'Active', canEdit ? '' : null].filter(x => x !== null).map(h => (
+              {['Icon', 'Label', 'URL', 'Category', 'Location', 'Active', canEdit ? '' : null].filter(x => x !== null).map(h => (
                 <th key={h as string} style={{ padding: '10px 12px', textAlign: 'left', fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#45B6E4', borderBottom: '1px solid #EDF2F7', whiteSpace: 'nowrap' }}>{h}</th>
               ))}
             </tr>
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={6} style={{ textAlign: 'center', padding: '48px', color: '#45B6E4' }}>Loading…</td></tr>
+              <tr><td colSpan={7} style={{ textAlign: 'center', padding: '48px', color: '#45B6E4' }}>Loading…</td></tr>
             ) : links.length === 0 ? (
-              <tr><td colSpan={6} style={{ textAlign: 'center', padding: '48px', color: '#94A3B8' }}>No company links yet.</td></tr>
+              <tr><td colSpan={7} style={{ textAlign: 'center', padding: '48px', color: '#94A3B8' }}>No company links yet.</td></tr>
             ) : links.map(item => (
               <tr key={item.id} style={{ borderBottom: '1px solid #F1F5F9' }}>
                 <td style={{ padding: '10px 12px', minWidth: '60px', fontSize: '16px' }}>
@@ -199,6 +208,21 @@ function CompanyLinksContent() {
                     editing={isEditing(item.id, 'url')} onStartEdit={() => toggleEdit(item.id, 'url')}>
                     <input autoFocus style={{ ...inp, width: '220px' }} defaultValue={item.url} onBlur={e => patchItem(item, { url: e.target.value })} onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }} />
                   </EditableCell>
+                </td>
+                <td style={{ padding: '10px 12px', minWidth: '150px' }}>
+                  {isEditing(item.id, 'category') ? (
+                    <select autoFocus style={inp} defaultValue={item.category || ''} onChange={e => patchItem(item, { category: e.target.value || null })} onBlur={() => setEditing(null)}>
+                      <option value="">Uncategorized</option>
+                      {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                    </select>
+                  ) : (
+                    <div onClick={() => toggleEdit(item.id, 'category')} title="Click to edit"
+                      style={{ cursor: canEdit ? 'pointer' : 'default', padding: '4px 6px', margin: '-4px -6px', borderRadius: '5px', minHeight: '18px' }}
+                      onMouseEnter={e => (e.currentTarget.style.background = '#F1F5F9')}
+                      onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
+                      {item.category ? <span style={{ background: '#F5F3FF', color: '#7C3AED', padding: '2px 9px', borderRadius: '10px', fontSize: '10px', fontWeight: '700' }}>{item.category}</span> : <span style={{ color: '#94A3B8' }}>Uncategorized</span>}
+                    </div>
+                  )}
                 </td>
                 <td style={{ padding: '10px 12px', minWidth: '120px' }}>
                   <EditableLocation item={item} locations={locations} editing={isEditing(item.id, 'location')}

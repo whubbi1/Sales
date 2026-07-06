@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import { TestingLayout, useTestingPerm } from '@/components/TestingLayout'
+import DevelopmentLayout, { useDevPerm } from '@/components/DevelopmentLayout'
 import { testingAPI } from '@/lib/api'
 import { getStoredUser } from '@/lib/auth'
 
@@ -74,14 +74,14 @@ function ActionRow({ action, users, onChanged }: any) {
 function RemediationPlanDetailContent() {
   const { id } = useParams()
   const router = useRouter()
-  const { level } = useTestingPerm('remediation')
+  const { level } = useDevPerm('remediation')
   const [plan, setPlan] = useState<any>(null)
   const [users, setUsers] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
 
   const load = async () => {
     try { setPlan(await testingAPI.getRemediationPlan(id as string)) }
-    catch { router.push('/testing/remediation-plans') }
+    catch { router.push('/development/remediation-plans') }
     finally { setLoading(false) }
   }
 
@@ -107,14 +107,14 @@ function RemediationPlanDetailContent() {
 
   return (
     <div style={{ padding: '24px 28px', maxWidth: '900px' }}>
-      <button onClick={() => router.push('/testing/remediation-plans')} style={{ background: 'none', border: 'none', color: '#45B6E4', fontSize: '12px', fontWeight: '700', cursor: 'pointer', padding: 0, marginBottom: '14px' }}>← Back to Remediation Plans</button>
+      <button onClick={() => router.push('/development/remediation-plans')} style={{ background: 'none', border: 'none', color: '#45B6E4', fontSize: '12px', fontWeight: '700', cursor: 'pointer', padding: 0, marginBottom: '14px' }}>← Back to Remediation Plans</button>
 
       <div style={card}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
           <div>
             <span style={{ color: '#94A3B8', fontFamily: 'monospace', fontSize: '11px', fontWeight: '700' }}>{plan.plan_number}</span>
             <h1 style={{ fontSize: '19px', fontWeight: '800', color: '#156082', margin: '4px 0 6px' }}>Remediation for {plan.campaign_title}</h1>
-            <a href={`/testing/test-campaigns/${plan.campaign_id}`} style={{ fontSize: '11px', color: '#156082' }}>View source campaign ({plan.campaign_number}) →</a>
+            <a href={`/development/test-campaigns/${plan.campaign_id}`} style={{ fontSize: '11px', color: '#156082' }}>View source campaign ({plan.campaign_number}) →</a>
           </div>
           <span style={{ background: PLAN_STATUS_COLOR[plan.status]?.bg, color: PLAN_STATUS_COLOR[plan.status]?.color, padding: '4px 12px', borderRadius: '10px', fontSize: '11px', fontWeight: '700' }}>{PLAN_STATUS_LABEL[plan.status]}</span>
         </div>
@@ -141,5 +141,5 @@ function RemediationPlanDetailContent() {
 }
 
 export default function RemediationPlanDetailPage() {
-  return <TestingLayout><RemediationPlanDetailContent /></TestingLayout>
+  return <DevelopmentLayout><RemediationPlanDetailContent /></DevelopmentLayout>
 }

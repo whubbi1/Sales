@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
 from app.database import get_db
@@ -232,17 +232,17 @@ async def create_application(data: dict, db: AsyncSession = Depends(get_db)):
         all_locations = not data.get("location_ids")
     await db.execute(text("""
         INSERT INTO it_applications
-            (id, name, editor, version, app_link, owner_email, owner_name,
+            (id, name, editor, version, use, owner_email, owner_name,
              all_locations, location_ids, location_names, created_at, updated_at)
         VALUES
-            (CAST(:id AS UUID), :name, :editor, :version, :app_link, :owner_email, :owner_name,
+            (CAST(:id AS UUID), :name, :editor, :version, :use, :owner_email, :owner_name,
              :all_locations, CAST(:location_ids AS JSONB), CAST(:location_names AS JSONB), NOW(), NOW())
     """), {
         "id": aid,
         "name": data.get("name", ""),
         "editor": data.get("editor", ""),
         "version": data.get("version", ""),
-        "app_link": data.get("app_link", ""),
+        "use": data.get("use") or "",
         "owner_email": data.get("owner_email", ""),
         "owner_name": data.get("owner_name", ""),
         "all_locations": bool(all_locations),
@@ -262,7 +262,7 @@ async def update_application(aid: str, data: dict, db: AsyncSession = Depends(ge
             name           = COALESCE(NULLIF(:name,''), name),
             editor         = :editor,
             version        = :version,
-            app_link       = :app_link,
+            use            = :use,
             owner_email    = :owner_email,
             owner_name     = :owner_name,
             all_locations  = :all_locations,
@@ -275,7 +275,7 @@ async def update_application(aid: str, data: dict, db: AsyncSession = Depends(ge
         "name": data.get("name", ""),
         "editor": data.get("editor", ""),
         "version": data.get("version", ""),
-        "app_link": data.get("app_link", ""),
+        "use": data.get("use", ""),
         "owner_email": data.get("owner_email", ""),
         "owner_name": data.get("owner_name", ""),
         "all_locations": bool(all_locations),
@@ -291,7 +291,7 @@ async def delete_application(aid: str, db: AsyncSession = Depends(get_db)):
     await db.commit()
     return {"status": "ok"}
 
-# ─── Application submodules (used by the Testing module to scope a test plan) ──
+# ─── Application submodules (used by the Development module to scope a test plan) ──
 @router.get("/applications/{aid}/submodules")
 async def list_application_submodules(aid: str, db: AsyncSession = Depends(get_db)):
     r = await db.execute(text("""
@@ -326,6 +326,88 @@ async def delete_application_submodule(aid: str, sid: str, db: AsyncSession = De
     await db.execute(text("""
         DELETE FROM it_application_submodules WHERE id = CAST(:id AS UUID) AND application_id = CAST(:aid AS UUID)
     """), {"id": sid, "aid": aid})
+    await db.commit()
+    return {"status": "ok"}
+
+# ─── Application environments (Definition/Hosting/Name/URL) ───────────────────
+@router.get("/applications/{aid}/environments")
+async def list_application_environments(aid: str, db: AsyncSession = Depends(get_db)):
+    r = await db.execute(text("""
+        SELECT * FROM it_application_environments WHERE application_id = CAST(:aid AS UUID) ORDER BY name
+    """), {"aid": aid})
+    return {"environments": [_stringify_row(dict(row._mapping)) for row in r.fetchall()]}
+
+@router.post("/applications/{aid}/environments")
+async def create_application_environment(aid: str, data: dict, db: AsyncSession = Depends(get_db)):
+    eid = str(uuid.uuid4())
+    await db.execute(text("""
+        INSERT INTO it_application_environments (id, application_id, definition, hosting_name, name, url, created_at, updated_at)
+        VALUES (CAST(:id AS UUID), CAST(:aid AS UUID), :definition, :hosting_name, :name, :url, NOW(), NOW())
+    """), {"id": eid, "aid": aid, "definition": data.get("definition", ""), "hosting_name": data.get("hosting_name", ""),
+           "name": data.get("name", ""), "url": data.get("url", "")})
+    await db.commit()
+    return {"status": "ok", "id": eid}
+
+@router.put("/applications/{aid}/environments/{eid}")
+async def update_application_environment(aid: str, eid: str, data: dict, db: AsyncSession = Depends(get_db)):
+    await db.execute(text("""
+        UPDATE it_application_environments SET
+            definition = COALESCE(NULLIF(:definition,''), definition),
+            hosting_name = COALESCE(NULLIF(:hosting_name,''), hosting_name),
+            name = COALESCE(NULLIF(:name,''), name),
+            url = COALESCE(:url, url),
+            updated_at = NOW()
+        WHERE id = CAST(:id AS UUID) AND application_id = CAST(:aid AS UUID)
+    """), {"id": eid, "aid": aid, "definition": data.get("definition", ""), "hosting_name": data.get("hosting_name", ""),
+           "name": data.get("name", ""), "url": data.get("url")})
+    await db.commit()
+    return {"status": "ok"}
+
+@router.delete("/applications/{aid}/environments/{eid}")
+async def delete_application_environment(aid: str, eid: str, db: AsyncSession = Depends(get_db)):
+    await db.execute(text("""
+        DELETE FROM it_application_environments WHERE id = CAST(:id AS UUID) AND application_id = CAST(:aid AS UUID)
+    """), {"id": eid, "aid": aid})
+    await db.commit()
+    return {"status": "ok"}
+
+# ─── Application links (free-form documents/resources, each with a description) ─
+@router.get("/applications/{aid}/links")
+async def list_application_links(aid: str, db: AsyncSession = Depends(get_db)):
+    r = await db.execute(text("""
+        SELECT * FROM it_application_links WHERE application_id = CAST(:aid AS UUID) ORDER BY created_at DESC
+    """), {"aid": aid})
+    return {"links": [_stringify_row(dict(row._mapping)) for row in r.fetchall()]}
+
+@router.post("/applications/{aid}/links")
+async def create_application_link(aid: str, data: dict, db: AsyncSession = Depends(get_db)):
+    if not data.get("url"):
+        raise HTTPException(status_code=400, detail="url is required")
+    lid = str(uuid.uuid4())
+    await db.execute(text("""
+        INSERT INTO it_application_links (id, application_id, url, description, created_at, updated_at)
+        VALUES (CAST(:id AS UUID), CAST(:aid AS UUID), :url, :description, NOW(), NOW())
+    """), {"id": lid, "aid": aid, "url": data["url"], "description": data.get("description", "")})
+    await db.commit()
+    return {"status": "ok", "id": lid}
+
+@router.put("/applications/{aid}/links/{lid}")
+async def update_application_link(aid: str, lid: str, data: dict, db: AsyncSession = Depends(get_db)):
+    await db.execute(text("""
+        UPDATE it_application_links SET
+            url = COALESCE(NULLIF(:url,''), url),
+            description = COALESCE(:description, description),
+            updated_at = NOW()
+        WHERE id = CAST(:id AS UUID) AND application_id = CAST(:aid AS UUID)
+    """), {"id": lid, "aid": aid, "url": data.get("url", ""), "description": data.get("description")})
+    await db.commit()
+    return {"status": "ok"}
+
+@router.delete("/applications/{aid}/links/{lid}")
+async def delete_application_link(aid: str, lid: str, db: AsyncSession = Depends(get_db)):
+    await db.execute(text("""
+        DELETE FROM it_application_links WHERE id = CAST(:id AS UUID) AND application_id = CAST(:aid AS UUID)
+    """), {"id": lid, "aid": aid})
     await db.commit()
     return {"status": "ok"}
 

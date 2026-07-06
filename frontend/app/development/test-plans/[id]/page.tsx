@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import { TestingLayout, useTestingPerm } from '@/components/TestingLayout'
+import DevelopmentLayout, { useDevPerm } from '@/components/DevelopmentLayout'
 import { testingAPI } from '@/lib/api'
 
 const API = 'https://api.whubbi.wcomply.com'
@@ -45,7 +45,7 @@ function ScriptForm({ onSave, onCancel }: any) {
 function TestPlanDetailContent() {
   const { id } = useParams()
   const router = useRouter()
-  const { level, canEdit } = useTestingPerm('plans')
+  const { level, canEdit } = useDevPerm('test_plans')
   const [plan, setPlan] = useState<any>(null)
   const [applications, setApplications] = useState<any[]>([])
   const [submodules, setSubmodules] = useState<any[]>([])
@@ -105,7 +105,7 @@ function TestPlanDetailContent() {
 
   return (
     <div style={{ padding: '24px 28px', maxWidth: '900px' }}>
-      <button onClick={() => router.push('/testing/test-plans')} style={{ background: 'none', border: 'none', color: '#45B6E4', fontSize: '12px', fontWeight: '700', cursor: 'pointer', padding: 0, marginBottom: '14px' }}>← Back to Test Plans</button>
+      <button onClick={() => router.push('/development/test-plans')} style={{ background: 'none', border: 'none', color: '#45B6E4', fontSize: '12px', fontWeight: '700', cursor: 'pointer', padding: 0, marginBottom: '14px' }}>← Back to Test Plans</button>
 
       <div style={card}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
@@ -179,5 +179,5 @@ function TestPlanDetailContent() {
 }
 
 export default function TestPlanDetailPage() {
-  return <TestingLayout><TestPlanDetailContent /></TestingLayout>
+  return <DevelopmentLayout><TestPlanDetailContent /></DevelopmentLayout>
 }
