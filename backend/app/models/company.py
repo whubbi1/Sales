@@ -43,7 +43,7 @@ class Company(Base):
     updated_at      = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     parent   = relationship("Company", remote_side=[id], foreign_keys=[parent_id], backref="children")
-    contacts = relationship("Contact", back_populates="company", cascade="all, delete-orphan")
+    contacts = relationship("Contact", back_populates="company", foreign_keys="Contact.company_id", cascade="all, delete-orphan")
 
 class CompanyNote(Base):
     __tablename__ = "company_notes"

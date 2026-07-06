@@ -47,5 +47,5 @@ class Contact(Base):
     created_at      = Column(DateTime, default=datetime.utcnow)
     updated_at      = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
-    company      = relationship("Company", back_populates="contacts")
+    company      = relationship("Company", back_populates="contacts", foreign_keys=[company_id])
     opportunities = relationship("Opportunity", secondary=contact_opportunity, back_populates="contacts")
