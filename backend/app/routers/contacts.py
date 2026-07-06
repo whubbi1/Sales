@@ -10,6 +10,7 @@ from app.database import get_db
 from app.models.contact import Contact
 from app.models.opportunity import Opportunity
 from app.schemas.schemas import ContactCreate, ContactUpdate, ContactResponse, ContactSummary, OpportunitySummary, PartnerSummary
+from app.services.ids import next_internal_id
 
 router = APIRouter()
 
@@ -20,10 +21,10 @@ async def _attach_partners(db: AsyncSession, objs: list):
     ids = {str(o.partner_id) for o in objs if getattr(o, "partner_id", None)}
     partners = {}
     for pid in ids:
-        r = await db.execute(text("SELECT id, name, status FROM partners WHERE id = CAST(:id AS UUID)"), {"id": pid})
+        r = await db.execute(text("SELECT id, internal_id, name, status FROM partners WHERE id = CAST(:id AS UUID)"), {"id": pid})
         row = r.fetchone()
         if row:
-            partners[pid] = PartnerSummary(id=row.id, name=row.name, status=row.status)
+            partners[pid] = PartnerSummary(id=row.id, internal_id=row.internal_id, name=row.name, status=row.status)
     for o in objs:
         o.partner = partners.get(str(o.partner_id)) if getattr(o, "partner_id", None) else None
 
@@ -52,7 +53,9 @@ async def list_contacts(
 
 @router.post("/", response_model=ContactResponse, status_code=status.HTTP_201_CREATED)
 async def create_contact(contact: ContactCreate, db: AsyncSession = Depends(get_db)):
-    db_contact = Contact(**contact.model_dump())
+    data = contact.model_dump()
+    data['internal_id'] = await next_internal_id(db, 'contact_internal_id_seq', 'CNT')
+    db_contact = Contact(**data)
     db.add(db_contact)
     await db.commit()
     r = await db.execute(select(Contact).options(selectinload(Contact.company)).where(Contact.id == db_contact.id))

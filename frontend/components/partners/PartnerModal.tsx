@@ -72,7 +72,10 @@ export function PartnerModal({ partner, onClose, onSave }: any) {
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal" onClick={e => e.stopPropagation()}>
         <div className="modal-header">
-          <h2 style={{ fontSize: '15px', fontWeight: '700', color: '#144766' }}>{partner ? 'Edit Partner' : 'New Partner'}</h2>
+          <h2 style={{ fontSize: '15px', fontWeight: '700', color: '#144766' }}>
+            {partner ? 'Edit Partner' : 'New Partner'}
+            {partner?.internal_id && <span style={{ fontSize: '11px', fontWeight: '600', color: '#9B9B9B', marginLeft: '8px' }}>{partner.internal_id}</span>}
+          </h2>
           <button onClick={onClose} style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: '20px', color: '#9B9B9B', lineHeight: 1 }}>×</button>
         </div>
         <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>

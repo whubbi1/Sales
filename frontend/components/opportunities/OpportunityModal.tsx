@@ -7,6 +7,18 @@ const DEAL_STATUSES = ['Presentation To Be Scheduled','Presentation Done','Propo
 const PROJECT_STATUSES = ['Daily Invoicing','Project','Software Licenses']
 const DEAL_TYPES = ['SAP','GRC','Smart Global Governance','SecurityBridge','Onapsis','BowBridge IBM OpenPages']
 
+// Mirrors compute_deal_name() in backend/app/services/ids.py — preview only, the
+// authoritative value always comes back from the server on save.
+function dealNamePreview(closingDate: string, companyName?: string, partnerName?: string, projectName?: string) {
+  let quarterLabel = 'TBD'
+  if (closingDate) {
+    const d = new Date(closingDate)
+    const quarter = Math.floor(d.getUTCMonth() / 3) + 1
+    quarterLabel = `Q${quarter}${String(d.getUTCFullYear()).slice(-2)}`
+  }
+  return [quarterLabel, companyName, partnerName, projectName].filter(Boolean).join(' - ')
+}
+
 // FormField MUST be outside modal to avoid focus loss on re-render
 function FormField({ label, children, full }: { label: string; children: React.ReactNode; full?: boolean }) {
   return (
@@ -21,14 +33,13 @@ export function OpportunityModal({ opportunity, onClose, onSave }: any) {
   const [companies, setCompanies] = useState<any[]>([])
   const [partners, setPartners] = useState<any[]>([])
   const [contacts, setContacts] = useState<any[]>([])
-  const [consultantInput, setConsultantInput] = useState('')
+  const [users, setUsers] = useState<any[]>([])
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
   const toDateStr = (d?: string) => d ? new Date(d).toISOString().split('T')[0] : ''
 
   const [form, setForm] = useState({
-    deal_name: opportunity?.deal_name || '',
     company_id: opportunity?.company_id || opportunity?.company?.id || '',
     partner_id: opportunity?.partner_id || opportunity?.partner?.id || '',
     deal_id: opportunity?.deal_id || '',
@@ -40,10 +51,12 @@ export function OpportunityModal({ opportunity, onClose, onSave }: any) {
     contract_start_date: toDateStr(opportunity?.contract_start_date),
     contract_end_date: toDateStr(opportunity?.contract_end_date),
     project_status: opportunity?.project_status || '',
+    contracting_party_id: opportunity?.contracting_party_id || opportunity?.contracting_party_company?.id || '',
     contracting_party: opportunity?.contracting_party || '',
     deal_type: opportunity?.deal_type || '',
     notes: opportunity?.notes || '',
     assigned_to: opportunity?.assigned_to || '',
+    assigned_to_email: opportunity?.assigned_to_email || '',
     contact_ids: opportunity?.contacts?.map((c: any) => c.id) || [],
   })
 
@@ -51,7 +64,12 @@ export function OpportunityModal({ opportunity, onClose, onSave }: any) {
     Promise.all([companiesAPI.list({}), contactsAPI.list({}), partnersAPI.list({})]).then(([c, ct, p]) => {
       setCompanies(c); setContacts(ct); setPartners(p)
     }).catch(() => {})
+    fetch('https://api.whubbi.wcomply.com/settings/users').then(r => r.json()).then(d => setUsers(d.users || [])).catch(() => {})
   }, [])
+
+  const selectedCompany = companies.find((c: any) => c.id === form.company_id)
+  const selectedPartner = partners.find((p: any) => p.id === form.partner_id)
+  const dealNamePreviewText = dealNamePreview(form.closing_date, selectedCompany?.name, selectedPartner?.name, form.project_name)
 
   const toggleContact = (contactId: string) => {
     setForm(p => ({
@@ -62,22 +80,23 @@ export function OpportunityModal({ opportunity, onClose, onSave }: any) {
     }))
   }
 
-  const addConsultant = () => {
-    const c = consultantInput.trim()
-    if (c && !form.assigned_consultants.includes(c)) {
-      setForm(p => ({ ...p, assigned_consultants: [...p.assigned_consultants, c] }))
-      setConsultantInput('')
-    }
+  const toggleConsultant = (u: any) => {
+    setForm(p => ({
+      ...p,
+      assigned_consultants: p.assigned_consultants.some((c: any) => c.email === u.email)
+        ? p.assigned_consultants.filter((c: any) => c.email !== u.email)
+        : [...p.assigned_consultants, { email: u.email, name: u.display_name || `${u.first_name} ${u.last_name}` }]
+    }))
   }
 
   const handleSave = async () => {
-    if (!form.deal_name.trim()) { setError('Deal name is required'); return }
     setSaving(true); setError('')
     try {
       const payload = {
         ...form,
         company_id: form.company_id && form.company_id.trim() !== '' ? form.company_id : null,
         partner_id: form.partner_id && form.partner_id.trim() !== '' ? form.partner_id : null,
+        contracting_party_id: form.contracting_party_id && form.contracting_party_id.trim() !== '' ? form.contracting_party_id : null,
         deal_amount: form.deal_amount ? Number(form.deal_amount) : null,
         closing_date: form.closing_date || null,
         contract_start_date: form.contract_start_date || null,
@@ -104,11 +123,11 @@ export function OpportunityModal({ opportunity, onClose, onSave }: any) {
           <div>
             <p className="section-label">Deal Information</p>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-              <FormField label="Deal Name *" full>
-                <input className="form-input" value={form.deal_name} onChange={e => setForm(p => ({ ...p, deal_name: e.target.value }))} placeholder="S001 - Company - Project" />
+              <FormField label="Deal Name (auto-generated)" full>
+                <input className="form-input" value={dealNamePreviewText} readOnly disabled style={{ color: '#6B7280', background: '#F8FAFC' }} />
               </FormField>
               <FormField label="Deal ID">
-                <input className="form-input" value={form.deal_id} onChange={e => setForm(p => ({ ...p, deal_id: e.target.value }))} placeholder="S001" />
+                <input className="form-input" value={form.deal_id || '(auto-generated after save)'} readOnly disabled style={{ color: '#6B7280', background: '#F8FAFC' }} />
               </FormField>
               <FormField label="Project Name">
                 <input className="form-input" value={form.project_name} onChange={e => setForm(p => ({ ...p, project_name: e.target.value }))} placeholder="SAP RISE Migration" />
@@ -167,27 +186,48 @@ export function OpportunityModal({ opportunity, onClose, onSave }: any) {
                 </select>
               </FormField>
               <FormField label="Contracting Party">
-                <input className="form-input" value={form.contracting_party} onChange={e => setForm(p => ({ ...p, contracting_party: e.target.value }))} placeholder="Company name" />
+                <select className="form-input" value={form.contracting_party_id} onChange={e => {
+                  const c = companies.find((cc: any) => cc.id === e.target.value)
+                  setForm(p => ({ ...p, contracting_party_id: e.target.value, contracting_party: c ? c.name : '' }))
+                }}>
+                  <option value="">Select company...</option>
+                  {companies.map((c: any) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                </select>
               </FormField>
               <FormField label="Assigned To">
-                <input className="form-input" value={form.assigned_to} onChange={e => setForm(p => ({ ...p, assigned_to: e.target.value }))} placeholder="Sales rep" />
+                <select className="form-input" value={form.assigned_to_email} onChange={e => {
+                  const u = users.find((uu: any) => uu.email === e.target.value)
+                  setForm(p => ({ ...p, assigned_to_email: e.target.value, assigned_to: u ? (u.display_name || `${u.first_name} ${u.last_name}`) : '' }))
+                }}>
+                  <option value="">Select employee...</option>
+                  {users.map((u: any) => <option key={u.email} value={u.email}>{u.display_name || `${u.first_name} ${u.last_name}`}</option>)}
+                </select>
               </FormField>
             </div>
           </div>
 
           <div>
             <p className="section-label">Assigned Consultants</p>
-            <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
-              <input className="form-input" value={consultantInput} onChange={e => setConsultantInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && addConsultant()} placeholder="Consultant name..." style={{ flex: 1 }} />
-              <button className="btn-secondary" onClick={addConsultant}>Add</button>
-            </div>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px' }}>
-              {form.assigned_consultants.map((c: string) => (
-                <span key={c} style={{ background: '#EFF6FF', color: '#2563EB', padding: '3px 9px', borderRadius: '12px', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '5px' }}>
-                  {c}
-                  <button onClick={() => setForm(p => ({ ...p, assigned_consultants: p.assigned_consultants.filter((x: string) => x !== c) }))} style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#2563EB', fontSize: '13px', lineHeight: 1, padding: 0 }}>×</button>
-                </span>
-              ))}
+            {form.assigned_consultants.length > 0 && (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px', marginBottom: '8px' }}>
+                {form.assigned_consultants.map((c: any) => (
+                  <span key={c.email} style={{ background: '#EFF6FF', color: '#2563EB', padding: '3px 9px', borderRadius: '12px', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                    {c.name || c.email}
+                    <button onClick={() => setForm(p => ({ ...p, assigned_consultants: p.assigned_consultants.filter((x: any) => x.email !== c.email) }))} style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#2563EB', fontSize: '13px', lineHeight: 1, padding: 0 }}>×</button>
+                  </span>
+                ))}
+              </div>
+            )}
+            <div style={{ maxHeight: '160px', overflowY: 'auto', border: '1px solid #E2E8F0', borderRadius: '8px', padding: '4px' }}>
+              {users.map((u: any) => {
+                const checked = form.assigned_consultants.some((c: any) => c.email === u.email)
+                return (
+                  <label key={u.email} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '7px 10px', cursor: 'pointer', borderRadius: '6px', background: checked ? '#EFF8FD' : 'transparent' }}>
+                    <input type="checkbox" checked={checked} onChange={() => toggleConsultant(u)} style={{ accentColor: '#219BD6', width: '14px', height: '14px' }} />
+                    <div style={{ fontSize: '12px', fontWeight: '600', color: '#144766' }}>{u.display_name || `${u.first_name} ${u.last_name}`}</div>
+                  </label>
+                )
+              })}
             </div>
           </div>
 

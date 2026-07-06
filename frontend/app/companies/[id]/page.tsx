@@ -72,6 +72,7 @@ export default function CompanyDetailPage() {
             <div style={{ flex: 1 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginBottom: '4px' }}>
                 <h1 style={{ fontSize: '18px', fontWeight: '800', color: '#144766', margin: 0 }}>{company.name}</h1>
+                {company.internal_id && <span style={{ fontSize: '11px', fontWeight: '600', color: '#9B9B9B' }}>{company.internal_id}</span>}
                 <StatusBadge value={company.status} />
                 <span style={{ background: color + '22', color, padding: '2px 8px', borderRadius: '10px', fontSize: '10px', fontWeight: '700' }}>{LEVEL_LABELS[company.level]}</span>
               </div>

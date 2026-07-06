@@ -58,6 +58,7 @@ export default function ContactDetailPage() {
             <div style={{ flex: 1 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginBottom: '4px' }}>
                 <h1 style={{ fontSize: '18px', fontWeight: '800', color: '#144766', margin: 0 }}>{contact.first_name} {contact.last_name}</h1>
+                {contact.internal_id && <span style={{ fontSize: '11px', fontWeight: '600', color: '#9B9B9B' }}>{contact.internal_id}</span>}
                 <StatusBadge value={contact.lead_status || 'New'} />
                 {contact.job_type && <span style={{ background: '#EEF2FF', color: '#4F46E5', padding: '2px 9px', borderRadius: '12px', fontSize: '10px', fontWeight: '700' }}>{contact.job_type}</span>}
               </div>

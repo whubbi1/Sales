@@ -9,6 +9,7 @@ from uuid import UUID
 from app.database import get_db
 from app.models.opportunity import Opportunity
 from app.models.contact import Contact
+from app.models.company import Company
 from app.models.opportunity_extra import OpportunityStaffing, OpportunityChecklistItem, OpportunityComment
 from app.schemas.schemas import (
     OpportunityCreate, OpportunityUpdate, OpportunityResponse, OpportunitySummary,
@@ -16,6 +17,7 @@ from app.schemas.schemas import (
     ChecklistItemCreate, ChecklistItemUpdate, ChecklistItemResponse,
     CommentCreate, CommentResponse, PartnerSummary,
 )
+from app.services.ids import next_internal_id, compute_deal_name
 
 router = APIRouter()
 
@@ -26,12 +28,39 @@ async def _attach_partners(db: AsyncSession, objs: list):
     ids = {str(o.partner_id) for o in objs if getattr(o, "partner_id", None)}
     partners = {}
     for pid in ids:
-        r = await db.execute(text("SELECT id, name, status FROM partners WHERE id = CAST(:id AS UUID)"), {"id": pid})
+        r = await db.execute(text("SELECT id, internal_id, name, status FROM partners WHERE id = CAST(:id AS UUID)"), {"id": pid})
         row = r.fetchone()
         if row:
-            partners[pid] = PartnerSummary(id=row.id, name=row.name, status=row.status)
+            partners[pid] = PartnerSummary(id=row.id, internal_id=row.internal_id, name=row.name, status=row.status)
     for o in objs:
         o.partner = partners.get(str(o.partner_id)) if getattr(o, "partner_id", None) else None
+
+
+async def _attach_contracting_party(db: AsyncSession, objs: list):
+    # contracting_party_id isn't an ORM relationship (plain FK, see opportunity.py) — attach it
+    # as a plain instance attribute, same trick as _attach_partners above.
+    ids = {o.contracting_party_id for o in objs if getattr(o, "contracting_party_id", None)}
+    companies = {}
+    if ids:
+        r = await db.execute(select(Company).where(Company.id.in_(ids)))
+        companies = {c.id: c for c in r.scalars().all()}
+    for o in objs:
+        o.contracting_party_company = companies.get(o.contracting_party_id) if getattr(o, "contracting_party_id", None) else None
+
+
+async def _lookup_names(db: AsyncSession, company_id, partner_id):
+    # Resolves the display names deal_name is built from — used on both create and update
+    # so the computed name always reflects whatever company/partner ends up on the row.
+    company_name = None
+    if company_id:
+        r = await db.execute(select(Company.name).where(Company.id == company_id))
+        company_name = r.scalar_one_or_none()
+    partner_name = None
+    if partner_id:
+        r = await db.execute(text("SELECT name FROM partners WHERE id = CAST(:id AS UUID)"), {"id": str(partner_id)})
+        row = r.fetchone()
+        partner_name = row.name if row else None
+    return company_name, partner_name
 
 
 @router.get("/", response_model=List[OpportunityResponse])
@@ -59,12 +88,18 @@ async def list_opportunities(
     result = await db.execute(query)
     opps = result.scalars().all()
     await _attach_partners(db, opps)
+    await _attach_contracting_party(db, opps)
     return opps
 
 @router.post("/", response_model=OpportunityResponse, status_code=status.HTTP_201_CREATED)
 async def create_opportunity(opp: OpportunityCreate, db: AsyncSession = Depends(get_db)):
     contact_ids = opp.contact_ids or []
     data = opp.model_dump(exclude={'contact_ids'})
+
+    company_name, partner_name = await _lookup_names(db, data.get('company_id'), data.get('partner_id'))
+    data['deal_id'] = await next_internal_id(db, 'opportunity_deal_id_seq', 'OPP')
+    data['deal_name'] = compute_deal_name(data.get('closing_date'), company_name, partner_name, data.get('project_name'))
+
     db_opp = Opportunity(**data)
 
     if contact_ids:
@@ -76,6 +111,7 @@ async def create_opportunity(opp: OpportunityCreate, db: AsyncSession = Depends(
     r = await db.execute(select(Opportunity).options(selectinload(Opportunity.company), selectinload(Opportunity.contacts)).where(Opportunity.id == db_opp.id))
     row = r.scalar_one()
     await _attach_partners(db, [row])
+    await _attach_contracting_party(db, [row])
     return row
 
 @router.get("/{opportunity_id}", response_model=OpportunityResponse)
@@ -85,6 +121,7 @@ async def get_opportunity(opportunity_id: UUID, db: AsyncSession = Depends(get_d
     if not opp:
         raise HTTPException(status_code=404, detail="Opportunity not found")
     await _attach_partners(db, [opp])
+    await _attach_contracting_party(db, [opp])
     return opp
 
 @router.put("/{opportunity_id}", response_model=OpportunityResponse)
@@ -95,9 +132,16 @@ async def update_opportunity(opportunity_id: UUID, data: OpportunityUpdate, db: 
         raise HTTPException(status_code=404, detail="Opportunity not found")
 
     update_data = data.model_dump(exclude={'contact_ids'}, exclude_unset=True)
+    update_data.pop('deal_id', None)     # immutable after creation
+    update_data.pop('deal_name', None)   # always recomputed below, never taken from the client
 
     for k, v in update_data.items():
         setattr(opp, k, v)
+
+    # Recompute unconditionally so deal_name always reflects the row's current company/partner
+    # /project/closing_date, whichever of those fields this particular update touched.
+    company_name, partner_name = await _lookup_names(db, opp.company_id, opp.partner_id)
+    opp.deal_name = compute_deal_name(opp.closing_date, company_name, partner_name, opp.project_name)
 
     if 'contact_ids' in data.model_fields_set:
         r = await db.execute(select(Contact).where(Contact.id.in_(data.contact_ids or [])))
@@ -107,6 +151,7 @@ async def update_opportunity(opportunity_id: UUID, data: OpportunityUpdate, db: 
     r = await db.execute(select(Opportunity).options(selectinload(Opportunity.company), selectinload(Opportunity.contacts)).where(Opportunity.id == opportunity_id))
     row = r.scalar_one()
     await _attach_partners(db, [row])
+    await _attach_contracting_party(db, [row])
     return row
 
 @router.delete("/{opportunity_id}", status_code=status.HTTP_204_NO_CONTENT)

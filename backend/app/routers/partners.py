@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
 from app.database import get_db
+from app.services.ids import next_internal_id
 import uuid, json, re, html
 import httpx
 
@@ -52,16 +53,17 @@ async def create_partner(data: dict, db: AsyncSession = Depends(get_db)):
     if not data.get("name"):
         raise HTTPException(status_code=400, detail="name is required")
     partner_id = str(uuid.uuid4())
+    internal_id = await next_internal_id(db, 'partner_internal_id_seq', 'PTN')
     await db.execute(text("""
-        INSERT INTO partners (id, name, contact_name, main_contact_id, domain_names, phone, sector, country, status,
+        INSERT INTO partners (id, internal_id, name, contact_name, main_contact_id, domain_names, phone, sector, country, status,
                                main_erp, cybersecurity_solutions, sap_hosting_partner, linkedin_url, notes,
                                assigned_to, assigned_to_email, created_at, updated_at)
-        VALUES (CAST(:id AS UUID), :name, :contact_name, CAST(NULLIF(:main_contact_id,'') AS UUID),
+        VALUES (CAST(:id AS UUID), :internal_id, :name, :contact_name, CAST(NULLIF(:main_contact_id,'') AS UUID),
                 CAST(:domain_names AS JSONB), :phone, :sector, :country, :status,
                 CAST(:main_erp AS JSONB), CAST(:cybersecurity_solutions AS JSONB), CAST(:sap_hosting_partner AS JSONB),
                 :linkedin_url, :notes, :assigned_to, :assigned_to_email, NOW(), NOW())
     """), {
-        "id": partner_id,
+        "id": partner_id, "internal_id": internal_id,
         "name": data["name"], "contact_name": data.get("contact_name"),
         "main_contact_id": data.get("main_contact_id") or "",
         "domain_names": json.dumps(data.get("domain_names") or []),

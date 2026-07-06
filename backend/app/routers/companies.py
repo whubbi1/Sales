@@ -15,6 +15,7 @@ from app.schemas.schemas import (
     NoteCreate, NoteResponse, ArticleCreate, ArticleResponse,
     TaskCreate, TaskUpdate, TaskResponse, ContactSummary, OpportunitySummary
 )
+from app.services.ids import next_internal_id
 
 router = APIRouter()
 
@@ -60,6 +61,7 @@ async def create_company(company: CompanyCreate, db: AsyncSession = Depends(get_
             level = min(parent.level + 1, 4)
     data = company.model_dump()
     data['level'] = level
+    data['internal_id'] = await next_internal_id(db, 'company_internal_id_seq', 'CMP')
     db_company = Company(**data)
     db.add(db_company)
     await db.commit()

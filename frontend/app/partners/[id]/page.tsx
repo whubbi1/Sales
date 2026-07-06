@@ -215,6 +215,7 @@ export default function PartnerDetailPage() {
                 <h1 style={{ fontSize: '18px', fontWeight: '800', color: '#144766', margin: 0 }}>
                   <EditableText value={partner.name} editing={editing === 'name'} onStartEdit={() => setEditing('name')} onSave={(v: string) => patchField('name', v)} />
                 </h1>
+                {partner.internal_id && <span style={{ fontSize: '11px', fontWeight: '600', color: '#9B9B9B' }}>{partner.internal_id}</span>}
                 <EditableSelect display={<StatusBadge value={partner.status} />} value={partner.status} editing={editing === 'status'}
                   onStartEdit={() => setEditing('status')} onSave={(v: any, blur?: boolean) => blur ? setEditing(null) : patchField('status', v)}
                   options={[{ value: 'active', label: 'Active' }, { value: 'inactive', label: 'Inactive' }]} />

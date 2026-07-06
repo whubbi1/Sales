@@ -16,6 +16,10 @@ class Opportunity(Base):
     # Partner isn't an ORM model (raw-SQL table, see partners.py) — plain column, FK enforced at the DB
     # level by the ALTER TABLE migration in main.py, not declared here to avoid mapper-resolution issues.
     partner_id          = Column(UUID(as_uuid=True), nullable=True)
+    # Plain FK, no relationship() — Company already has its own `contacts`/`opportunities`
+    # relationships to other tables; attached manually in the router (see _attach_contracting_party),
+    # same trick used for `partner` above, to avoid a repeat of the AmbiguousForeignKeysError.
+    contracting_party_id = Column(UUID(as_uuid=True), ForeignKey("companies.id", ondelete="SET NULL"), nullable=True)
 
     deal_id             = Column(String(100))
     deal_name           = Column(String(500), nullable=False)
@@ -43,10 +47,11 @@ class Opportunity(Base):
     ))
     notes               = Column(Text)
     assigned_to         = Column(String(255))
+    assigned_to_email   = Column(String(255))
     sharepoint_site_url = Column(Text)
 
     created_at          = Column(DateTime, default=datetime.utcnow)
     updated_at          = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
-    company  = relationship("Company", backref="opportunities")
+    company  = relationship("Company", backref="opportunities", foreign_keys=[company_id])
     contacts = relationship("Contact", secondary=contact_opportunity, back_populates="opportunities")

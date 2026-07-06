@@ -10,6 +10,7 @@ import { useReportBuilder, applyReport, ReportPanel, ReportColumn } from '@/comp
 import { getStoredUser } from '@/lib/auth'
 
 const COLUMNS: ReportColumn[] = [
+  { key: 'internal_id', label: 'ID', filterable: 'text' },
   { key: 'name', label: 'Partner', filterable: 'text' },
   { key: 'main_contact_display', label: 'Contact', filterable: 'text' },
   { key: 'sector', label: 'Sector', filterable: 'text' },
@@ -86,6 +87,9 @@ export default function PartnersPage() {
                   <tr key={partner.id} onClick={() => router.push(`/partners/${partner.id}`)} style={{ cursor: 'pointer', transition: 'background 0.1s' }}
                     onMouseEnter={e => (e.currentTarget.style.background = '#FAFBFC')}
                     onMouseLeave={e => (e.currentTarget.style.background = 'white')}>
+                    {isVisible('internal_id') && (
+                      <td style={{ padding: '12px 16px', borderBottom: '1px solid #F1F5F9', fontSize: '11px', color: '#9B9B9B', fontWeight: '600' }}>{partner.internal_id || '—'}</td>
+                    )}
                     {isVisible('name') && (
                       <td style={{ padding: '12px 16px', borderBottom: '1px solid #F1F5F9' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>

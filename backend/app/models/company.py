@@ -18,6 +18,7 @@ class Company(Base):
     __tablename__ = "companies"
 
     id              = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    internal_id     = Column(String(20), unique=True)
     parent_id       = Column(UUID(as_uuid=True), ForeignKey("companies.id", ondelete="SET NULL"), nullable=True)
     level           = Column(Integer, default=1)
 

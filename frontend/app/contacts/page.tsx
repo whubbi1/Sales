@@ -26,6 +26,7 @@ async function claudeSearch(prompt: string): Promise<string> {
 }
 
 const COLUMNS: ReportColumn[] = [
+  { key: 'internal_id', label: 'ID', filterable: 'text' },
   { key: 'contact_name', label: 'Contact', filterable: 'text' },
   { key: 'company_name', label: 'Company', filterable: 'text' },
   { key: 'job_name', label: 'Job Title', filterable: 'text' },
@@ -134,6 +135,9 @@ export default function ContactsPage() {
                   <tr key={contact.id} onClick={() => router.push(`/contacts/${contact.id}`)} style={{ cursor: 'pointer', position: 'relative' }}
                     onMouseEnter={e => (e.currentTarget.style.background = '#FAFBFC')}
                     onMouseLeave={e => (e.currentTarget.style.background = 'white')}>
+                    {isVisible('internal_id') && (
+                      <td style={{ padding: '11px 16px', borderBottom: '1px solid #F1F5F9', fontSize: '11px', color: '#9B9B9B', fontWeight: '600' }}>{contact.internal_id || '—'}</td>
+                    )}
                     {isVisible('contact_name') && (
                       <td style={{ padding: '11px 16px', borderBottom: '1px solid #F1F5F9' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>

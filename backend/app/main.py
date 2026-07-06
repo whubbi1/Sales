@@ -1175,6 +1175,46 @@ async def startup():
                     added_by_email VARCHAR(255),
                     created_at TIMESTAMP DEFAULT NOW()
                 )""",
+
+                # Sequential human-readable IDs: Company/Contact/Partner get internal_id,
+                # Opportunity reuses its existing deal_id column.
+                "CREATE SEQUENCE IF NOT EXISTS company_internal_id_seq",
+                "CREATE SEQUENCE IF NOT EXISTS contact_internal_id_seq",
+                "CREATE SEQUENCE IF NOT EXISTS partner_internal_id_seq",
+                "CREATE SEQUENCE IF NOT EXISTS opportunity_deal_id_seq",
+
+                "ALTER TABLE companies ADD COLUMN IF NOT EXISTS internal_id VARCHAR(20)",
+                "ALTER TABLE contacts ADD COLUMN IF NOT EXISTS internal_id VARCHAR(20)",
+                "ALTER TABLE partners ADD COLUMN IF NOT EXISTS internal_id VARCHAR(20)",
+                "ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS contracting_party_id UUID REFERENCES companies(id) ON DELETE SET NULL",
+                "ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS assigned_to_email VARCHAR(255)",
+
+                # Backfill existing rows (oldest first), then advance each sequence past the backfilled max
+                """UPDATE companies SET internal_id = 'CMP-' || LPAD(t.rn::text, 5, '0')
+                    FROM (SELECT id, ROW_NUMBER() OVER (ORDER BY created_at) AS rn FROM companies WHERE internal_id IS NULL) t
+                    WHERE companies.id = t.id""",
+                "SELECT setval('company_internal_id_seq', GREATEST((SELECT COALESCE(MAX(SUBSTRING(internal_id FROM 5)::int), 0) FROM companies), 1))",
+
+                """UPDATE contacts SET internal_id = 'CNT-' || LPAD(t.rn::text, 5, '0')
+                    FROM (SELECT id, ROW_NUMBER() OVER (ORDER BY created_at) AS rn FROM contacts WHERE internal_id IS NULL) t
+                    WHERE contacts.id = t.id""",
+                "SELECT setval('contact_internal_id_seq', GREATEST((SELECT COALESCE(MAX(SUBSTRING(internal_id FROM 5)::int), 0) FROM contacts), 1))",
+
+                """UPDATE partners SET internal_id = 'PTN-' || LPAD(t.rn::text, 5, '0')
+                    FROM (SELECT id, ROW_NUMBER() OVER (ORDER BY created_at) AS rn FROM partners WHERE internal_id IS NULL) t
+                    WHERE partners.id = t.id""",
+                "SELECT setval('partner_internal_id_seq', GREATEST((SELECT COALESCE(MAX(SUBSTRING(internal_id FROM 5)::int), 0) FROM partners), 1))",
+
+                # Only backfill NULL deal_ids — pre-existing hand-typed values (e.g. "S001") are left as-is
+                """UPDATE opportunities SET deal_id = 'OPP-' || LPAD(t.rn::text, 5, '0')
+                    FROM (SELECT id, ROW_NUMBER() OVER (ORDER BY created_at) AS rn FROM opportunities WHERE deal_id IS NULL) t
+                    WHERE opportunities.id = t.id""",
+                "SELECT setval('opportunity_deal_id_seq', GREATEST((SELECT COALESCE(MAX(SUBSTRING(deal_id FROM 5)::int), 0) FROM opportunities WHERE deal_id ~ '^OPP-[0-9]+$'), 1))",
+
+                "CREATE UNIQUE INDEX IF NOT EXISTS idx_companies_internal_id ON companies(internal_id)",
+                "CREATE UNIQUE INDEX IF NOT EXISTS idx_contacts_internal_id ON contacts(internal_id)",
+                "CREATE UNIQUE INDEX IF NOT EXISTS idx_partners_internal_id ON partners(internal_id)",
+                "CREATE UNIQUE INDEX IF NOT EXISTS idx_opportunities_deal_id ON opportunities(deal_id)",
             ]
             for sql in sqls:
                 try:

@@ -29,6 +29,7 @@ const LEVEL_LABELS: Record<number, string> = { 1: 'Group', 2: 'Parent', 3: 'Chil
 const LEVEL_COLORS: Record<number, string> = { 1: '#144766', 2: '#1a5a84', 3: '#219BD6', 4: '#7DD3F0' }
 
 const COLUMNS: ReportColumn[] = [
+  { key: 'internal_id', label: 'ID', filterable: 'text' },
   { key: 'name', label: 'Company', filterable: 'text' },
   { key: 'level_label', label: 'Level', filterable: 'select', options: ['Group', 'Parent', 'Child', 'Sub-Child'] },
   { key: 'main_contact_display', label: 'Contact', filterable: 'text' },
@@ -166,6 +167,9 @@ export default function CompaniesPage() {
                           </div>
                         </div>
                       </td>
+                    )}
+                    {isVisible('internal_id') && (
+                      <td style={{ padding: '12px 16px', borderBottom: '1px solid #F1F5F9', fontSize: '11px', color: '#9B9B9B', fontWeight: '600' }}>{company.internal_id || '—'}</td>
                     )}
                     {isVisible('level_label') && (
                       <td style={{ padding: '12px 16px', borderBottom: '1px solid #F1F5F9' }}>

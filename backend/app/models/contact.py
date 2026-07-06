@@ -19,6 +19,7 @@ class Contact(Base):
     __tablename__ = "contacts"
 
     id              = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    internal_id     = Column(String(20), unique=True)
     company_id      = Column(UUID(as_uuid=True), ForeignKey("companies.id", ondelete="SET NULL"), nullable=True)
     # Partner isn't an ORM model (raw-SQL table, see partners.py) — plain column, FK enforced at the DB
     # level by the ALTER TABLE migration in main.py, not declared here to avoid mapper-resolution issues.

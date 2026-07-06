@@ -8,6 +8,7 @@ from uuid import UUID
 # but Company needs this early for its main_contact embed) ─────────────────────
 class ContactSummary(BaseModel):
     id: UUID
+    internal_id: Optional[str] = None
     first_name: str
     last_name: str
     job_type: Optional[str] = None
@@ -44,6 +45,7 @@ class CompanyUpdate(CompanyBase):
 
 class CompanySummary(BaseModel):
     id: UUID
+    internal_id: Optional[str] = None
     name: str
     status: str
     level: int
@@ -52,6 +54,7 @@ class CompanySummary(BaseModel):
 
 class CompanyResponse(CompanyBase):
     id: UUID
+    internal_id: Optional[str] = None
     parent: Optional[CompanySummary] = None
     children: Optional[List[CompanySummary]] = []
     main_contact: Optional[ContactSummary] = None
@@ -105,6 +108,7 @@ class TaskResponse(TaskCreate):
 # ─── Partner (summary only — Partner itself is a raw-SQL entity, see routers/partners.py) ──
 class PartnerSummary(BaseModel):
     id: UUID
+    internal_id: Optional[str] = None
     name: str
     status: Optional[str] = None
     class Config:
@@ -144,6 +148,7 @@ class ContactUpdate(ContactBase):
 
 class ContactResponse(ContactBase):
     id: UUID
+    internal_id: Optional[str] = None
     company: Optional[CompanySummary] = None
     partner: Optional[PartnerSummary] = None
     created_at: datetime
@@ -152,16 +157,26 @@ class ContactResponse(ContactBase):
         from_attributes = True
 
 # ─── Opportunity ──────────────────────────────────────────────────────────────
+class ConsultantEntry(BaseModel):
+    email: str
+    name: Optional[str] = None
+
 class OpportunityBase(BaseModel):
-    deal_name: str
+    # deal_name is server-generated (see compute_deal_name in app/services/ids.py) — always
+    # recomputed from company/partner/project/closing_date on create and update, so it's not
+    # meaningfully settable by the client. Optional here purely so callers don't need to send it.
+    deal_name: Optional[str] = None
     company_id: Optional[UUID] = None
     partner_id: Optional[UUID] = None
+    contracting_party_id: Optional[UUID] = None
+    # deal_id is server-generated on create (see next_internal_id) and never changes after —
+    # kept here as Optional/ignored-on-write so responses can still round-trip it.
     deal_id: Optional[str] = None
     project_name: Optional[str] = None
     deal_amount: Optional[float] = None
     closing_date: Optional[datetime] = None
     deal_status: Optional[str] = "Presentation To Be Scheduled"
-    assigned_consultants: Optional[List[str]] = []
+    assigned_consultants: Optional[List[ConsultantEntry]] = []
     contract_start_date: Optional[datetime] = None
     contract_end_date: Optional[datetime] = None
     project_status: Optional[str] = None
@@ -169,17 +184,18 @@ class OpportunityBase(BaseModel):
     deal_type: Optional[str] = None
     notes: Optional[str] = None
     assigned_to: Optional[str] = None
+    assigned_to_email: Optional[str] = None
     sharepoint_site_url: Optional[str] = None
 
 class OpportunityCreate(OpportunityBase):
     contact_ids: Optional[List[UUID]] = []
 
 class OpportunityUpdate(OpportunityBase):
-    deal_name: Optional[str] = None
     contact_ids: Optional[List[UUID]] = []
 
 class OpportunitySummary(BaseModel):
     id: UUID
+    deal_id: Optional[str] = None
     deal_name: str
     deal_status: Optional[str] = None
     deal_amount: Optional[float] = None
@@ -191,6 +207,7 @@ class OpportunityResponse(OpportunityBase):
     id: UUID
     company: Optional[CompanySummary] = None
     partner: Optional[PartnerSummary] = None
+    contracting_party_company: Optional[CompanySummary] = None
     contacts: Optional[List[ContactSummary]] = []
     created_at: datetime
     updated_at: datetime
