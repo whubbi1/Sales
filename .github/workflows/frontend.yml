@@ -88,6 +88,7 @@ jobs:
             --job-id $(aws amplify list-jobs \
               --app-id ${{ secrets.AMPLIFY_APP_ID }} \
               --branch-name master \
+              --no-paginate \
               --query 'jobSummaries[0].jobId' \
               --output text) \
             --query 'job.summary.status' \
