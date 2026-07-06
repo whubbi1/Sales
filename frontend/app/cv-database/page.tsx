@@ -3,8 +3,17 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { Sidebar } from '@/components/Sidebar'
 import { getStoredUser } from '@/lib/auth'
+import { useReportBuilder, applyReport, ReportPanel, ReportColumn } from '@/components/it/ReportBuilder'
 
 const API = 'https://api.whubbi.wcomply.com'
+
+const COLUMNS: ReportColumn[] = [
+  { key: 'employee_name', label: 'Employee', filterable: 'text' },
+  { key: 'cv_title', label: 'Title', filterable: 'text' },
+  { key: 'department', label: 'Department', filterable: 'text' },
+  { key: 'cv_status', label: 'CV', filterable: 'select', options: ['Complete', 'Not started'] },
+  { key: 'experience_count', label: 'Experiences' },
+]
 
 const inp: React.CSSProperties = {
   fontSize: '12px', padding: '7px 11px', border: '1px solid #E2E8F0',
@@ -75,18 +84,33 @@ function CvDatabaseContent() {
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [shortCvUser, setShortCvUser] = useState<any>(null)
+  const [userEmail, setUserEmail] = useState('')
+
+  const rb = useReportBuilder('cv_database', COLUMNS, userEmail)
 
   useEffect(() => {
     fetch(`${API}/cv`).then(r => r.json()).then(d => { setUsers(d.users || []); setLoading(false) }).catch(() => setLoading(false))
+    const u = getStoredUser()
+    if (u?.email) setUserEmail(u.email)
   }, [])
 
-  const filtered = users.filter(u => !search || `${u.display_name} ${u.email} ${u.department}`.toLowerCase().includes(search.toLowerCase()))
+  const searched = users.filter(u => !search || `${u.display_name} ${u.email} ${u.department}`.toLowerCase().includes(search.toLowerCase()))
+  const withDisplay = searched.map(u => ({
+    ...u,
+    employee_name: u.display_name || `${u.first_name} ${u.last_name}`,
+    cv_status: u.has_cv ? 'Complete' : 'Not started',
+  }))
+  const reported = applyReport(withDisplay, COLUMNS, rb.filters, rb.sortField, rb.sortDir)
+  const isVisible = (key: string) => rb.visibleCols.includes(key)
 
   return (
     <div style={{ padding: '24px 28px' }}>
-      <div style={{ marginBottom: '20px' }}>
-        <h1 style={{ fontSize: '20px', fontWeight: '800', color: '#156082', margin: '0 0 4px' }}>📇 CV Database</h1>
-        <p style={{ fontSize: '12px', color: '#94A3B8', margin: 0 }}>{filtered.length} employee{filtered.length !== 1 ? 's' : ''}</p>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '20px' }}>
+        <div>
+          <h1 style={{ fontSize: '20px', fontWeight: '800', color: '#156082', margin: '0 0 4px' }}>📇 CV Database</h1>
+          <p style={{ fontSize: '12px', color: '#94A3B8', margin: 0 }}>{reported.length} employee{reported.length !== 1 ? 's' : ''}</p>
+        </div>
+        <ReportPanel columns={COLUMNS} rb={rb} />
       </div>
 
       <div style={{ marginBottom: '14px' }}>
@@ -97,25 +121,28 @@ function CvDatabaseContent() {
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
           <thead style={{ background: '#FAFBFC' }}>
             <tr>
-              {['Employee', 'Title', 'Department', 'CV', 'Experiences', 'Actions'].map(h => (
-                <th key={h} style={{ padding: '10px 16px', textAlign: 'left', fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#45B6E4', borderBottom: '1px solid #EDF2F7' }}>{h}</th>
+              {COLUMNS.filter(c => isVisible(c.key)).map(c => (
+                <th key={c.key} style={{ padding: '10px 16px', textAlign: 'left', fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#45B6E4', borderBottom: '1px solid #EDF2F7' }}>{c.label}</th>
               ))}
+              <th style={{ padding: '10px 16px', borderBottom: '1px solid #EDF2F7' }}>Actions</th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={6} style={{ textAlign: 'center', padding: '32px', color: '#45B6E4' }}>Loading…</td></tr>
-            ) : filtered.length === 0 ? (
-              <tr><td colSpan={6} style={{ textAlign: 'center', padding: '32px', color: '#94A3B8' }}>No employees found.</td></tr>
-            ) : filtered.map(u => (
+              <tr><td colSpan={COLUMNS.length + 1} style={{ textAlign: 'center', padding: '32px', color: '#45B6E4' }}>Loading…</td></tr>
+            ) : reported.length === 0 ? (
+              <tr><td colSpan={COLUMNS.length + 1} style={{ textAlign: 'center', padding: '32px', color: '#94A3B8' }}>No employees found.</td></tr>
+            ) : reported.map(u => (
               <tr key={u.email} style={{ borderBottom: '1px solid #F1F5F9' }}>
-                <td style={{ padding: '10px 16px', fontWeight: '700', color: '#156082' }}>{u.display_name || `${u.first_name} ${u.last_name}`}</td>
-                <td style={{ padding: '10px 16px', color: '#3F3F3F' }}>{u.cv_title || '—'}</td>
-                <td style={{ padding: '10px 16px', color: '#64748B' }}>{u.department || '—'}</td>
-                <td style={{ padding: '10px 16px' }}>
-                  {u.has_cv ? <span style={{ background: '#ECFDF5', color: '#059669', padding: '2px 9px', borderRadius: '10px', fontSize: '10px', fontWeight: '700' }}>Complete</span> : <span style={{ background: '#F1F5F9', color: '#94A3B8', padding: '2px 9px', borderRadius: '10px', fontSize: '10px', fontWeight: '700' }}>Not started</span>}
-                </td>
-                <td style={{ padding: '10px 16px' }}>{u.experience_count}</td>
+                {isVisible('employee_name') && <td style={{ padding: '10px 16px', fontWeight: '700', color: '#156082' }}>{u.employee_name}</td>}
+                {isVisible('cv_title') && <td style={{ padding: '10px 16px', color: '#3F3F3F' }}>{u.cv_title || '—'}</td>}
+                {isVisible('department') && <td style={{ padding: '10px 16px', color: '#64748B' }}>{u.department || '—'}</td>}
+                {isVisible('cv_status') && (
+                  <td style={{ padding: '10px 16px' }}>
+                    {u.has_cv ? <span style={{ background: '#ECFDF5', color: '#059669', padding: '2px 9px', borderRadius: '10px', fontSize: '10px', fontWeight: '700' }}>Complete</span> : <span style={{ background: '#F1F5F9', color: '#94A3B8', padding: '2px 9px', borderRadius: '10px', fontSize: '10px', fontWeight: '700' }}>Not started</span>}
+                  </td>
+                )}
+                {isVisible('experience_count') && <td style={{ padding: '10px 16px' }}>{u.experience_count}</td>}
                 <td style={{ padding: '10px 16px' }}>
                   <div style={{ display: 'flex', gap: '6px' }}>
                     <a href={`${API}/cv/${encodeURIComponent(u.email)}/export/word`} style={{ padding: '5px 10px', background: '#EFF6FF', borderRadius: '6px', fontSize: '11px', color: '#3B82F6', fontWeight: '700', fontFamily: 'Montserrat, sans-serif', textDecoration: 'none' }}>Word</a>

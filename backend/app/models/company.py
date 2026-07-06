@@ -22,7 +22,10 @@ class Company(Base):
     level           = Column(Integer, default=1)
 
     name            = Column(String(255), nullable=False)  # company name
-    contact_name    = Column(String(255))                   # main contact
+    contact_name    = Column(String(255))                   # legacy free-text main contact, superseded by main_contact_id
+    # Main contact is a real Contact record — plain FK, no relationship() (Contact already has its
+    # own company_id FK the other way; avoids a backref-naming collision on the same pair of tables).
+    main_contact_id = Column(UUID(as_uuid=True), ForeignKey("contacts.id", ondelete="SET NULL"), nullable=True)
     domain_names    = Column(JSONB, default=list)
     phone           = Column(String(50))
     sector          = Column(String(255))
@@ -33,7 +36,8 @@ class Company(Base):
     sap_hosting_partner     = Column(JSONB, default=list)
     linkedin_url    = Column(String(500))
     notes           = Column(Text)
-    assigned_to     = Column(String(255))
+    assigned_to     = Column(String(255))                   # display name of the assigned wcomply employee
+    assigned_to_email = Column(String(255))
 
     created_at      = Column(DateTime, default=datetime.utcnow)
     updated_at      = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

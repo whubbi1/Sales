@@ -3,9 +3,11 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { Sidebar } from '@/components/Sidebar'
-import { companiesAPI } from '@/lib/api'
+import { companiesAPI, partnersAPI } from '@/lib/api'
 import { PageHeader, StatusBadge, EmptyState } from '@/components/shared/RecordLayout'
 import { CompanyModal } from '@/components/companies/CompanyModal'
+import { useReportBuilder, applyReport, ReportPanel, ReportColumn } from '@/components/it/ReportBuilder'
+import { getStoredUser } from '@/lib/auth'
 
 const ANTHROPIC_API = 'https://api.anthropic.com/v1/messages'
 
@@ -26,13 +28,23 @@ async function claudeSearch(prompt: string): Promise<string> {
 const LEVEL_LABELS: Record<number, string> = { 1: 'Group', 2: 'Parent', 3: 'Child', 4: 'Sub-Child' }
 const LEVEL_COLORS: Record<number, string> = { 1: '#144766', 2: '#1a5a84', 3: '#219BD6', 4: '#7DD3F0' }
 
+const COLUMNS: ReportColumn[] = [
+  { key: 'name', label: 'Company', filterable: 'text' },
+  { key: 'level_label', label: 'Level', filterable: 'select', options: ['Group', 'Parent', 'Child', 'Sub-Child'] },
+  { key: 'main_contact_display', label: 'Contact', filterable: 'text' },
+  { key: 'domains_display', label: 'Domains' },
+  { key: 'main_erp_display', label: 'ERP' },
+  { key: 'hosting_display', label: 'Hosting' },
+  { key: 'status', label: 'Status', filterable: 'select', options: ['lead', 'prospect', 'client', 'partner'] },
+  { key: 'assigned_to', label: 'Assigned', filterable: 'text' },
+]
+
 export default function CompaniesPage() {
   const router = useRouter()
   const [companies, setCompanies] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
-  const [search, setSearch] = useState('')
-  const [statusFilter, setStatusFilter] = useState('')
   const [showModal, setShowModal] = useState(false)
+  const [userEmail, setUserEmail] = useState('')
   const [showSearch, setShowSearch] = useState(false)
   const [selectedCompany, setSelectedCompany] = useState<any>(null)
   const [aiLoading, setAiLoading] = useState(false)
@@ -55,16 +67,41 @@ export default function CompaniesPage() {
     setAiResult(result); setAiLoading(false)
   }
 
+  const rb = useReportBuilder('company', COLUMNS, userEmail)
+
   const load = async () => {
     try {
       setLoading(true)
-      const data = await companiesAPI.list({ search: search || undefined, status: statusFilter || undefined })
-      setCompanies(data)
+      const [companyRows, partnerRows] = await Promise.all([
+        companiesAPI.list({}),
+        partnersAPI.list({}),
+      ])
+      const mappedPartners = partnerRows.map((p: any) => ({
+        ...p, status: 'partner', level: 1, parent: null,
+        main_contact: p.main_contact_first_name ? { first_name: p.main_contact_first_name, last_name: p.main_contact_last_name } : null,
+        _isPartner: true,
+      }))
+      setCompanies([...companyRows, ...mappedPartners].sort((a, b) => a.name.localeCompare(b.name)))
     } catch (e) { console.error(e) }
     finally { setLoading(false) }
   }
 
-  useEffect(() => { load() }, [search, statusFilter])
+  useEffect(() => {
+    load()
+    const u = getStoredUser()
+    if (u?.email) setUserEmail(u.email)
+  }, [])
+
+  const withDisplay = companies.map(c => ({
+    ...c,
+    level_label: LEVEL_LABELS[c.level],
+    main_contact_display: c.main_contact ? `${c.main_contact.first_name} ${c.main_contact.last_name}` : '',
+    domains_display: (c.domain_names || []).join(', '),
+    main_erp_display: (c.main_erp || []).join(', '),
+    hosting_display: (c.sap_hosting_partner || []).join(', '),
+  }))
+  const reported = applyReport(withDisplay, COLUMNS, rb.filters, rb.sortField, rb.sortDir)
+  const isVisible = (key: string) => rb.visibleCols.includes(key)
 
   return (
     <div style={{ display: 'flex' }}>
@@ -73,90 +110,95 @@ export default function CompaniesPage() {
         <div style={{ padding: '24px 28px' }}>
           <PageHeader
             title="Companies"
-            count={companies.length}
+            count={reported.length}
             action={
-              <button className="btn-primary" onClick={() => setShowModal(true)}>
-                <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                New Company
-              </button>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <ReportPanel columns={COLUMNS} rb={rb} />
+                <button className="btn-primary" onClick={() => setShowModal(true)}>
+                  <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                  New Company
+                </button>
+              </div>
             }
           />
-
-          {/* Filters */}
-          <div style={{ display: 'flex', gap: '10px', marginBottom: '14px', flexWrap: 'wrap' }}>
-            <div style={{ position: 'relative', flex: 1, minWidth: '200px', maxWidth: '340px' }}>
-              <svg style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: '#9B9B9B' }} width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-              <input className="form-input" style={{ paddingLeft: '30px' }} placeholder="Search companies..." value={search} onChange={e => setSearch(e.target.value)} />
-            </div>
-            <select className="form-input" style={{ width: '150px' }} value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
-              <option value="">All statuses</option>
-              <option value="lead">Lead</option>
-              <option value="prospect">Prospect</option>
-              <option value="client">Client</option>
-              <option value="partner">Partner</option>
-            </select>
-          </div>
 
           {/* Table */}
           <div style={{ background: 'white', borderRadius: '10px', border: '1px solid #EDF2F7', boxShadow: '0 1px 3px rgba(0,0,0,0.06)', overflow: 'hidden' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead style={{ background: '#FAFBFC' }}>
                 <tr>
-                  {['Company', 'Level', 'Contact', 'Domains', 'ERP', 'Hosting', 'Status', 'Assigned', ''].map(h => (
-                    <th key={h} style={{ textAlign: 'left', padding: '10px 16px', fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#9B9B9B', borderBottom: '1px solid #E2E8F0', whiteSpace: 'nowrap' }}>{h}</th>
+                  {COLUMNS.filter(c => isVisible(c.key)).map(c => (
+                    <th key={c.key} style={{ textAlign: 'left', padding: '10px 16px', fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#9B9B9B', borderBottom: '1px solid #E2E8F0', whiteSpace: 'nowrap' }}>{c.label}</th>
                   ))}
+                  <th style={{ borderBottom: '1px solid #E2E8F0' }} />
                 </tr>
               </thead>
               <tbody>
                 {loading ? (
-                  <tr><td colSpan={8} style={{ textAlign: 'center', padding: '48px', color: '#9B9B9B', fontSize: '13px' }}>Loading...</td></tr>
-                ) : companies.length === 0 ? (
-                  <tr><td colSpan={8}><EmptyState icon="🏢" title="No companies yet" description="Create your first company by clicking New Company" /></td></tr>
-                ) : companies.map(company => (
-                  <tr key={company.id} onClick={() => router.push(`/companies/${company.id}`)} style={{ cursor: 'pointer', transition: 'background 0.1s' }}
+                  <tr><td colSpan={COLUMNS.length + 1} style={{ textAlign: 'center', padding: '48px', color: '#9B9B9B', fontSize: '13px' }}>Loading...</td></tr>
+                ) : reported.length === 0 ? (
+                  <tr><td colSpan={COLUMNS.length + 1}><EmptyState icon="🏢" title="No companies yet" description="Create your first company by clicking New Company" /></td></tr>
+                ) : reported.map(company => (
+                  <tr key={company.id} onClick={() => router.push(company._isPartner ? `/partners/${company.id}` : `/companies/${company.id}`)} style={{ cursor: 'pointer', transition: 'background 0.1s' }}
                     onMouseEnter={e => (e.currentTarget.style.background = '#FAFBFC')}
                     onMouseLeave={e => (e.currentTarget.style.background = 'white')}>
-                    <td style={{ padding: '12px 16px', borderBottom: '1px solid #F1F5F9' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                        {company.level > 1 && <span style={{ color: '#CBD5E0', marginLeft: `${(company.level - 1) * 12}px` }}>└</span>}
-                        <div style={{ width: '30px', height: '30px', borderRadius: '6px', background: LEVEL_COLORS[company.level] || '#144766', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: '800', flexShrink: 0 }}>
-                          {company.name[0]?.toUpperCase()}
+                    {isVisible('name') && (
+                      <td style={{ padding: '12px 16px', borderBottom: '1px solid #F1F5F9' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                          {company.level > 1 && <span style={{ color: '#CBD5E0', marginLeft: `${(company.level - 1) * 12}px` }}>└</span>}
+                          <div style={{ width: '30px', height: '30px', borderRadius: '6px', background: LEVEL_COLORS[company.level] || '#144766', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: '800', flexShrink: 0 }}>
+                            {company.name[0]?.toUpperCase()}
+                          </div>
+                          <div>
+                            <div style={{ fontWeight: '700', color: '#144766', fontSize: '13px' }}>{company.name}</div>
+                            {company.parent && <div style={{ fontSize: '10px', color: '#9B9B9B' }}>↑ {company.parent.name}</div>}
+                          </div>
                         </div>
-                        <div>
-                          <div style={{ fontWeight: '700', color: '#144766', fontSize: '13px' }}>{company.name}</div>
-                          {company.parent && <div style={{ fontSize: '10px', color: '#9B9B9B' }}>↑ {company.parent.name}</div>}
+                      </td>
+                    )}
+                    {isVisible('level_label') && (
+                      <td style={{ padding: '12px 16px', borderBottom: '1px solid #F1F5F9' }}>
+                        <span style={{ background: LEVEL_COLORS[company.level] + '20', color: LEVEL_COLORS[company.level], padding: '2px 8px', borderRadius: '10px', fontSize: '10px', fontWeight: '700' }}>
+                          {LEVEL_LABELS[company.level]}
+                        </span>
+                      </td>
+                    )}
+                    {isVisible('main_contact_display') && (
+                      <td style={{ padding: '12px 16px', borderBottom: '1px solid #F1F5F9', fontSize: '12px', color: '#3F3F3F' }}>{company.main_contact_display || '—'}</td>
+                    )}
+                    {isVisible('domains_display') && (
+                      <td style={{ padding: '12px 16px', borderBottom: '1px solid #F1F5F9', fontSize: '11px', color: '#9B9B9B' }}>
+                        {(company.domain_names || []).slice(0, 2).join(', ')}
+                        {(company.domain_names || []).length > 2 && <span style={{ color: '#219BD6' }}> +{company.domain_names.length - 2}</span>}
+                      </td>
+                    )}
+                    {isVisible('main_erp_display') && (
+                      <td style={{ padding: '12px 16px', borderBottom: '1px solid #F1F5F9' }}>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '3px' }}>
+                          {(company.main_erp || []).slice(0, 2).map((e: string) => (
+                            <span key={e} style={{ background: '#EEF2FF', color: '#4F46E5', padding: '1px 7px', borderRadius: '10px', fontSize: '10px', fontWeight: '700' }}>{e}</span>
+                          ))}
+                          {(company.main_erp || []).length > 2 && <span style={{ fontSize: '10px', color: '#9B9B9B' }}>+{company.main_erp.length - 2}</span>}
                         </div>
-                      </div>
-                    </td>
-                    <td style={{ padding: '12px 16px', borderBottom: '1px solid #F1F5F9' }}>
-                      <span style={{ background: LEVEL_COLORS[company.level] + '20', color: LEVEL_COLORS[company.level], padding: '2px 8px', borderRadius: '10px', fontSize: '10px', fontWeight: '700' }}>
-                        {LEVEL_LABELS[company.level]}
-                      </span>
-                    </td>
-                    <td style={{ padding: '12px 16px', borderBottom: '1px solid #F1F5F9', fontSize: '12px', color: '#3F3F3F' }}>{company.contact_name || '—'}</td>
-                    <td style={{ padding: '12px 16px', borderBottom: '1px solid #F1F5F9', fontSize: '11px', color: '#9B9B9B' }}>
-                      {(company.domain_names || []).slice(0, 2).join(', ')}
-                      {(company.domain_names || []).length > 2 && <span style={{ color: '#219BD6' }}> +{company.domain_names.length - 2}</span>}
-                    </td>
-                    <td style={{ padding: '12px 16px', borderBottom: '1px solid #F1F5F9' }}>
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '3px' }}>
-                        {(company.main_erp || []).slice(0, 2).map((e: string) => (
-                          <span key={e} style={{ background: '#EEF2FF', color: '#4F46E5', padding: '1px 7px', borderRadius: '10px', fontSize: '10px', fontWeight: '700' }}>{e}</span>
-                        ))}
-                        {(company.main_erp || []).length > 2 && <span style={{ fontSize: '10px', color: '#9B9B9B' }}>+{company.main_erp.length - 2}</span>}
-                      </div>
-                    </td>
-                    <td style={{ padding: '12px 16px', borderBottom: '1px solid #F1F5F9' }}>
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '3px' }}>
-                        {(company.sap_hosting_partner || []).slice(0, 2).map((h: string) => (
-                          <span key={h} style={{ background: '#ECFDF5', color: '#059669', padding: '1px 7px', borderRadius: '10px', fontSize: '10px', fontWeight: '700' }}>{h}</span>
-                        ))}
-                      </div>
-                    </td>
-                    <td style={{ padding: '12px 16px', borderBottom: '1px solid #F1F5F9' }}>
-                      <StatusBadge value={company.status} />
-                    </td>
-                    <td style={{ padding: '12px 16px', borderBottom: '1px solid #F1F5F9', fontSize: '11px', color: '#9B9B9B' }}>{company.assigned_to || '—'}</td>
+                      </td>
+                    )}
+                    {isVisible('hosting_display') && (
+                      <td style={{ padding: '12px 16px', borderBottom: '1px solid #F1F5F9' }}>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '3px' }}>
+                          {(company.sap_hosting_partner || []).slice(0, 2).map((h: string) => (
+                            <span key={h} style={{ background: '#ECFDF5', color: '#059669', padding: '1px 7px', borderRadius: '10px', fontSize: '10px', fontWeight: '700' }}>{h}</span>
+                          ))}
+                        </div>
+                      </td>
+                    )}
+                    {isVisible('status') && (
+                      <td style={{ padding: '12px 16px', borderBottom: '1px solid #F1F5F9' }}>
+                        <StatusBadge value={company.status} />
+                      </td>
+                    )}
+                    {isVisible('assigned_to') && (
+                      <td style={{ padding: '12px 16px', borderBottom: '1px solid #F1F5F9', fontSize: '11px', color: '#9B9B9B' }}>{company.assigned_to || '—'}</td>
+                    )}
                     <td style={{ padding: '12px 16px', borderBottom: '1px solid #F1F5F9' }}>
                       <button onClick={e => { e.stopPropagation(); setSelectedCompany(company); setAiResult(''); setShowSearch(true) }}
                         style={{ padding:'4px 10px', background:'#EFF6FF', color:'#156082', border:'none', borderRadius:'6px', fontSize:'10px', fontWeight:'700', cursor:'pointer', fontFamily:'Montserrat, sans-serif', whiteSpace:'nowrap' }}>
@@ -222,7 +264,7 @@ export default function CompaniesPage() {
             </div>
           </div>
         )}
-        {showModal && <CompanyModal onClose={() => setShowModal(false)} onSave={() => { setShowModal(false); load() }} companies={companies} />}
+        {showModal && <CompanyModal onClose={() => setShowModal(false)} onSave={() => { setShowModal(false); load() }} companies={companies.filter(c => !c._isPartner)} />}
       </main>
     </div>
   )

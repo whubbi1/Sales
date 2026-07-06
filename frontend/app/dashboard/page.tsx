@@ -83,9 +83,11 @@ export default function DashboardPage() {
 
   const wonAll = opportunities.filter(o => WON_STATUSES.includes(o.deal_status) && o.deal_amount)
   const wonYear = wonAll.filter(o => o.closing_date && String(o.closing_date).startsWith(CURRENT_YEAR))
+  const openOpps = opportunities.filter(o => !WON_STATUSES.includes(o.deal_status) && o.deal_status !== 'Contract Lost')
 
   const salesAll  = wonAll.reduce((s, o) => s + (o.deal_amount || 0), 0)
   const salesYear = wonYear.reduce((s, o) => s + (o.deal_amount || 0), 0)
+  const openValue = openOpps.reduce((s, o) => s + (o.deal_amount || 0), 0)
 
   const fmt = (n: number) => `€${n.toLocaleString('en-US', { minimumFractionDigits: 0 })}`
 
@@ -134,7 +136,7 @@ export default function DashboardPage() {
 
             {/* Sales section */}
             <div style={{ fontSize: '11px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#45B6E4', marginBottom: '12px', fontFamily: 'Montserrat, sans-serif' }}>Sales</div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '16px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px' }}>
               {/* All-time */}
               <div style={{ background: 'white', borderRadius: '14px', border: '1px solid #EDF2F7', padding: '22px 24px', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', borderTop: '3px solid #059669' }}>
                 <div style={{ fontSize: '11px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#9B9B9B', marginBottom: '4px', fontFamily: 'Montserrat, sans-serif' }}>All-time closed won</div>
@@ -147,6 +149,13 @@ export default function DashboardPage() {
                 <div style={{ fontSize: '11px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#9B9B9B', marginBottom: '4px', fontFamily: 'Montserrat, sans-serif' }}>{CURRENT_YEAR} closed won</div>
                 <div style={{ fontSize: '36px', fontWeight: '800', color: '#156082', fontFamily: 'Montserrat, sans-serif', lineHeight: 1, marginBottom: '10px' }}>{fmt(salesYear)}</div>
                 <div style={{ fontSize: '12px', color: '#94A3B8', fontFamily: 'Montserrat, sans-serif' }}>{wonYear.length} deal{wonYear.length !== 1 ? 's' : ''} closed this year</div>
+              </div>
+
+              {/* Open pipeline */}
+              <div onClick={() => router.push('/opportunities')} style={{ background: 'white', borderRadius: '14px', border: '1px solid #EDF2F7', padding: '22px 24px', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', borderTop: '3px solid #e97132', cursor: 'pointer' }}>
+                <div style={{ fontSize: '11px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#9B9B9B', marginBottom: '4px', fontFamily: 'Montserrat, sans-serif' }}>Open Opportunities</div>
+                <div style={{ fontSize: '36px', fontWeight: '800', color: '#e97132', fontFamily: 'Montserrat, sans-serif', lineHeight: 1, marginBottom: '10px' }}>{fmt(openValue)}</div>
+                <div style={{ fontSize: '12px', color: '#94A3B8', fontFamily: 'Montserrat, sans-serif' }}>{openOpps.length} open deal{openOpps.length !== 1 ? 's' : ''}</div>
               </div>
             </div>
           </>)}

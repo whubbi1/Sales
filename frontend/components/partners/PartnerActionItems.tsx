@@ -10,6 +10,78 @@ const S_LABEL: Record<string, string> = { open: 'Open', in_progress: 'In progres
 
 const EMPTY_FORM = { title: '', description: '', company_id: '', contact_id: '', owner_email: '', owner_name: '', due_date: '' }
 
+function ActionItemEditModal({ item, companies, contacts, onClose, onSave }: any) {
+  const [form, setForm] = useState({
+    title: item.title || '', description: item.description || '',
+    company_id: item.company_id || '', contact_id: item.contact_id || '',
+    owner_email: item.owner_email || '', owner_name: item.owner_name || '',
+    due_date: item.due_date ? item.due_date.slice(0, 10) : '', status: item.status || 'open',
+  })
+  const [saving, setSaving] = useState(false)
+  const contactsForCompany = form.company_id ? contacts.filter((c: any) => c.company_id === form.company_id) : contacts
+
+  const save = async () => {
+    setSaving(true)
+    try { await onSave(form) } finally { setSaving(false) }
+  }
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal" onClick={e => e.stopPropagation()}>
+        <div className="modal-header">
+          <h2 style={{ fontSize: '15px', fontWeight: '700', color: '#144766' }}>Edit Action</h2>
+          <button onClick={onClose} style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: '20px', color: '#9B9B9B', lineHeight: 1 }}>×</button>
+        </div>
+        <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+          <div><label className="form-label">Title *</label><input className="form-input" value={form.title} onChange={e => setForm(p => ({ ...p, title: e.target.value }))} /></div>
+          <div><label className="form-label">Description</label><textarea className="form-input" rows={2} style={{ resize: 'vertical' }} value={form.description} onChange={e => setForm(p => ({ ...p, description: e.target.value }))} /></div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+            <div>
+              <label className="form-label">Company</label>
+              <select className="form-input" value={form.company_id} onChange={e => setForm(p => ({ ...p, company_id: e.target.value, contact_id: '' }))}>
+                <option value="">No company</option>
+                {companies.map((c: any) => <option key={c.id} value={c.id}>{c.name}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="form-label">Contact</label>
+              <select className="form-input" value={form.contact_id} onChange={e => setForm(p => ({ ...p, contact_id: e.target.value }))}>
+                <option value="">No contact</option>
+                {contactsForCompany.map((c: any) => <option key={c.id} value={c.id}>{c.first_name} {c.last_name}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="form-label">Owner Email</label>
+              <input className="form-input" placeholder="owner@wcomply.com" value={form.owner_email} onChange={e => setForm(p => ({ ...p, owner_email: e.target.value }))} />
+            </div>
+            <div>
+              <label className="form-label">Owner Name</label>
+              <input className="form-input" value={form.owner_name} onChange={e => setForm(p => ({ ...p, owner_name: e.target.value }))} />
+            </div>
+            <div>
+              <label className="form-label">Due Date</label>
+              <input type="date" className="form-input" value={form.due_date} onChange={e => setForm(p => ({ ...p, due_date: e.target.value }))} />
+            </div>
+            <div>
+              <label className="form-label">Status</label>
+              <select className="form-input" value={form.status} onChange={e => setForm(p => ({ ...p, status: e.target.value }))}>
+                <option value="open">Open</option><option value="in_progress">In progress</option><option value="done">Done</option>
+              </select>
+            </div>
+          </div>
+          <p style={{ fontSize: '10px', color: '#9B9B9B', marginTop: '4px', marginBottom: 0 }}>
+            If the owner's email is an @wcomply.com address, this also creates a task in their Task Manager.
+          </p>
+        </div>
+        <div className="modal-footer">
+          <button className="btn-secondary" onClick={onClose}>Cancel</button>
+          <button className="btn-primary" onClick={save} disabled={saving || !form.title.trim()}>{saving ? 'Saving...' : 'Save Changes'}</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export function PartnerActionItems({ partnerId }: { partnerId: string }) {
   const [items, setItems] = useState<any[]>([])
   const [companies, setCompanies] = useState<any[]>([])
@@ -17,6 +89,9 @@ export function PartnerActionItems({ partnerId }: { partnerId: string }) {
   const [showForm, setShowForm] = useState(false)
   const [saving, setSaving] = useState(false)
   const [form, setForm] = useState(EMPTY_FORM)
+  const [editingTitleId, setEditingTitleId] = useState<string | null>(null)
+  const [titleDraft, setTitleDraft] = useState('')
+  const [editItem, setEditItem] = useState<any>(null)
 
   const load = async () => setItems(await partnersAPI.getActionItems(partnerId))
   useEffect(() => {
@@ -36,6 +111,16 @@ export function PartnerActionItems({ partnerId }: { partnerId: string }) {
 
   const cycleStatus = (item: any) => partnersAPI.updateActionItem(partnerId, item.id, { status: S_NEXT[item.status] }).then(load)
   const remove = (item: any) => { if (confirm(`Delete "${item.title}"?`)) partnersAPI.deleteActionItem(partnerId, item.id).then(load) }
+  const saveTitle = async (item: any) => {
+    setEditingTitleId(null)
+    if (titleDraft.trim() && titleDraft !== item.title) await partnersAPI.updateActionItem(partnerId, item.id, { title: titleDraft.trim() })
+    load()
+  }
+  const saveEditModal = async (fields: any) => {
+    await partnersAPI.updateActionItem(partnerId, editItem.id, fields)
+    setEditItem(null)
+    load()
+  }
 
   const contactsForCompany = form.company_id ? contacts.filter((c: any) => c.company_id === form.company_id) : contacts
 
@@ -97,7 +182,15 @@ export function PartnerActionItems({ partnerId }: { partnerId: string }) {
               <button onClick={() => cycleStatus(item)} style={{ width: '18px', height: '18px', borderRadius: '50%', flexShrink: 0, marginTop: '2px', border: `2px solid ${S_COLOR[item.status]}`, background: item.status === 'done' ? S_COLOR[item.status] : 'white', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '9px', color: 'white' }}>{item.status === 'done' ? '✓' : ''}</button>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '5px', marginBottom: '2px', flexWrap: 'wrap' }}>
-                  <span style={{ fontSize: '12px', fontWeight: '600', color: '#3F3F3F', textDecoration: item.status === 'done' ? 'line-through' : 'none' }}>{item.title}</span>
+                  {editingTitleId === item.id ? (
+                    <input autoFocus className="form-input" style={{ fontSize: '12px', padding: '3px 6px', width: '220px' }} value={titleDraft}
+                      onChange={e => setTitleDraft(e.target.value)} onBlur={() => saveTitle(item)}
+                      onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); if (e.key === 'Escape') setEditingTitleId(null) }} />
+                  ) : (
+                    <span onClick={() => { setEditingTitleId(item.id); setTitleDraft(item.title) }} title="Click to edit"
+                      style={{ fontSize: '12px', fontWeight: '600', color: '#3F3F3F', textDecoration: item.status === 'done' ? 'line-through' : 'none', cursor: 'pointer', padding: '2px 4px', margin: '-2px -4px', borderRadius: '4px' }}
+                      onMouseEnter={e => (e.currentTarget.style.background = '#F1F5F9')} onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>{item.title}</span>
+                  )}
                   <span style={{ background: S_BG[item.status], color: S_COLOR[item.status], padding: '1px 6px', borderRadius: '10px', fontSize: '9px', fontWeight: '700', textTransform: 'uppercase' }}>{S_LABEL[item.status]}</span>
                   {item.task_id && <span style={{ background: '#EFF6FF', color: '#156082', padding: '1px 6px', borderRadius: '10px', fontSize: '9px', fontWeight: '700' }}>✓ Task created</span>}
                 </div>
@@ -109,11 +202,13 @@ export function PartnerActionItems({ partnerId }: { partnerId: string }) {
                   {item.due_date && <span>Due {new Date(item.due_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>}
                 </div>
               </div>
+              <button onClick={() => setEditItem(item)} style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#219BD6', fontSize: '11px', fontWeight: '700', flexShrink: 0 }}>Edit</button>
               <button onClick={() => remove(item)} style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#9B9B9B', fontSize: '16px', lineHeight: 1 }}>×</button>
             </div>
           ))}
         </div>
       )}
+      {editItem && <ActionItemEditModal item={editItem} companies={companies} contacts={contacts} onClose={() => setEditItem(null)} onSave={saveEditModal} />}
     </div>
   )
 }

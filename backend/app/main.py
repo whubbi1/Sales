@@ -1097,6 +1097,29 @@ async def startup():
                     created_at TIMESTAMP DEFAULT NOW(),
                     updated_at TIMESTAMP DEFAULT NOW()
                 )""",
+
+                # Companies & Partners — real Contact/employee references instead of free text
+                "ALTER TABLE companies ADD COLUMN IF NOT EXISTS main_contact_id UUID REFERENCES contacts(id) ON DELETE SET NULL",
+                "ALTER TABLE companies ADD COLUMN IF NOT EXISTS assigned_to_email VARCHAR(255)",
+                "ALTER TABLE partners ADD COLUMN IF NOT EXISTS main_contact_id UUID REFERENCES contacts(id) ON DELETE SET NULL",
+                "ALTER TABLE partners ADD COLUMN IF NOT EXISTS assigned_to_email VARCHAR(255)",
+                """CREATE TABLE IF NOT EXISTS partner_comments (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    partner_id UUID NOT NULL REFERENCES partners(id) ON DELETE CASCADE,
+                    author_email VARCHAR(255) NOT NULL,
+                    author_name VARCHAR(255),
+                    comment TEXT NOT NULL,
+                    created_at TIMESTAMP DEFAULT NOW()
+                )""",
+                """CREATE TABLE IF NOT EXISTS partner_links (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    partner_id UUID NOT NULL REFERENCES partners(id) ON DELETE CASCADE,
+                    url TEXT NOT NULL,
+                    title VARCHAR(500),
+                    description TEXT,
+                    added_by_email VARCHAR(255),
+                    created_at TIMESTAMP DEFAULT NOW()
+                )""",
             ]
             for sql in sqls:
                 try:

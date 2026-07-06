@@ -76,7 +76,7 @@ export default function CompanyDetailPage() {
                 <span style={{ background: color + '22', color, padding: '2px 8px', borderRadius: '10px', fontSize: '10px', fontWeight: '700' }}>{LEVEL_LABELS[company.level]}</span>
               </div>
               <p style={{ color: '#9B9B9B', fontSize: '12px', margin: 0 }}>
-                {company.contact_name && `${company.contact_name} · `}
+                {company.main_contact && `${company.main_contact.first_name} ${company.main_contact.last_name} · `}
                 {company.sector || 'No sector'}
                 {company.country && ` · ${company.country}`}
               </p>

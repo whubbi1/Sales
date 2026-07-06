@@ -60,6 +60,17 @@ export const partnersAPI = {
   createActionItem: (id: string, d: any) => fetchAPI(`/partners/${id}/action-items`, { method: 'POST', body: JSON.stringify(d) }),
   updateActionItem: (id: string, itemId: string, d: any) => fetchAPI(`/partners/${id}/action-items/${itemId}`, { method: 'PUT', body: JSON.stringify(d) }),
   deleteActionItem: (id: string, itemId: string) => fetchAPI(`/partners/${id}/action-items/${itemId}`, { method: 'DELETE' }),
+
+  getComments:   (id: string) => fetchAPI(`/partners/${id}/comments`),
+  addComment:    (id: string, d: any) => fetchAPI(`/partners/${id}/comments`, { method: 'POST', body: JSON.stringify(d) }),
+  deleteComment: (id: string, cid: string) => fetchAPI(`/partners/${id}/comments/${cid}`, { method: 'DELETE' }),
+
+  getLinks:   (id: string) => fetchAPI(`/partners/${id}/links`),
+  addLink:    (id: string, d: any) => fetchAPI(`/partners/${id}/links`, { method: 'POST', body: JSON.stringify(d) }),
+  deleteLink: (id: string, lid: string) => fetchAPI(`/partners/${id}/links/${lid}`, { method: 'DELETE' }),
+
+  getEvents:    (id: string) => fetchAPI(`/partners/${id}/events`),
+  getCustomers: (id: string) => fetchAPI(`/partners/${id}/customers`),
 }
 
 // ─── Marketing ────────────────────────────────────────────────────────────────

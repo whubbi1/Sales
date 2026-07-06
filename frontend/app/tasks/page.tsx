@@ -36,7 +36,7 @@ export default function TasksPage() {
     setLoading(true)
     try {
       const [t, c, ct, o] = await Promise.all([
-        taskManagerAPI.list({ source: 'sales', status: statusFilter || undefined }),
+        taskManagerAPI.list({ source: 'sales', status_filter: statusFilter || undefined, email: actingEmail, scope: 'own' }),
         companiesAPI.list({}), contactsAPI.list({}), opportunitiesAPI.list({}),
       ])
       setTasks(t.tasks || []); setCompanies(c); setContacts(ct); setOpportunities(o)

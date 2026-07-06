@@ -1,10 +1,53 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import { partnersAPI } from '@/lib/api'
-import { RecordLayout, PropertyRow, SidebarSection, SidebarCard, StatusBadge, TabNav } from '@/components/shared/RecordLayout'
-import { PartnerModal } from '@/components/partners/PartnerModal'
+import { partnersAPI, contactsAPI, opportunitiesAPI } from '@/lib/api'
+import { getStoredUser } from '@/lib/auth'
+import { RecordLayout, PropertyRow, SidebarSection, SidebarCard, StatusBadge, TabNav, EmptyState } from '@/components/shared/RecordLayout'
 import { PartnerActionItems } from '@/components/partners/PartnerActionItems'
+
+const ERP_OPTIONS     = ["SAP", "Dynamics", "IFS", "Infor", "Odoo", "Oracle", "JDE", "SAGE", "Unknown", "Other"]
+const CYBER_OPTIONS   = ["SAP ETD", "SAP GRC", "SAP Focused Run", "Cloud ALM", "SecurityBridge", "Onapsis", "Layer Seven Security", "Other"]
+const HOSTING_OPTIONS = ["RISE", "AWS", "Azure", "GXP", "BLUE", "SENS", "Scaleway", "Private Datacenter", "Other"]
+
+const inlineInp: React.CSSProperties = { fontSize: '12px', padding: '4px 7px', border: '1px solid #219BD6', borderRadius: '5px', fontFamily: 'Montserrat, sans-serif', outline: 'none', background: 'white' }
+
+function EditableText({ value, editing, onStartEdit, onSave, placeholder, textarea }: any) {
+  const [val, setVal] = useState(value || '')
+  useEffect(() => { setVal(value || '') }, [editing])
+  if (!editing) {
+    return (
+      <span onClick={onStartEdit} title="Click to edit" style={{ cursor: 'pointer', padding: '2px 4px', margin: '-2px -4px', borderRadius: '4px', display: 'inline-block' }}
+        onMouseEnter={e => (e.currentTarget.style.background = '#F1F5F9')} onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
+        {value || <span style={{ color: '#CBD5E0' }}>{placeholder || '—'}</span>}
+      </span>
+    )
+  }
+  const commit = () => onSave(val)
+  return textarea ? (
+    <textarea autoFocus style={{ ...inlineInp, width: '100%', resize: 'vertical' }} rows={3} value={val} onChange={e => setVal(e.target.value)}
+      onBlur={commit} onKeyDown={e => { if (e.key === 'Escape') onSave(value) }} />
+  ) : (
+    <input autoFocus style={inlineInp} value={val} onChange={e => setVal(e.target.value)}
+      onBlur={commit} onKeyDown={e => { if (e.key === 'Enter') commit(); if (e.key === 'Escape') onSave(value) }} />
+  )
+}
+
+function EditableSelect({ display, value, editing, onStartEdit, onSave, options }: any) {
+  if (!editing) {
+    return (
+      <span onClick={onStartEdit} title="Click to edit" style={{ cursor: 'pointer', padding: '2px 4px', margin: '-2px -4px', borderRadius: '4px', display: 'inline-block' }}
+        onMouseEnter={e => (e.currentTarget.style.background = '#F1F5F9')} onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
+        {display || <span style={{ color: '#CBD5E0' }}>—</span>}
+      </span>
+    )
+  }
+  return (
+    <select autoFocus style={inlineInp} value={value || ''} onChange={e => onSave(e.target.value)} onBlur={() => onSave(null, true)}>
+      {options.map((o: any) => <option key={o.value} value={o.value}>{o.label}</option>)}
+    </select>
+  )
+}
 
 export default function PartnerDetailPage() {
   const { id } = useParams()
@@ -12,20 +55,47 @@ export default function PartnerDetailPage() {
   const [partner, setPartner] = useState<any>(null)
   const [contacts, setContacts] = useState<any[]>([])
   const [opportunities, setOpportunities] = useState<any[]>([])
+  const [comments, setComments] = useState<any[]>([])
+  const [newComment, setNewComment] = useState('')
+  const [links, setLinks] = useState<any[]>([])
+  const [newLinkUrl, setNewLinkUrl] = useState('')
+  const [addingLink, setAddingLink] = useState(false)
+  const [events, setEvents] = useState<any[]>([])
+  const [customers, setCustomers] = useState<any[]>([])
+  const [allContacts, setAllContacts] = useState<any[]>([])
+  const [allOpportunities, setAllOpportunities] = useState<any[]>([])
+  const [linkContactId, setLinkContactId] = useState('')
+  const [linkOppId, setLinkOppId] = useState('')
+  const [users, setUsers] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [tab, setTab] = useState('Overview')
-  const [showEdit, setShowEdit] = useState(false)
+  const [editing, setEditing] = useState<string | null>(null)
+  const [chipEditing, setChipEditing] = useState<string | null>(null)
 
   const load = async () => {
     try {
-      const [p, ctcts, opps] = await Promise.all([
+      const [p, ctcts, opps, cmts, lnks, evts, custs, allC, allO, usersResp] = await Promise.all([
         partnersAPI.get(id as string),
         partnersAPI.getContacts(id as string),
         partnersAPI.getOpportunities(id as string),
+        partnersAPI.getComments(id as string),
+        partnersAPI.getLinks(id as string),
+        partnersAPI.getEvents(id as string),
+        partnersAPI.getCustomers(id as string),
+        contactsAPI.list({}),
+        opportunitiesAPI.list({}),
+        fetch('https://api.whubbi.wcomply.com/settings/users').then(r => r.json()).catch(() => ({ users: [] })),
       ])
       setPartner(p)
       setContacts(ctcts)
       setOpportunities(opps)
+      setComments(cmts)
+      setLinks(lnks)
+      setEvents(evts)
+      setCustomers(custs)
+      setAllContacts(allC)
+      setAllOpportunities(allO)
+      setUsers(usersResp.users || [])
     } catch {
       router.push('/partners')
     } finally {
@@ -34,6 +104,84 @@ export default function PartnerDetailPage() {
   }
 
   useEffect(() => { load() }, [id])
+
+  const patchField = async (field: string, value: any) => {
+    setEditing(null)
+    if ((partner as any)[field] === value) return
+    await partnersAPI.update(id as string, { [field]: value })
+    load()
+  }
+
+  const patchAssignedTo = async (email: string | null) => {
+    setEditing(null)
+    if (email === null) return
+    const u = users.find((uu: any) => uu.email === email)
+    await partnersAPI.update(id as string, { assigned_to_email: email, assigned_to: u ? (u.display_name || `${u.first_name} ${u.last_name}`) : '' })
+    load()
+  }
+
+  const toggleChip = async (field: string, value: string) => {
+    const current: string[] = (partner as any)[field] || []
+    const next = current.includes(value) ? current.filter(v => v !== value) : [...current, value]
+    await partnersAPI.update(id as string, { [field]: next })
+    load()
+  }
+
+  const postComment = async () => {
+    if (!newComment.trim()) return
+    const user = getStoredUser()
+    await partnersAPI.addComment(id as string, { author_email: user?.email || '', author_name: user?.name || user?.email || '', comment: newComment.trim() })
+    setNewComment('')
+    setComments(await partnersAPI.getComments(id as string))
+  }
+  const deleteComment = async (c: any) => {
+    await partnersAPI.deleteComment(id as string, c.id)
+    setComments(await partnersAPI.getComments(id as string))
+  }
+
+  const addLink = async () => {
+    if (!newLinkUrl.trim()) return
+    setAddingLink(true)
+    try {
+      const user = getStoredUser()
+      await partnersAPI.addLink(id as string, { url: newLinkUrl.trim(), added_by_email: user?.email || '' })
+      setNewLinkUrl('')
+      setLinks(await partnersAPI.getLinks(id as string))
+    } finally { setAddingLink(false) }
+  }
+  const removeLink = async (l: any) => {
+    await partnersAPI.deleteLink(id as string, l.id)
+    setLinks(await partnersAPI.getLinks(id as string))
+  }
+
+  const linkContact = async () => {
+    if (!linkContactId) return
+    await contactsAPI.update(linkContactId, { partner_id: id as string })
+    setLinkContactId('')
+    setContacts(await partnersAPI.getContacts(id as string))
+    setAllContacts(await contactsAPI.list({}))
+  }
+  const unlinkContact = async (c: any) => {
+    await contactsAPI.update(c.id, { partner_id: null })
+    setContacts(await partnersAPI.getContacts(id as string))
+    setAllContacts(await contactsAPI.list({}))
+  }
+
+  const linkOpportunity = async () => {
+    if (!linkOppId) return
+    const opp = allOpportunities.find((o: any) => o.id === linkOppId)
+    const contact_ids = (opp?.contacts || []).map((c: any) => c.id)
+    await opportunitiesAPI.update(linkOppId, { partner_id: id as string, contact_ids })
+    setLinkOppId('')
+    setOpportunities(await partnersAPI.getOpportunities(id as string))
+    setAllOpportunities(await opportunitiesAPI.list({}))
+  }
+  const unlinkOpportunity = async (o: any) => {
+    const contact_ids = (o.contacts || []).map((c: any) => c.id)
+    await opportunitiesAPI.update(o.id, { partner_id: null, contact_ids })
+    setOpportunities(await partnersAPI.getOpportunities(id as string))
+    setAllOpportunities(await opportunitiesAPI.list({}))
+  }
 
   if (loading) return (
     <RecordLayout
@@ -45,6 +193,9 @@ export default function PartnerDetailPage() {
   if (!partner) return null
 
   const color = '#7C3AED'
+  const linkableContacts = allContacts.filter((c: any) => c.partner_id !== id)
+  const linkableOpportunities = allOpportunities.filter((o: any) => o.partner_id !== id)
+  const mainContactLabel = partner.main_contact_first_name ? `${partner.main_contact_first_name} ${partner.main_contact_last_name}` : ''
 
   const leftColumn = (
     <div>
@@ -61,63 +212,193 @@ export default function PartnerDetailPage() {
             </div>
             <div style={{ flex: 1 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginBottom: '4px' }}>
-                <h1 style={{ fontSize: '18px', fontWeight: '800', color: '#144766', margin: 0 }}>{partner.name}</h1>
-                <StatusBadge value={partner.status} />
+                <h1 style={{ fontSize: '18px', fontWeight: '800', color: '#144766', margin: 0 }}>
+                  <EditableText value={partner.name} editing={editing === 'name'} onStartEdit={() => setEditing('name')} onSave={(v: string) => patchField('name', v)} />
+                </h1>
+                <EditableSelect display={<StatusBadge value={partner.status} />} value={partner.status} editing={editing === 'status'}
+                  onStartEdit={() => setEditing('status')} onSave={(v: any, blur?: boolean) => blur ? setEditing(null) : patchField('status', v)}
+                  options={[{ value: 'active', label: 'Active' }, { value: 'inactive', label: 'Inactive' }]} />
               </div>
               <p style={{ color: '#9B9B9B', fontSize: '12px', margin: 0 }}>
-                {partner.contact_name && `${partner.contact_name} · `}
-                {partner.sector || 'No sector'}
-                {partner.country && ` · ${partner.country}`}
+                <EditableSelect display={mainContactLabel || 'No main contact'} value={partner.main_contact_id} editing={editing === 'main_contact_id'}
+                  onStartEdit={() => setEditing('main_contact_id')} onSave={(v: any, blur?: boolean) => blur ? setEditing(null) : patchField('main_contact_id', v)}
+                  options={[{ value: '', label: 'No main contact' }, ...contacts.concat(allContacts.filter((c: any) => !contacts.find((x: any) => x.id === c.id))).map((c: any) => ({ value: c.id, label: `${c.first_name} ${c.last_name}` }))]} />
+                {' · '}
+                <EditableText value={partner.sector} editing={editing === 'sector'} onStartEdit={() => setEditing('sector')} onSave={(v: string) => patchField('sector', v)} placeholder="No sector" />
+                {' · '}
+                <EditableText value={partner.country} editing={editing === 'country'} onStartEdit={() => setEditing('country')} onSave={(v: string) => patchField('country', v)} placeholder="No country" />
               </p>
-              <div style={{ display: 'flex', gap: '12px', marginTop: '8px', fontSize: '11px' }}>
-                {partner.phone && <span style={{ color: '#6B6B6B' }}>📞 {partner.phone}</span>}
-                {partner.linkedin_url && <a href={partner.linkedin_url} target="_blank" rel="noopener" style={{ color: '#219BD6', fontWeight: '600' }}>LinkedIn ↗</a>}
+              <div style={{ display: 'flex', gap: '12px', marginTop: '8px', fontSize: '11px', alignItems: 'center' }}>
+                <span style={{ color: '#6B6B6B' }}>📞 <EditableText value={partner.phone} editing={editing === 'phone'} onStartEdit={() => setEditing('phone')} onSave={(v: string) => patchField('phone', v)} placeholder="No phone" /></span>
+                <span style={{ color: '#219BD6', fontWeight: '600' }}>
+                  <EditableText value={partner.linkedin_url} editing={editing === 'linkedin_url'} onStartEdit={() => setEditing('linkedin_url')} onSave={(v: string) => patchField('linkedin_url', v)} placeholder="No LinkedIn" />
+                </span>
               </div>
             </div>
           </div>
-          <button onClick={() => setShowEdit(true)} style={{ background: 'white', color: '#144766', padding: '7px 14px', borderRadius: '7px', fontSize: '12px', fontWeight: '600', border: '1.5px solid #CBD5E0', cursor: 'pointer' }}>Edit</button>
         </div>
-        {(partner.main_erp?.length > 0 || partner.cybersecurity_solutions?.length > 0 || partner.sap_hosting_partner?.length > 0 || partner.domain_names?.length > 0) && (
-          <div style={{ marginTop: '16px', paddingTop: '14px', borderTop: '1px solid #F1F5F9', display: 'flex', flexWrap: 'wrap', gap: '16px' }}>
-            {partner.domain_names?.length > 0 && <div><div style={{ fontSize: '9px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#9B9B9B', marginBottom: '5px' }}>Domains</div><div style={{ display: 'flex', flexWrap: 'wrap', gap: '3px' }}>{partner.domain_names.map((d: string) => <span key={d} style={{ background: '#F1F5F9', color: '#475569', padding: '2px 7px', borderRadius: '10px', fontSize: '10px', fontWeight: '600' }}>{d}</span>)}</div></div>}
-            {partner.main_erp?.length > 0 && <div><div style={{ fontSize: '9px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#9B9B9B', marginBottom: '5px' }}>ERP</div><div style={{ display: 'flex', flexWrap: 'wrap', gap: '3px' }}>{partner.main_erp.map((v: string) => <span key={v} style={{ background: '#EEF2FF', color: '#4F46E5', padding: '2px 7px', borderRadius: '10px', fontSize: '10px', fontWeight: '600' }}>{v}</span>)}</div></div>}
-            {partner.cybersecurity_solutions?.length > 0 && <div><div style={{ fontSize: '9px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#9B9B9B', marginBottom: '5px' }}>Cybersecurity</div><div style={{ display: 'flex', flexWrap: 'wrap', gap: '3px' }}>{partner.cybersecurity_solutions.map((v: string) => <span key={v} style={{ background: '#FFF7ED', color: '#EA580C', padding: '2px 7px', borderRadius: '10px', fontSize: '10px', fontWeight: '600' }}>{v}</span>)}</div></div>}
-            {partner.sap_hosting_partner?.length > 0 && <div><div style={{ fontSize: '9px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#9B9B9B', marginBottom: '5px' }}>SAP Hosting</div><div style={{ display: 'flex', flexWrap: 'wrap', gap: '3px' }}>{partner.sap_hosting_partner.map((v: string) => <span key={v} style={{ background: '#ECFDF5', color: '#059669', padding: '2px 7px', borderRadius: '10px', fontSize: '10px', fontWeight: '600' }}>{v}</span>)}</div></div>}
-          </div>
-        )}
+        <div style={{ marginTop: '16px', paddingTop: '14px', borderTop: '1px solid #F1F5F9', display: 'flex', flexWrap: 'wrap', gap: '16px' }}>
+          {[
+            { label: 'Main ERP', field: 'main_erp', options: ERP_OPTIONS, bg: '#EEF2FF', color: '#4F46E5' },
+            { label: 'Cybersecurity', field: 'cybersecurity_solutions', options: CYBER_OPTIONS, bg: '#FFF7ED', color: '#EA580C' },
+            { label: 'SAP Hosting', field: 'sap_hosting_partner', options: HOSTING_OPTIONS, bg: '#ECFDF5', color: '#059669' },
+          ].map(({ label, field, options, bg, color: c }) => (
+            <div key={field}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '5px' }}>
+                <div style={{ fontSize: '9px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#9B9B9B' }}>{label}</div>
+                <button onClick={() => setChipEditing(chipEditing === field ? null : field)} style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#219BD6', fontSize: '9px', fontWeight: '700', padding: 0 }}>{chipEditing === field ? 'Done' : 'Edit'}</button>
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '3px', maxWidth: '260px' }}>
+                {chipEditing === field ? options.map(opt => (
+                  <span key={opt} onClick={() => toggleChip(field, opt)} style={{ background: (partner as any)[field]?.includes(opt) ? bg : '#F1F5F9', color: (partner as any)[field]?.includes(opt) ? c : '#94A3B8', padding: '2px 7px', borderRadius: '10px', fontSize: '10px', fontWeight: '600', cursor: 'pointer', border: `1px solid ${(partner as any)[field]?.includes(opt) ? c : '#E2E8F0'}` }}>{opt}</span>
+                )) : ((partner as any)[field]?.length > 0 ? (partner as any)[field].map((v: string) => (
+                  <span key={v} style={{ background: bg, color: c, padding: '2px 7px', borderRadius: '10px', fontSize: '10px', fontWeight: '600' }}>{v}</span>
+                )) : <span style={{ color: '#CBD5E0', fontSize: '10px' }}>None</span>)}
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
 
       <div style={{ background: 'white', borderRadius: '10px', border: '1px solid #EDF2F7', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
         <div style={{ padding: '0 20px', background: '#FAFBFC', borderBottom: '2px solid #E2E8F0' }}>
-          <TabNav tabs={['Overview', 'Contacts', 'Opportunities', 'Action Items']} active={tab} onChange={setTab} />
+          <TabNav tabs={['Overview', 'Contacts', 'Opportunities', 'Action List', 'Events', 'Information', 'Customers']} active={tab} onChange={setTab} />
         </div>
         <div style={{ padding: '20px' }}>
-          {tab === 'Overview' && <p style={{ color: partner.notes ? '#3F3F3F' : '#CBD5E0', fontSize: '13px', lineHeight: '1.8', whiteSpace: 'pre-wrap' }}>{partner.notes || 'No general notes.'}</p>}
+          {tab === 'Overview' && (
+            <div>
+              <div style={{ marginBottom: '10px' }}>
+                <EditableText value={partner.notes} editing={editing === 'notes'} onStartEdit={() => setEditing('notes')} onSave={(v: string) => patchField('notes', v)} placeholder="No general notes." textarea />
+              </div>
+              <div style={{ marginTop: '18px', paddingTop: '14px', borderTop: '1px solid #F1F5F9' }}>
+                <p style={{ fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#9B9B9B', marginBottom: '10px' }}>Comments</p>
+                <div style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
+                  <textarea className="form-input" style={{ flex: 1, resize: 'vertical' }} rows={2} placeholder="Write a comment…" value={newComment} onChange={e => setNewComment(e.target.value)} />
+                  <button className="btn-primary" onClick={postComment} style={{ alignSelf: 'flex-end' }}>Post</button>
+                </div>
+                {comments.length === 0 ? <p style={{ color: '#9B9B9B', fontSize: '13px' }}>No comments yet.</p> : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                    {comments.map((c: any) => (
+                      <div key={c.id} style={{ padding: '10px 14px', border: '1px solid #EDF2F7', borderRadius: '8px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                          <span style={{ fontWeight: '700', color: '#144766', fontSize: '12px' }}>{c.author_name || c.author_email}</span>
+                          <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                            <span style={{ fontSize: '10px', color: '#9B9B9B' }}>{new Date(c.created_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
+                            <button onClick={() => deleteComment(c)} style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#DC2626', fontSize: '14px', padding: 0, lineHeight: 1 }}>×</button>
+                          </div>
+                        </div>
+                        <p style={{ fontSize: '13px', color: '#3F3F3F', margin: 0, whiteSpace: 'pre-wrap' }}>{c.comment}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
           {tab === 'Contacts' && (
-            contacts.length === 0 ? <p style={{ fontSize: '12px', color: '#9B9B9B' }}>No contacts yet.</p> : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                {contacts.map((c: any) => (
-                  <a key={c.id} href={`/contacts/${c.id}`} style={{ textDecoration: 'none', display: 'flex', justifyContent: 'space-between', padding: '10px 12px', border: '1px solid #EDF2F7', borderRadius: '8px' }}>
-                    <span style={{ fontSize: '13px', fontWeight: '600', color: '#156082' }}>{c.first_name} {c.last_name}</span>
-                    <span style={{ fontSize: '11px', color: '#9B9B9B' }}>{c.job_type || c.email || ''}</span>
-                  </a>
-                ))}
+            <div>
+              <div style={{ display: 'flex', gap: '8px', marginBottom: '14px' }}>
+                <select className="form-input" style={{ flex: 1 }} value={linkContactId} onChange={e => setLinkContactId(e.target.value)}>
+                  <option value="">Link an existing contact…</option>
+                  {linkableContacts.map((c: any) => <option key={c.id} value={c.id}>{c.first_name} {c.last_name}</option>)}
+                </select>
+                <button className="btn-primary" onClick={linkContact} disabled={!linkContactId}>Link</button>
               </div>
-            )
+              {contacts.length === 0 ? <p style={{ fontSize: '12px', color: '#9B9B9B' }}>No contacts yet.</p> : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {contacts.map((c: any) => (
+                    <div key={c.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 12px', border: '1px solid #EDF2F7', borderRadius: '8px' }}>
+                      <a href={`/contacts/${c.id}`} style={{ textDecoration: 'none', display: 'flex', flexDirection: 'column' }}>
+                        <span style={{ fontSize: '13px', fontWeight: '600', color: '#156082' }}>{c.first_name} {c.last_name}</span>
+                        <span style={{ fontSize: '11px', color: '#9B9B9B' }}>{c.job_type || c.email || ''}</span>
+                      </a>
+                      <button onClick={() => unlinkContact(c)} style={{ padding: '5px 10px', background: '#FEF2F2', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '11px', color: '#DC2626', fontWeight: '700' }}>Unlink</button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           )}
+
           {tab === 'Opportunities' && (
-            opportunities.length === 0 ? <p style={{ fontSize: '12px', color: '#9B9B9B' }}>No opportunities yet.</p> : (
+            <div>
+              <div style={{ display: 'flex', gap: '8px', marginBottom: '14px' }}>
+                <select className="form-input" style={{ flex: 1 }} value={linkOppId} onChange={e => setLinkOppId(e.target.value)}>
+                  <option value="">Link an existing opportunity…</option>
+                  {linkableOpportunities.map((o: any) => <option key={o.id} value={o.id}>{o.deal_name}</option>)}
+                </select>
+                <button className="btn-primary" onClick={linkOpportunity} disabled={!linkOppId}>Link</button>
+              </div>
+              {opportunities.length === 0 ? <p style={{ fontSize: '12px', color: '#9B9B9B' }}>No opportunities yet.</p> : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {opportunities.map((o: any) => (
+                    <div key={o.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 12px', border: '1px solid #EDF2F7', borderRadius: '8px' }}>
+                      <a href={`/opportunities/${o.id}`} style={{ textDecoration: 'none', display: 'flex', flexDirection: 'column' }}>
+                        <span style={{ fontSize: '13px', fontWeight: '600', color: '#156082' }}>{o.deal_name}</span>
+                        <span style={{ fontSize: '11px', color: '#9B9B9B' }}>{o.deal_status}</span>
+                      </a>
+                      <button onClick={() => unlinkOpportunity(o)} style={{ padding: '5px 10px', background: '#FEF2F2', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '11px', color: '#DC2626', fontWeight: '700' }}>Unlink</button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {tab === 'Action List' && <PartnerActionItems partnerId={id as string} />}
+
+          {tab === 'Events' && (
+            events.length === 0 ? <EmptyState icon="📅" title="No marketing events yet" description="Events linked to this partner from the Marketing module will appear here" /> : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                {opportunities.map((o: any) => (
-                  <a key={o.id} href={`/opportunities/${o.id}`} style={{ textDecoration: 'none', display: 'flex', justifyContent: 'space-between', padding: '10px 12px', border: '1px solid #EDF2F7', borderRadius: '8px' }}>
-                    <span style={{ fontSize: '13px', fontWeight: '600', color: '#156082' }}>{o.deal_name}</span>
-                    <span style={{ fontSize: '11px', color: '#9B9B9B' }}>{o.deal_status}</span>
+                {events.map((e: any) => (
+                  <a key={e.id} href={`/marketing/events/${e.id}`} style={{ textDecoration: 'none', display: 'flex', justifyContent: 'space-between', padding: '10px 12px', border: '1px solid #EDF2F7', borderRadius: '8px' }}>
+                    <div>
+                      <div style={{ fontSize: '13px', fontWeight: '600', color: '#156082' }}>{e.title}</div>
+                      <div style={{ fontSize: '11px', color: '#9B9B9B' }}>{e.event_type}{e.location && ` · ${e.location}`}</div>
+                    </div>
+                    <span style={{ fontSize: '11px', color: '#9B9B9B' }}>{e.event_date && new Date(e.event_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
                   </a>
                 ))}
               </div>
             )
           )}
-          {tab === 'Action Items' && <PartnerActionItems partnerId={id as string} />}
+
+          {tab === 'Information' && (
+            <div>
+              <div style={{ display: 'flex', gap: '8px', marginBottom: '14px' }}>
+                <input className="form-input" style={{ flex: 1 }} placeholder="Paste a link to an article…" value={newLinkUrl} onChange={e => setNewLinkUrl(e.target.value)} onKeyDown={e => e.key === 'Enter' && addLink()} />
+                <button className="btn-primary" onClick={addLink} disabled={addingLink || !newLinkUrl.trim()}>{addingLink ? 'Fetching…' : 'Add'}</button>
+              </div>
+              {links.length === 0 ? <p style={{ fontSize: '12px', color: '#9B9B9B' }}>No links yet.</p> : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {links.map((l: any) => (
+                    <div key={l.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '10px 12px', border: '1px solid #EDF2F7', borderRadius: '8px' }}>
+                      <a href={l.url} target="_blank" rel="noopener" style={{ textDecoration: 'none', flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: '13px', fontWeight: '600', color: '#156082' }}>{l.title || l.url}</div>
+                        {l.description && <div style={{ fontSize: '11px', color: '#6B6B6B', marginTop: '2px' }}>{l.description}</div>}
+                        <div style={{ fontSize: '10px', color: '#9B9B9B', marginTop: '2px' }}>{l.url}</div>
+                      </a>
+                      <button onClick={() => removeLink(l)} style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#9B9B9B', fontSize: '16px', lineHeight: 1, flexShrink: 0 }}>×</button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {tab === 'Customers' && (
+            customers.length === 0 ? <EmptyState icon="🛡️" title="No customers yet" description={`Companies with "${partner.name}" as a Cybersecurity Solution will appear here`} /> : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                {customers.map((c: any) => (
+                  <a key={c.id} href={`/companies/${c.id}`} style={{ textDecoration: 'none', display: 'flex', justifyContent: 'space-between', padding: '10px 12px', border: '1px solid #EDF2F7', borderRadius: '8px' }}>
+                    <span style={{ fontSize: '13px', fontWeight: '600', color: '#156082' }}>{c.name}</span>
+                    <span style={{ fontSize: '11px', color: '#9B9B9B' }}>{c.sector || ''}</span>
+                  </a>
+                ))}
+              </div>
+            )
+          )}
         </div>
       </div>
     </div>
@@ -129,7 +410,12 @@ export default function PartnerDetailPage() {
         <PropertyRow label="Status" value={<StatusBadge value={partner.status} />} />
         <PropertyRow label="Sector" value={partner.sector} />
         <PropertyRow label="Country" value={partner.country} />
-        <PropertyRow label="Assigned to" value={partner.assigned_to} />
+        <PropertyRow label="Main contact" value={mainContactLabel} />
+        <PropertyRow label="Assigned to" value={
+          <EditableSelect display={partner.assigned_to || '—'} value={partner.assigned_to_email} editing={editing === 'assigned_to_email'}
+            onStartEdit={() => setEditing('assigned_to_email')} onSave={(v: any, blur?: boolean) => blur ? setEditing(null) : patchAssignedTo(v)}
+            options={[{ value: '', label: 'Unassigned' }, ...users.map((u: any) => ({ value: u.email, label: u.display_name || `${u.first_name} ${u.last_name}` }))]} />
+        } />
         <PropertyRow label="Created" value={new Date(partner.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} />
       </SidebarSection>
       <SidebarSection title={`Contacts (${contacts.length})`} onAdd={() => router.push(`/contacts?partner_id=${id}`)}>
@@ -141,10 +427,5 @@ export default function PartnerDetailPage() {
     </div>
   )
 
-  return (
-    <>
-      <RecordLayout leftColumn={leftColumn} rightColumn={rightColumn} />
-      {showEdit && <PartnerModal partner={partner} onClose={() => setShowEdit(false)} onSave={() => { setShowEdit(false); load() }} />}
-    </>
-  )
+  return <RecordLayout leftColumn={leftColumn} rightColumn={rightColumn} />
 }

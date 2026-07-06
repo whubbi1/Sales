@@ -18,6 +18,21 @@ from app.schemas.schemas import (
 
 router = APIRouter()
 
+
+async def _attach_main_contacts(db: AsyncSession, companies: list):
+    # main_contact isn't an ORM relationship (kept as a plain FK to avoid a backref collision
+    # with Contact.company) — attach it as a transient instance attribute instead, same trick
+    # already used for Opportunity/Contact's .partner this session.
+    ids = {c.main_contact_id for c in companies if getattr(c, "main_contact_id", None)}
+    contacts = {}
+    if ids:
+        r = await db.execute(select(Contact).where(Contact.id.in_(ids)))
+        for contact in r.scalars().all():
+            contacts[contact.id] = contact
+    for c in companies:
+        c.main_contact = contacts.get(c.main_contact_id) if getattr(c, "main_contact_id", None) else None
+
+
 @router.get("/", response_model=List[CompanyResponse])
 async def list_companies(
     skip: int = 0, limit: int = 100,
@@ -31,7 +46,9 @@ async def list_companies(
         query = query.where(or_(Company.name.ilike(f"%{search}%"), Company.contact_name.ilike(f"%{search}%")))
     query = query.offset(skip).limit(limit).order_by(Company.level, Company.name)
     result = await db.execute(query)
-    return result.scalars().all()
+    companies = result.scalars().all()
+    await _attach_main_contacts(db, companies)
+    return companies
 
 @router.post("/", response_model=CompanyResponse, status_code=status.HTTP_201_CREATED)
 async def create_company(company: CompanyCreate, db: AsyncSession = Depends(get_db)):
@@ -47,7 +64,9 @@ async def create_company(company: CompanyCreate, db: AsyncSession = Depends(get_
     db.add(db_company)
     await db.commit()
     r = await db.execute(select(Company).options(selectinload(Company.parent), selectinload(Company.children)).where(Company.id == db_company.id))
-    return r.scalar_one()
+    row = r.scalar_one()
+    await _attach_main_contacts(db, [row])
+    return row
 
 @router.get("/{company_id}", response_model=CompanyResponse)
 async def get_company(company_id: UUID, db: AsyncSession = Depends(get_db)):
@@ -55,6 +74,7 @@ async def get_company(company_id: UUID, db: AsyncSession = Depends(get_db)):
     company = r.scalar_one_or_none()
     if not company:
         raise HTTPException(status_code=404, detail="Company not found")
+    await _attach_main_contacts(db, [company])
     return company
 
 @router.put("/{company_id}", response_model=CompanyResponse)
@@ -73,7 +93,9 @@ async def update_company(company_id: UUID, data: CompanyUpdate, db: AsyncSession
         setattr(company, k, v)
     await db.commit()
     r = await db.execute(select(Company).options(selectinload(Company.parent), selectinload(Company.children)).where(Company.id == company_id))
-    return r.scalar_one()
+    row = r.scalar_one()
+    await _attach_main_contacts(db, [row])
+    return row
 
 @router.delete("/{company_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_company(company_id: UUID, db: AsyncSession = Depends(get_db)):

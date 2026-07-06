@@ -1,7 +1,7 @@
 'use client'
 // components/companies/CompanyModal.tsx
-import { useState } from 'react'
-import { companiesAPI } from '@/lib/api'
+import { useState, useEffect } from 'react'
+import { companiesAPI, contactsAPI } from '@/lib/api'
 
 const ERP_OPTIONS     = ["SAP", "Dynamics", "IFS", "Infor", "Odoo", "Oracle", "JDE", "SAGE", "Unknown", "Other"]
 const CYBER_OPTIONS   = ["SAP ETD", "SAP GRC", "SAP Focused Run", "Cloud ALM", "SecurityBridge", "Onapsis", "Layer Seven Security", "Other"]
@@ -21,7 +21,7 @@ function FormField({ label, children, full }: { label: string; children: React.R
 export function CompanyModal({ company, companies = [], onClose, onSave }: any) {
   const [form, setForm] = useState({
     name: company?.name || '',
-    contact_name: company?.contact_name || '',
+    main_contact_id: company?.main_contact_id || '',
     parent_id: company?.parent_id || '',
     level: company?.level || 1,
     domain_names: company?.domain_names || [],
@@ -35,10 +35,18 @@ export function CompanyModal({ company, companies = [], onClose, onSave }: any) 
     linkedin_url: company?.linkedin_url || '',
     notes: company?.notes || '',
     assigned_to: company?.assigned_to || '',
+    assigned_to_email: company?.assigned_to_email || '',
   })
   const [domainInput, setDomainInput] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  const [contacts, setContacts] = useState<any[]>([])
+  const [users, setUsers] = useState<any[]>([])
+
+  useEffect(() => {
+    contactsAPI.list({}).then(setContacts).catch(() => {})
+    fetch('https://api.whubbi.wcomply.com/settings/users').then(r => r.json()).then(d => setUsers(d.users || [])).catch(() => {})
+  }, [])
 
   const toggle = (field: string, value: string) => {
     setForm(p => ({ ...p, [field]: (p as any)[field].includes(value) ? (p as any)[field].filter((v: string) => v !== value) : [...(p as any)[field], value] }))
@@ -62,7 +70,7 @@ export function CompanyModal({ company, companies = [], onClose, onSave }: any) 
     if (!form.name.trim()) { setError('Company name is required'); return }
     setSaving(true); setError('')
     try {
-      const payload = { ...form, parent_id: form.parent_id || null }
+      const payload = { ...form, parent_id: form.parent_id || null, main_contact_id: form.main_contact_id || null }
       if (company) { await companiesAPI.update(company.id, payload) }
       else { await companiesAPI.create(payload) }
       onSave()
@@ -88,7 +96,10 @@ export function CompanyModal({ company, companies = [], onClose, onSave }: any) 
                 <input className="form-input" value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))} placeholder="Acme Corp" />
               </FormField>
               <FormField label="Main Contact">
-                <input className="form-input" value={form.contact_name} onChange={e => setForm(p => ({ ...p, contact_name: e.target.value }))} placeholder="John Doe" />
+                <select className="form-input" value={form.main_contact_id} onChange={e => setForm(p => ({ ...p, main_contact_id: e.target.value }))}>
+                  <option value="">Select contact…</option>
+                  {contacts.map((c: any) => <option key={c.id} value={c.id}>{c.first_name} {c.last_name}</option>)}
+                </select>
               </FormField>
               <FormField label="Phone">
                 <input className="form-input" value={form.phone} onChange={e => setForm(p => ({ ...p, phone: e.target.value }))} placeholder="+1 555 000 0000" />
@@ -105,7 +116,13 @@ export function CompanyModal({ company, companies = [], onClose, onSave }: any) 
                 </select>
               </FormField>
               <FormField label="Assigned To">
-                <input className="form-input" value={form.assigned_to} onChange={e => setForm(p => ({ ...p, assigned_to: e.target.value }))} placeholder="Sales rep" />
+                <select className="form-input" value={form.assigned_to_email} onChange={e => {
+                  const u = users.find((uu: any) => uu.email === e.target.value)
+                  setForm(p => ({ ...p, assigned_to_email: e.target.value, assigned_to: u ? (u.display_name || `${u.first_name} ${u.last_name}`) : '' }))
+                }}>
+                  <option value="">Select employee…</option>
+                  {users.map((u: any) => <option key={u.email} value={u.email}>{u.display_name || `${u.first_name} ${u.last_name}`}</option>)}
+                </select>
               </FormField>
             </div>
           </div>

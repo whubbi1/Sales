@@ -94,14 +94,13 @@ async def update_opportunity(opportunity_id: UUID, data: OpportunityUpdate, db: 
     if not opp:
         raise HTTPException(status_code=404, detail="Opportunity not found")
 
-    contact_ids = data.contact_ids or []
     update_data = data.model_dump(exclude={'contact_ids'}, exclude_unset=True)
 
     for k, v in update_data.items():
         setattr(opp, k, v)
 
-    if contact_ids is not None:
-        r = await db.execute(select(Contact).where(Contact.id.in_(contact_ids)))
+    if 'contact_ids' in data.model_fields_set:
+        r = await db.execute(select(Contact).where(Contact.id.in_(data.contact_ids or [])))
         opp.contacts = r.scalars().all()
 
     await db.commit()

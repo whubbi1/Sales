@@ -4,10 +4,23 @@ from typing import Optional, List
 from datetime import datetime
 from uuid import UUID
 
+# ─── Contact (summary only — full ContactBase/Response defined further down,
+# but Company needs this early for its main_contact embed) ─────────────────────
+class ContactSummary(BaseModel):
+    id: UUID
+    first_name: str
+    last_name: str
+    job_type: Optional[str] = None
+    email: Optional[str] = None
+    lead_status: Optional[str] = None
+    class Config:
+        from_attributes = True
+
 # ─── Company ──────────────────────────────────────────────────────────────────
 class CompanyBase(BaseModel):
     name: str
     contact_name: Optional[str] = None
+    main_contact_id: Optional[UUID] = None
     parent_id: Optional[UUID] = None
     level: Optional[int] = 1
     domain_names: Optional[List[str]] = []
@@ -21,6 +34,7 @@ class CompanyBase(BaseModel):
     linkedin_url: Optional[str] = None
     notes: Optional[str] = None
     assigned_to: Optional[str] = None
+    assigned_to_email: Optional[str] = None
 
 class CompanyCreate(CompanyBase):
     pass
@@ -40,6 +54,7 @@ class CompanyResponse(CompanyBase):
     id: UUID
     parent: Optional[CompanySummary] = None
     children: Optional[List[CompanySummary]] = []
+    main_contact: Optional[ContactSummary] = None
     created_at: datetime
     updated_at: datetime
     class Config:
@@ -126,16 +141,6 @@ class ContactCreate(ContactBase):
 class ContactUpdate(ContactBase):
     first_name: Optional[str] = None
     last_name: Optional[str] = None
-
-class ContactSummary(BaseModel):
-    id: UUID
-    first_name: str
-    last_name: str
-    job_type: Optional[str] = None
-    email: Optional[str] = None
-    lead_status: Optional[str] = None
-    class Config:
-        from_attributes = True
 
 class ContactResponse(ContactBase):
     id: UUID

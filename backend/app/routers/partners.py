@@ -5,14 +5,21 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
 from app.database import get_db
-import uuid, json
+import uuid, json, re, html
+import httpx
 
 router = APIRouter()
 
 PARTNER_FIELDS = [
-    "name", "contact_name", "domain_names", "phone", "sector", "country", "status",
-    "main_erp", "cybersecurity_solutions", "sap_hosting_partner", "linkedin_url", "notes", "assigned_to",
+    "name", "contact_name", "main_contact_id", "domain_names", "phone", "sector", "country", "status",
+    "main_erp", "cybersecurity_solutions", "sap_hosting_partner", "linkedin_url", "notes",
+    "assigned_to", "assigned_to_email",
 ]
+
+_PARTNER_SELECT = """
+    SELECT p.*, c.first_name AS main_contact_first_name, c.last_name AS main_contact_last_name
+    FROM partners p LEFT JOIN contacts c ON c.id = p.main_contact_id
+"""
 
 
 def _row(d: dict) -> dict:
@@ -23,7 +30,7 @@ def _row(d: dict) -> dict:
 
 
 async def _get_partner(db: AsyncSession, partner_id: str) -> dict | None:
-    r = await db.execute(text("SELECT * FROM partners WHERE id = CAST(:id AS UUID)"), {"id": partner_id})
+    r = await db.execute(text(f"{_PARTNER_SELECT} WHERE p.id = CAST(:id AS UUID)"), {"id": partner_id})
     row = r.fetchone()
     return _row(dict(row._mapping)) if row else None
 
@@ -34,9 +41,9 @@ async def list_partners(search: str = None, db: AsyncSession = Depends(get_db)):
     where = ""
     params = {}
     if search:
-        where = "WHERE name ILIKE :q OR contact_name ILIKE :q"
+        where = "WHERE p.name ILIKE :q OR p.contact_name ILIKE :q"
         params["q"] = f"%{search}%"
-    r = await db.execute(text(f"SELECT * FROM partners {where} ORDER BY name"), params)
+    r = await db.execute(text(f"{_PARTNER_SELECT} {where} ORDER BY p.name"), params)
     return [_row(dict(row._mapping)) for row in r.fetchall()]
 
 
@@ -46,22 +53,25 @@ async def create_partner(data: dict, db: AsyncSession = Depends(get_db)):
         raise HTTPException(status_code=400, detail="name is required")
     partner_id = str(uuid.uuid4())
     await db.execute(text("""
-        INSERT INTO partners (id, name, contact_name, domain_names, phone, sector, country, status,
-                               main_erp, cybersecurity_solutions, sap_hosting_partner, linkedin_url, notes, assigned_to,
-                               created_at, updated_at)
-        VALUES (CAST(:id AS UUID), :name, :contact_name, CAST(:domain_names AS JSONB), :phone, :sector, :country, :status,
+        INSERT INTO partners (id, name, contact_name, main_contact_id, domain_names, phone, sector, country, status,
+                               main_erp, cybersecurity_solutions, sap_hosting_partner, linkedin_url, notes,
+                               assigned_to, assigned_to_email, created_at, updated_at)
+        VALUES (CAST(:id AS UUID), :name, :contact_name, CAST(NULLIF(:main_contact_id,'') AS UUID),
+                CAST(:domain_names AS JSONB), :phone, :sector, :country, :status,
                 CAST(:main_erp AS JSONB), CAST(:cybersecurity_solutions AS JSONB), CAST(:sap_hosting_partner AS JSONB),
-                :linkedin_url, :notes, :assigned_to, NOW(), NOW())
+                :linkedin_url, :notes, :assigned_to, :assigned_to_email, NOW(), NOW())
     """), {
         "id": partner_id,
         "name": data["name"], "contact_name": data.get("contact_name"),
+        "main_contact_id": data.get("main_contact_id") or "",
         "domain_names": json.dumps(data.get("domain_names") or []),
         "phone": data.get("phone"), "sector": data.get("sector"), "country": data.get("country"),
         "status": data.get("status") or "active",
         "main_erp": json.dumps(data.get("main_erp") or []),
         "cybersecurity_solutions": json.dumps(data.get("cybersecurity_solutions") or []),
         "sap_hosting_partner": json.dumps(data.get("sap_hosting_partner") or []),
-        "linkedin_url": data.get("linkedin_url"), "notes": data.get("notes"), "assigned_to": data.get("assigned_to"),
+        "linkedin_url": data.get("linkedin_url"), "notes": data.get("notes"),
+        "assigned_to": data.get("assigned_to"), "assigned_to_email": data.get("assigned_to_email"),
     })
     await db.commit()
     return await _get_partner(db, partner_id)
@@ -82,21 +92,24 @@ async def update_partner(partner_id: str, data: dict, db: AsyncSession = Depends
         raise HTTPException(status_code=404, detail="Partner not found")
     merged = {**partner, **{k: v for k, v in data.items() if k in PARTNER_FIELDS}}
     await db.execute(text("""
-        UPDATE partners SET name=:name, contact_name=:contact_name, domain_names=CAST(:domain_names AS JSONB),
+        UPDATE partners SET name=:name, contact_name=:contact_name,
+            main_contact_id=CAST(NULLIF(:main_contact_id,'') AS UUID), domain_names=CAST(:domain_names AS JSONB),
             phone=:phone, sector=:sector, country=:country, status=:status,
             main_erp=CAST(:main_erp AS JSONB), cybersecurity_solutions=CAST(:cybersecurity_solutions AS JSONB),
             sap_hosting_partner=CAST(:sap_hosting_partner AS JSONB), linkedin_url=:linkedin_url,
-            notes=:notes, assigned_to=:assigned_to, updated_at=NOW()
+            notes=:notes, assigned_to=:assigned_to, assigned_to_email=:assigned_to_email, updated_at=NOW()
         WHERE id = CAST(:id AS UUID)
     """), {
         "id": partner_id, "name": merged["name"], "contact_name": merged.get("contact_name"),
+        "main_contact_id": merged.get("main_contact_id") or "",
         "domain_names": json.dumps(merged.get("domain_names") or []),
         "phone": merged.get("phone"), "sector": merged.get("sector"), "country": merged.get("country"),
         "status": merged.get("status") or "active",
         "main_erp": json.dumps(merged.get("main_erp") or []),
         "cybersecurity_solutions": json.dumps(merged.get("cybersecurity_solutions") or []),
         "sap_hosting_partner": json.dumps(merged.get("sap_hosting_partner") or []),
-        "linkedin_url": merged.get("linkedin_url"), "notes": merged.get("notes"), "assigned_to": merged.get("assigned_to"),
+        "linkedin_url": merged.get("linkedin_url"), "notes": merged.get("notes"),
+        "assigned_to": merged.get("assigned_to"), "assigned_to_email": merged.get("assigned_to_email"),
     })
     await db.commit()
     return await _get_partner(db, partner_id)
@@ -197,12 +210,18 @@ async def update_action_item(partner_id: str, item_id: str, data: dict, db: Asyn
             new_owner, data.get("owner_name", item.get("owner_name") or ""), item.get("created_by_email") or "",
         )
 
+    # company_id/contact_id: resolve in Python rather than SQL COALESCE, so that omitting the key
+    # (e.g. cycleStatus/saveTitle only send {status}/{title}) keeps the existing value, while an
+    # explicit "" (the edit modal's "No company"/"No contact" option) actually clears it to NULL.
+    company_id = data["company_id"] if "company_id" in data else (item.get("company_id") or "")
+    contact_id = data["contact_id"] if "contact_id" in data else (item.get("contact_id") or "")
+
     await db.execute(text("""
         UPDATE partner_action_items SET
             title = COALESCE(NULLIF(:title,''), title),
             description = COALESCE(:description, description),
-            company_id = COALESCE(CAST(NULLIF(:company_id,'') AS UUID), company_id),
-            contact_id = COALESCE(CAST(NULLIF(:contact_id,'') AS UUID), contact_id),
+            company_id = CAST(NULLIF(:company_id,'') AS UUID),
+            contact_id = CAST(NULLIF(:contact_id,'') AS UUID),
             owner_email = :owner_email, owner_name = COALESCE(:owner_name, owner_name),
             due_date = COALESCE(CAST(NULLIF(:due_date,'') AS DATE), due_date),
             status = COALESCE(NULLIF(:status,''), status),
@@ -211,7 +230,7 @@ async def update_action_item(partner_id: str, item_id: str, data: dict, db: Asyn
         WHERE id = CAST(:id AS UUID)
     """), {
         "id": item_id, "title": data.get("title", ""), "description": data.get("description"),
-        "company_id": data.get("company_id", ""), "contact_id": data.get("contact_id", ""),
+        "company_id": company_id, "contact_id": contact_id,
         "owner_email": new_owner, "owner_name": data.get("owner_name"),
         "due_date": data.get("due_date", ""), "status": data.get("status", ""), "task_id": task_id,
     })
@@ -226,3 +245,114 @@ async def delete_action_item(partner_id: str, item_id: str, db: AsyncSession = D
                       {"id": item_id, "pid": partner_id})
     await db.commit()
     return {"status": "ok"}
+
+
+# ─── Comments (Overview tab) ──────────────────────────────────────────────────────
+@router.get("/{partner_id}/comments")
+async def list_comments(partner_id: str, db: AsyncSession = Depends(get_db)):
+    r = await db.execute(text("""
+        SELECT * FROM partner_comments WHERE partner_id = CAST(:id AS UUID) ORDER BY created_at DESC
+    """), {"id": partner_id})
+    return [_row(dict(row._mapping)) for row in r.fetchall()]
+
+
+@router.post("/{partner_id}/comments")
+async def add_comment(partner_id: str, data: dict, db: AsyncSession = Depends(get_db)):
+    if not data.get("comment"):
+        raise HTTPException(status_code=400, detail="comment is required")
+    comment_id = str(uuid.uuid4())
+    await db.execute(text("""
+        INSERT INTO partner_comments (id, partner_id, author_email, author_name, comment, created_at)
+        VALUES (CAST(:id AS UUID), CAST(:pid AS UUID), :author_email, :author_name, :comment, NOW())
+    """), {"id": comment_id, "pid": partner_id, "author_email": data.get("author_email", ""),
+           "author_name": data.get("author_name", ""), "comment": data["comment"]})
+    await db.commit()
+    return {"status": "ok", "id": comment_id}
+
+
+@router.delete("/{partner_id}/comments/{comment_id}")
+async def delete_comment(partner_id: str, comment_id: str, db: AsyncSession = Depends(get_db)):
+    await db.execute(text("DELETE FROM partner_comments WHERE id = CAST(:id AS UUID) AND partner_id = CAST(:pid AS UUID)"),
+                      {"id": comment_id, "pid": partner_id})
+    await db.commit()
+    return {"status": "ok"}
+
+
+# ─── Information — pasted links, title/description auto-fetched server-side ────
+async def _fetch_link_metadata(url: str) -> tuple[str, str]:
+    try:
+        async with httpx.AsyncClient(timeout=10, follow_redirects=True) as client:
+            resp = await client.get(url, headers={"User-Agent": "Mozilla/5.0 (compatible; WhubbiBot/1.0)"})
+            body = resp.text[:200000]
+    except Exception:
+        return "", ""
+    title = ""
+    m = re.search(r"<title[^>]*>(.*?)</title>", body, re.IGNORECASE | re.DOTALL)
+    if m:
+        title = html.unescape(re.sub(r"\s+", " ", m.group(1)).strip())
+    description = ""
+    for pattern in (
+        r'<meta[^>]+name=["\']description["\'][^>]+content=["\'](.*?)["\']',
+        r'<meta[^>]+property=["\']og:description["\'][^>]+content=["\'](.*?)["\']',
+        r'<meta[^>]+content=["\'](.*?)["\'][^>]+name=["\']description["\']',
+    ):
+        m = re.search(pattern, body, re.IGNORECASE | re.DOTALL)
+        if m:
+            description = html.unescape(re.sub(r"\s+", " ", m.group(1)).strip())
+            break
+    return title[:500], description
+
+
+@router.get("/{partner_id}/links")
+async def list_links(partner_id: str, db: AsyncSession = Depends(get_db)):
+    r = await db.execute(text("""
+        SELECT * FROM partner_links WHERE partner_id = CAST(:id AS UUID) ORDER BY created_at DESC
+    """), {"id": partner_id})
+    return [_row(dict(row._mapping)) for row in r.fetchall()]
+
+
+@router.post("/{partner_id}/links")
+async def add_link(partner_id: str, data: dict, db: AsyncSession = Depends(get_db)):
+    if not data.get("url"):
+        raise HTTPException(status_code=400, detail="url is required")
+    title, description = await _fetch_link_metadata(data["url"])
+    link_id = str(uuid.uuid4())
+    await db.execute(text("""
+        INSERT INTO partner_links (id, partner_id, url, title, description, added_by_email, created_at)
+        VALUES (CAST(:id AS UUID), CAST(:pid AS UUID), :url, :title, :description, :by, NOW())
+    """), {"id": link_id, "pid": partner_id, "url": data["url"], "title": title, "description": description,
+           "by": data.get("added_by_email", "")})
+    await db.commit()
+    return {"id": link_id, "url": data["url"], "title": title, "description": description}
+
+
+@router.delete("/{partner_id}/links/{link_id}")
+async def delete_link(partner_id: str, link_id: str, db: AsyncSession = Depends(get_db)):
+    await db.execute(text("DELETE FROM partner_links WHERE id = CAST(:id AS UUID) AND partner_id = CAST(:pid AS UUID)"),
+                      {"id": link_id, "pid": partner_id})
+    await db.commit()
+    return {"status": "ok"}
+
+
+# ─── Events — Marketing events linked to this partner ──────────────────────────
+@router.get("/{partner_id}/events")
+async def list_partner_events(partner_id: str, db: AsyncSession = Depends(get_db)):
+    r = await db.execute(text("""
+        SELECT e.* FROM marketing_event_partners ep
+        JOIN marketing_events e ON e.id = ep.event_id
+        WHERE ep.partner_id = CAST(:id AS UUID)
+        ORDER BY e.event_date DESC NULLS LAST
+    """), {"id": partner_id})
+    return [_row(dict(row._mapping)) for row in r.fetchall()]
+
+
+# ─── Customers — companies listing this partner's name as a Cybersecurity Solution ─
+@router.get("/{partner_id}/customers")
+async def list_partner_customers(partner_id: str, db: AsyncSession = Depends(get_db)):
+    partner = await _get_partner(db, partner_id)
+    if not partner:
+        raise HTTPException(status_code=404, detail="Partner not found")
+    r = await db.execute(text("""
+        SELECT * FROM companies WHERE cybersecurity_solutions ? :name ORDER BY name
+    """), {"name": partner["name"]})
+    return [_row(dict(row._mapping)) for row in r.fetchall()]
