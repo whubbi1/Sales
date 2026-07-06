@@ -48,6 +48,14 @@ async def list_equipments(
     result = [_stringify_row(dict(row._mapping)) for row in r.fetchall()]
     return {"equipments": result}
 
+@router.get("/equipments/{eid}")
+async def get_equipment(eid: str, db: AsyncSession = Depends(get_db)):
+    r = await db.execute(text("SELECT * FROM it_equipment WHERE id = CAST(:id AS UUID)"), {"id": eid})
+    row = r.fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Equipment not found")
+    return _stringify_row(dict(row._mapping))
+
 @router.post("/equipments")
 async def create_equipment(data: dict, db: AsyncSession = Depends(get_db)):
     eq_id = str(uuid.uuid4())
@@ -148,6 +156,14 @@ async def list_software(search: str = None, db: AsyncSession = Depends(get_db)):
     """), params)
     result = [_stringify_row(dict(row._mapping)) for row in r.fetchall()]
     return {"software": result}
+
+@router.get("/software/{sid}")
+async def get_software_item(sid: str, db: AsyncSession = Depends(get_db)):
+    r = await db.execute(text("SELECT * FROM it_software WHERE id = CAST(:id AS UUID)"), {"id": sid})
+    row = r.fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Software not found")
+    return _stringify_row(dict(row._mapping))
 
 @router.post("/software")
 async def create_software(data: dict, db: AsyncSession = Depends(get_db)):

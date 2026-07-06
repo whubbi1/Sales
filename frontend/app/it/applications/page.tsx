@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import ITLayout, { useITPerm } from '@/components/ITLayout'
-import { useReportBuilder, applyReport, ReportPanel, ReportColumn } from '@/components/it/ReportBuilder'
+import { useReportBuilder, applyReport, ReportPanel, ReportColumn, ColumnResizeHandle } from '@/components/it/ReportBuilder'
 import { getStoredUser } from '@/lib/auth'
 
 const API = 'https://api.whubbi.wcomply.com'
@@ -28,6 +28,10 @@ const COLUMNS: ReportColumn[] = [
   { key: 'owner_name', label: 'Owner', filterable: 'text' },
   { key: 'locations_display', label: 'Locations', filterable: 'text' },
 ]
+
+const DEFAULT_COLUMN_WIDTHS: Record<string, number> = {
+  name: 200, editor: 150, version: 100, use: 130, owner_name: 170, locations_display: 170,
+}
 
 function EditableCell({ display, editing, onStartEdit, children }: any) {
   return editing ? children : (
@@ -284,13 +288,16 @@ function ApplicationsContent() {
       </div>
 
       <div style={{ background: 'white', borderRadius: '12px', border: '1px solid #EDF2F7', overflowX: 'auto', overflowY: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.06)', maxWidth: '100%' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px', tableLayout: 'fixed' }}>
           <thead style={{ background: '#FAFBFC' }}>
             <tr>
               {COLUMNS.filter(c => isVisible(c.key)).map(c => (
-                <th key={c.key} style={{ padding: '10px 12px', textAlign: 'left', fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#45B6E4', borderBottom: '1px solid #EDF2F7', whiteSpace: 'nowrap' }}>{c.label}</th>
+                <th key={c.key} style={{ position: 'relative', padding: '10px 12px', textAlign: 'left', fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#45B6E4', borderBottom: '1px solid #EDF2F7', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', width: `${rb.columnWidths[c.key] || DEFAULT_COLUMN_WIDTHS[c.key] || 150}px` }}>
+                  {c.label}
+                  <ColumnResizeHandle colKey={c.key} rb={rb} />
+                </th>
               ))}
-              <th style={{ padding: '10px 12px', borderBottom: '1px solid #EDF2F7' }} />
+              <th style={{ padding: '10px 12px', borderBottom: '1px solid #EDF2F7', width: '110px' }} />
             </tr>
           </thead>
           <tbody>

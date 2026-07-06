@@ -2,13 +2,8 @@
 import { useState, useEffect } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import ITLayout, { useITPerm } from '@/components/ITLayout'
-import { ApplicationSubmodulesSection } from '@/components/it/ApplicationSubmodulesSection'
-import { ApplicationEnvironmentsSection } from '@/components/it/ApplicationEnvironmentsSection'
-import { ApplicationLinksSection } from '@/components/it/ApplicationLinksSection'
 
 const API = 'https://api.whubbi.wcomply.com'
-
-const USE_OPTIONS = ['Demo', 'Production', 'Development']
 
 const inp: React.CSSProperties = {
   fontSize: '12px', padding: '7px 11px', border: '1px solid #E2E8F0',
@@ -56,11 +51,11 @@ function PropertyRow({ label, children }: { label: string; children: React.React
   )
 }
 
-function ApplicationDetailContent() {
+function SoftwareDetailContent() {
   const { id } = useParams()
   const router = useRouter()
   const { canEdit } = useITPerm()
-  const [application, setApplication] = useState<any>(null)
+  const [software, setSoftware] = useState<any>(null)
   const [users, setUsers] = useState<any[]>([])
   const [locations, setLocations] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
@@ -69,10 +64,10 @@ function ApplicationDetailContent() {
   const load = async () => {
     setLoading(true)
     try {
-      const d = await fetch(`${API}/it/applications/${id}`).then(r => r.json())
-      setApplication(d)
+      const d = await fetch(`${API}/it/software/${id}`).then(r => r.json())
+      setSoftware(d)
     } catch {
-      router.push('/it/applications')
+      router.push('/it/software')
     } finally {
       setLoading(false)
     }
@@ -85,12 +80,12 @@ function ApplicationDetailContent() {
   }, [id])
 
   const patch = async (fields: any) => {
-    await fetch(`${API}/it/applications/${id}`, {
+    await fetch(`${API}/it/software/${id}`, {
       method: 'PUT', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        name: application.name, editor: application.editor, version: application.version, use: application.use,
-        owner_email: application.owner_email, owner_name: application.owner_name,
-        all_locations: application.all_locations, location_ids: application.location_ids, location_names: application.location_names,
+        name: software.name, editor: software.editor, version: software.version, install_link: software.install_link,
+        owner_email: software.owner_email, owner_name: software.owner_name,
+        location_id: software.location_id, location_name: software.location_name,
         ...fields,
       }),
     })
@@ -98,69 +93,62 @@ function ApplicationDetailContent() {
     load()
   }
 
-  const deleteApplication = async () => {
-    if (!confirm(`Delete "${application.name}"? This cannot be undone.`)) return
-    await fetch(`${API}/it/applications/${id}`, { method: 'DELETE' })
-    router.push('/it/applications')
+  const deleteSoftware = async () => {
+    if (!confirm(`Delete "${software.name}"? This cannot be undone.`)) return
+    await fetch(`${API}/it/software/${id}`, { method: 'DELETE' })
+    router.push('/it/software')
   }
 
-  const toggleAll = () => patch({ all_locations: !application.all_locations, location_ids: [], location_names: [] })
+  const toggleAll = () => patch({ location_id: '', location_name: 'All' })
   const toggleLocation = (locId: string) => {
-    const has = (application.location_ids || []).includes(locId)
-    const ids = has ? application.location_ids.filter((x: string) => x !== locId) : [...(application.location_ids || []), locId]
-    const names = ids.map((i: string) => locations.find((l: any) => l.id === i)?.location_name).filter(Boolean)
-    patch({ location_ids: ids, location_names: names })
+    const loc = locations.find((l: any) => l.id === locId)
+    patch({ location_id: locId, location_name: loc?.location_name || 'All' })
   }
 
   if (loading) return <div style={{ padding: '48px', textAlign: 'center', color: '#45B6E4' }}>Loading…</div>
-  if (!application) return null
+  if (!software) return null
 
   return (
     <div style={{ padding: '24px 28px', maxWidth: '860px' }}>
-      <button onClick={() => router.push('/it/applications')} style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#219BD6', fontWeight: '600', fontSize: '11px', padding: 0, marginBottom: '14px' }}>← Applications</button>
+      <button onClick={() => router.push('/it/software')} style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#219BD6', fontWeight: '600', fontSize: '11px', padding: 0, marginBottom: '14px' }}>← Software</button>
 
-      <div style={{ background: 'white', borderRadius: '12px', border: '1px solid #EDF2F7', padding: '24px', boxShadow: '0 1px 3px rgba(0,0,0,0.06)', marginBottom: '20px' }}>
+      <div style={{ background: 'white', borderRadius: '12px', border: '1px solid #EDF2F7', padding: '24px', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '18px' }}>
           <div style={{ display: 'flex', gap: '14px', alignItems: 'center' }}>
             <div style={{ width: '44px', height: '44px', borderRadius: '10px', background: '#156082', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px', fontWeight: '800', flexShrink: 0 }}>
-              {application.name[0]?.toUpperCase()}
+              {software.name[0]?.toUpperCase()}
             </div>
             <h1 style={{ fontSize: '20px', fontWeight: '800', color: '#156082', margin: 0 }}>
-              <EditableCell display={application.name} editing={editing === 'name'} onStartEdit={() => canEdit && setEditing('name')}>
-                <input autoFocus style={{ ...inp, fontSize: '18px', fontWeight: '800' }} defaultValue={application.name} onBlur={e => patch({ name: e.target.value })} onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }} />
+              <EditableCell display={software.name} editing={editing === 'name'} onStartEdit={() => canEdit && setEditing('name')}>
+                <input autoFocus style={{ ...inp, fontSize: '18px', fontWeight: '800' }} defaultValue={software.name} onBlur={e => patch({ name: e.target.value })} onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }} />
               </EditableCell>
             </h1>
           </div>
           {canEdit && (
-            <button onClick={deleteApplication} style={{ padding: '7px 14px', background: 'white', color: '#DC2626', border: '1.5px solid #FCA5A5', borderRadius: '7px', cursor: 'pointer', fontSize: '12px', fontWeight: '600', fontFamily: 'Montserrat, sans-serif' }}>Delete</button>
+            <button onClick={deleteSoftware} style={{ padding: '7px 14px', background: 'white', color: '#DC2626', border: '1.5px solid #FCA5A5', borderRadius: '7px', cursor: 'pointer', fontSize: '12px', fontWeight: '600', fontFamily: 'Montserrat, sans-serif' }}>Delete</button>
           )}
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 24px' }}>
-          <PropertyRow label="Editor Name">
-            <EditableCell display={application.editor} editing={editing === 'editor'} onStartEdit={() => canEdit && setEditing('editor')}>
-              <input autoFocus style={inp} defaultValue={application.editor} onBlur={e => patch({ editor: e.target.value })} onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }} />
+          <PropertyRow label="Software Editor">
+            <EditableCell display={software.editor} editing={editing === 'editor'} onStartEdit={() => canEdit && setEditing('editor')}>
+              <input autoFocus style={inp} defaultValue={software.editor} onBlur={e => patch({ editor: e.target.value })} onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }} />
             </EditableCell>
           </PropertyRow>
-          <PropertyRow label="Version">
-            <EditableCell display={application.version} editing={editing === 'version'} onStartEdit={() => canEdit && setEditing('version')}>
-              <input autoFocus style={inp} defaultValue={application.version} onBlur={e => patch({ version: e.target.value })} onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }} />
+          <PropertyRow label="Software Version">
+            <EditableCell display={software.version} editing={editing === 'version'} onStartEdit={() => canEdit && setEditing('version')}>
+              <input autoFocus style={inp} defaultValue={software.version} onBlur={e => patch({ version: e.target.value })} onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }} />
             </EditableCell>
           </PropertyRow>
-          <PropertyRow label="Use">
-            {editing === 'use' ? (
-              <select autoFocus style={inp} defaultValue={application.use || ''} onChange={e => patch({ use: e.target.value })} onBlur={() => setEditing(null)}>
-                <option value="">Select…</option>
-                {USE_OPTIONS.map(u => <option key={u} value={u}>{u}</option>)}
-              </select>
-            ) : (
-              <EditableCell display={application.use ? <span style={{ background: '#EEF2FF', color: '#4F46E5', padding: '2px 9px', borderRadius: '10px', fontSize: '10px', fontWeight: '700' }}>{application.use}</span> : null}
-                editing={false} onStartEdit={() => canEdit && setEditing('use')} />
-            )}
+          <PropertyRow label="Link to Installation Files">
+            <EditableCell display={software.install_link ? <a href={software.install_link} target="_blank" rel="noopener noreferrer" style={{ color: '#3B82F6' }} onClick={e => e.stopPropagation()}>🔗 {software.install_link}</a> : null}
+              editing={editing === 'install_link'} onStartEdit={() => canEdit && setEditing('install_link')}>
+              <input autoFocus style={{ ...inp, width: '100%', boxSizing: 'border-box' as const }} defaultValue={software.install_link} placeholder="https://…" onBlur={e => patch({ install_link: e.target.value })} onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }} />
+            </EditableCell>
           </PropertyRow>
-          <PropertyRow label="Owner of the Application">
+          <PropertyRow label="Owner of the Solution">
             {editing === 'owner' ? (
-              <select autoFocus style={inp} defaultValue={application.owner_email || ''}
+              <select autoFocus style={inp} defaultValue={software.owner_email || ''}
                 onChange={e => {
                   const u = users.find((uu: any) => uu.email === e.target.value)
                   patch({ owner_email: e.target.value, owner_name: u?.display_name || (u ? `${u.first_name} ${u.last_name}` : '') })
@@ -170,31 +158,26 @@ function ApplicationDetailContent() {
                 {users.map((u: any) => <option key={u.email} value={u.email}>{u.display_name || `${u.first_name} ${u.last_name}`}</option>)}
               </select>
             ) : (
-              <EditableCell display={application.owner_name || application.owner_email} editing={false} onStartEdit={() => canEdit && setEditing('owner')} />
+              <EditableCell display={software.owner_name || software.owner_email} editing={false} onStartEdit={() => canEdit && setEditing('owner')} />
             )}
           </PropertyRow>
-          <PropertyRow label="Locations Using the Application">
-            {editing === 'locations' ? (
+          <PropertyRow label="Location">
+            {editing === 'location' ? (
               <div style={{ minWidth: '260px' }}>
-                <LocationChecklist allLocations={application.all_locations} selectedIds={application.location_ids || []} locations={locations} onToggleAll={toggleAll} onToggleLocation={toggleLocation} />
+                <LocationChecklist allLocations={!software.location_id} selectedIds={software.location_id ? [software.location_id] : []} locations={locations} onToggleAll={toggleAll} onToggleLocation={toggleLocation} />
                 <button onClick={() => setEditing(null)} style={{ marginTop: '6px', padding: '4px 10px', background: '#156082', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '11px', fontWeight: '700', fontFamily: 'Montserrat, sans-serif' }}>Done</button>
               </div>
             ) : (
-              <EditableCell
-                display={application.all_locations ? <span style={{ background: '#EEF2FF', color: '#156082', padding: '2px 9px', borderRadius: '10px', fontSize: '10px', fontWeight: '700' }}>All</span> : (application.location_names || []).join(', ')}
-                editing={false} onStartEdit={() => canEdit && setEditing('locations')} />
+              <EditableCell display={<span style={{ background: !software.location_id ? '#EEF2FF' : '#F1F5F9', color: !software.location_id ? '#156082' : '#3F3F3F', padding: '2px 9px', borderRadius: '10px', fontSize: '10px', fontWeight: '700' }}>{software.location_name || 'All'}</span>}
+                editing={false} onStartEdit={() => canEdit && setEditing('location')} />
             )}
           </PropertyRow>
         </div>
       </div>
-
-      <ApplicationSubmodulesSection application={application} canEdit={canEdit} />
-      <ApplicationEnvironmentsSection application={application} canEdit={canEdit} />
-      <ApplicationLinksSection application={application} canEdit={canEdit} />
     </div>
   )
 }
 
-export default function ApplicationDetailPage() {
-  return <ITLayout><ApplicationDetailContent /></ITLayout>
+export default function SoftwareDetailPage() {
+  return <ITLayout><SoftwareDetailContent /></ITLayout>
 }
