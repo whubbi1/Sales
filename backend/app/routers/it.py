@@ -224,6 +224,14 @@ async def list_applications(search: str = None, db: AsyncSession = Depends(get_d
     result = [_stringify_row(dict(row._mapping)) for row in r.fetchall()]
     return {"applications": result}
 
+@router.get("/applications/{aid}")
+async def get_application(aid: str, db: AsyncSession = Depends(get_db)):
+    r = await db.execute(text("SELECT * FROM it_applications WHERE id = CAST(:id AS UUID)"), {"id": aid})
+    row = r.fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Application not found")
+    return _stringify_row(dict(row._mapping))
+
 @router.post("/applications")
 async def create_application(data: dict, db: AsyncSession = Depends(get_db)):
     aid = str(uuid.uuid4())
@@ -427,10 +435,10 @@ async def create_report_view(data: dict, db: AsyncSession = Depends(get_db)):
     vid = str(uuid.uuid4())
     await db.execute(text("""
         INSERT INTO it_report_views
-            (id, user_email, module, name, columns, filters, sort_field, sort_dir, created_at, updated_at)
+            (id, user_email, module, name, columns, filters, sort_field, sort_dir, column_widths, created_at, updated_at)
         VALUES
             (CAST(:id AS UUID), :user_email, :module, :name, CAST(:columns AS JSONB), CAST(:filters AS JSONB),
-             :sort_field, :sort_dir, NOW(), NOW())
+             :sort_field, :sort_dir, CAST(:column_widths AS JSONB), NOW(), NOW())
     """), {
         "id": vid,
         "user_email": data.get("user_email", ""),
@@ -440,6 +448,7 @@ async def create_report_view(data: dict, db: AsyncSession = Depends(get_db)):
         "filters": json.dumps(data.get("filters") or {}),
         "sort_field": data.get("sort_field") or "",
         "sort_dir": data.get("sort_dir") or "asc",
+        "column_widths": json.dumps(data.get("column_widths") or {}),
     })
     await db.commit()
     return {"status": "ok", "id": vid}
@@ -448,12 +457,13 @@ async def create_report_view(data: dict, db: AsyncSession = Depends(get_db)):
 async def update_report_view(vid: str, data: dict, db: AsyncSession = Depends(get_db)):
     await db.execute(text("""
         UPDATE it_report_views SET
-            name       = COALESCE(NULLIF(:name,''), name),
-            columns    = CAST(:columns AS JSONB),
-            filters    = CAST(:filters AS JSONB),
-            sort_field = :sort_field,
-            sort_dir   = :sort_dir,
-            updated_at = NOW()
+            name          = COALESCE(NULLIF(:name,''), name),
+            columns       = CAST(:columns AS JSONB),
+            filters       = CAST(:filters AS JSONB),
+            sort_field    = :sort_field,
+            sort_dir      = :sort_dir,
+            column_widths = CAST(:column_widths AS JSONB),
+            updated_at    = NOW()
         WHERE id = CAST(:id AS UUID)
     """), {
         "id": vid,
@@ -462,6 +472,7 @@ async def update_report_view(vid: str, data: dict, db: AsyncSession = Depends(ge
         "filters": json.dumps(data.get("filters") or {}),
         "sort_field": data.get("sort_field") or "",
         "sort_dir": data.get("sort_dir") or "asc",
+        "column_widths": json.dumps(data.get("column_widths") or {}),
     })
     await db.commit()
     return {"status": "ok"}

@@ -20,6 +20,7 @@ export function useReportBuilder(module: string, columns: ReportColumn[], userEm
   const [filters, setFilters] = useState<Record<string, string>>({})
   const [sortField, setSortField] = useState<string>(columns[0]?.key || '')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
+  const [columnWidths, setColumnWidths] = useState<Record<string, number>>({})
   const [savedViews, setSavedViews] = useState<any[]>([])
   const [activeViewId, setActiveViewId] = useState<string>('')
   const [restored, setRestored] = useState(false)
@@ -30,8 +31,8 @@ export function useReportBuilder(module: string, columns: ReportColumn[], userEm
       .then(r => r.json()).then(d => setSavedViews(d.views || [])).catch(() => {})
   }
 
-  // Restore whatever report setup (saved view, columns, filters, sort) was active when the
-  // user last left this page, so it doesn't silently reset to defaults on return.
+  // Restore whatever report setup (saved view, columns, filters, sort, column widths) was active
+  // when the user last left this page, so it doesn't silently reset to defaults on return.
   useEffect(() => {
     const key = storageKeyFor(module, userEmail)
     if (key) {
@@ -43,6 +44,7 @@ export function useReportBuilder(module: string, columns: ReportColumn[], userEm
           if (saved.filters) setFilters(saved.filters)
           if (saved.sortField) setSortField(saved.sortField)
           if (saved.sortDir) setSortDir(saved.sortDir)
+          if (saved.columnWidths) setColumnWidths(saved.columnWidths)
           if (saved.activeViewId) setActiveViewId(saved.activeViewId)
         }
       } catch {}
@@ -55,8 +57,8 @@ export function useReportBuilder(module: string, columns: ReportColumn[], userEm
     if (!restored) return
     const key = storageKeyFor(module, userEmail)
     if (!key) return
-    localStorage.setItem(key, JSON.stringify({ visibleCols, filters, sortField, sortDir, activeViewId }))
-  }, [restored, module, userEmail, visibleCols, filters, sortField, sortDir, activeViewId])
+    localStorage.setItem(key, JSON.stringify({ visibleCols, filters, sortField, sortDir, columnWidths, activeViewId }))
+  }, [restored, module, userEmail, visibleCols, filters, sortField, sortDir, columnWidths, activeViewId])
 
   const toggleCol = (key: string) => {
     setVisibleCols(v => v.includes(key) ? v.filter(k => k !== key) : [...v, key])
@@ -66,16 +68,21 @@ export function useReportBuilder(module: string, columns: ReportColumn[], userEm
     setFilters(f => ({ ...f, [key]: value }))
   }
 
+  const setColumnWidth = (key: string, width: number) => {
+    setColumnWidths(w => ({ ...w, [key]: Math.round(width) }))
+  }
+
   const applyView = (view: any) => {
     setVisibleCols(view.columns && view.columns.length ? view.columns : allKeys)
     setFilters(view.filters || {})
     setSortField(view.sort_field || columns[0]?.key || '')
     setSortDir((view.sort_dir as any) || 'asc')
+    setColumnWidths(view.column_widths || {})
     setActiveViewId(view.id)
   }
 
   const saveView = async (name: string) => {
-    const payload = { user_email: userEmail, module, name, columns: visibleCols, filters, sort_field: sortField, sort_dir: sortDir }
+    const payload = { user_email: userEmail, module, name, columns: visibleCols, filters, sort_field: sortField, sort_dir: sortDir, column_widths: columnWidths }
     await fetch(`${API}/it/report-views`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
     reload()
   }
@@ -87,13 +94,14 @@ export function useReportBuilder(module: string, columns: ReportColumn[], userEm
   }
 
   const resetToDefault = () => {
-    setVisibleCols(allKeys); setFilters({}); setSortField(columns[0]?.key || ''); setSortDir('asc'); setActiveViewId('')
+    setVisibleCols(allKeys); setFilters({}); setSortField(columns[0]?.key || ''); setSortDir('asc'); setColumnWidths({}); setActiveViewId('')
   }
 
   return {
     visibleCols, setVisibleCols, toggleCol,
     filters, setFilter,
     sortField, setSortField, sortDir, setSortDir,
+    columnWidths, setColumnWidth,
     savedViews, activeViewId, applyView, saveView, deleteView, resetToDefault,
   }
 }
@@ -123,6 +131,36 @@ export function applyReport(data: any[], columns: ReportColumn[], filters: Recor
 const inp: React.CSSProperties = {
   fontSize: '12px', padding: '6px 10px', border: '1px solid #E2E8F0',
   borderRadius: '7px', fontFamily: 'Montserrat, sans-serif', outline: 'none', background: 'white',
+}
+
+const MIN_COLUMN_WIDTH = 60
+
+// Drag handle for the right edge of a <th> — place it inside a `<th style={{position:'relative'}}>`.
+// Give the table `style={{ tableLayout: 'fixed' }}` so widths set on header cells actually stick.
+export function ColumnResizeHandle({ colKey, rb }: { colKey: string; rb: ReturnType<typeof useReportBuilder> }) {
+  const startResize = (e: React.MouseEvent<HTMLSpanElement>) => {
+    e.preventDefault()
+    e.stopPropagation()
+    const th = (e.currentTarget.parentElement as HTMLElement)
+    const startWidth = rb.columnWidths[colKey] || th?.offsetWidth || 120
+    const startX = e.clientX
+    const onMove = (ev: MouseEvent) => {
+      rb.setColumnWidth(colKey, Math.max(MIN_COLUMN_WIDTH, startWidth + (ev.clientX - startX)))
+    }
+    const onUp = () => {
+      document.removeEventListener('mousemove', onMove)
+      document.removeEventListener('mouseup', onUp)
+    }
+    document.addEventListener('mousemove', onMove)
+    document.addEventListener('mouseup', onUp)
+  }
+
+  return (
+    <span onMouseDown={startResize} onClick={e => e.stopPropagation()} title="Drag to resize"
+      style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: '8px', cursor: 'col-resize', userSelect: 'none' }}
+      onMouseEnter={e => (e.currentTarget.style.background = 'rgba(21,96,130,0.15)')}
+      onMouseLeave={e => (e.currentTarget.style.background = 'transparent')} />
+  )
 }
 
 export function ReportPanel({ columns, rb }: { columns: ReportColumn[]; rb: ReturnType<typeof useReportBuilder> }) {

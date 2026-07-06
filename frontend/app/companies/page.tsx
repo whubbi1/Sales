@@ -6,7 +6,7 @@ import { Sidebar } from '@/components/Sidebar'
 import { companiesAPI, partnersAPI } from '@/lib/api'
 import { PageHeader, StatusBadge, EmptyState } from '@/components/shared/RecordLayout'
 import { CompanyModal } from '@/components/companies/CompanyModal'
-import { useReportBuilder, applyReport, ReportPanel, ReportColumn } from '@/components/it/ReportBuilder'
+import { useReportBuilder, applyReport, ReportPanel, ReportColumn, ColumnResizeHandle } from '@/components/it/ReportBuilder'
 import { getStoredUser } from '@/lib/auth'
 
 const ANTHROPIC_API = 'https://api.anthropic.com/v1/messages'
@@ -38,6 +38,14 @@ const COLUMNS: ReportColumn[] = [
   { key: 'status', label: 'Status', filterable: 'select', options: ['lead', 'prospect', 'client', 'partner'] },
   { key: 'assigned_to', label: 'Assigned', filterable: 'text' },
 ]
+
+// table-layout:fixed (needed so resized column widths actually stick) divides unset columns
+// evenly by default, which looks worse than the old content-based auto layout — these give
+// the first-ever render sane proportions until a user drags a column to their own preference.
+const DEFAULT_COLUMN_WIDTHS: Record<string, number> = {
+  name: 260, level_label: 110, main_contact_display: 170, domains_display: 170,
+  main_erp_display: 150, hosting_display: 150, status: 110, assigned_to: 150,
+}
 
 export default function CompaniesPage() {
   const router = useRouter()
@@ -123,14 +131,17 @@ export default function CompaniesPage() {
           />
 
           {/* Table */}
-          <div style={{ background: 'white', borderRadius: '10px', border: '1px solid #EDF2F7', boxShadow: '0 1px 3px rgba(0,0,0,0.06)', overflow: 'hidden' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <div style={{ background: 'white', borderRadius: '10px', border: '1px solid #EDF2F7', boxShadow: '0 1px 3px rgba(0,0,0,0.06)', overflow: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
               <thead style={{ background: '#FAFBFC' }}>
                 <tr>
                   {COLUMNS.filter(c => isVisible(c.key)).map(c => (
-                    <th key={c.key} style={{ textAlign: 'left', padding: '10px 16px', fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#9B9B9B', borderBottom: '1px solid #E2E8F0', whiteSpace: 'nowrap' }}>{c.label}</th>
+                    <th key={c.key} style={{ position: 'relative', textAlign: 'left', padding: '10px 16px', fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#9B9B9B', borderBottom: '1px solid #E2E8F0', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', width: `${rb.columnWidths[c.key] || DEFAULT_COLUMN_WIDTHS[c.key] || 150}px` }}>
+                      {c.label}
+                      <ColumnResizeHandle colKey={c.key} rb={rb} />
+                    </th>
                   ))}
-                  <th style={{ borderBottom: '1px solid #E2E8F0' }} />
+                  <th style={{ borderBottom: '1px solid #E2E8F0', width: '90px' }} />
                 </tr>
               </thead>
               <tbody>

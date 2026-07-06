@@ -695,6 +695,7 @@ async def startup():
                     created_at TIMESTAMP DEFAULT NOW(),
                     updated_at TIMESTAMP DEFAULT NOW()
                 )""",
+                "ALTER TABLE it_report_views ADD COLUMN IF NOT EXISTS column_widths JSONB NOT NULL DEFAULT '{}'",
 
                 # Personal Profile — Curriculum Vitae
                 """CREATE TABLE IF NOT EXISTS employee_cv (

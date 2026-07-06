@@ -1,10 +1,8 @@
 'use client'
 import { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import ITLayout, { useITPerm } from '@/components/ITLayout'
 import { useReportBuilder, applyReport, ReportPanel, ReportColumn } from '@/components/it/ReportBuilder'
-import { ApplicationSubmodulesModal } from '@/components/it/ApplicationSubmodulesModal'
-import { ApplicationEnvironmentsModal } from '@/components/it/ApplicationEnvironmentsModal'
-import { ApplicationLinksModal } from '@/components/it/ApplicationLinksModal'
 import { getStoredUser } from '@/lib/auth'
 
 const API = 'https://api.whubbi.wcomply.com'
@@ -63,17 +61,8 @@ function LocationChecklist({ allLocations, selectedIds, locations, onToggleAll, 
   )
 }
 
-function withDefaults(base: any, initial?: any) {
-  if (!initial) return base
-  const out = { ...base }
-  for (const k of Object.keys(base)) {
-    if (initial[k] !== undefined && initial[k] !== null) out[k] = initial[k]
-  }
-  return out
-}
-
-function NewApplicationModal({ users, locations, initial, title, submitLabel, onClose, onSave }: any) {
-  const [form, setForm] = useState<any>(() => withDefaults(EMPTY_FORM, initial))
+function NewApplicationModal({ users, locations, onClose, onSave }: any) {
+  const [form, setForm] = useState<any>(EMPTY_FORM)
   const [saving, setSaving] = useState(false)
   const valid = form.name.trim().length > 0
 
@@ -102,7 +91,7 @@ function NewApplicationModal({ users, locations, initial, title, submitLabel, on
       onClick={e => { if (e.target === e.currentTarget) onClose() }}>
       <div style={{ background: 'white', borderRadius: '14px', width: '520px', maxHeight: '90vh', overflow: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
         <div style={{ padding: '20px 24px', borderBottom: '1px solid #EDF2F7', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <h2 style={{ fontSize: '15px', fontWeight: '800', color: '#156082', margin: 0 }}>{title || 'New Application'}</h2>
+          <h2 style={{ fontSize: '15px', fontWeight: '800', color: '#156082', margin: 0 }}>New Application</h2>
           <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: '20px', cursor: 'pointer', color: '#94A3B8' }}>×</button>
         </div>
         <div style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
@@ -142,7 +131,7 @@ function NewApplicationModal({ users, locations, initial, title, submitLabel, on
             <button onClick={onClose} style={{ padding: '9px 18px', background: '#F1F5F9', color: '#64748B', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '700', fontFamily: 'Montserrat, sans-serif' }}>Cancel</button>
             <button onClick={submit} disabled={saving || !valid}
               style={{ padding: '9px 18px', background: saving || !valid ? '#94A3B8' : '#156082', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '700', fontFamily: 'Montserrat, sans-serif' }}>
-              {saving ? 'Saving…' : (submitLabel || 'Create Application')}
+              {saving ? 'Creating…' : 'Create Application'}
             </button>
           </div>
         </div>
@@ -213,16 +202,13 @@ function EditableLocations({ item, locations, editing, onStartEdit, onSave }: an
 }
 
 function ApplicationsContent() {
+  const router = useRouter()
   const { canEdit } = useITPerm()
   const [applications, setApplications] = useState<any[]>([])
   const [users, setUsers] = useState<any[]>([])
   const [locations, setLocations] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [showNew, setShowNew] = useState(false)
-  const [editItem, setEditItem] = useState<any | null>(null)
-  const [submodulesItem, setSubmodulesItem] = useState<any | null>(null)
-  const [environmentsItem, setEnvironmentsItem] = useState<any | null>(null)
-  const [linksItem, setLinksItem] = useState<any | null>(null)
   const [editing, setEditing] = useState<{ id: string; field: string } | null>(null)
   const [search, setSearch] = useState('')
   const [userEmail, setUserEmail] = useState('')
@@ -273,11 +259,6 @@ function ApplicationsContent() {
     if (!confirm(`Delete "${item.name}"? This cannot be undone.`)) return
     await fetch(`${API}/it/applications/${item.id}`, { method: 'DELETE' })
     load()
-  }
-
-  const saveEditItem = async (form: any) => {
-    await patchItem(editItem, form)
-    setEditItem(null)
   }
 
   const isEditing = (id: string, field: string) => editing?.id === id && editing.field === field
@@ -370,14 +351,9 @@ function ApplicationsContent() {
                   </td>
                 )}
                 <td style={{ padding: '10px 12px', whiteSpace: 'nowrap' }}>
-                  <button onClick={() => setSubmodulesItem(item)} style={{ padding: '5px 10px', marginRight: '6px', background: '#F5F3FF', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '11px', color: '#7C3AED', fontWeight: '700', fontFamily: 'Montserrat, sans-serif' }}>Submodules</button>
-                  <button onClick={() => setEnvironmentsItem(item)} style={{ padding: '5px 10px', marginRight: '6px', background: '#ECFDF5', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '11px', color: '#059669', fontWeight: '700', fontFamily: 'Montserrat, sans-serif' }}>Environments</button>
-                  <button onClick={() => setLinksItem(item)} style={{ padding: '5px 10px', marginRight: '6px', background: '#EFF6FF', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '11px', color: '#3B82F6', fontWeight: '700', fontFamily: 'Montserrat, sans-serif' }}>Links</button>
+                  <button onClick={() => router.push(`/it/applications/${item.id}`)} style={{ padding: '5px 10px', marginRight: '6px', background: '#EFF6FF', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '11px', color: '#156082', fontWeight: '700', fontFamily: 'Montserrat, sans-serif' }}>Details</button>
                   {canEdit && (
-                    <>
-                      <button onClick={() => setEditItem(item)} style={{ padding: '5px 10px', marginRight: '6px', background: '#EFF6FF', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '11px', color: '#156082', fontWeight: '700', fontFamily: 'Montserrat, sans-serif' }}>Edit</button>
-                      <button onClick={() => deleteItem(item)} style={{ padding: '5px 10px', background: '#FEF2F2', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '11px', color: '#EF4444', fontWeight: '700', fontFamily: 'Montserrat, sans-serif' }}>Delete</button>
-                    </>
+                    <button onClick={() => deleteItem(item)} style={{ padding: '5px 10px', background: '#FEF2F2', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '11px', color: '#EF4444', fontWeight: '700', fontFamily: 'Montserrat, sans-serif' }}>Delete</button>
                   )}
                 </td>
               </tr>
@@ -387,19 +363,6 @@ function ApplicationsContent() {
       </div>
 
       {showNew && <NewApplicationModal users={users} locations={locations} onClose={() => setShowNew(false)} onSave={createItem} />}
-      {editItem && (
-        <NewApplicationModal users={users} locations={locations} initial={editItem} title="Edit Application" submitLabel="Save Changes"
-          onClose={() => setEditItem(null)} onSave={saveEditItem} />
-      )}
-      {submodulesItem && (
-        <ApplicationSubmodulesModal application={submodulesItem} canEdit={canEdit} onClose={() => setSubmodulesItem(null)} />
-      )}
-      {environmentsItem && (
-        <ApplicationEnvironmentsModal application={environmentsItem} canEdit={canEdit} onClose={() => setEnvironmentsItem(null)} />
-      )}
-      {linksItem && (
-        <ApplicationLinksModal application={linksItem} canEdit={canEdit} onClose={() => setLinksItem(null)} />
-      )}
     </div>
   )
 }
