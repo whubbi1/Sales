@@ -10,12 +10,20 @@ import json
 from datetime import datetime
 import secrets
 import hashlib
+import time
 
 router = APIRouter()
 
 TENANT_ID     = os.getenv("MS_TENANT_ID", "")
 CLIENT_ID     = os.getenv("MS_CLIENT_ID", "")
 CLIENT_SECRET = os.getenv("MS_CLIENT_SECRET", "")
+
+# Access to WHUBBI is restricted to members of this Azure AD security group. The group is
+# looked up by name (cached) unless MS_WHUBBI_GROUP_ID is set, which skips the lookup entirely.
+WHUBBI_GROUP_NAME = os.getenv("MS_WHUBBI_GROUP_NAME", "WHUBBI")
+WHUBBI_GROUP_ID_ENV = os.getenv("MS_WHUBBI_GROUP_ID", "").strip()
+_whubbi_group_cache = {"id": None, "members": None, "fetched_at": 0.0}
+WHUBBI_GROUP_CACHE_TTL = 300  # seconds
 
 # Modules & submodules definition
 MODULES = {
@@ -61,6 +69,59 @@ async def graph_get(path: str, token: str = None) -> dict:
             return {}
         resp.raise_for_status()
         return resp.json()
+
+
+async def _get_whubbi_group_id(token: str) -> str | None:
+    if WHUBBI_GROUP_ID_ENV:
+        return WHUBBI_GROUP_ID_ENV
+    if _whubbi_group_cache["id"]:
+        return _whubbi_group_cache["id"]
+    async with httpx.AsyncClient(timeout=15) as client:
+        resp = await client.get(
+            "https://graph.microsoft.com/v1.0/groups",
+            params={"$filter": f"displayName eq '{WHUBBI_GROUP_NAME}'", "$select": "id"},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        resp.raise_for_status()
+        groups = resp.json().get("value", [])
+        if not groups:
+            return None
+        _whubbi_group_cache["id"] = groups[0]["id"]
+        return _whubbi_group_cache["id"]
+
+
+async def get_whubbi_group_members() -> list | None:
+    """Members of the WHUBBI Azure AD security group, cached briefly to avoid a
+    round-trip to Graph on every request. Returns None if the check couldn't be
+    completed (Graph unreachable, permission not granted, group not found) —
+    callers must treat None as "check unavailable" and fail open, not "empty
+    group", or a Graph outage / an incomplete Azure AD setup would lock out
+    the whole company."""
+    now = time.time()
+    if _whubbi_group_cache["members"] is not None and now - _whubbi_group_cache["fetched_at"] < WHUBBI_GROUP_CACHE_TTL:
+        return _whubbi_group_cache["members"]
+    try:
+        token = await get_ms_token()
+        group_id = await _get_whubbi_group_id(token)
+        if not group_id:
+            return None
+        members = []
+        url = f"https://graph.microsoft.com/v1.0/groups/{group_id}/transitiveMembers/microsoft.graph.user"
+        params = {"$select": "id,displayName,givenName,surname,mail,jobTitle,department", "$top": 999}
+        async with httpx.AsyncClient(timeout=20) as client:
+            while url:
+                resp = await client.get(url, params=params, headers={"Authorization": f"Bearer {token}"})
+                resp.raise_for_status()
+                data = resp.json()
+                members.extend(data.get("value", []))
+                url = data.get("@odata.nextLink")
+                params = None  # nextLink already carries the query string
+        _whubbi_group_cache["members"] = members
+        _whubbi_group_cache["fetched_at"] = now
+        return members
+    except Exception as e:
+        print(f"WHUBBI group membership check failed, failing open: {e}")
+        return None
 
 
 # ─── Sync user from Microsoft Graph ──────────────────────────────────────────
@@ -301,37 +362,26 @@ async def _main_location_by_email(db: AsyncSession) -> dict:
 
 @router.get("/users")
 async def list_users(db: AsyncSession = Depends(get_db)):
-    """List all wcomply users — tries MS AD first, falls back to DB cache."""
+    """List WHUBBI security-group members — tries the MS AD group first, falls back to DB cache."""
     locations = await _main_location_by_email(db)
-    try:
-        token = await get_ms_token()
-        async with httpx.AsyncClient(timeout=15) as client:
-            resp = await client.get(
-                "https://graph.microsoft.com/v1.0/users"
-                "?$select=id,displayName,givenName,surname,mail,jobTitle,department"
-                "&$filter=accountEnabled eq true"
-                "&$top=100",
-                headers={"Authorization": f"Bearer {token}"}
-            )
-            if resp.status_code == 200:
-                ms_users = resp.json().get("value", [])
-                users = [
-                    {
-                        "email": u.get("mail", ""),
-                        "first_name": u.get("givenName", ""),
-                        "last_name": u.get("surname", ""),
-                        "display_name": u.get("displayName", ""),
-                        "job_title": u.get("jobTitle", ""),
-                        "department": u.get("department", ""),
-                        **locations.get(u.get("mail", ""), {"main_location_id": None, "main_location_name": "All", "is_excluded": False}),
-                    }
-                    for u in ms_users if u.get("mail")
-                ]
-                return {"users": users, "source": "ms_ad"}
-    except Exception:
-        pass
+    members = await get_whubbi_group_members()
+    if members is not None:
+        users = [
+            {
+                "email": u.get("mail", ""),
+                "first_name": u.get("givenName", ""),
+                "last_name": u.get("surname", ""),
+                "display_name": u.get("displayName", ""),
+                "job_title": u.get("jobTitle", ""),
+                "department": u.get("department", ""),
+                **locations.get(u.get("mail", ""), {"main_location_id": None, "main_location_name": "All", "is_excluded": False}),
+            }
+            for u in members if u.get("mail")
+        ]
+        return {"users": users, "source": "ms_ad_group"}
 
-    # Fallback: return cached DB users
+    # Fallback: return cached DB users (predates group-scoping, so unfiltered by
+    # group membership — acceptable as a degraded fallback when Graph is unreachable)
     result = await db.execute(text("""
         SELECT email, first_name, last_name, display_name, job_title, department, last_sync,
                main_location_id, main_location_name, is_excluded
@@ -344,6 +394,26 @@ async def list_users(db: AsyncSession = Depends(get_db)):
         if d.get("main_location_id"): d["main_location_id"] = str(d["main_location_id"])
         users.append(d)
     return {"users": users, "source": "db_cache"}
+
+
+@router.get("/whubbi-access/{email}")
+async def check_whubbi_access(email: str, db: AsyncSession = Depends(get_db)):
+    """Login gate: access requires membership in the WHUBBI Azure AD security group
+    and not being manually excluded. If the group check itself is unavailable (Graph
+    unreachable, permission not granted, group not found), that half fails open so a
+    transient issue or an incomplete Azure AD setup doesn't lock out the whole
+    company — is_excluded is still enforced either way."""
+    r = await db.execute(text("SELECT is_excluded FROM user_profiles WHERE email = :email"), {"email": email})
+    row = r.fetchone()
+    is_excluded = bool(row.is_excluded) if row else False
+
+    members = await get_whubbi_group_members()
+    if members is None:
+        return {"has_access": not is_excluded, "is_group_member": None, "is_excluded": is_excluded, "check_available": False}
+
+    member_emails = {u.get("mail", "").lower() for u in members if u.get("mail")}
+    is_member = email.lower() in member_emails
+    return {"has_access": is_member and not is_excluded, "is_group_member": is_member, "is_excluded": is_excluded, "check_available": True}
 
 
 # ─── Company Links (shown on the home page, managed from the IT module) ───────

@@ -1,7 +1,7 @@
 'use client'
 import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { isAccessExcluded } from '@/lib/auth'
+import { checkWhubbiAccess } from '@/lib/auth'
 
 function decodeJwtPayload(token: string): Record<string, any> {
   const b64 = token.split('.')[1] ?? ''
@@ -68,10 +68,17 @@ export default function CallbackPage() {
             email
           )
 
-          if (email && await isAccessExcluded(email)) {
-            setStatus('Your access to WHUBBI has been revoked. Contact your administrator.')
-            setTimeout(() => router.push('/auth/login'), 3500)
-            return
+          if (email) {
+            const access = await checkWhubbiAccess(email)
+            if (!access.has_access) {
+              setStatus(
+                access.is_excluded
+                  ? 'Your access to WHUBBI has been revoked. Contact your administrator.'
+                  : 'You must be a member of the WHUBBI security group to access this app. Contact your administrator.'
+              )
+              setTimeout(() => router.push('/auth/login'), 3500)
+              return
+            }
           }
 
           localStorage.setItem('whubbi_user', JSON.stringify({
