@@ -4,9 +4,9 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { Sidebar } from '@/components/Sidebar'
 import { partnersAPI } from '@/lib/api'
-import { PageHeader, StatusBadge, EmptyState } from '@/components/shared/RecordLayout'
+import { PageHeader, EmptyState } from '@/components/shared/RecordLayout'
 import { PartnerModal } from '@/components/partners/PartnerModal'
-import { useReportBuilder, applyReport, ReportPanel, ReportColumn } from '@/components/it/ReportBuilder'
+import { useReportBuilder, applyReport, ReportPanel, ReportColumn, REPORT_CELL_STYLE } from '@/components/it/ReportBuilder'
 import { getStoredUser } from '@/lib/auth'
 
 const COLUMNS: ReportColumn[] = [
@@ -88,34 +88,32 @@ export default function PartnersPage() {
                     onMouseEnter={e => (e.currentTarget.style.background = '#FAFBFC')}
                     onMouseLeave={e => (e.currentTarget.style.background = 'white')}>
                     {isVisible('internal_id') && (
-                      <td style={{ padding: '12px 16px', borderBottom: '1px solid #F1F5F9', fontSize: '11px', color: '#9B9B9B', fontWeight: '600' }}>{partner.internal_id || '—'}</td>
+                      <td style={{ padding: '12px 16px', borderBottom: '1px solid #F1F5F9', ...REPORT_CELL_STYLE }}>{partner.internal_id || '—'}</td>
                     )}
                     {isVisible('name') && (
-                      <td style={{ padding: '12px 16px', borderBottom: '1px solid #F1F5F9' }}>
+                      <td style={{ padding: '12px 16px', borderBottom: '1px solid #F1F5F9', ...REPORT_CELL_STYLE }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                          <div style={{ width: '30px', height: '30px', borderRadius: '6px', background: '#7C3AED', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: '800', flexShrink: 0 }}>
+                          <div style={{ width: '30px', height: '30px', borderRadius: '6px', background: '#7C3AED', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Montserrat, sans-serif', fontSize: '12px', flexShrink: 0 }}>
                             {partner.name[0]?.toUpperCase()}
                           </div>
-                          <div style={{ fontWeight: '700', color: '#144766', fontSize: '13px' }}>{partner.name}</div>
+                          <div>{partner.name}</div>
                         </div>
                       </td>
                     )}
                     {isVisible('main_contact_display') && (
-                      <td style={{ padding: '12px 16px', borderBottom: '1px solid #F1F5F9', fontSize: '12px', color: '#3F3F3F' }}>{partner.main_contact_display || '—'}</td>
+                      <td style={{ padding: '12px 16px', borderBottom: '1px solid #F1F5F9', ...REPORT_CELL_STYLE }}>{partner.main_contact_display || '—'}</td>
                     )}
                     {isVisible('sector') && (
-                      <td style={{ padding: '12px 16px', borderBottom: '1px solid #F1F5F9', fontSize: '12px', color: '#3F3F3F' }}>{partner.sector || '—'}</td>
+                      <td style={{ padding: '12px 16px', borderBottom: '1px solid #F1F5F9', ...REPORT_CELL_STYLE }}>{partner.sector || '—'}</td>
                     )}
                     {isVisible('country') && (
-                      <td style={{ padding: '12px 16px', borderBottom: '1px solid #F1F5F9', fontSize: '12px', color: '#3F3F3F' }}>{partner.country || '—'}</td>
+                      <td style={{ padding: '12px 16px', borderBottom: '1px solid #F1F5F9', ...REPORT_CELL_STYLE }}>{partner.country || '—'}</td>
                     )}
                     {isVisible('status') && (
-                      <td style={{ padding: '12px 16px', borderBottom: '1px solid #F1F5F9' }}>
-                        <StatusBadge value={partner.status} />
-                      </td>
+                      <td style={{ padding: '12px 16px', borderBottom: '1px solid #F1F5F9', ...REPORT_CELL_STYLE, textTransform: 'capitalize' as const }}>{partner.status}</td>
                     )}
                     {isVisible('assigned_to') && (
-                      <td style={{ padding: '12px 16px', borderBottom: '1px solid #F1F5F9', fontSize: '11px', color: '#9B9B9B' }}>{partner.assigned_to || '—'}</td>
+                      <td style={{ padding: '12px 16px', borderBottom: '1px solid #F1F5F9', ...REPORT_CELL_STYLE }}>{partner.assigned_to || '—'}</td>
                     )}
                   </tr>
                 ))}

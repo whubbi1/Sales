@@ -10,6 +10,12 @@ export interface ReportColumn {
   options?: string[]
 }
 
+// Single typographic style for every data cell in a report table — no per-column or per-value
+// font/size/color variation (badges included), so the output reads as one consistent report.
+export const REPORT_CELL_STYLE: React.CSSProperties = {
+  fontFamily: 'Montserrat, sans-serif', fontSize: '12px', color: '#3F3F3F', fontWeight: 400,
+}
+
 function storageKeyFor(module: string, userEmail: string) {
   return userEmail ? `it_report_state_${module}_${userEmail}` : ''
 }
@@ -33,6 +39,13 @@ export function useReportBuilder(module: string, columns: ReportColumn[], userEm
 
   // Restore whatever report setup (saved view, columns, filters, sort, column widths) was active
   // when the user last left this page, so it doesn't silently reset to defaults on return.
+  //
+  // userEmail starts out as '' on first mount (the page resolves it from getStoredUser() in its
+  // own effect, one render later), so this effect necessarily runs once with an empty key before
+  // it runs again with the real email. `restored` must only flip to true on that second, real run —
+  // flipping it early let the save-effect below fire in the same batch using the still-default
+  // state (the restore's setState calls hadn't committed yet) and immediately clobber whatever
+  // was in localStorage with those defaults, on every single page load.
   useEffect(() => {
     const key = storageKeyFor(module, userEmail)
     if (key) {
@@ -48,8 +61,8 @@ export function useReportBuilder(module: string, columns: ReportColumn[], userEm
           if (saved.activeViewId) setActiveViewId(saved.activeViewId)
         }
       } catch {}
+      setRestored(true)
     }
-    setRestored(true)
     reload()
   }, [userEmail])
 

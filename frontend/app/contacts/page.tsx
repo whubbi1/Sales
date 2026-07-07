@@ -4,9 +4,9 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { Sidebar } from '@/components/Sidebar'
 import { contactsAPI } from '@/lib/api'
-import { PageHeader, StatusBadge, EmptyState } from '@/components/shared/RecordLayout'
+import { PageHeader, EmptyState } from '@/components/shared/RecordLayout'
 import { ContactModal } from '@/components/contacts/ContactModal'
-import { useReportBuilder, applyReport, ReportPanel, ReportColumn } from '@/components/it/ReportBuilder'
+import { useReportBuilder, applyReport, ReportPanel, ReportColumn, REPORT_CELL_STYLE } from '@/components/it/ReportBuilder'
 import { getStoredUser } from '@/lib/auth'
 
 const ANTHROPIC_API = 'https://api.anthropic.com/v1/messages'
@@ -136,48 +136,42 @@ export default function ContactsPage() {
                     onMouseEnter={e => (e.currentTarget.style.background = '#FAFBFC')}
                     onMouseLeave={e => (e.currentTarget.style.background = 'white')}>
                     {isVisible('internal_id') && (
-                      <td style={{ padding: '11px 16px', borderBottom: '1px solid #F1F5F9', fontSize: '11px', color: '#9B9B9B', fontWeight: '600' }}>{contact.internal_id || '—'}</td>
+                      <td style={{ padding: '11px 16px', borderBottom: '1px solid #F1F5F9', ...REPORT_CELL_STYLE }}>{contact.internal_id || '—'}</td>
                     )}
                     {isVisible('contact_name') && (
-                      <td style={{ padding: '11px 16px', borderBottom: '1px solid #F1F5F9' }}>
+                      <td style={{ padding: '11px 16px', borderBottom: '1px solid #F1F5F9', ...REPORT_CELL_STYLE }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                          <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: '#e97132', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '13px', fontWeight: '800', flexShrink: 0 }}>
+                          <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: '#e97132', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Montserrat, sans-serif', fontSize: '13px', flexShrink: 0 }}>
                             {contact.first_name[0]?.toUpperCase()}
                           </div>
                           <div>
-                            <div style={{ fontWeight: '700', color: '#144766', fontSize: '13px' }}>{contact.first_name} {contact.last_name}</div>
-                            {contact.mobile_phone && <div style={{ fontSize: '10px', color: '#9B9B9B' }}>{contact.mobile_phone}</div>}
+                            <div>{contact.first_name} {contact.last_name}</div>
+                            {contact.mobile_phone && <div>{contact.mobile_phone}</div>}
                           </div>
                         </div>
                       </td>
                     )}
                     {isVisible('company_name') && (
-                      <td style={{ padding: '11px 16px', borderBottom: '1px solid #F1F5F9', fontSize: '12px', color: '#3F3F3F' }}>
+                      <td style={{ padding: '11px 16px', borderBottom: '1px solid #F1F5F9', ...REPORT_CELL_STYLE }}>
                         {contact.company ? (
-                          <span onClick={e => { e.stopPropagation(); router.push(`/companies/${contact.company.id}`) }} style={{ color: '#219BD6', fontWeight: '600', cursor: 'pointer' }}>{contact.company.name}</span>
-                        ) : <span style={{ color: '#CBD5E0' }}>—</span>}
+                          <span onClick={e => { e.stopPropagation(); router.push(`/companies/${contact.company.id}`) }} style={{ cursor: 'pointer' }}>{contact.company.name}</span>
+                        ) : '—'}
                       </td>
                     )}
                     {isVisible('job_name') && (
-                      <td style={{ padding: '11px 16px', borderBottom: '1px solid #F1F5F9', fontSize: '12px', color: '#3F3F3F' }}>{contact.job_name || '—'}</td>
+                      <td style={{ padding: '11px 16px', borderBottom: '1px solid #F1F5F9', ...REPORT_CELL_STYLE }}>{contact.job_name || '—'}</td>
                     )}
                     {isVisible('job_type') && (
-                      <td style={{ padding: '11px 16px', borderBottom: '1px solid #F1F5F9' }}>
-                        {contact.job_type ? (
-                          <span style={{ background: '#EEF2FF', color: '#4F46E5', padding: '2px 8px', borderRadius: '10px', fontSize: '10px', fontWeight: '700' }}>{contact.job_type}</span>
-                        ) : <span style={{ color: '#CBD5E0', fontSize: '12px' }}>—</span>}
-                      </td>
+                      <td style={{ padding: '11px 16px', borderBottom: '1px solid #F1F5F9', ...REPORT_CELL_STYLE }}>{contact.job_type || '—'}</td>
                     )}
                     {isVisible('email') && (
-                      <td style={{ padding: '11px 16px', borderBottom: '1px solid #F1F5F9', fontSize: '12px', color: '#9B9B9B' }}>{contact.email || '—'}</td>
+                      <td style={{ padding: '11px 16px', borderBottom: '1px solid #F1F5F9', ...REPORT_CELL_STYLE }}>{contact.email || '—'}</td>
                     )}
                     {isVisible('lead_status') && (
-                      <td style={{ padding: '11px 16px', borderBottom: '1px solid #F1F5F9' }}>
-                        <StatusBadge value={contact.lead_status || 'New'} />
-                      </td>
+                      <td style={{ padding: '11px 16px', borderBottom: '1px solid #F1F5F9', ...REPORT_CELL_STYLE }}>{contact.lead_status || 'New'}</td>
                     )}
                     {isVisible('preferred_language') && (
-                      <td style={{ padding: '11px 16px', borderBottom: '1px solid #F1F5F9', fontSize: '11px', color: '#9B9B9B' }}>{contact.preferred_language || '—'}</td>
+                      <td style={{ padding: '11px 16px', borderBottom: '1px solid #F1F5F9', ...REPORT_CELL_STYLE }}>{contact.preferred_language || '—'}</td>
                     )}
                     <td style={{ padding: '11px 16px', borderBottom: '1px solid #F1F5F9' }}>
                       <button onClick={e => { e.stopPropagation(); setSelectedContact(contact); setAiResult(''); setShowWebSearch(true) }}

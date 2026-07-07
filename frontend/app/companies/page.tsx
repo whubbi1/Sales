@@ -4,9 +4,9 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { Sidebar } from '@/components/Sidebar'
 import { companiesAPI, partnersAPI } from '@/lib/api'
-import { PageHeader, StatusBadge, EmptyState } from '@/components/shared/RecordLayout'
+import { PageHeader, EmptyState } from '@/components/shared/RecordLayout'
 import { CompanyModal } from '@/components/companies/CompanyModal'
-import { useReportBuilder, applyReport, ReportPanel, ReportColumn, ColumnResizeHandle } from '@/components/it/ReportBuilder'
+import { useReportBuilder, applyReport, ReportPanel, ReportColumn, ColumnResizeHandle, REPORT_CELL_STYLE } from '@/components/it/ReportBuilder'
 import { getStoredUser } from '@/lib/auth'
 
 const ANTHROPIC_API = 'https://api.anthropic.com/v1/messages'
@@ -26,7 +26,6 @@ async function claudeSearch(prompt: string): Promise<string> {
 }
 
 const LEVEL_LABELS: Record<number, string> = { 1: 'Group', 2: 'Parent', 3: 'Child', 4: 'Sub-Child' }
-const LEVEL_COLORS: Record<number, string> = { 1: '#144766', 2: '#1a5a84', 3: '#219BD6', 4: '#7DD3F0' }
 
 const COLUMNS: ReportColumn[] = [
   { key: 'internal_id', label: 'ID', filterable: 'text' },
@@ -155,64 +154,50 @@ export default function CompaniesPage() {
                     onMouseEnter={e => (e.currentTarget.style.background = '#FAFBFC')}
                     onMouseLeave={e => (e.currentTarget.style.background = 'white')}>
                     {isVisible('name') && (
-                      <td style={{ padding: '12px 16px', borderBottom: '1px solid #F1F5F9' }}>
+                      <td style={{ padding: '12px 16px', borderBottom: '1px solid #F1F5F9', ...REPORT_CELL_STYLE }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                          {company.level > 1 && <span style={{ color: '#CBD5E0', marginLeft: `${(company.level - 1) * 12}px` }}>└</span>}
-                          <div style={{ width: '30px', height: '30px', borderRadius: '6px', background: LEVEL_COLORS[company.level] || '#144766', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: '800', flexShrink: 0 }}>
+                          {company.level > 1 && <span style={{ marginLeft: `${(company.level - 1) * 12}px` }}>└</span>}
+                          <div style={{ width: '30px', height: '30px', borderRadius: '6px', background: '#144766', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Montserrat, sans-serif', fontSize: '12px', flexShrink: 0 }}>
                             {company.name[0]?.toUpperCase()}
                           </div>
                           <div>
-                            <div style={{ fontWeight: '700', color: '#144766', fontSize: '13px' }}>{company.name}</div>
-                            {company.parent && <div style={{ fontSize: '10px', color: '#9B9B9B' }}>↑ {company.parent.name}</div>}
+                            <div>{company.name}</div>
+                            {company.parent && <div>↑ {company.parent.name}</div>}
                           </div>
                         </div>
                       </td>
                     )}
                     {isVisible('internal_id') && (
-                      <td style={{ padding: '12px 16px', borderBottom: '1px solid #F1F5F9', fontSize: '11px', color: '#9B9B9B', fontWeight: '600' }}>{company.internal_id || '—'}</td>
+                      <td style={{ padding: '12px 16px', borderBottom: '1px solid #F1F5F9', ...REPORT_CELL_STYLE }}>{company.internal_id || '—'}</td>
                     )}
                     {isVisible('level_label') && (
-                      <td style={{ padding: '12px 16px', borderBottom: '1px solid #F1F5F9' }}>
-                        <span style={{ background: LEVEL_COLORS[company.level] + '20', color: LEVEL_COLORS[company.level], padding: '2px 8px', borderRadius: '10px', fontSize: '10px', fontWeight: '700' }}>
-                          {LEVEL_LABELS[company.level]}
-                        </span>
-                      </td>
+                      <td style={{ padding: '12px 16px', borderBottom: '1px solid #F1F5F9', ...REPORT_CELL_STYLE }}>{LEVEL_LABELS[company.level]}</td>
                     )}
                     {isVisible('main_contact_display') && (
-                      <td style={{ padding: '12px 16px', borderBottom: '1px solid #F1F5F9', fontSize: '12px', color: '#3F3F3F' }}>{company.main_contact_display || '—'}</td>
+                      <td style={{ padding: '12px 16px', borderBottom: '1px solid #F1F5F9', ...REPORT_CELL_STYLE }}>{company.main_contact_display || '—'}</td>
                     )}
                     {isVisible('domains_display') && (
-                      <td style={{ padding: '12px 16px', borderBottom: '1px solid #F1F5F9', fontSize: '11px', color: '#9B9B9B' }}>
+                      <td style={{ padding: '12px 16px', borderBottom: '1px solid #F1F5F9', ...REPORT_CELL_STYLE }}>
                         {(company.domain_names || []).slice(0, 2).join(', ')}
-                        {(company.domain_names || []).length > 2 && <span style={{ color: '#219BD6' }}> +{company.domain_names.length - 2}</span>}
+                        {(company.domain_names || []).length > 2 && <span> +{company.domain_names.length - 2}</span>}
                       </td>
                     )}
                     {isVisible('main_erp_display') && (
-                      <td style={{ padding: '12px 16px', borderBottom: '1px solid #F1F5F9' }}>
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '3px' }}>
-                          {(company.main_erp || []).slice(0, 2).map((e: string) => (
-                            <span key={e} style={{ background: '#EEF2FF', color: '#4F46E5', padding: '1px 7px', borderRadius: '10px', fontSize: '10px', fontWeight: '700' }}>{e}</span>
-                          ))}
-                          {(company.main_erp || []).length > 2 && <span style={{ fontSize: '10px', color: '#9B9B9B' }}>+{company.main_erp.length - 2}</span>}
-                        </div>
+                      <td style={{ padding: '12px 16px', borderBottom: '1px solid #F1F5F9', ...REPORT_CELL_STYLE }}>
+                        {(company.main_erp || []).slice(0, 2).join(', ')}
+                        {(company.main_erp || []).length > 2 && <span> +{company.main_erp.length - 2}</span>}
                       </td>
                     )}
                     {isVisible('hosting_display') && (
-                      <td style={{ padding: '12px 16px', borderBottom: '1px solid #F1F5F9' }}>
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '3px' }}>
-                          {(company.sap_hosting_partner || []).slice(0, 2).map((h: string) => (
-                            <span key={h} style={{ background: '#ECFDF5', color: '#059669', padding: '1px 7px', borderRadius: '10px', fontSize: '10px', fontWeight: '700' }}>{h}</span>
-                          ))}
-                        </div>
+                      <td style={{ padding: '12px 16px', borderBottom: '1px solid #F1F5F9', ...REPORT_CELL_STYLE }}>
+                        {(company.sap_hosting_partner || []).join(', ') || '—'}
                       </td>
                     )}
                     {isVisible('status') && (
-                      <td style={{ padding: '12px 16px', borderBottom: '1px solid #F1F5F9' }}>
-                        <StatusBadge value={company.status} />
-                      </td>
+                      <td style={{ padding: '12px 16px', borderBottom: '1px solid #F1F5F9', ...REPORT_CELL_STYLE, textTransform: 'capitalize' as const }}>{company.status}</td>
                     )}
                     {isVisible('assigned_to') && (
-                      <td style={{ padding: '12px 16px', borderBottom: '1px solid #F1F5F9', fontSize: '11px', color: '#9B9B9B' }}>{company.assigned_to || '—'}</td>
+                      <td style={{ padding: '12px 16px', borderBottom: '1px solid #F1F5F9', ...REPORT_CELL_STYLE }}>{company.assigned_to || '—'}</td>
                     )}
                     <td style={{ padding: '12px 16px', borderBottom: '1px solid #F1F5F9' }}>
                       <button onClick={e => { e.stopPropagation(); setSelectedCompany(company); setAiResult(''); setShowSearch(true) }}

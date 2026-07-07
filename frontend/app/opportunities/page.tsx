@@ -6,29 +6,8 @@ import { Sidebar } from '@/components/Sidebar'
 import { opportunitiesAPI } from '@/lib/api'
 import { PageHeader, EmptyState } from '@/components/shared/RecordLayout'
 import { OpportunityModal } from '@/components/opportunities/OpportunityModal'
-import { useReportBuilder, applyReport, ReportPanel, ReportColumn } from '@/components/it/ReportBuilder'
+import { useReportBuilder, applyReport, ReportPanel, ReportColumn, REPORT_CELL_STYLE } from '@/components/it/ReportBuilder'
 import { getStoredUser } from '@/lib/auth'
-
-const STATUS_COLORS: Record<string, string> = {
-  'Presentation To Be Scheduled': '#EEF2FF',
-  'Presentation Done': '#FFF7ED',
-  'Proposition Ongoing': '#FFF7ED',
-  'Proposition Accepted': '#ECFDF5',
-  'Contract Ongoing': '#ECFDF5',
-  'Contract Finalised': '#ECFDF5',
-  'PO Received': '#D1FAE5',
-  'Contract Lost': '#FEF2F2',
-}
-const STATUS_TEXT: Record<string, string> = {
-  'Presentation To Be Scheduled': '#4F46E5',
-  'Presentation Done': '#D97706',
-  'Proposition Ongoing': '#EA580C',
-  'Proposition Accepted': '#059669',
-  'Contract Ongoing': '#059669',
-  'Contract Finalised': '#059669',
-  'PO Received': '#047857',
-  'Contract Lost': '#DC2626',
-}
 
 const STATUS_OPTIONS = ['Presentation To Be Scheduled','Presentation Done','Proposition Ongoing','Proposition Accepted','Contract Ongoing','Contract Finalised','PO Received','Contract Lost']
 
@@ -132,60 +111,46 @@ export default function OpportunitiesPage() {
                     onMouseEnter={e => (e.currentTarget.style.background = '#FAFBFC')}
                     onMouseLeave={e => (e.currentTarget.style.background = 'white')}>
                     {isVisible('deal_name') && (
-                      <td style={{ padding: '11px 16px', borderBottom: '1px solid #F1F5F9' }}>
+                      <td style={{ padding: '11px 16px', borderBottom: '1px solid #F1F5F9', ...REPORT_CELL_STYLE }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                          <div style={{ width: '30px', height: '30px', borderRadius: '6px', background: '#219BD6', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: '800', flexShrink: 0 }}>
+                          <div style={{ width: '30px', height: '30px', borderRadius: '6px', background: '#219BD6', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Montserrat, sans-serif', fontSize: '12px', flexShrink: 0 }}>
                             {opp.deal_name[0]?.toUpperCase()}
                           </div>
                           <div>
-                            <div style={{ fontWeight: '700', color: '#144766', fontSize: '12px' }}>{opp.deal_name}</div>
-                            {opp.deal_id && <div style={{ fontSize: '10px', color: '#9B9B9B' }}>#{opp.deal_id}</div>}
+                            <div>{opp.deal_name}</div>
+                            {opp.deal_id && <div>#{opp.deal_id}</div>}
                           </div>
                         </div>
                       </td>
                     )}
                     {isVisible('company_name') && (
-                      <td style={{ padding: '11px 16px', borderBottom: '1px solid #F1F5F9', fontSize: '12px', color: '#3F3F3F' }}>
+                      <td style={{ padding: '11px 16px', borderBottom: '1px solid #F1F5F9', ...REPORT_CELL_STYLE }}>
                         {opp.company ? (
-                          <span onClick={e => { e.stopPropagation(); router.push(`/companies/${opp.company.id}`) }} style={{ color: '#219BD6', fontWeight: '600', cursor: 'pointer' }}>{opp.company.name}</span>
-                        ) : <span style={{ color: '#CBD5E0' }}>—</span>}
+                          <span onClick={e => { e.stopPropagation(); router.push(`/companies/${opp.company.id}`) }} style={{ cursor: 'pointer' }}>{opp.company.name}</span>
+                        ) : '—'}
                       </td>
                     )}
                     {isVisible('deal_type') && (
-                      <td style={{ padding: '11px 16px', borderBottom: '1px solid #F1F5F9' }}>
-                        {opp.deal_type ? (
-                          <span style={{ background: '#EEF2FF', color: '#4F46E5', padding: '2px 7px', borderRadius: '10px', fontSize: '10px', fontWeight: '700' }}>{opp.deal_type}</span>
-                        ) : <span style={{ color: '#CBD5E0', fontSize: '12px' }}>—</span>}
-                      </td>
+                      <td style={{ padding: '11px 16px', borderBottom: '1px solid #F1F5F9', ...REPORT_CELL_STYLE }}>{opp.deal_type || '—'}</td>
                     )}
                     {isVisible('deal_amount') && (
-                      <td style={{ padding: '11px 16px', borderBottom: '1px solid #F1F5F9' }}>
-                        {opp.deal_amount ? (
-                          <span style={{ fontWeight: '800', color: '#059669', fontSize: '13px' }}>€{opp.deal_amount.toLocaleString('en-US', { minimumFractionDigits: 0 })}</span>
-                        ) : <span style={{ color: '#CBD5E0', fontSize: '12px' }}>—</span>}
+                      <td style={{ padding: '11px 16px', borderBottom: '1px solid #F1F5F9', ...REPORT_CELL_STYLE }}>
+                        {opp.deal_amount ? `€${opp.deal_amount.toLocaleString('en-US', { minimumFractionDigits: 0 })}` : '—'}
                       </td>
                     )}
                     {isVisible('deal_status') && (
-                      <td style={{ padding: '11px 16px', borderBottom: '1px solid #F1F5F9' }}>
-                        <span style={{ background: STATUS_COLORS[opp.deal_status] || '#F1F5F9', color: STATUS_TEXT[opp.deal_status] || '#475569', padding: '2px 8px', borderRadius: '10px', fontSize: '10px', fontWeight: '700' }}>
-                          {opp.deal_status}
-                        </span>
-                      </td>
+                      <td style={{ padding: '11px 16px', borderBottom: '1px solid #F1F5F9', ...REPORT_CELL_STYLE }}>{opp.deal_status}</td>
                     )}
                     {isVisible('closing_date') && (
-                      <td style={{ padding: '11px 16px', borderBottom: '1px solid #F1F5F9', fontSize: '11px', color: '#9B9B9B' }}>
+                      <td style={{ padding: '11px 16px', borderBottom: '1px solid #F1F5F9', ...REPORT_CELL_STYLE }}>
                         {opp.closing_date ? new Date(opp.closing_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'}
                       </td>
                     )}
                     {isVisible('project_status') && (
-                      <td style={{ padding: '11px 16px', borderBottom: '1px solid #F1F5F9' }}>
-                        {opp.project_status ? (
-                          <span style={{ background: '#F1F5F9', color: '#475569', padding: '2px 7px', borderRadius: '10px', fontSize: '10px', fontWeight: '600' }}>{opp.project_status}</span>
-                        ) : <span style={{ color: '#CBD5E0', fontSize: '12px' }}>—</span>}
-                      </td>
+                      <td style={{ padding: '11px 16px', borderBottom: '1px solid #F1F5F9', ...REPORT_CELL_STYLE }}>{opp.project_status || '—'}</td>
                     )}
                     {isVisible('contacts_count') && (
-                      <td style={{ padding: '11px 16px', borderBottom: '1px solid #F1F5F9', fontSize: '11px', color: '#9B9B9B' }}>
+                      <td style={{ padding: '11px 16px', borderBottom: '1px solid #F1F5F9', ...REPORT_CELL_STYLE }}>
                         {opp.contacts?.length || 0} contact{(opp.contacts?.length || 0) !== 1 ? 's' : ''}
                       </td>
                     )}
