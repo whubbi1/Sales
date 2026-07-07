@@ -1281,6 +1281,8 @@ async def startup():
                 "CREATE UNIQUE INDEX IF NOT EXISTS idx_finance_contracts_internal_id ON finance_contracts(internal_id)",
                 "CREATE UNIQUE INDEX IF NOT EXISTS idx_finance_po_internal_id ON finance_purchase_orders(internal_id)",
                 "CREATE UNIQUE INDEX IF NOT EXISTS idx_finance_invoices_internal_id ON finance_invoices(internal_id)",
+
+                "ALTER TABLE contacts ADD COLUMN IF NOT EXISTS assigned_to_email VARCHAR(255)",
             ]
             for sql in sqls:
                 try:

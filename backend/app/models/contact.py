@@ -43,6 +43,7 @@ class Contact(Base):
     subscriptions   = Column(JSONB, default=list)  # ["Marketing Information", "Customer Service Communication", "One to One"]
 
     assigned_to     = Column(String(255))
+    assigned_to_email = Column(String(255))
     notes           = Column(Text)
 
     created_at      = Column(DateTime, default=datetime.utcnow)

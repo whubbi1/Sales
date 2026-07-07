@@ -20,6 +20,7 @@ function FormField({ label, children, full }: { label: string; children: React.R
 export function ContactModal({ contact, onClose, onSave }: any) {
   const [companies, setCompanies] = useState<any[]>([])
   const [partners, setPartners] = useState<any[]>([])
+  const [users, setUsers] = useState<any[]>([])
   const [form, setForm] = useState({
     first_name: contact?.first_name || '',
     last_name: contact?.last_name || '',
@@ -35,6 +36,7 @@ export function ContactModal({ contact, onClose, onSave }: any) {
     preferred_language: contact?.preferred_language || '',
     subscriptions: contact?.subscriptions || [],
     assigned_to: contact?.assigned_to || '',
+    assigned_to_email: contact?.assigned_to_email || '',
     notes: contact?.notes || '',
   })
   const [saving, setSaving] = useState(false)
@@ -43,6 +45,7 @@ export function ContactModal({ contact, onClose, onSave }: any) {
   useEffect(() => {
     companiesAPI.list({}).then(setCompanies).catch(() => {})
     partnersAPI.list({}).then(setPartners).catch(() => {})
+    fetch('https://api.whubbi.wcomply.com/settings/users').then(r => r.json()).then(d => setUsers(d.users || [])).catch(() => {})
   }, [])
 
   const toggleSub = (sub: string) => {
@@ -146,7 +149,13 @@ export function ContactModal({ contact, onClose, onSave }: any) {
                 </select>
               </FormField>
               <FormField label="Assigned To">
-                <input className="form-input" value={form.assigned_to} onChange={e => setForm(p => ({ ...p, assigned_to: e.target.value }))} placeholder="Sales rep" />
+                <select className="form-input" value={form.assigned_to_email} onChange={e => {
+                  const u = users.find((uu: any) => uu.email === e.target.value)
+                  setForm(p => ({ ...p, assigned_to_email: e.target.value, assigned_to: u ? (u.display_name || `${u.first_name} ${u.last_name}`) : '' }))
+                }}>
+                  <option value="">Select employee…</option>
+                  {users.map((u: any) => <option key={u.email} value={u.email}>{u.display_name || `${u.first_name} ${u.last_name}`}</option>)}
+                </select>
               </FormField>
             </div>
           </div>

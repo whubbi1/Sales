@@ -130,6 +130,7 @@ class ContactBase(BaseModel):
     preferred_language: Optional[str] = None
     subscriptions: Optional[List[str]] = []
     assigned_to: Optional[str] = None
+    assigned_to_email: Optional[str] = None
     notes: Optional[str] = None
 
     @field_validator("job_type", "lead_status", mode="before")
