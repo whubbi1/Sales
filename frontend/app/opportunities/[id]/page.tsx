@@ -220,7 +220,7 @@ export default function OpportunityDetailPage() {
                 <div style={{ marginTop: '16px' }}>
                   <p style={{ fontSize: '10px', fontWeight: '700', textTransform: 'uppercase' as const, letterSpacing: '0.07em', color: '#9B9B9B', marginBottom: '8px' }}>Consultants</p>
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px' }}>
-                    {opp.assigned_consultants.map((c: string) => <span key={c} style={{ background: '#EFF6FF', color: '#2563EB', padding: '3px 10px', borderRadius: '12px', fontSize: '11px', fontWeight: '600' }}>{c}</span>)}
+                    {opp.assigned_consultants.map((c: any) => <span key={c.email || c} style={{ background: '#EFF6FF', color: '#2563EB', padding: '3px 10px', borderRadius: '12px', fontSize: '11px', fontWeight: '600' }}>{c.name || c.email || c}</span>)}
                   </div>
                 </div>
               )}
