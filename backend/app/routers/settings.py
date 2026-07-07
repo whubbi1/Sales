@@ -28,7 +28,7 @@ WHUBBI_GROUP_CACHE_TTL = 300  # seconds
 # Modules & submodules definition
 MODULES = {
     "sales":     ["companies", "contacts", "opportunities", "tasks", "cv_database", "partners"],
-    "finance":   ["invoices", "budgets", "reports"],
+    "finance":   ["suppliers", "contracts", "purchasing", "invoices"],
     "hr":        ["freelancers", "recrutement", "positions", "jobs", "permissions", "chat", "admin", "onboarding", "offboarding"],
     "grc":       ["compliance", "risks", "audits", "certifications", "access_review", "tprm", "whistleblowing"],
     "it":        ["assets", "incidents", "access", "infrastructure"],

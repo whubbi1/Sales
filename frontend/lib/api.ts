@@ -232,3 +232,51 @@ export const testingAPI = {
   updateRemediationPlan: (id: string, d: any) => fetchAPI(`/development/remediation-plans/${id}`, { method: 'PUT', body: JSON.stringify(d) }),
   updateRemediationAction: (id: string, d: any) => fetchAPI(`/development/remediation-actions/${id}`, { method: 'PUT', body: JSON.stringify(d) }),
 }
+
+// ─── Finance: Suppliers ────────────────────────────────────────────────────────
+export const financeSuppliersAPI = {
+  list:   (p?: any) => fetchAPI(`/finance/suppliers${qs(p)}`),
+  get:    (id: string) => fetchAPI(`/finance/suppliers/${id}`),
+  create: (d: any) => fetchAPI('/finance/suppliers', { method: 'POST', body: JSON.stringify(d) }),
+  update: (id: string, d: any) => fetchAPI(`/finance/suppliers/${id}`, { method: 'PUT', body: JSON.stringify(d) }),
+  delete: (id: string) => fetchAPI(`/finance/suppliers/${id}`, { method: 'DELETE' }),
+}
+
+// ─── Finance: Contract Lifecycle Management ───────────────────────────────────
+export const financeContractsAPI = {
+  list:   (p?: any) => fetchAPI(`/finance/contracts${qs(p)}`),
+  get:    (id: string) => fetchAPI(`/finance/contracts/${id}`),
+  create: (d: any) => fetchAPI('/finance/contracts', { method: 'POST', body: JSON.stringify(d) }),
+  update: (id: string, d: any) => fetchAPI(`/finance/contracts/${id}`, { method: 'PUT', body: JSON.stringify(d) }),
+  delete: (id: string) => fetchAPI(`/finance/contracts/${id}`, { method: 'DELETE' }),
+
+  getDocuments: (id: string) => fetchAPI(`/finance/contracts/${id}/documents`),
+  uploadDocument: async (id: string, file: File, uploadedByEmail: string) => {
+    const fd = new FormData()
+    fd.append('file', file)
+    fd.append('uploaded_by_email', uploadedByEmail)
+    const res = await fetch(`${API_URL}/finance/contracts/${id}/documents`, { method: 'POST', body: fd })
+    if (!res.ok) { const err = await res.json().catch(() => ({})); throw new Error(err.detail || 'Upload failed') }
+    return res.json()
+  },
+  deleteDocument: (id: string, docId: string) => fetchAPI(`/finance/contracts/${id}/documents/${docId}`, { method: 'DELETE' }),
+}
+
+// ─── Finance: Purchasing ───────────────────────────────────────────────────────
+export const financePurchaseOrdersAPI = {
+  list:   (p?: any) => fetchAPI(`/finance/purchase-orders${qs(p)}`),
+  get:    (id: string) => fetchAPI(`/finance/purchase-orders/${id}`),
+  create: (d: any) => fetchAPI('/finance/purchase-orders', { method: 'POST', body: JSON.stringify(d) }),
+  update: (id: string, d: any) => fetchAPI(`/finance/purchase-orders/${id}`, { method: 'PUT', body: JSON.stringify(d) }),
+  delete: (id: string) => fetchAPI(`/finance/purchase-orders/${id}`, { method: 'DELETE' }),
+}
+
+// ─── Finance: Supplier Invoicing ───────────────────────────────────────────────
+export const financeInvoicesAPI = {
+  list:   (p?: any) => fetchAPI(`/finance/invoices${qs(p)}`),
+  get:    (id: string) => fetchAPI(`/finance/invoices/${id}`),
+  create: (d: any) => fetchAPI('/finance/invoices', { method: 'POST', body: JSON.stringify(d) }),
+  update: (id: string, d: any) => fetchAPI(`/finance/invoices/${id}`, { method: 'PUT', body: JSON.stringify(d) }),
+  delete: (id: string) => fetchAPI(`/finance/invoices/${id}`, { method: 'DELETE' }),
+  setApproval: (id: string, d: any) => fetchAPI(`/finance/invoices/${id}/approval`, { method: 'PUT', body: JSON.stringify(d) }),
+}

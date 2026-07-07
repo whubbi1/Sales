@@ -1215,6 +1215,72 @@ async def startup():
                 "CREATE UNIQUE INDEX IF NOT EXISTS idx_contacts_internal_id ON contacts(internal_id)",
                 "CREATE UNIQUE INDEX IF NOT EXISTS idx_partners_internal_id ON partners(internal_id)",
                 "CREATE UNIQUE INDEX IF NOT EXISTS idx_opportunities_deal_id ON opportunities(deal_id)",
+
+                # ─── Finance module: Contract Lifecycle Management, Purchasing, Supplier Invoicing ──
+                "CREATE SEQUENCE IF NOT EXISTS finance_supplier_id_seq",
+                "CREATE SEQUENCE IF NOT EXISTS finance_contract_id_seq",
+                "CREATE SEQUENCE IF NOT EXISTS finance_po_id_seq",
+                "CREATE SEQUENCE IF NOT EXISTS finance_invoice_id_seq",
+
+                """CREATE TABLE IF NOT EXISTS finance_suppliers (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    internal_id VARCHAR(20) UNIQUE,
+                    name VARCHAR(255) NOT NULL,
+                    contact_name VARCHAR(255), email VARCHAR(255), phone VARCHAR(50),
+                    sector VARCHAR(255), country VARCHAR(100),
+                    status VARCHAR(20) DEFAULT 'active',
+                    assigned_to VARCHAR(255), assigned_to_email VARCHAR(255),
+                    notes TEXT, created_at TIMESTAMP DEFAULT NOW(), updated_at TIMESTAMP DEFAULT NOW()
+                )""",
+
+                """CREATE TABLE IF NOT EXISTS finance_contracts (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    internal_id VARCHAR(20) UNIQUE,
+                    supplier_id UUID NOT NULL REFERENCES finance_suppliers(id) ON DELETE RESTRICT,
+                    contract_name VARCHAR(500) NOT NULL,
+                    start_date DATE NOT NULL, end_date DATE,
+                    contract_value FLOAT,
+                    status VARCHAR(20) DEFAULT 'active',
+                    assigned_to VARCHAR(255), assigned_to_email VARCHAR(255),
+                    notes TEXT, created_at TIMESTAMP DEFAULT NOW(), updated_at TIMESTAMP DEFAULT NOW()
+                )""",
+
+                """CREATE TABLE IF NOT EXISTS finance_contract_documents (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    contract_id UUID NOT NULL REFERENCES finance_contracts(id) ON DELETE CASCADE,
+                    filename VARCHAR(500), file_url TEXT,
+                    uploaded_by_email VARCHAR(255), uploaded_at TIMESTAMP DEFAULT NOW()
+                )""",
+
+                """CREATE TABLE IF NOT EXISTS finance_purchase_orders (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    internal_id VARCHAR(20) UNIQUE,
+                    supplier_id UUID NOT NULL REFERENCES finance_suppliers(id) ON DELETE RESTRICT,
+                    contract_id UUID REFERENCES finance_contracts(id) ON DELETE SET NULL,
+                    description VARCHAR(500), amount FLOAT,
+                    order_date DATE, expected_delivery_date DATE,
+                    status VARCHAR(20) DEFAULT 'draft',
+                    assigned_to VARCHAR(255), assigned_to_email VARCHAR(255),
+                    notes TEXT, created_at TIMESTAMP DEFAULT NOW(), updated_at TIMESTAMP DEFAULT NOW()
+                )""",
+
+                """CREATE TABLE IF NOT EXISTS finance_invoices (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    internal_id VARCHAR(20) UNIQUE,
+                    supplier_id UUID NOT NULL REFERENCES finance_suppliers(id) ON DELETE RESTRICT,
+                    purchase_order_id UUID REFERENCES finance_purchase_orders(id) ON DELETE SET NULL,
+                    invoice_number VARCHAR(100),
+                    amount FLOAT, invoice_date DATE, due_date DATE,
+                    approval_status VARCHAR(20) DEFAULT 'pending',
+                    approver_email VARCHAR(255), approver_name VARCHAR(255),
+                    approved_by_email VARCHAR(255), approved_at TIMESTAMP, approval_comment TEXT,
+                    notes TEXT, created_at TIMESTAMP DEFAULT NOW(), updated_at TIMESTAMP DEFAULT NOW()
+                )""",
+
+                "CREATE UNIQUE INDEX IF NOT EXISTS idx_finance_suppliers_internal_id ON finance_suppliers(internal_id)",
+                "CREATE UNIQUE INDEX IF NOT EXISTS idx_finance_contracts_internal_id ON finance_contracts(internal_id)",
+                "CREATE UNIQUE INDEX IF NOT EXISTS idx_finance_po_internal_id ON finance_purchase_orders(internal_id)",
+                "CREATE UNIQUE INDEX IF NOT EXISTS idx_finance_invoices_internal_id ON finance_invoices(internal_id)",
             ]
             for sql in sqls:
                 try:
@@ -1293,6 +1359,7 @@ _include("app.routers.cv",             "/cv",           "CV")
 _include("app.routers.training",       "/training",     "Training")
 _include("app.routers.task_manager",   "/task-manager", "TaskManager")
 _include("app.routers.task_teams",     "/task-manager", "TaskTeams")
+_include("app.routers.finance",        "/finance",      "Finance")
 
 try:
     from app.routers import auth, outlook, copilot
