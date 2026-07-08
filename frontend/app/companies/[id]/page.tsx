@@ -22,6 +22,9 @@ export default function CompanyDetailPage() {
   const [loading, setLoading] = useState(true)
   const [tab, setTab] = useState('Overview')
   const [showEdit, setShowEdit] = useState(false)
+  const [showDelete, setShowDelete] = useState(false)
+  const [deleteConfirm, setDeleteConfirm] = useState('')
+  const [deleting, setDeleting] = useState(false)
 
   const load = async () => {
     try {
@@ -87,7 +90,10 @@ export default function CompanyDetailPage() {
               </div>
             </div>
           </div>
-          <button onClick={() => setShowEdit(true)} style={{ background: 'white', color: '#144766', padding: '7px 14px', borderRadius: '7px', fontSize: '12px', fontWeight: '600', border: '1.5px solid #CBD5E0', cursor: 'pointer' }}>Edit</button>
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <button onClick={() => setShowEdit(true)} style={{ background: 'white', color: '#144766', padding: '7px 14px', borderRadius: '7px', fontSize: '12px', fontWeight: '600', border: '1.5px solid #CBD5E0', cursor: 'pointer' }}>Edit</button>
+            <button onClick={() => { setDeleteConfirm(''); setShowDelete(true) }} style={{ background: 'white', color: '#DC2626', padding: '7px 14px', borderRadius: '7px', fontSize: '12px', fontWeight: '600', border: '1.5px solid #FCA5A5', cursor: 'pointer' }}>Delete</button>
+          </div>
         </div>
         {(company.main_erp?.length > 0 || company.cybersecurity_solutions?.length > 0 || company.sap_hosting_partner?.length > 0 || company.domain_names?.length > 0) && (
           <div style={{ marginTop: '16px', paddingTop: '14px', borderTop: '1px solid #F1F5F9', display: 'flex', flexWrap: 'wrap', gap: '16px' }}>
@@ -139,10 +145,57 @@ export default function CompanyDetailPage() {
     </div>
   )
 
+  const handleDelete = async () => {
+    if (deleteConfirm !== 'DELETE') return
+    setDeleting(true)
+    try {
+      await companiesAPI.delete(company.id)
+      router.push('/companies')
+    } catch {
+      setDeleting(false)
+    }
+  }
+
   return (
     <>
       <RecordLayout leftColumn={leftColumn} rightColumn={rightColumn} />
       {showEdit && <CompanyModal company={company} companies={allCompanies} onClose={() => setShowEdit(false)} onSave={() => { setShowEdit(false); load() }} />}
+      {showDelete && (
+        <div className="modal-overlay" onClick={() => setShowDelete(false)}>
+          <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '420px' }}>
+            <div className="modal-header">
+              <h2 style={{ fontSize: '15px', fontWeight: '700', color: '#DC2626' }}>Delete Company</h2>
+              <button onClick={() => setShowDelete(false)} style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: '20px', color: '#9B9B9B', lineHeight: 1 }}>×</button>
+            </div>
+            <div className="modal-body">
+              <p style={{ fontSize: '13px', color: '#3F3F3F', marginBottom: '8px' }}>
+                You are about to permanently delete <strong>{company.name}</strong>. This action cannot be undone.
+              </p>
+              <p style={{ fontSize: '13px', color: '#3F3F3F', marginBottom: '12px' }}>
+                Type <strong style={{ color: '#DC2626' }}>DELETE</strong> to confirm.
+              </p>
+              <input
+                className="form-input"
+                value={deleteConfirm}
+                onChange={e => setDeleteConfirm(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && handleDelete()}
+                placeholder="Type DELETE to confirm"
+                autoFocus
+              />
+            </div>
+            <div className="modal-footer">
+              <button className="btn-secondary" onClick={() => setShowDelete(false)}>Cancel</button>
+              <button
+                onClick={handleDelete}
+                disabled={deleteConfirm !== 'DELETE' || deleting}
+                style={{ background: deleteConfirm === 'DELETE' ? '#DC2626' : '#FCA5A5', color: 'white', padding: '8px 16px', borderRadius: '7px', fontSize: '13px', fontWeight: '600', border: 'none', cursor: deleteConfirm === 'DELETE' ? 'pointer' : 'not-allowed', transition: 'background 0.15s' }}
+              >
+                {deleting ? 'Deleting...' : 'Delete Company'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   )
 }
