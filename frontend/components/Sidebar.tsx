@@ -1,7 +1,7 @@
 'use client'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { signOut } from 'aws-amplify/auth'
 import { getStoredUser } from '@/lib/auth'
 
@@ -21,13 +21,23 @@ export function Sidebar() {
   const router = useRouter()
   const [userName, setUserName] = useState('')
   const [userEmail, setUserEmail] = useState('')
+  const redirecting = useRef(false)
 
+  // getStoredUser() returns null both when nobody's logged in and when the session's JWT has
+  // expired (it silently clears the stored session in that case) — without this redirect, pages
+  // using this sidebar kept rendering with an empty userEmail forever, breaking every feature
+  // keyed on it (e.g. per-user report view persistence) with no indication anything was wrong.
   useEffect(() => {
     const user = getStoredUser()
-    if (user) {
-      setUserName(user.name || user.email)
-      setUserEmail(user.email)
+    if (!user) {
+      if (redirecting.current) return
+      redirecting.current = true
+      localStorage.setItem('redirectAfterLogin', window.location.pathname)
+      router.push('/auth/login')
+      return
     }
+    setUserName(user.name || user.email)
+    setUserEmail(user.email)
   }, [])
 
   const handleSignOut = async () => {
