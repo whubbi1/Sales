@@ -1283,6 +1283,16 @@ async def startup():
                 "CREATE UNIQUE INDEX IF NOT EXISTS idx_finance_invoices_internal_id ON finance_invoices(internal_id)",
 
                 "ALTER TABLE contacts ADD COLUMN IF NOT EXISTS assigned_to_email VARCHAR(255)",
+
+                # Opportunity — manually-curated SharePoint folder/file links, each with a description
+                """CREATE TABLE IF NOT EXISTS opportunity_links (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    opportunity_id UUID NOT NULL REFERENCES opportunities(id) ON DELETE CASCADE,
+                    url TEXT NOT NULL,
+                    description TEXT,
+                    created_at TIMESTAMP DEFAULT NOW(),
+                    updated_at TIMESTAMP DEFAULT NOW()
+                )""",
             ]
             for sql in sqls:
                 try:

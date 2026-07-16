@@ -29,19 +29,21 @@ function FormField({ label, children, full }: { label: string; children: React.R
   )
 }
 
-export function OpportunityModal({ opportunity, onClose, onSave }: any) {
+export function OpportunityModal({ opportunity, initialCompanyId, initialPartnerId, initialContactId, onClose, onSave }: any) {
   const [companies, setCompanies] = useState<any[]>([])
   const [partners, setPartners] = useState<any[]>([])
   const [contacts, setContacts] = useState<any[]>([])
   const [users, setUsers] = useState<any[]>([])
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  const [contactSearch, setContactSearch] = useState('')
+  const [consultantSearch, setConsultantSearch] = useState('')
 
   const toDateStr = (d?: string) => d ? new Date(d).toISOString().split('T')[0] : ''
 
   const [form, setForm] = useState({
-    company_id: opportunity?.company_id || opportunity?.company?.id || '',
-    partner_id: opportunity?.partner_id || opportunity?.partner?.id || '',
+    company_id: opportunity?.company_id || opportunity?.company?.id || (!opportunity ? initialCompanyId : '') || '',
+    partner_id: opportunity?.partner_id || opportunity?.partner?.id || (!opportunity ? initialPartnerId : '') || '',
     deal_id: opportunity?.deal_id || '',
     project_name: opportunity?.project_name || '',
     deal_amount: opportunity?.deal_amount || '',
@@ -57,7 +59,7 @@ export function OpportunityModal({ opportunity, onClose, onSave }: any) {
     notes: opportunity?.notes || '',
     assigned_to: opportunity?.assigned_to || '',
     assigned_to_email: opportunity?.assigned_to_email || '',
-    contact_ids: opportunity?.contacts?.map((c: any) => c.id) || [],
+    contact_ids: opportunity?.contacts?.map((c: any) => c.id) || (!opportunity && initialContactId ? [initialContactId] : []),
   })
 
   useEffect(() => {
@@ -70,6 +72,17 @@ export function OpportunityModal({ opportunity, onClose, onSave }: any) {
   const selectedCompany = companies.find((c: any) => c.id === form.company_id)
   const selectedPartner = partners.find((p: any) => p.id === form.partner_id)
   const dealNamePreviewText = dealNamePreview(form.closing_date, selectedCompany?.name, selectedPartner?.name, form.project_name)
+
+  const contactName = (c: any) => `${c.first_name} ${c.last_name}`
+  const scopedContacts = contacts
+    .filter((c: any) => (form.company_id && c.company_id === form.company_id) || (form.partner_id && c.partner_id === form.partner_id))
+    .filter((c: any) => !contactSearch.trim() || contactName(c).toLowerCase().includes(contactSearch.trim().toLowerCase()))
+    .sort((a: any, b: any) => contactName(a).localeCompare(contactName(b)))
+
+  const consultantName = (u: any) => u.display_name || `${u.first_name} ${u.last_name}`
+  const scopedUsers = users
+    .filter((u: any) => !consultantSearch.trim() || consultantName(u).toLowerCase().includes(consultantSearch.trim().toLowerCase()))
+    .sort((a: any, b: any) => consultantName(a).localeCompare(consultantName(b)))
 
   const toggleContact = (contactId: string) => {
     setForm(p => ({
@@ -121,12 +134,12 @@ export function OpportunityModal({ opportunity, onClose, onSave }: any) {
         <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
 
           <div>
-            <p className="section-label">Deal Information</p>
+            <p className="section-label">Opportunity Information</p>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-              <FormField label="Deal Name (auto-generated)" full>
+              <FormField label="Opportunity Name (auto-generated)" full>
                 <input className="form-input" value={dealNamePreviewText} readOnly disabled style={{ color: '#6B7280', background: '#F8FAFC' }} />
               </FormField>
-              <FormField label="Deal ID">
+              <FormField label="Opportunity ID">
                 <input className="form-input" value={form.deal_id || '(auto-generated after save)'} readOnly disabled style={{ color: '#6B7280', background: '#F8FAFC' }} />
               </FormField>
               <FormField label="Project Name">
@@ -144,13 +157,13 @@ export function OpportunityModal({ opportunity, onClose, onSave }: any) {
                   {partners.map((p: any) => <option key={p.id} value={p.id}>{p.name}</option>)}
                 </select>
               </FormField>
-              <FormField label="Deal Type">
+              <FormField label="Opportunity Type">
                 <select className="form-input" value={form.deal_type} onChange={e => setForm(p => ({ ...p, deal_type: e.target.value }))}>
-                  <option value="">Select deal type...</option>
+                  <option value="">Select opportunity type...</option>
                   {DEAL_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
                 </select>
               </FormField>
-              <FormField label="Deal Status">
+              <FormField label="Opportunity Status">
                 <select className="form-input" value={form.deal_status} onChange={e => setForm(p => ({ ...p, deal_status: e.target.value }))}>
                   {DEAL_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
                 </select>
@@ -161,7 +174,7 @@ export function OpportunityModal({ opportunity, onClose, onSave }: any) {
           <div>
             <p className="section-label">Financial & Timeline</p>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-              <FormField label="Deal Amount (EUR)">
+              <FormField label="Opportunity Amount (EUR)">
                 <input className="form-input" type="number" value={form.deal_amount} onChange={e => setForm(p => ({ ...p, deal_amount: e.target.value }))} placeholder="50000" />
               </FormField>
               <FormField label="Closing Date">
@@ -218,8 +231,9 @@ export function OpportunityModal({ opportunity, onClose, onSave }: any) {
                 ))}
               </div>
             )}
+            <input className="form-input" style={{ marginBottom: '6px' }} placeholder="Search consultants…" value={consultantSearch} onChange={e => setConsultantSearch(e.target.value)} />
             <div style={{ maxHeight: '160px', overflowY: 'auto', border: '1px solid #E2E8F0', borderRadius: '8px', padding: '4px' }}>
-              {users.map((u: any) => {
+              {scopedUsers.map((u: any) => {
                 const checked = form.assigned_consultants.some((c: any) => c.email === u.email)
                 return (
                   <label key={u.email} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '7px 10px', cursor: 'pointer', borderRadius: '6px', background: checked ? '#EFF8FD' : 'transparent' }}>
@@ -231,26 +245,33 @@ export function OpportunityModal({ opportunity, onClose, onSave }: any) {
             </div>
           </div>
 
-          {contacts.length > 0 && (
-            <div>
-              <p className="section-label">Linked Contacts</p>
-              <div style={{ maxHeight: '200px', overflowY: 'auto', border: '1px solid #E2E8F0', borderRadius: '8px', padding: '4px' }}>
-                {contacts.map((c: any) => (
-                  <label key={c.id} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '7px 10px', cursor: 'pointer', borderRadius: '6px', background: form.contact_ids.includes(c.id) ? '#EFF8FD' : 'transparent' }}>
-                    <input type="checkbox" checked={form.contact_ids.includes(c.id)} onChange={() => toggleContact(c.id)} style={{ accentColor: '#219BD6', width: '14px', height: '14px' }} />
-                    <div style={{ width: '26px', height: '26px', borderRadius: '50%', background: '#e97132', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px', fontWeight: '800', flexShrink: 0 }}>
-                      {c.first_name[0]?.toUpperCase()}
-                    </div>
-                    <div>
-                      <div style={{ fontSize: '12px', fontWeight: '600', color: '#144766' }}>{c.first_name} {c.last_name}</div>
-                      <div style={{ fontSize: '10px', color: '#9B9B9B' }}>{c.job_type || c.email || ''}</div>
-                    </div>
-                  </label>
-                ))}
-              </div>
-              {form.contact_ids.length > 0 && <p style={{ fontSize: '11px', color: '#219BD6', fontWeight: '600', marginTop: '6px' }}>{form.contact_ids.length} contact{form.contact_ids.length > 1 ? 's' : ''} selected</p>}
-            </div>
-          )}
+          <div>
+            <p className="section-label">Linked Contacts</p>
+            {!form.company_id && !form.partner_id ? (
+              <p style={{ fontSize: '12px', color: '#9B9B9B' }}>Select a company or partner above to choose contacts.</p>
+            ) : (
+              <>
+                <input className="form-input" style={{ marginBottom: '6px' }} placeholder="Search contacts…" value={contactSearch} onChange={e => setContactSearch(e.target.value)} />
+                <div style={{ maxHeight: '200px', overflowY: 'auto', border: '1px solid #E2E8F0', borderRadius: '8px', padding: '4px' }}>
+                  {scopedContacts.length === 0 ? (
+                    <p style={{ fontSize: '12px', color: '#9B9B9B', padding: '7px 10px' }}>No matching contacts.</p>
+                  ) : scopedContacts.map((c: any) => (
+                    <label key={c.id} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '7px 10px', cursor: 'pointer', borderRadius: '6px', background: form.contact_ids.includes(c.id) ? '#EFF8FD' : 'transparent' }}>
+                      <input type="checkbox" checked={form.contact_ids.includes(c.id)} onChange={() => toggleContact(c.id)} style={{ accentColor: '#219BD6', width: '14px', height: '14px' }} />
+                      <div style={{ width: '26px', height: '26px', borderRadius: '50%', background: '#e97132', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px', fontWeight: '800', flexShrink: 0 }}>
+                        {c.first_name[0]?.toUpperCase()}
+                      </div>
+                      <div>
+                        <div style={{ fontSize: '12px', fontWeight: '600', color: '#144766' }}>{c.first_name} {c.last_name}</div>
+                        <div style={{ fontSize: '10px', color: '#9B9B9B' }}>{c.job_type || c.email || ''}</div>
+                      </div>
+                    </label>
+                  ))}
+                </div>
+                {form.contact_ids.length > 0 && <p style={{ fontSize: '11px', color: '#219BD6', fontWeight: '600', marginTop: '6px' }}>{form.contact_ids.length} contact{form.contact_ids.length > 1 ? 's' : ''} selected</p>}
+              </>
+            )}
+          </div>
 
           <FormField label="Notes" full>
             <textarea className="form-input" value={form.notes} onChange={e => setForm(p => ({ ...p, notes: e.target.value }))} placeholder="Additional notes..." rows={3} style={{ resize: 'vertical' }} />

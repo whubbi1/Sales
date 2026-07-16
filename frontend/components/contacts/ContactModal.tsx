@@ -48,6 +48,19 @@ export function ContactModal({ contact, onClose, onSave }: any) {
     fetch('https://api.whubbi.wcomply.com/settings/users').then(r => r.json()).then(d => setUsers(d.users || [])).catch(() => {})
   }, [])
 
+  // Companies and Partners are two separate underlying links (company_id/partner_id), but a
+  // contact only ever belongs to one of them — presented as a single merged picker instead of
+  // two dropdowns where picking one is supposed to imply "not the other".
+  const companyPartnerOptions = [
+    ...companies.map((c: any) => ({ value: `company:${c.id}`, label: c.name })),
+    ...partners.map((p: any) => ({ value: `partner:${p.id}`, label: p.name })),
+  ].sort((a, b) => a.label.localeCompare(b.label))
+  const companyPartnerValue = form.company_id ? `company:${form.company_id}` : form.partner_id ? `partner:${form.partner_id}` : ''
+  const onCompanyPartnerChange = (v: string) => {
+    const [kind, id] = v.split(':')
+    setForm(p => ({ ...p, company_id: kind === 'company' ? id : '', partner_id: kind === 'partner' ? id : '' }))
+  }
+
   const toggleSub = (sub: string) => {
     setForm(p => ({
       ...p,
@@ -90,16 +103,10 @@ export function ContactModal({ contact, onClose, onSave }: any) {
               <FormField label="Last Name *">
                 <input className="form-input" value={form.last_name} onChange={e => setForm(p => ({ ...p, last_name: e.target.value }))} placeholder="Dupont" />
               </FormField>
-              <FormField label="Company">
-                <select className="form-input" value={form.company_id} onChange={e => setForm(p => ({ ...p, company_id: e.target.value }))}>
-                  <option value="">No company</option>
-                  {companies.map((c: any) => <option key={c.id} value={c.id}>{c.name}</option>)}
-                </select>
-              </FormField>
-              <FormField label="Partner">
-                <select className="form-input" value={form.partner_id} onChange={e => setForm(p => ({ ...p, partner_id: e.target.value }))}>
-                  <option value="">No partner</option>
-                  {partners.map((p: any) => <option key={p.id} value={p.id}>{p.name}</option>)}
+              <FormField label="Company / Partner" full>
+                <select className="form-input" value={companyPartnerValue} onChange={e => onCompanyPartnerChange(e.target.value)}>
+                  <option value="">None</option>
+                  {companyPartnerOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                 </select>
               </FormField>
               <FormField label="Lead Status">

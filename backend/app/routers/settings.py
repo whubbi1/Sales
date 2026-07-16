@@ -377,6 +377,7 @@ async def list_users(db: AsyncSession = Depends(get_db)):
             }
             for u in members if u.get("mail")
         ]
+        users.sort(key=lambda u: (u["last_name"] or "", u["first_name"] or ""))
         return {"users": users, "source": "ms_ad_group"}
 
     # Fallback: return cached DB users (predates group-scoping, so unfiltered by

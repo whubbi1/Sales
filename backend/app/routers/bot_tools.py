@@ -977,7 +977,7 @@ TOOL_DEFS = [
     }, _sales_create_contact),
     ("sales", "opportunities", "view", {
         "name": "sales_list_opportunities",
-        "description": "List sales opportunities/deals. Optional status filter.",
+        "description": "List sales opportunities. Optional status filter.",
         "input_schema": {"type": "object", "properties": {"status": {"type": "string"}}},
     }, _sales_list_opportunities),
     ("sales", "opportunities", "view", {

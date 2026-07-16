@@ -5,7 +5,29 @@ import { opportunitiesAPI, companiesAPI, taskManagerAPI } from '@/lib/api'
 import { getStoredUser } from '@/lib/auth'
 import { RecordLayout, PropertyRow, SidebarSection, SidebarCard, TabNav } from '@/components/shared/RecordLayout'
 import { OpportunityModal } from '@/components/opportunities/OpportunityModal'
+import { OpportunityLinksSection } from '@/components/opportunities/OpportunityLinksSection'
 import { TaskModal } from '@/components/tasks/TaskModal'
+
+// Click-to-edit date row, same interaction as the EditableCell pattern used across the
+// IT/Training/GRC report pages — click the value, swap in a date input, save on blur.
+function EditableDateRow({ label, value, editing, onStartEdit, onSave }: { label: string; value?: string; editing: boolean; onStartEdit: () => void; onSave: (v: string) => void }) {
+  const toDateStr = (d?: string) => d ? new Date(d).toISOString().split('T')[0] : ''
+  const fmt = (d?: string) => d ? new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : undefined
+  return (
+    <div style={{ padding: '8px 0', borderBottom: '1px solid #F1F5F9' }}>
+      <div style={{ fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#45B6E4', marginBottom: '3px' }}>{label}</div>
+      {editing ? (
+        <input type="date" className="form-input" autoFocus defaultValue={toDateStr(value)} onBlur={e => onSave(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }} style={{ fontSize: '13px', padding: '4px 6px' }} />
+      ) : (
+        <div onClick={onStartEdit} title="Click to edit" style={{ fontSize: '13px', color: '#3F3F3F', fontWeight: '500', cursor: 'pointer', padding: '4px 6px', margin: '-4px -6px', borderRadius: '5px' }}
+          onMouseEnter={e => (e.currentTarget.style.background = '#F1F5F9')}
+          onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
+          {fmt(value) || <span style={{ color: '#45B6E4' }}>—</span>}
+        </div>
+      )}
+    </div>
+  )
+}
 
 const STATUS_COLORS: Record<string, { bg: string; color: string }> = {
   'Presentation To Be Scheduled': { bg: '#EEF2FF', color: '#4F46E5' },
@@ -50,6 +72,8 @@ export default function OpportunityDetailPage() {
   const [tasks, setTasks] = useState<any[]>([])
   const [showTaskModal, setShowTaskModal] = useState(false)
   const [editingTask, setEditingTask] = useState<any>(null)
+
+  const [editingDateField, setEditingDateField] = useState<string | null>(null)
 
   const [sharepointUrl, setSharepointUrl] = useState('')
   const [editingSharepoint, setEditingSharepoint] = useState(false)
@@ -110,6 +134,12 @@ export default function OpportunityDetailPage() {
 
   const statusStyle = STATUS_COLORS[opp.deal_status] || { bg: '#F1F5F9', color: '#475569' }
   const fmt = (d?: string) => d ? new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'
+
+  const saveDateField = async (field: string, value: string) => {
+    await opportunitiesAPI.update(opp.id, { [field]: value || null })
+    setOpp((o: any) => ({ ...o, [field]: value || null }))
+    setEditingDateField(null)
+  }
 
   const saveSharepointUrl = async () => {
     await opportunitiesAPI.update(opp.id, { sharepoint_site_url: sharepointUrl })
@@ -380,6 +410,7 @@ export default function OpportunityDetailPage() {
                   </div>
                 )
               )}
+              <OpportunityLinksSection opportunityId={opp.id} />
             </div>
           )}
         </div>
@@ -389,14 +420,14 @@ export default function OpportunityDetailPage() {
 
   const rightColumn = (
     <div>
-      <SidebarSection title="Deal Details">
-        <PropertyRow label="Deal ID" value={opp.deal_id} />
-        <PropertyRow label="Deal Type" value={opp.deal_type} />
+      <SidebarSection title="Opportunity Details">
+        <PropertyRow label="Opportunity ID" value={opp.deal_id} />
+        <PropertyRow label="Opportunity Type" value={opp.deal_type} />
         <PropertyRow label="Project Status" value={opp.project_status} />
         <PropertyRow label="Amount" value={opp.deal_amount ? `€${opp.deal_amount.toLocaleString()}` : null} />
-        <PropertyRow label="Closing Date" value={fmt(opp.closing_date)} />
-        <PropertyRow label="Contract Start" value={fmt(opp.contract_start_date)} />
-        <PropertyRow label="Contract End" value={fmt(opp.contract_end_date)} />
+        <EditableDateRow label="Closing Date" value={opp.closing_date} editing={editingDateField === 'closing_date'} onStartEdit={() => setEditingDateField('closing_date')} onSave={v => saveDateField('closing_date', v)} />
+        <EditableDateRow label="Contract Start" value={opp.contract_start_date} editing={editingDateField === 'contract_start_date'} onStartEdit={() => setEditingDateField('contract_start_date')} onSave={v => saveDateField('contract_start_date', v)} />
+        <EditableDateRow label="Contract End" value={opp.contract_end_date} editing={editingDateField === 'contract_end_date'} onStartEdit={() => setEditingDateField('contract_end_date')} onSave={v => saveDateField('contract_end_date', v)} />
         <PropertyRow label="Contracting Party" value={opp.contracting_party} />
         <PropertyRow label="Owner" value={opp.assigned_to} />
       </SidebarSection>
@@ -413,8 +444,8 @@ export default function OpportunityDetailPage() {
         {staffing.length === 0 ? <p style={{ fontSize: '12px', color: '#9B9B9B' }}>No one staffed yet.</p> : staffing.map((s: any) => <SidebarCard key={s.id} title={s.user_name || s.user_email} subtitle={s.role || 'Staffed'} href="/staffing" color="#059669" />)}
       </SidebarSection>
       {opp.company && (
-        <SidebarSection title={`Other ${opp.company.name} Deals (${companyDeals.length})`}>
-          {companyDeals.length === 0 ? <p style={{ fontSize: '12px', color: '#9B9B9B' }}>No other deals.</p> : companyDeals.map((d: any) => <SidebarCard key={d.id} title={d.deal_name} subtitle={d.deal_status} href={`/opportunities/${d.id}`} color="#219BD6" />)}
+        <SidebarSection title={`Other ${opp.company.name} Opportunities (${companyDeals.length})`}>
+          {companyDeals.length === 0 ? <p style={{ fontSize: '12px', color: '#9B9B9B' }}>No other opportunities.</p> : companyDeals.map((d: any) => <SidebarCard key={d.id} title={d.deal_name} subtitle={d.deal_status} href={`/opportunities/${d.id}`} color="#219BD6" />)}
         </SidebarSection>
       )}
     </div>

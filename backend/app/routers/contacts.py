@@ -8,6 +8,7 @@ from uuid import UUID
 
 from app.database import get_db
 from app.models.contact import Contact
+from app.models.company import Company
 from app.models.opportunity import Opportunity
 from app.schemas.schemas import ContactCreate, ContactUpdate, ContactResponse, ContactSummary, OpportunitySummary, PartnerSummary
 from app.services.ids import next_internal_id
@@ -55,6 +56,15 @@ async def list_contacts(
 async def create_contact(contact: ContactCreate, db: AsyncSession = Depends(get_db)):
     data = contact.model_dump()
     data['internal_id'] = await next_internal_id(db, 'contact_internal_id_seq', 'CNT')
+    # Default a new contact's owner to their company's owner, unless the caller already
+    # picked someone — a contact created under an already-assigned company shouldn't
+    # start out unassigned.
+    if data.get('company_id') and not data.get('assigned_to_email'):
+        r = await db.execute(select(Company).where(Company.id == data['company_id']))
+        company = r.scalar_one_or_none()
+        if company and company.assigned_to_email:
+            data['assigned_to'] = company.assigned_to
+            data['assigned_to_email'] = company.assigned_to_email
     db_contact = Contact(**data)
     db.add(db_contact)
     await db.commit()

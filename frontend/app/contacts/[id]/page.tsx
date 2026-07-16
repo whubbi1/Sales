@@ -99,7 +99,7 @@ export default function ContactDetailPage() {
             <div>
               {opportunities.length === 0 ? <p style={{ color: '#9B9B9B', fontSize: '13px' }}>No opportunities linked.</p> : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  {opportunities.map(opp => (
+                  {opportunities.map((opp: any) => (
                     <div key={opp.id} onClick={() => router.push(`/opportunities/${opp.id}`)} style={{ padding: '12px 14px', border: '1px solid #EDF2F7', borderRadius: '8px', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <div>
                         <div style={{ fontSize: '13px', fontWeight: '700', color: '#144766' }}>{opp.deal_name}</div>
@@ -131,11 +131,18 @@ export default function ContactDetailPage() {
         <PropertyRow label="Language" value={contact.preferred_language} />
         <PropertyRow label="Assigned To" value={contact.assigned_to} />
       </SidebarSection>
-      <SidebarSection title="Company">
-        {contact.company ? <SidebarCard title={contact.company.name} subtitle={`Status: ${contact.company.status}`} href={`/companies/${contact.company.id}`} color="#144766" /> : <p style={{ fontSize: '12px', color: '#9B9B9B' }}>No company.</p>}
+      <SidebarSection title="Company / Partner">
+        {contact.company ? (
+          <SidebarCard title={contact.company.name} subtitle={`Status: ${contact.company.status}`} href={`/companies/${contact.company.id}`} color="#144766" />
+        ) : contact.partner ? (
+          <SidebarCard title={contact.partner.name} subtitle={`Status: ${contact.partner.status}`} href={`/partners/${contact.partner.id}`} color="#7C3AED" />
+        ) : <p style={{ fontSize: '12px', color: '#9B9B9B' }}>None.</p>}
       </SidebarSection>
-      <SidebarSection title={`Deals (${opportunities.length})`}>
-        {opportunities.length === 0 ? <p style={{ fontSize: '12px', color: '#9B9B9B' }}>No deals.</p> : opportunities.map(opp => <SidebarCard key={opp.id} title={opp.deal_name} subtitle={opp.deal_status} href={`/opportunities/${opp.id}`} color="#219BD6" />)}
+      <SidebarSection
+        title={`Opportunities (${opportunities.length})`}
+        onAdd={() => router.push(`/opportunities?contact_id=${id}${contact.company_id ? `&company_id=${contact.company_id}` : ''}${contact.partner_id ? `&partner_id=${contact.partner_id}` : ''}`)}
+      >
+        {opportunities.length === 0 ? <p style={{ fontSize: '12px', color: '#9B9B9B' }}>No opportunities.</p> : opportunities.map((opp: any) => <SidebarCard key={opp.id} title={opp.deal_name} subtitle={opp.deal_status} href={`/opportunities/${opp.id}`} color="#219BD6" />)}
       </SidebarSection>
     </div>
   )

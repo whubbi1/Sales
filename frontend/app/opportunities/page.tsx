@@ -1,7 +1,7 @@
 'use client'
 // app/opportunities/page.tsx
-import { useState, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
+import { useState, useEffect, Suspense } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { Sidebar } from '@/components/Sidebar'
 import { opportunitiesAPI } from '@/lib/api'
 import { PageHeader, EmptyState } from '@/components/shared/RecordLayout'
@@ -12,7 +12,7 @@ import { getStoredUser } from '@/lib/auth'
 const STATUS_OPTIONS = ['Presentation To Be Scheduled','Presentation Done','Proposition Ongoing','Proposition Accepted','Contract Ongoing','Contract Finalised','PO Received','Contract Lost']
 
 const COLUMNS: ReportColumn[] = [
-  { key: 'deal_name', label: 'Deal', filterable: 'text' },
+  { key: 'deal_name', label: 'Opportunity', filterable: 'text' },
   { key: 'company_name', label: 'Company', filterable: 'text' },
   { key: 'deal_type', label: 'Type', filterable: 'text' },
   { key: 'deal_amount', label: 'Amount' },
@@ -22,12 +22,17 @@ const COLUMNS: ReportColumn[] = [
   { key: 'contacts_count', label: 'Contacts' },
 ]
 
-export default function OpportunitiesPage() {
+function OpportunitiesContent() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const [opportunities, setOpportunities] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
   const [userEmail, setUserEmail] = useState('')
+
+  const prefillCompanyId = searchParams.get('company_id') || ''
+  const prefillPartnerId = searchParams.get('partner_id') || ''
+  const prefillContactId = searchParams.get('contact_id') || ''
 
   const rb = useReportBuilder('opportunity', COLUMNS, userEmail)
 
@@ -44,6 +49,9 @@ export default function OpportunitiesPage() {
     load()
     const u = getStoredUser()
     if (u?.email) setUserEmail(u.email)
+    // Company/Contact detail pages link here with these params to open the create
+    // modal pre-filled instead of dumping the user on an unrelated list page.
+    if (prefillCompanyId || prefillPartnerId || prefillContactId) setShowModal(true)
   }, [])
 
   const totalValue = opportunities.filter(o => o.deal_amount).reduce((sum, o) => sum + o.deal_amount, 0)
@@ -79,7 +87,7 @@ export default function OpportunitiesPage() {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px', marginBottom: '16px' }}>
             {[
               { label: 'Total Pipeline', value: `€${totalValue.toLocaleString('en-US', { minimumFractionDigits: 0 })}`, color: '#144766' },
-              { label: 'Open Deals', value: opportunities.filter(o => !['Contract Lost', 'PO Received', 'Contract Finalised'].includes(o.deal_status)).length, color: '#219BD6' },
+              { label: 'Open Opportunities', value: opportunities.filter(o => !['Contract Lost', 'PO Received', 'Contract Finalised'].includes(o.deal_status)).length, color: '#219BD6' },
               { label: 'Won', value: opportunities.filter(o => ['PO Received', 'Contract Finalised'].includes(o.deal_status)).length, color: '#059669' },
               { label: 'Lost', value: opportunities.filter(o => o.deal_status === 'Contract Lost').length, color: '#DC2626' },
             ].map(stat => (
@@ -105,7 +113,7 @@ export default function OpportunitiesPage() {
                 {loading ? (
                   <tr><td colSpan={COLUMNS.length + 1} style={{ textAlign: 'center', padding: '48px', color: '#9B9B9B', fontSize: '13px' }}>Loading...</td></tr>
                 ) : reported.length === 0 ? (
-                  <tr><td colSpan={COLUMNS.length + 1}><EmptyState icon="💼" title="No opportunities yet" description="Create your first deal by clicking New Opportunity" /></td></tr>
+                  <tr><td colSpan={COLUMNS.length + 1}><EmptyState icon="💼" title="No opportunities yet" description="Create your first opportunity by clicking New Opportunity" /></td></tr>
                 ) : reported.map(opp => (
                   <tr key={opp.id} onClick={() => router.push(`/opportunities/${opp.id}`)} style={{ cursor: 'pointer' }}
                     onMouseEnter={e => (e.currentTarget.style.background = '#FAFBFC')}
@@ -166,8 +174,24 @@ export default function OpportunitiesPage() {
             </table>
           </div>
         </div>
-        {showModal && <OpportunityModal onClose={() => setShowModal(false)} onSave={() => { setShowModal(false); load() }} />}
+        {showModal && (
+          <OpportunityModal
+            initialCompanyId={prefillCompanyId}
+            initialPartnerId={prefillPartnerId}
+            initialContactId={prefillContactId}
+            onClose={() => setShowModal(false)}
+            onSave={() => { setShowModal(false); load() }}
+          />
+        )}
       </main>
     </div>
+  )
+}
+
+export default function OpportunitiesPage() {
+  return (
+    <Suspense fallback={<div style={{ display: 'flex' }}><Sidebar /><main style={{ marginLeft: '220px', minHeight: '100vh', width: 'calc(100vw - 220px)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#9B9B9B' }}>Loading...</main></div>}>
+      <OpportunitiesContent />
+    </Suspense>
   )
 }

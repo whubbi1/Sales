@@ -30,6 +30,7 @@ export const companiesAPI = {
 
   getContacts:     (id: string) => fetchAPI(`/companies/${id}/contacts`),
   getOpportunities:(id: string) => fetchAPI(`/companies/${id}/opportunities`),
+  dashboardStats:  () => fetchAPI(`/companies/dashboard-stats`),
 
   getNotes:    (id: string) => fetchAPI(`/companies/${id}/notes`),
   createNote:  (id: string, d: any) => fetchAPI(`/companies/${id}/notes`, { method: 'POST', body: JSON.stringify(d) }),
@@ -124,6 +125,11 @@ export const opportunitiesAPI = {
   deleteComment: (id: string, cid: string) => fetchAPI(`/opportunities/${id}/comments/${cid}/`, { method: 'DELETE' }),
 
   getSharepointFiles: (id: string) => fetchAPI(`/opportunities/${id}/sharepoint-files`),
+
+  getLinks:   (id: string) => fetchAPI(`/opportunities/${id}/links`),
+  addLink:    (id: string, d: any) => fetchAPI(`/opportunities/${id}/links`, { method: 'POST', body: JSON.stringify(d) }),
+  updateLink: (id: string, lid: string, d: any) => fetchAPI(`/opportunities/${id}/links/${lid}`, { method: 'PUT', body: JSON.stringify(d) }),
+  deleteLink: (id: string, lid: string) => fetchAPI(`/opportunities/${id}/links/${lid}`, { method: 'DELETE' }),
 }
 
 // ─── Sales Tasks (legacy — superseded by taskManagerAPI, kept for rollback safety) ─

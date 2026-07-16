@@ -6,10 +6,18 @@ from sqlalchemy.orm import selectinload
 from typing import List
 from uuid import UUID
 
+from sqlalchemy import text as sql_text
+
 from app.database import get_db
 from app.models.company import Company, CompanyNote, CompanyArticle, CompanyTask
 from app.models.contact import Contact
 from app.models.opportunity import Opportunity
+
+# Same open/won classification the Opportunities page already uses client-side
+# (frontend/app/opportunities/page.tsx) — kept as literal status lists here rather
+# than a shared constant, to avoid touching that page's already-working stat cards.
+_LOST_OR_WON_STATUSES = ('Contract Lost', 'PO Received', 'Contract Finalised')
+_WON_STATUSES = ('PO Received', 'Contract Finalised')
 from app.schemas.schemas import (
     CompanyCreate, CompanyUpdate, CompanyResponse, CompanySummary,
     NoteCreate, NoteResponse, ArticleCreate, ArticleResponse,
@@ -69,6 +77,31 @@ async def create_company(company: CompanyCreate, db: AsyncSession = Depends(get_
     row = r.scalar_one()
     await _attach_main_contacts(db, [row])
     return row
+
+# Must come before /{company_id} — otherwise FastAPI tries to parse "dashboard-stats"
+# as a UUID for that route and 422s instead of falling through to this one.
+@router.get("/dashboard-stats")
+async def get_dashboard_stats(db: AsyncSession = Depends(get_db)):
+    # _LOST_OR_WON_STATUSES/_WON_STATUSES are fixed module-level constants (not user input),
+    # so building the IN-clauses with literal values here is safe.
+    lost_or_won_sql = ", ".join(f"'{s}'" for s in _LOST_OR_WON_STATUSES)
+    won_sql = ", ".join(f"'{s}'" for s in _WON_STATUSES)
+    r = await db.execute(sql_text(f"""
+        SELECT
+            (SELECT COUNT(*) FROM contacts) AS total_contacts,
+            (SELECT COUNT(*) FROM opportunities WHERE deal_status NOT IN ({lost_or_won_sql})) AS open_count,
+            (SELECT COALESCE(SUM(deal_amount), 0) FROM opportunities WHERE deal_status NOT IN ({lost_or_won_sql})) AS open_amount,
+            (SELECT COUNT(*) FROM opportunities WHERE deal_status IN ({won_sql})) AS won_count,
+            (SELECT COALESCE(SUM(deal_amount), 0) FROM opportunities WHERE deal_status IN ({won_sql})) AS won_amount
+    """))
+    row = r.fetchone()
+    return {
+        "total_contacts": row.total_contacts,
+        "open_count": row.open_count,
+        "open_amount": float(row.open_amount),
+        "won_count": row.won_count,
+        "won_amount": float(row.won_amount),
+    }
 
 @router.get("/{company_id}", response_model=CompanyResponse)
 async def get_company(company_id: UUID, db: AsyncSession = Depends(get_db)):

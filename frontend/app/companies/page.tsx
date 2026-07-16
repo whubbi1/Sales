@@ -53,6 +53,7 @@ export default function CompaniesPage() {
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
   const [userEmail, setUserEmail] = useState('')
+  const [stats, setStats] = useState<any>(null)
   const [showSearch, setShowSearch] = useState(false)
   const [selectedCompany, setSelectedCompany] = useState<any>(null)
   const [aiLoading, setAiLoading] = useState(false)
@@ -98,6 +99,7 @@ export default function CompaniesPage() {
     load()
     const u = getStoredUser()
     if (u?.email) setUserEmail(u.email)
+    companiesAPI.dashboardStats().then(setStats).catch(() => {})
   }, [])
 
   const withDisplay = companies.map(c => ({
@@ -129,6 +131,24 @@ export default function CompaniesPage() {
               </div>
             }
           />
+
+          {/* Dashboard */}
+          {stats && (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '12px', marginBottom: '16px' }}>
+              {[
+                { label: 'Contacts', value: stats.total_contacts, color: '#144766' },
+                { label: 'Open Opportunities', value: stats.open_count, color: '#219BD6' },
+                { label: 'Open Pipeline', value: `€${stats.open_amount.toLocaleString('en-US', { minimumFractionDigits: 0 })}`, color: '#219BD6' },
+                { label: 'Won Opportunities', value: stats.won_count, color: '#059669' },
+                { label: 'Won Amount', value: `€${stats.won_amount.toLocaleString('en-US', { minimumFractionDigits: 0 })}`, color: '#059669' },
+              ].map(stat => (
+                <div key={stat.label} style={{ background: 'white', borderRadius: '10px', border: '1px solid #EDF2F7', padding: '14px 16px', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
+                  <div style={{ fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#9B9B9B', marginBottom: '4px' }}>{stat.label}</div>
+                  <div style={{ fontSize: '20px', fontWeight: '800', color: stat.color }}>{stat.value}</div>
+                </div>
+              ))}
+            </div>
+          )}
 
           {/* Table */}
           <div style={{ background: 'white', borderRadius: '10px', border: '1px solid #EDF2F7', boxShadow: '0 1px 3px rgba(0,0,0,0.06)', overflow: 'auto' }}>

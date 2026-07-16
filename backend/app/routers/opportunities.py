@@ -4,7 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, or_, text
 from sqlalchemy.orm import selectinload
 from typing import List
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from app.database import get_db
 from app.models.opportunity import Opportunity
@@ -309,3 +309,49 @@ async def list_sharepoint_files(opportunity_id: UUID, db: AsyncSession = Depends
         return {"linked": True, "files": result}
     except Exception as e:
         return {"linked": True, "error": str(e), "files": []}
+
+# ─── Links (manually-curated SharePoint folders/files, each with a description) ─
+@router.get("/{opportunity_id}/links")
+async def list_opportunity_links(opportunity_id: str, db: AsyncSession = Depends(get_db)):
+    r = await db.execute(text("""
+        SELECT * FROM opportunity_links WHERE opportunity_id = CAST(:oid AS UUID) ORDER BY created_at DESC
+    """), {"oid": opportunity_id})
+    links = []
+    for row in r.fetchall():
+        d = dict(row._mapping)
+        d["id"] = str(d["id"])
+        d["opportunity_id"] = str(d["opportunity_id"])
+        links.append(d)
+    return {"links": links}
+
+@router.post("/{opportunity_id}/links")
+async def create_opportunity_link(opportunity_id: str, data: dict, db: AsyncSession = Depends(get_db)):
+    if not data.get("url"):
+        raise HTTPException(status_code=400, detail="url is required")
+    lid = str(uuid4())
+    await db.execute(text("""
+        INSERT INTO opportunity_links (id, opportunity_id, url, description, created_at, updated_at)
+        VALUES (CAST(:id AS UUID), CAST(:oid AS UUID), :url, :description, NOW(), NOW())
+    """), {"id": lid, "oid": opportunity_id, "url": data["url"], "description": data.get("description", "")})
+    await db.commit()
+    return {"status": "ok", "id": lid}
+
+@router.put("/{opportunity_id}/links/{link_id}")
+async def update_opportunity_link(opportunity_id: str, link_id: str, data: dict, db: AsyncSession = Depends(get_db)):
+    await db.execute(text("""
+        UPDATE opportunity_links SET
+            url = COALESCE(NULLIF(:url,''), url),
+            description = COALESCE(:description, description),
+            updated_at = NOW()
+        WHERE id = CAST(:id AS UUID) AND opportunity_id = CAST(:oid AS UUID)
+    """), {"id": link_id, "oid": opportunity_id, "url": data.get("url", ""), "description": data.get("description")})
+    await db.commit()
+    return {"status": "ok"}
+
+@router.delete("/{opportunity_id}/links/{link_id}")
+async def delete_opportunity_link(opportunity_id: str, link_id: str, db: AsyncSession = Depends(get_db)):
+    await db.execute(text("""
+        DELETE FROM opportunity_links WHERE id = CAST(:id AS UUID) AND opportunity_id = CAST(:oid AS UUID)
+    """), {"id": link_id, "oid": opportunity_id})
+    await db.commit()
+    return {"status": "ok"}

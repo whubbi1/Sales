@@ -139,8 +139,8 @@ export default function CompanyDetailPage() {
       <SidebarSection title={`Contacts (${contacts.length})`} onAdd={() => router.push(`/contacts?company_id=${id}`)}>
         {contacts.length === 0 ? <p style={{ fontSize: '12px', color: '#9B9B9B' }}>No contacts.</p> : contacts.map((c: any) => <SidebarCard key={c.id} title={`${c.first_name} ${c.last_name}`} subtitle={c.job_type || c.email} href={`/contacts/${c.id}`} color="#e97132" />)}
       </SidebarSection>
-      <SidebarSection title={`Deals (${opportunities.length})`} onAdd={() => router.push(`/opportunities?company_id=${id}`)}>
-        {opportunities.length === 0 ? <p style={{ fontSize: '12px', color: '#9B9B9B' }}>No deals.</p> : opportunities.map((o: any) => <SidebarCard key={o.id} title={o.deal_name} subtitle={o.deal_status} href={`/opportunities/${o.id}`} color="#219BD6" />)}
+      <SidebarSection title={`Opportunities (${opportunities.length})`} onAdd={() => router.push(`/opportunities?company_id=${id}`)}>
+        {opportunities.length === 0 ? <p style={{ fontSize: '12px', color: '#9B9B9B' }}>No opportunities.</p> : opportunities.map((o: any) => <SidebarCard key={o.id} title={o.deal_name} subtitle={o.deal_status} href={`/opportunities/${o.id}`} color="#219BD6" />)}
       </SidebarSection>
     </div>
   )
