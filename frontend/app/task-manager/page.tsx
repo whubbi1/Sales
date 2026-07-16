@@ -39,6 +39,7 @@ function TaskManagerContent() {
   const [tasks, setTasks] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
+  const [searchOpen, setSearchOpen] = useState(false)
   const [scope, setScope] = useState<'own' | 'company'>(dataScope === 'company' ? 'company' : 'own')
   const [showNew, setShowNew] = useState(false)
   const [groupBySubject, setGroupBySubject] = useState(false)
@@ -98,7 +99,15 @@ function TaskManagerContent() {
     <div style={{ padding: '24px 28px' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' }}>
         <div>
-          <h1 style={{ fontSize: '20px', fontWeight: '800', color: '#156082', margin: '0 0 4px' }}>✅ My Tasks</h1>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: '10px' }}>
+            <h1 style={{ fontSize: '20px', fontWeight: '800', color: '#156082', margin: '0 0 4px' }}>✅ My Tasks</h1>
+            {searchOpen ? (
+              <input autoFocus style={{ ...inp, fontSize: '12px', padding: '4px 8px', width: '180px' }} placeholder="Search title or task #…" value={search}
+                onChange={e => setSearch(e.target.value)} onBlur={() => { if (!search) setSearchOpen(false) }} />
+            ) : (
+              <span onClick={() => setSearchOpen(true)} style={{ fontSize: '12px', color: '#45B6E4', cursor: 'pointer', fontWeight: '600' }}>Search</span>
+            )}
+          </div>
           <p style={{ fontSize: '12px', color: '#94A3B8', margin: 0 }}>{reported.length} task{reported.length !== 1 ? 's' : ''}</p>
         </div>
         <div style={{ display: 'flex', gap: '8px' }}>
@@ -112,7 +121,6 @@ function TaskManagerContent() {
       </div>
 
       <div style={{ display: 'flex', gap: '10px', marginBottom: '14px', flexWrap: 'wrap' }}>
-        <input style={{ ...inp, width: '220px' }} placeholder="Search title or task #…" value={search} onChange={e => setSearch(e.target.value)} />
         <select style={inp} value={scope} onChange={e => setScope(e.target.value as any)}>
           <option value="own">My Tasks (owner, assignee or watcher)</option>
           <option value="company">All Company Tasks</option>

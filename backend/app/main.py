@@ -1352,6 +1352,31 @@ async def startup():
                     created_at TIMESTAMP DEFAULT NOW(),
                     updated_at TIMESTAMP DEFAULT NOW()
                 )""",
+
+                # Contact clean-up — LinkedIn-mismatch suggestions awaiting review (accept/deny)
+                """CREATE TABLE IF NOT EXISTS contact_cleanup_suggestions (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    contact_id UUID NOT NULL REFERENCES contacts(id) ON DELETE CASCADE,
+                    check_type VARCHAR(20) NOT NULL,
+                    current_company VARCHAR(255), current_title VARCHAR(255),
+                    suggested_company VARCHAR(255), suggested_title VARCHAR(255),
+                    confidence VARCHAR(10), summary TEXT,
+                    status VARCHAR(20) DEFAULT 'pending',
+                    reviewed_by VARCHAR(255), reviewed_at TIMESTAMP,
+                    created_at TIMESTAMP DEFAULT NOW()
+                )""",
+
+                # Company Articles — additive many-to-many links on top of the existing single
+                # company_id column, so an article can also be linked to more companies/contacts
+                # without touching the article it was originally created under.
+                """CREATE TABLE IF NOT EXISTS article_companies (
+                    article_id UUID REFERENCES company_articles(id) ON DELETE CASCADE,
+                    company_id UUID REFERENCES companies(id) ON DELETE CASCADE
+                )""",
+                """CREATE TABLE IF NOT EXISTS article_contacts (
+                    article_id UUID REFERENCES company_articles(id) ON DELETE CASCADE,
+                    contact_id UUID REFERENCES contacts(id) ON DELETE CASCADE
+                )""",
             ]
             for sql in sqls:
                 try:
@@ -1407,6 +1432,8 @@ _include("app.routers.companies",      "/companies",    "Companies")
 _include("app.routers.contacts",       "/contacts",     "Contacts")
 _include("app.routers.opportunities",  "/opportunities","Opportunities")
 _include("app.routers.rfp",            "/rfps",         "RFPs")
+_include("app.routers.contact_cleanup","/contacts/cleanup","ContactCleanup")
+_include("app.routers.broken_links",   "/cleanup",      "BrokenLinks")
 _include("app.routers.tasks",          "/tasks",        "Tasks")
 _include("app.routers.partners",       "/partners",     "Partners")
 _include("app.routers.marketing",      "/marketing",    "Marketing")

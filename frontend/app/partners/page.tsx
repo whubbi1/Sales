@@ -25,6 +25,7 @@ export default function PartnersPage() {
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
   const [userEmail, setUserEmail] = useState('')
+  const [nameSearch, setNameSearch] = useState('')
 
   const rb = useReportBuilder('partner', COLUMNS, userEmail)
 
@@ -47,7 +48,8 @@ export default function PartnersPage() {
     ...p,
     main_contact_display: p.main_contact_first_name ? `${p.main_contact_first_name} ${p.main_contact_last_name}` : '',
   }))
-  const reported = applyReport(withDisplay, COLUMNS, rb.filters, rb.sortField, rb.sortDir)
+  const searched = withDisplay.filter(p => !nameSearch.trim() || p.name.toLowerCase().includes(nameSearch.trim().toLowerCase()))
+  const reported = applyReport(searched, COLUMNS, rb.filters, rb.sortField, rb.sortDir)
   const pageRows = reported.slice((rb.page - 1) * 20, rb.page * 20)
   const isVisible = (key: string) => rb.visibleCols.includes(key)
 
@@ -59,6 +61,7 @@ export default function PartnersPage() {
           <PageHeader
             title="Partners"
             count={reported.length}
+            search={{ value: nameSearch, onChange: setNameSearch }}
             action={
               <div style={{ display: 'flex', gap: '8px' }}>
                 <ReportPanel columns={COLUMNS} rb={rb} />

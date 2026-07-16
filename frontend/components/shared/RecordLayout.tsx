@@ -1,5 +1,5 @@
 'use client'
-import { ReactNode } from 'react'
+import { ReactNode, useState } from 'react'
 import { Sidebar } from '@/components/Sidebar'
 
 interface Props { leftColumn: ReactNode; rightColumn: ReactNode }
@@ -77,11 +77,24 @@ export function TabNav({ tabs, active, onChange }: { tabs: string[]; active: str
   )
 }
 
-export function PageHeader({ title, count, action }: { title: string; count?: number; action?: ReactNode }) {
+export function PageHeader({ title, count, action, search }: { title: string; count?: number; action?: ReactNode; search?: { value: string; onChange: (v: string) => void } }) {
+  const [searchOpen, setSearchOpen] = useState(false)
   return (
     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '20px' }}>
       <div>
-        <h1 style={{ fontSize: '19px', fontWeight: '800', color: '#156082', marginBottom: '2px', letterSpacing: '-0.01em' }}>{title}</h1>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: '10px' }}>
+          <h1 style={{ fontSize: '19px', fontWeight: '800', color: '#156082', marginBottom: '2px', letterSpacing: '-0.01em' }}>{title}</h1>
+          {search && (
+            searchOpen ? (
+              <input autoFocus className="form-input" placeholder="Search…" value={search.value}
+                onChange={e => search.onChange(e.target.value)}
+                onBlur={() => { if (!search.value) setSearchOpen(false) }}
+                style={{ fontSize: '12px', padding: '4px 8px', width: '180px' }} />
+            ) : (
+              <span onClick={() => setSearchOpen(true)} style={{ fontSize: '12px', color: '#45B6E4', cursor: 'pointer', fontWeight: '600' }}>Search</span>
+            )
+          )}
+        </div>
         {count !== undefined && <p style={{ color: '#45B6E4', fontSize: '12px' }}>{count} record{count !== 1 ? 's' : ''}</p>}
       </div>
       {action}

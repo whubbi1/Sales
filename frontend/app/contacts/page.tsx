@@ -28,7 +28,7 @@ async function claudeSearch(prompt: string): Promise<string> {
 const COLUMNS: ReportColumn[] = [
   { key: 'internal_id', label: 'ID', filterable: 'text' },
   { key: 'contact_name', label: 'Contact', filterable: 'text' },
-  { key: 'company_name', label: 'Company', filterable: 'text' },
+  { key: 'company_name', label: 'Company/Partner', filterable: 'text' },
   { key: 'job_name', label: 'Job Title', filterable: 'text' },
   { key: 'job_type', label: 'Job Type', filterable: 'text' },
   { key: 'email', label: 'Email', filterable: 'text' },
@@ -42,6 +42,7 @@ export default function ContactsPage() {
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
   const [userEmail, setUserEmail] = useState('')
+  const [nameSearch, setNameSearch] = useState('')
   const [showWebSearch, setShowWebSearch] = useState(false)
   const [selectedContact, setSelectedContact] = useState<any>(null)
   const [aiLoading, setAiLoading] = useState(false)
@@ -91,9 +92,10 @@ export default function ContactsPage() {
   const withDisplay = contacts.map(c => ({
     ...c,
     contact_name: `${c.first_name} ${c.last_name}`,
-    company_name: c.company?.name || '',
+    company_name: c.company?.name || c.partner?.name || '',
   }))
-  const reported = applyReport(withDisplay, COLUMNS, rb.filters, rb.sortField, rb.sortDir)
+  const searched = withDisplay.filter(c => !nameSearch.trim() || c.contact_name.toLowerCase().includes(nameSearch.trim().toLowerCase()))
+  const reported = applyReport(searched, COLUMNS, rb.filters, rb.sortField, rb.sortDir)
   const pageRows = reported.slice((rb.page - 1) * 20, rb.page * 20)
   const isVisible = (key: string) => rb.visibleCols.includes(key)
 
@@ -105,8 +107,10 @@ export default function ContactsPage() {
           <PageHeader
             title="Contacts"
             count={reported.length}
+            search={{ value: nameSearch, onChange: setNameSearch }}
             action={
               <div style={{ display: 'flex', gap: '8px' }}>
+                <button className="btn-secondary" onClick={() => router.push('/contacts/cleanup')}>🧹 Clean-up</button>
                 <ReportPanel columns={COLUMNS} rb={rb} />
                 <button className="btn-primary" onClick={() => setShowModal(true)}>
                   <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
@@ -156,6 +160,8 @@ export default function ContactsPage() {
                       <td style={{ padding: '11px 16px', borderBottom: '1px solid #F1F5F9', ...REPORT_CELL_STYLE }}>
                         {contact.company ? (
                           <span onClick={e => { e.stopPropagation(); router.push(`/companies/${contact.company.id}`) }} style={{ cursor: 'pointer' }}>{contact.company.name}</span>
+                        ) : contact.partner ? (
+                          <span onClick={e => { e.stopPropagation(); router.push(`/partners/${contact.partner.id}`) }} style={{ cursor: 'pointer' }}>{contact.partner.name}</span>
                         ) : '—'}
                       </td>
                     )}

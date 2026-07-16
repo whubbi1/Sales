@@ -83,6 +83,12 @@ export default function CompanyDetailPage() {
 
   const color = LEVEL_COLORS[company.level] || '#144766'
 
+  // Same open/won classification the Opportunities list page already uses.
+  const openOpportunities = opportunities.filter((o: any) => !['Contract Lost', 'PO Received', 'Contract Finalised'].includes(o.deal_status))
+  const wonOpportunities = opportunities.filter((o: any) => ['PO Received', 'Contract Finalised'].includes(o.deal_status))
+  const openAmount = openOpportunities.filter((o: any) => o.deal_amount).reduce((sum: number, o: any) => sum + o.deal_amount, 0)
+  const wonAmount = wonOpportunities.filter((o: any) => o.deal_amount).reduce((sum: number, o: any) => sum + o.deal_amount, 0)
+
   const leftColumn = (
     <div>
       <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '16px', fontSize: '11px', color: '#9B9B9B' }}>
@@ -128,6 +134,21 @@ export default function CompanyDetailPage() {
             {company.sap_hosting_partner?.length > 0 && <div><div style={{ fontSize: '9px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#9B9B9B', marginBottom: '5px' }}>SAP Hosting</div><div style={{ display: 'flex', flexWrap: 'wrap', gap: '3px' }}>{company.sap_hosting_partner.map((v: string) => <span key={v} style={{ background: '#ECFDF5', color: '#059669', padding: '2px 7px', borderRadius: '10px', fontSize: '10px', fontWeight: '600' }}>{v}</span>)}</div></div>}
           </div>
         )}
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '12px', marginBottom: '16px' }}>
+        {[
+          { label: 'Contacts', value: contacts.length, color: '#144766' },
+          { label: 'Open Opportunities', value: openOpportunities.length, color: '#219BD6' },
+          { label: 'Open Pipeline', value: `€${openAmount.toLocaleString('en-US', { minimumFractionDigits: 0 })}`, color: '#219BD6' },
+          { label: 'Won Opportunities', value: wonOpportunities.length, color: '#059669' },
+          { label: 'Won Amount', value: `€${wonAmount.toLocaleString('en-US', { minimumFractionDigits: 0 })}`, color: '#059669' },
+        ].map(stat => (
+          <div key={stat.label} style={{ background: 'white', borderRadius: '10px', border: '1px solid #EDF2F7', padding: '14px 16px', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
+            <div style={{ fontSize: '10px', fontWeight: '700', textTransform: 'uppercase' as const, letterSpacing: '0.07em', color: '#9B9B9B', marginBottom: '4px' }}>{stat.label}</div>
+            <div style={{ fontSize: '20px', fontWeight: '800', color: stat.color }}>{stat.value}</div>
+          </div>
+        ))}
       </div>
 
       <div style={{ background: 'white', borderRadius: '10px', border: '1px solid #EDF2F7', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>

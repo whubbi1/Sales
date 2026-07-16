@@ -29,6 +29,7 @@ function OpportunitiesContent() {
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
   const [userEmail, setUserEmail] = useState('')
+  const [nameSearch, setNameSearch] = useState('')
 
   const prefillCompanyId = searchParams.get('company_id') || ''
   const prefillPartnerId = searchParams.get('partner_id') || ''
@@ -61,7 +62,8 @@ function OpportunitiesContent() {
     company_name: o.company?.name || '',
     contacts_count: o.contacts?.length || 0,
   }))
-  const reported = applyReport(withDisplay, COLUMNS, rb.filters, rb.sortField, rb.sortDir)
+  const searched = withDisplay.filter(o => !nameSearch.trim() || o.deal_name.toLowerCase().includes(nameSearch.trim().toLowerCase()))
+  const reported = applyReport(searched, COLUMNS, rb.filters, rb.sortField, rb.sortDir)
   const pageRows = reported.slice((rb.page - 1) * 20, rb.page * 20)
   const isVisible = (key: string) => rb.visibleCols.includes(key)
 
@@ -73,6 +75,7 @@ function OpportunitiesContent() {
           <PageHeader
             title="Opportunities"
             count={reported.length}
+            search={{ value: nameSearch, onChange: setNameSearch }}
             action={
               <div style={{ display: 'flex', gap: '8px' }}>
                 <ReportPanel columns={COLUMNS} rb={rb} />

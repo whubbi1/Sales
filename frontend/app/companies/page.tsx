@@ -38,6 +38,7 @@ export default function CompaniesPage() {
   const [showModal, setShowModal] = useState(false)
   const [userEmail, setUserEmail] = useState('')
   const [stats, setStats] = useState<any>(null)
+  const [nameSearch, setNameSearch] = useState('')
 
   const rb = useReportBuilder('company', COLUMNS, userEmail)
 
@@ -73,7 +74,8 @@ export default function CompaniesPage() {
     main_erp_display: (c.main_erp || []).join(', '),
     hosting_display: (c.sap_hosting_partner || []).join(', '),
   }))
-  const reported = applyReport(withDisplay, COLUMNS, rb.filters, rb.sortField, rb.sortDir)
+  const searched = withDisplay.filter(c => !nameSearch.trim() || c.name.toLowerCase().includes(nameSearch.trim().toLowerCase()))
+  const reported = applyReport(searched, COLUMNS, rb.filters, rb.sortField, rb.sortDir)
   const pageRows = reported.slice((rb.page - 1) * 20, rb.page * 20)
   const isVisible = (key: string) => rb.visibleCols.includes(key)
 
@@ -85,6 +87,7 @@ export default function CompaniesPage() {
           <PageHeader
             title="Companies"
             count={reported.length}
+            search={{ value: nameSearch, onChange: setNameSearch }}
             action={
               <div style={{ display: 'flex', gap: '8px' }}>
                 <ReportPanel columns={COLUMNS} rb={rb} />

@@ -41,6 +41,12 @@ export const companiesAPI = {
   createArticle: (id: string, d: any) => fetchAPI(`/companies/${id}/articles`, { method: 'POST', body: JSON.stringify(d) }),
   deleteArticle: (cid: string, aid: string) => fetchAPI(`/companies/${cid}/articles/${aid}`, { method: 'DELETE' }),
 
+  getArticleLinks:     (aid: string) => fetchAPI(`/companies/articles/${aid}/links`),
+  linkArticleCompany:  (aid: string, cid: string) => fetchAPI(`/companies/articles/${aid}/companies/${cid}`, { method: 'POST' }),
+  unlinkArticleCompany:(aid: string, cid: string) => fetchAPI(`/companies/articles/${aid}/companies/${cid}`, { method: 'DELETE' }),
+  linkArticleContact:  (aid: string, cid: string) => fetchAPI(`/companies/articles/${aid}/contacts/${cid}`, { method: 'POST' }),
+  unlinkArticleContact:(aid: string, cid: string) => fetchAPI(`/companies/articles/${aid}/contacts/${cid}`, { method: 'DELETE' }),
+
   getTasks:   (id: string) => fetchAPI(`/companies/${id}/tasks`),
   createTask: (id: string, d: any) => fetchAPI(`/companies/${id}/tasks`, { method: 'POST', body: JSON.stringify(d) }),
   updateTask: (cid: string, tid: string, d: any) => fetchAPI(`/companies/${cid}/tasks/${tid}`, { method: 'PUT', body: JSON.stringify(d) }),
@@ -310,4 +316,13 @@ export const financeInvoicesAPI = {
   update: (id: string, d: any) => fetchAPI(`/finance/invoices/${id}`, { method: 'PUT', body: JSON.stringify(d) }),
   delete: (id: string) => fetchAPI(`/finance/invoices/${id}`, { method: 'DELETE' }),
   setApproval: (id: string, d: any) => fetchAPI(`/finance/invoices/${id}/approval`, { method: 'PUT', body: JSON.stringify(d) }),
+}
+
+// ─── Contact clean-up (LinkedIn check, email check) ────────────────────────────
+export const cleanupAPI = {
+  linkedinCheck: (contactId: string) => fetchAPI(`/contacts/cleanup/${contactId}/linkedin-check`, { method: 'POST' }),
+  emailCheck:    (contactId: string) => fetchAPI(`/contacts/cleanup/${contactId}/email-check`),
+  getSuggestions: (status: string = 'pending') => fetchAPI(`/contacts/cleanup/suggestions${qs({ status })}`),
+  reviewSuggestion: (id: string, d: any) => fetchAPI(`/contacts/cleanup/suggestions/${id}`, { method: 'PUT', body: JSON.stringify(d) }),
+  brokenLinks: () => fetchAPI(`/cleanup/broken-links`, { method: 'POST' }),
 }

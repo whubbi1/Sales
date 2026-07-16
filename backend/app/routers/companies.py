@@ -106,15 +106,10 @@ async def get_dashboard_stats(db: AsyncSession = Depends(get_db)):
         "won_amount": float(row.won_amount),
     }
 
-# Must also come before /{company_id} for the same reason as dashboard-stats above.
-# Server-side proxy for the company Research tab's AI web search — the frontend previously
-# called api.anthropic.com directly with no x-api-key header (would 401 every time); this
-# does the actual call, same httpx/header shape as hr.py's existing Claude calls.
-@router.post("/research")
-async def research(data: dict):
-    prompt = data.get("prompt", "")
-    if not prompt:
-        raise HTTPException(status_code=400, detail="prompt is required")
+# Shared by the Research tab's proxy endpoint below and the contact clean-up module's
+# LinkedIn check (backend/app/routers/contact_cleanup.py) — one place doing the actual
+# Claude+web_search call, both callers just build a prompt.
+async def claude_web_search(prompt: str) -> str:
     if not ANTHROPIC_API_KEY:
         raise HTTPException(status_code=500, detail="ANTHROPIC_API_KEY not configured")
     async with httpx.AsyncClient(timeout=30) as client:
@@ -134,8 +129,20 @@ async def research(data: dict):
         if r.status_code != 200:
             raise HTTPException(status_code=502, detail=f"Claude API error {r.status_code}: {r.text[:200]}")
         d = r.json()
-        result = "\n".join(b["text"] for b in d.get("content", []) if b.get("type") == "text") or "No results found."
-        return {"result": result}
+        return "\n".join(b["text"] for b in d.get("content", []) if b.get("type") == "text") or "No results found."
+
+
+# Must also come before /{company_id} for the same reason as dashboard-stats above.
+# Server-side proxy for the company Research tab's AI web search — the frontend previously
+# called api.anthropic.com directly with no x-api-key header (would 401 every time); this
+# does the actual call, same httpx/header shape as hr.py's existing Claude calls.
+@router.post("/research")
+async def research(data: dict):
+    prompt = data.get("prompt", "")
+    if not prompt:
+        raise HTTPException(status_code=400, detail="prompt is required")
+    result = await claude_web_search(prompt)
+    return {"result": result}
 
 @router.get("/{company_id}", response_model=CompanyResponse)
 async def get_company(company_id: UUID, db: AsyncSession = Depends(get_db)):
@@ -210,10 +217,21 @@ async def delete_note(company_id: UUID, note_id: UUID, db: AsyncSession = Depend
     await db.commit()
 
 # ─── Articles ─────────────────────────────────────────────────────────────────
+# An article's `company_id` is the company it was originally created under (kept so this
+# query, and every other pre-existing caller, keeps working unchanged); `article_companies`
+# is purely additive, for linking the same article to other companies afterward.
 @router.get("/{company_id}/articles", response_model=List[ArticleResponse])
 async def list_articles(company_id: UUID, db: AsyncSession = Depends(get_db)):
-    r = await db.execute(select(CompanyArticle).where(CompanyArticle.company_id == company_id).order_by(CompanyArticle.created_at.desc()))
-    return r.scalars().all()
+    r = await db.execute(sql_text("""
+        SELECT * FROM (
+            SELECT a.* FROM company_articles a WHERE a.company_id = :cid
+            UNION
+            SELECT a.* FROM company_articles a
+            JOIN article_companies ac ON ac.article_id = a.id
+            WHERE ac.company_id = :cid
+        ) sub ORDER BY created_at DESC
+    """), {"cid": str(company_id)})
+    return [dict(row._mapping) for row in r.fetchall()]
 
 @router.post("/{company_id}/articles", response_model=ArticleResponse, status_code=status.HTTP_201_CREATED)
 async def create_article(company_id: UUID, article: ArticleCreate, db: AsyncSession = Depends(get_db)):
@@ -230,6 +248,47 @@ async def delete_article(company_id: UUID, article_id: UUID, db: AsyncSession = 
     if not article:
         raise HTTPException(status_code=404, detail="Article not found")
     await db.delete(article)
+    await db.commit()
+
+# Additional company/contact links for an article, beyond the one it was created under.
+@router.get("/articles/{article_id}/links")
+async def get_article_links(article_id: UUID, db: AsyncSession = Depends(get_db)):
+    companies_r = await db.execute(sql_text("""
+        SELECT c.id, c.name FROM article_companies ac JOIN companies c ON c.id = ac.company_id WHERE ac.article_id = :aid
+    """), {"aid": str(article_id)})
+    contacts_r = await db.execute(sql_text("""
+        SELECT ct.id, ct.first_name, ct.last_name FROM article_contacts ac JOIN contacts ct ON ct.id = ac.contact_id WHERE ac.article_id = :aid
+    """), {"aid": str(article_id)})
+    return {
+        "companies": [{"id": str(row.id), "name": row.name} for row in companies_r.fetchall()],
+        "contacts": [{"id": str(row.id), "name": f"{row.first_name} {row.last_name}"} for row in contacts_r.fetchall()],
+    }
+
+@router.post("/articles/{article_id}/companies/{company_id}")
+async def link_article_company(article_id: UUID, company_id: UUID, db: AsyncSession = Depends(get_db)):
+    exists = await db.execute(sql_text("SELECT 1 FROM article_companies WHERE article_id = :aid AND company_id = :cid"), {"aid": str(article_id), "cid": str(company_id)})
+    if not exists.first():
+        await db.execute(sql_text("INSERT INTO article_companies (article_id, company_id) VALUES (:aid, :cid)"), {"aid": str(article_id), "cid": str(company_id)})
+        await db.commit()
+    return {"status": "ok"}
+
+@router.delete("/articles/{article_id}/companies/{company_id}")
+async def unlink_article_company(article_id: UUID, company_id: UUID, db: AsyncSession = Depends(get_db)):
+    await db.execute(sql_text("DELETE FROM article_companies WHERE article_id = :aid AND company_id = :cid"), {"aid": str(article_id), "cid": str(company_id)})
+    await db.commit()
+    return {"status": "ok"}
+
+@router.post("/articles/{article_id}/contacts/{contact_id}")
+async def link_article_contact(article_id: UUID, contact_id: UUID, db: AsyncSession = Depends(get_db)):
+    exists = await db.execute(sql_text("SELECT 1 FROM article_contacts WHERE article_id = :aid AND contact_id = :cid"), {"aid": str(article_id), "cid": str(contact_id)})
+    if not exists.first():
+        await db.execute(sql_text("INSERT INTO article_contacts (article_id, contact_id) VALUES (:aid, :cid)"), {"aid": str(article_id), "cid": str(contact_id)})
+        await db.commit()
+    return {"status": "ok"}
+
+@router.delete("/articles/{article_id}/contacts/{contact_id}")
+async def unlink_article_contact(article_id: UUID, contact_id: UUID, db: AsyncSession = Depends(get_db)):
+    await db.execute(sql_text("DELETE FROM article_contacts WHERE article_id = :aid AND contact_id = :cid"), {"aid": str(article_id), "cid": str(contact_id)})
     await db.commit()
 
 # ─── Tasks ────────────────────────────────────────────────────────────────────
