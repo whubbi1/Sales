@@ -87,6 +87,17 @@ export default function RFPDetailPage() {
     setEditingFolder(false)
   }
 
+  // Edits here write straight through to the real Opportunity record — the RFP has
+  // no copy of its own, it's just displaying/editing the linked opportunity live.
+  const patchOpportunity = async (oppId: string, field: string, value: any) => {
+    setEditing(null)
+    const updated = await opportunitiesAPI.update(oppId, { [field]: value })
+    setRfp((r: any) => ({
+      ...r,
+      opportunities: (r.opportunities || []).map((o: any) => o.id === oppId ? { ...o, ...updated } : o),
+    }))
+  }
+
   const runAnalyze = async () => {
     setAnalyzing(true); setAnalyzeError('')
     try {
@@ -217,7 +228,7 @@ export default function RFPDetailPage() {
 
       <div style={{ background: 'white', borderRadius: '10px', border: '1px solid #EDF2F7', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
         <div style={{ padding: '0 20px', background: '#FAFBFC', borderBottom: '2px solid #E2E8F0' }}>
-          <TabNav tabs={['Overview', 'Action Plan', 'Documents Checklist', 'Files']} active={tab} onChange={setTab} />
+          <TabNav tabs={['Overview', 'Action Plan', 'Documents Checklist', 'Answer', 'Files']} active={tab} onChange={setTab} />
         </div>
         <div style={{ padding: '20px' }}>
           {tab === 'Overview' && (
@@ -349,6 +360,31 @@ export default function RFPDetailPage() {
             </div>
           )}
 
+          {tab === 'Answer' && (
+            <div>
+              <p style={{ fontSize: '12px', color: '#64748B', marginBottom: '14px' }}>
+                The link to our current answer for each document in the checklist — kept separate from the template link above.
+              </p>
+              {documentChecklist.length === 0 ? <p style={{ color: '#9B9B9B', fontSize: '13px' }}>No documents in the checklist yet — add some in the Documents Checklist tab.</p> : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {documentChecklist.map((item: any) => (
+                    <div key={item.id} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 14px', border: '1px solid #EDF2F7', borderRadius: '8px' }}>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontWeight: '700', color: '#144766', fontSize: '13px', marginBottom: '2px' }}>{item.name}</div>
+                        <EditableCell display={item.answer_url ? <a href={item.answer_url} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} style={{ color: '#3B82F6', fontSize: '11px' }}>🔗 Answer document</a> : <span style={{ fontSize: '11px', color: '#CBD5E0' }}>No answer link yet — click to add</span>} editing={isEditing(item.id, 'answer_url')} onStartEdit={() => setEditing({ id: item.id, field: 'answer_url' })}>
+                          <input autoFocus className="form-input" style={{ fontSize: '11px' }} defaultValue={item.answer_url} onBlur={e => patchDoc(item, { answer_url: e.target.value })} onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }} />
+                        </EditableCell>
+                      </div>
+                      {!item.answer_url && (
+                        <span style={{ fontSize: '11px', fontWeight: '700', color: '#D97706', background: '#FFFBEB', padding: '3px 9px', borderRadius: '10px', whiteSpace: 'nowrap' }}>⚠️ Missing</span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
           {tab === 'Files' && (
             <div>
               <div style={{ marginBottom: '18px' }}>
@@ -412,9 +448,41 @@ export default function RFPDetailPage() {
           </div>
         )}
         {(!rfp.opportunities || rfp.opportunities.length === 0) ? <p style={{ fontSize: '12px', color: '#9B9B9B' }}>No opportunities linked.</p> : rfp.opportunities.map((o: any) => (
-          <div key={o.id} style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-            <div style={{ flex: 1 }}><SidebarCard title={o.deal_name} subtitle={o.deal_status} href={`/opportunities/${o.id}`} color="#219BD6" /></div>
-            <button onClick={() => unlinkOpportunity(o.id)} title="Unlink" style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#94A3B8', fontSize: '13px', padding: '0 4px' }}>×</button>
+          <div key={o.id} style={{ marginBottom: '10px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <div style={{ flex: 1 }}><SidebarCard title={o.deal_name} subtitle={o.deal_status} href={`/opportunities/${o.id}`} color="#219BD6" /></div>
+              <button onClick={() => unlinkOpportunity(o.id)} title="Unlink" style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#94A3B8', fontSize: '13px', padding: '0 4px' }}>×</button>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px 8px', padding: '8px', marginTop: '2px', background: '#F8FAFC', borderRadius: '7px', fontSize: '11px' }}>
+              <div>
+                <div style={{ color: '#94A3B8', marginBottom: '2px' }}>Closing Date</div>
+                <EditableCell display={fmt(o.closing_date) || '—'} editing={isEditing(o.id, 'closing_date')} onStartEdit={() => setEditing({ id: o.id, field: 'closing_date' })}>
+                  <input autoFocus type="date" className="form-input" style={{ fontSize: '11px', padding: '3px 6px' }} defaultValue={toDateStr(o.closing_date)}
+                    onBlur={e => patchOpportunity(o.id, 'closing_date', e.target.value || null)} onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }} />
+                </EditableCell>
+              </div>
+              <div>
+                <div style={{ color: '#94A3B8', marginBottom: '2px' }}>Amount</div>
+                <EditableCell display={o.deal_amount ? `€${o.deal_amount.toLocaleString('en-US')}` : '—'} editing={isEditing(o.id, 'deal_amount')} onStartEdit={() => setEditing({ id: o.id, field: 'deal_amount' })}>
+                  <input autoFocus type="number" className="form-input" style={{ fontSize: '11px', padding: '3px 6px' }} defaultValue={o.deal_amount ?? ''}
+                    onBlur={e => patchOpportunity(o.id, 'deal_amount', e.target.value ? parseFloat(e.target.value) : null)} onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }} />
+                </EditableCell>
+              </div>
+              <div>
+                <div style={{ color: '#94A3B8', marginBottom: '2px' }}>Project Start</div>
+                <EditableCell display={fmt(o.contract_start_date) || '—'} editing={isEditing(o.id, 'contract_start_date')} onStartEdit={() => setEditing({ id: o.id, field: 'contract_start_date' })}>
+                  <input autoFocus type="date" className="form-input" style={{ fontSize: '11px', padding: '3px 6px' }} defaultValue={toDateStr(o.contract_start_date)}
+                    onBlur={e => patchOpportunity(o.id, 'contract_start_date', e.target.value || null)} onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }} />
+                </EditableCell>
+              </div>
+              <div>
+                <div style={{ color: '#94A3B8', marginBottom: '2px' }}>Project End</div>
+                <EditableCell display={fmt(o.contract_end_date) || '—'} editing={isEditing(o.id, 'contract_end_date')} onStartEdit={() => setEditing({ id: o.id, field: 'contract_end_date' })}>
+                  <input autoFocus type="date" className="form-input" style={{ fontSize: '11px', padding: '3px 6px' }} defaultValue={toDateStr(o.contract_end_date)}
+                    onBlur={e => patchOpportunity(o.id, 'contract_end_date', e.target.value || null)} onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }} />
+                </EditableCell>
+              </div>
+            </div>
           </div>
         ))}
       </SidebarSection>

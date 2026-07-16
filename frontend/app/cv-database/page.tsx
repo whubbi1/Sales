@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation'
 import { Sidebar } from '@/components/Sidebar'
 import { getStoredUser } from '@/lib/auth'
 import { useReportBuilder, applyReport, ReportPanel, ReportColumn, SortArrow, Pagination } from '@/components/it/ReportBuilder'
+import { PageHeader } from '@/components/shared/RecordLayout'
 
 const API = 'https://api.whubbi.wcomply.com'
 
@@ -14,11 +15,6 @@ const COLUMNS: ReportColumn[] = [
   { key: 'cv_status', label: 'CV', filterable: 'select', options: ['Complete', 'Not started'] },
   { key: 'experience_count', label: 'Experiences' },
 ]
-
-const inp: React.CSSProperties = {
-  fontSize: '12px', padding: '7px 11px', border: '1px solid #E2E8F0',
-  borderRadius: '8px', fontFamily: 'Montserrat, sans-serif', outline: 'none', background: 'white',
-}
 
 function ShortCvModal({ user, onClose }: any) {
   const [cv, setCv] = useState<any>(null)
@@ -106,17 +102,12 @@ function CvDatabaseContent() {
 
   return (
     <div style={{ padding: '24px 28px' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '20px' }}>
-        <div>
-          <h1 style={{ fontSize: '20px', fontWeight: '800', color: '#156082', margin: '0 0 4px' }}>📇 CV Database</h1>
-          <p style={{ fontSize: '12px', color: '#94A3B8', margin: 0 }}>{reported.length} employee{reported.length !== 1 ? 's' : ''}</p>
-        </div>
-        <ReportPanel columns={COLUMNS} rb={rb} />
-      </div>
-
-      <div style={{ marginBottom: '14px' }}>
-        <input style={{ ...inp, width: '280px' }} placeholder="Search name, email, department…" value={search} onChange={e => setSearch(e.target.value)} />
-      </div>
+      <PageHeader
+        title="📇 CV Database"
+        count={reported.length}
+        search={{ value: search, onChange: setSearch }}
+        action={<ReportPanel columns={COLUMNS} rb={rb} />}
+      />
 
       <div style={{ background: 'white', borderRadius: '12px', border: '1px solid #EDF2F7', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>

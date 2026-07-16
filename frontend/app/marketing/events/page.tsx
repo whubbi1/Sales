@@ -24,9 +24,15 @@ function fmtDate(d: string) {
   return d ? new Date(d).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'
 }
 
+function fmtRange(start: string, end: string) {
+  if (end && start && end.slice(0, 10) !== start.slice(0, 10)) return `${fmtDate(start)} – ${fmtDate(end)}`
+  return fmtDate(start)
+}
+
 function NewEventModal({ onClose, onCreated }: { onClose: () => void; onCreated: (id: string) => void }) {
   const [title, setTitle] = useState('')
   const [eventDate, setEventDate] = useState('')
+  const [endDate, setEndDate] = useState('')
   const [eventType, setEventType] = useState('other')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -36,7 +42,7 @@ function NewEventModal({ onClose, onCreated }: { onClose: () => void; onCreated:
     setSaving(true); setError('')
     try {
       const me = getStoredUser()
-      const e = await marketingAPI.createEvent({ title: title.trim(), event_date: eventDate, event_type: eventType, created_by_email: me?.email || '' })
+      const e = await marketingAPI.createEvent({ title: title.trim(), event_date: eventDate, end_date: endDate, event_type: eventType, created_by_email: me?.email || '' })
       onCreated(e.id)
     } catch (e: any) { setError(e.message) }
     finally { setSaving(false) }
@@ -61,11 +67,17 @@ function NewEventModal({ onClose, onCreated }: { onClose: () => void; onCreated:
               {Object.entries(TYPE_LABEL).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
             </select>
           </div>
-          <div>
-            <label style={lbl}>Date</label>
-            <input type="date" style={{ ...inp, width: '100%', boxSizing: 'border-box' as const }} value={eventDate} onChange={e => setEventDate(e.target.value)} />
+          <div style={{ display: 'flex', gap: '12px' }}>
+            <div style={{ flex: 1 }}>
+              <label style={lbl}>Start Date</label>
+              <input type="date" style={{ ...inp, width: '100%', boxSizing: 'border-box' as const }} value={eventDate} onChange={e => setEventDate(e.target.value)} />
+            </div>
+            <div style={{ flex: 1 }}>
+              <label style={lbl}>End Date</label>
+              <input type="date" style={{ ...inp, width: '100%', boxSizing: 'border-box' as const }} value={endDate} onChange={e => setEndDate(e.target.value)} placeholder="Same as start" />
+            </div>
           </div>
-          <p style={{ fontSize: '11px', color: '#94A3B8', margin: 0 }}>Description, location, owner, contributors and URLs are set on the event's own page once created.</p>
+          <p style={{ fontSize: '11px', color: '#94A3B8', margin: 0 }}>Leave End Date blank for a single-day event. Description, location, owner, contributors and URLs are set on the event's own page once created.</p>
           {error && <div style={{ background: '#FEF2F2', color: '#DC2626', padding: '10px 14px', borderRadius: '8px', fontSize: '12px' }}>{error}</div>}
           <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
             <button onClick={onClose} style={{ padding: '9px 18px', background: '#F1F5F9', color: '#64748B', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '700', fontFamily: 'Montserrat, sans-serif' }}>Cancel</button>
@@ -145,7 +157,7 @@ function EventsContent() {
                 onMouseEnter={ev => (ev.currentTarget.style.background = '#FAFBFC')} onMouseLeave={ev => (ev.currentTarget.style.background = 'transparent')}>
                 <td style={{ padding: '10px 12px', fontWeight: '700', color: '#156082' }}>{e.title}</td>
                 <td style={{ padding: '10px 12px' }}><span style={{ background: TYPE_COLOR[e.event_type]?.bg, color: TYPE_COLOR[e.event_type]?.color, padding: '2px 9px', borderRadius: '10px', fontSize: '10px', fontWeight: '700' }}>{TYPE_LABEL[e.event_type] || e.event_type}</span></td>
-                <td style={{ padding: '10px 12px', color: '#64748B' }}>{fmtDate(e.event_date)}</td>
+                <td style={{ padding: '10px 12px', color: '#64748B' }}>{fmtRange(e.event_date, e.end_date)}</td>
                 <td style={{ padding: '10px 12px', color: '#64748B' }}>{e.location || '—'}</td>
                 <td style={{ padding: '10px 12px', color: '#3F3F3F' }}>{e.owner_name || e.owner_email || '—'}</td>
               </tr>

@@ -28,6 +28,7 @@ export default function TasksPage() {
   const [opportunities, setOpportunities] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [statusFilter, setStatusFilter] = useState('')
+  const [nameSearch, setNameSearch] = useState('')
   const [showModal, setShowModal] = useState(false)
   const [editing, setEditing] = useState<any>(null)
   const actingEmail = getStoredUser()?.email || ''
@@ -70,6 +71,8 @@ export default function TasksPage() {
 
   const overdue = (task: any) => !DONE_STATUSES.includes(task.status) && task.due_date && new Date(task.due_date) < new Date()
 
+  const searched = tasks.filter(t => !nameSearch.trim() || t.title.toLowerCase().includes(nameSearch.trim().toLowerCase()))
+
   return (
     <div style={{ display: 'flex' }}>
       <Sidebar />
@@ -77,7 +80,8 @@ export default function TasksPage() {
         <div style={{ padding: '24px 28px' }}>
           <PageHeader
             title="Tasks"
-            count={tasks.length}
+            count={searched.length}
+            search={{ value: nameSearch, onChange: setNameSearch }}
             action={
               <button className="btn-primary" onClick={() => { setEditing(null); setShowModal(true) }}>
                 <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
@@ -105,9 +109,9 @@ export default function TasksPage() {
               <tbody>
                 {loading ? (
                   <tr><td colSpan={8} style={{ textAlign: 'center', padding: '48px', color: '#9B9B9B', fontSize: '13px' }}>Loading...</td></tr>
-                ) : tasks.length === 0 ? (
+                ) : searched.length === 0 ? (
                   <tr><td colSpan={8}><EmptyState icon="✅" title="No tasks yet" description="Create your first task by clicking New Task" /></td></tr>
-                ) : tasks.map(task => {
+                ) : searched.map(task => {
                   const info = entityInfo(task)
                   return (
                     <tr key={task.id} style={{ borderBottom: '1px solid #F1F5F9' }}>

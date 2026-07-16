@@ -43,13 +43,17 @@ async def create_event(data: dict, db: AsyncSession = Depends(get_db)):
     if event_type not in EVENT_TYPES:
         raise HTTPException(status_code=400, detail=f"event_type must be one of {sorted(EVENT_TYPES)}")
     event_id = str(uuid.uuid4())
+    # A multi-day event's end_date defaults to its start date when not given, so single-day
+    # events (the common case) keep working with no frontend changes required.
+    event_date = data.get("event_date") or ""
+    end_date = data.get("end_date") or event_date
     await db.execute(text("""
-        INSERT INTO marketing_events (id, title, event_date, description, event_type, location,
+        INSERT INTO marketing_events (id, title, event_date, end_date, description, event_type, location,
                                        owner_email, owner_name, created_by_email, created_at, updated_at)
-        VALUES (CAST(:id AS UUID), :title, CAST(NULLIF(:event_date,'') AS DATE), :description, :event_type, :location,
+        VALUES (CAST(:id AS UUID), :title, CAST(NULLIF(:event_date,'') AS DATE), CAST(NULLIF(:end_date,'') AS DATE), :description, :event_type, :location,
                 :owner_email, :owner_name, :created_by_email, NOW(), NOW())
     """), {
-        "id": event_id, "title": data["title"], "event_date": data.get("event_date") or "",
+        "id": event_id, "title": data["title"], "event_date": event_date, "end_date": end_date,
         "description": data.get("description", ""), "event_type": event_type, "location": data.get("location", ""),
         "owner_email": data.get("owner_email", ""), "owner_name": data.get("owner_name", ""),
         "created_by_email": data.get("created_by_email", ""),
@@ -87,6 +91,7 @@ async def update_event(event_id: str, data: dict, db: AsyncSession = Depends(get
         UPDATE marketing_events SET
             title = COALESCE(NULLIF(:title,''), title),
             event_date = COALESCE(CAST(NULLIF(:event_date,'') AS DATE), event_date),
+            end_date = COALESCE(CAST(NULLIF(:end_date,'') AS DATE), end_date),
             description = COALESCE(:description, description),
             event_type = COALESCE(NULLIF(:event_type,''), event_type),
             location = COALESCE(:location, location),
@@ -96,6 +101,7 @@ async def update_event(event_id: str, data: dict, db: AsyncSession = Depends(get
         WHERE id = CAST(:id AS UUID)
     """), {
         "id": event_id, "title": data.get("title", ""), "event_date": data.get("event_date", ""),
+        "end_date": data.get("end_date", ""),
         "description": data.get("description"), "event_type": event_type, "location": data.get("location"),
         "owner_email": data.get("owner_email"), "owner_name": data.get("owner_name"),
     })

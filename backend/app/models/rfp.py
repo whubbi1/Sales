@@ -85,6 +85,7 @@ class RFPDocumentChecklist(Base):
     rfp_id       = Column(UUID(as_uuid=True), ForeignKey("rfps.id", ondelete="CASCADE"), nullable=False)
     name         = Column(String(500), nullable=False)
     template_url = Column(Text)
+    answer_url   = Column(Text)
     status       = Column(SAEnum('pending', 'done', name='rfp_document_status_enum'), default='pending')
     position     = Column(Integer, default=0)
 

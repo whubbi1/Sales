@@ -5,6 +5,7 @@ import { partnersAPI, contactsAPI, opportunitiesAPI } from '@/lib/api'
 import { getStoredUser } from '@/lib/auth'
 import { RecordLayout, PropertyRow, SidebarSection, SidebarCard, StatusBadge, TabNav, EmptyState } from '@/components/shared/RecordLayout'
 import { PartnerActionItems } from '@/components/partners/PartnerActionItems'
+import { PartnerModal } from '@/components/partners/PartnerModal'
 
 const ERP_OPTIONS     = ["SAP", "Dynamics", "IFS", "Infor", "Odoo", "Oracle", "JDE", "SAGE", "Unknown", "Other"]
 const CYBER_OPTIONS   = ["SAP ETD", "SAP GRC", "SAP Focused Run", "Cloud ALM", "SecurityBridge", "Onapsis", "Layer Seven Security", "Other"]
@@ -71,6 +72,7 @@ export default function PartnerDetailPage() {
   const [tab, setTab] = useState('Overview')
   const [editing, setEditing] = useState<string | null>(null)
   const [chipEditing, setChipEditing] = useState<string | null>(null)
+  const [showEdit, setShowEdit] = useState(false)
 
   const load = async () => {
     try {
@@ -236,6 +238,9 @@ export default function PartnerDetailPage() {
                 </span>
               </div>
             </div>
+          </div>
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <button onClick={() => setShowEdit(true)} style={{ background: 'white', color: '#144766', padding: '7px 14px', borderRadius: '7px', fontSize: '12px', fontWeight: '600', border: '1.5px solid #CBD5E0', cursor: 'pointer' }}>Edit</button>
           </div>
         </div>
         <div style={{ marginTop: '16px', paddingTop: '14px', borderTop: '1px solid #F1F5F9', display: 'flex', flexWrap: 'wrap', gap: '16px' }}>
@@ -428,5 +433,10 @@ export default function PartnerDetailPage() {
     </div>
   )
 
-  return <RecordLayout leftColumn={leftColumn} rightColumn={rightColumn} />
+  return (
+    <>
+      <RecordLayout leftColumn={leftColumn} rightColumn={rightColumn} />
+      {showEdit && <PartnerModal partner={partner} onClose={() => setShowEdit(false)} onSave={() => { setShowEdit(false); load() }} />}
+    </>
+  )
 }

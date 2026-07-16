@@ -6,7 +6,7 @@ import { Sidebar } from '@/components/Sidebar'
 import { opportunitiesAPI } from '@/lib/api'
 import { PageHeader } from '@/components/shared/RecordLayout'
 
-function ByEmployee({ allStaffing, users, router }: any) {
+function ByEmployee({ allStaffing, users, router, nameSearch }: any) {
   const [expanded, setExpanded] = useState<string | null>(null)
 
   const byEmail: Record<string, any[]> = {}
@@ -16,6 +16,7 @@ function ByEmployee({ allStaffing, users, router }: any) {
 
   const rows = users.map((u: any) => ({ user: u, entries: byEmail[u.email] || [] }))
     .filter((r: any) => r.entries.length > 0)
+    .filter((r: any) => !nameSearch.trim() || (r.user.display_name || `${r.user.first_name} ${r.user.last_name}`).toLowerCase().includes(nameSearch.trim().toLowerCase()))
     .sort((a: any, b: any) => b.entries.length - a.entries.length)
 
   return (
@@ -65,8 +66,9 @@ function ByEmployee({ allStaffing, users, router }: any) {
   )
 }
 
-function ByOpportunity({ opportunities, users, router }: any) {
+function ByOpportunity({ opportunities, users, router, nameSearch }: any) {
   const [selected, setSelected] = useState('')
+  const filteredOpportunities = opportunities.filter((o: any) => !nameSearch.trim() || o.deal_name.toLowerCase().includes(nameSearch.trim().toLowerCase()))
   const [staffing, setStaffing] = useState<any[]>([])
   const [loading, setLoading] = useState(false)
   const [addEmail, setAddEmail] = useState('')
@@ -98,7 +100,7 @@ function ByOpportunity({ opportunities, users, router }: any) {
       <div style={{ marginBottom: '14px' }}>
         <select className="form-input" style={{ width: '360px' }} value={selected} onChange={e => setSelected(e.target.value)}>
           <option value="">Select an opportunity…</option>
-          {opportunities.map((o: any) => <option key={o.id} value={o.id}>{o.deal_name}{o.company ? ` · ${o.company.name}` : ''}</option>)}
+          {filteredOpportunities.map((o: any) => <option key={o.id} value={o.id}>{o.deal_name}{o.company ? ` · ${o.company.name}` : ''}</option>)}
         </select>
       </div>
       {!selected ? (
@@ -152,6 +154,7 @@ export default function StaffingPage() {
   const [users, setUsers] = useState<any[]>([])
   const [opportunities, setOpportunities] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
+  const [nameSearch, setNameSearch] = useState('')
 
   const load = async () => {
     setLoading(true)
@@ -174,7 +177,7 @@ export default function StaffingPage() {
       <Sidebar />
       <main style={{ marginLeft: '220px', minHeight: '100vh', width: 'calc(100vw - 220px)', background: '#F5F7FA' }}>
         <div style={{ padding: '24px 28px' }}>
-          <PageHeader title="Staffing" count={allStaffing.length} />
+          <PageHeader title="Staffing" count={allStaffing.length} search={{ value: nameSearch, onChange: setNameSearch }} />
 
           <div style={{ display: 'flex', gap: '3px', marginBottom: '16px', background: 'white', padding: '4px', borderRadius: '10px', border: '1px solid #EDF2F7', width: 'fit-content' }}>
             {[{ id: 'employee', label: 'By Employee' }, { id: 'opportunity', label: 'By Opportunity' }].map(t => (
@@ -188,9 +191,9 @@ export default function StaffingPage() {
             {loading ? (
               <div style={{ textAlign: 'center', padding: '48px', color: '#9B9B9B', fontSize: '13px' }}>Loading...</div>
             ) : tab === 'employee' ? (
-              <ByEmployee allStaffing={allStaffing} users={users} router={router} />
+              <ByEmployee allStaffing={allStaffing} users={users} router={router} nameSearch={nameSearch} />
             ) : (
-              <ByOpportunity opportunities={opportunities} users={users} router={router} />
+              <ByOpportunity opportunities={opportunities} users={users} router={router} nameSearch={nameSearch} />
             )}
           </div>
         </div>

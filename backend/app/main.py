@@ -1377,6 +1377,14 @@ async def startup():
                     article_id UUID REFERENCES company_articles(id) ON DELETE CASCADE,
                     contact_id UUID REFERENCES contacts(id) ON DELETE CASCADE
                 )""",
+
+                # RFP Answer tab — link to our current answer document per checklist item,
+                # separate from template_url (the blank template we're filling in).
+                "ALTER TABLE rfp_document_checklist ADD COLUMN IF NOT EXISTS answer_url TEXT",
+
+                # Multi-day events — nullable so single-day events (event_date only) keep working.
+                "ALTER TABLE marketing_events ADD COLUMN IF NOT EXISTS end_date DATE",
+                "UPDATE marketing_events SET end_date = event_date WHERE end_date IS NULL",
             ]
             for sql in sqls:
                 try:

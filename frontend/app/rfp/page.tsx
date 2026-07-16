@@ -23,6 +23,7 @@ export default function RFPPage() {
   const [rfps, setRfps] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [userEmail, setUserEmail] = useState('')
+  const [nameSearch, setNameSearch] = useState('')
 
   const rb = useReportBuilder('rfp', COLUMNS, userEmail)
 
@@ -46,9 +47,14 @@ export default function RFPPage() {
     customer_name: r.company?.name || r.partner?.name || '',
     opportunities_count: r.opportunities?.length || 0,
   }))
-  const reported = applyReport(withDisplay, COLUMNS, rb.filters, rb.sortField, rb.sortDir)
+  const searched = withDisplay.filter(r => !nameSearch.trim() || r.name.toLowerCase().includes(nameSearch.trim().toLowerCase()))
+  const reported = applyReport(searched, COLUMNS, rb.filters, rb.sortField, rb.sortDir)
   const pageRows = reported.slice((rb.page - 1) * 20, rb.page * 20)
   const isVisible = (key: string) => rb.visibleCols.includes(key)
+
+  // RFPs have no amount of their own — sum each linked opportunity's deal_amount.
+  const rfpAmount = (r: any) => (r.opportunities || []).reduce((s: number, o: any) => s + (o.deal_amount || 0), 0)
+  const totalAmount = withDisplay.reduce((s, r) => s + rfpAmount(r), 0)
 
   return (
     <div style={{ display: 'flex' }}>
@@ -58,8 +64,24 @@ export default function RFPPage() {
           <PageHeader
             title="RFP"
             count={reported.length}
+            search={{ value: nameSearch, onChange: setNameSearch }}
             action={<ReportPanel columns={COLUMNS} rb={rb} />}
           />
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '12px', marginBottom: '16px' }}>
+            {[
+              { label: 'Total Amount', value: `€${totalAmount.toLocaleString('en-US', { minimumFractionDigits: 0 })}`, color: '#144766' },
+              { label: 'Open', value: withDisplay.filter(r => r.status === 'Open').length, color: '#219BD6' },
+              { label: 'Submitted', value: withDisplay.filter(r => r.status === 'Submitted').length, color: '#D97706' },
+              { label: 'Won', value: withDisplay.filter(r => r.status === 'Won').length, color: '#059669' },
+              { label: 'Lost', value: withDisplay.filter(r => r.status === 'Lost').length, color: '#DC2626' },
+            ].map(stat => (
+              <div key={stat.label} style={{ background: 'white', borderRadius: '10px', border: '1px solid #EDF2F7', padding: '14px 16px', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
+                <div style={{ fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#9B9B9B', marginBottom: '4px' }}>{stat.label}</div>
+                <div style={{ fontSize: '20px', fontWeight: '800', color: stat.color }}>{stat.value}</div>
+              </div>
+            ))}
+          </div>
 
           <div style={{ background: 'white', borderRadius: '10px', border: '1px solid #EDF2F7', boxShadow: '0 1px 3px rgba(0,0,0,0.06)', overflow: 'hidden' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>

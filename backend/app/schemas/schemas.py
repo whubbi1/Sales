@@ -201,6 +201,8 @@ class OpportunitySummary(BaseModel):
     deal_status: Optional[str] = None
     deal_amount: Optional[float] = None
     closing_date: Optional[datetime] = None
+    contract_start_date: Optional[datetime] = None
+    contract_end_date: Optional[datetime] = None
     class Config:
         from_attributes = True
 
@@ -390,11 +392,13 @@ class RFPActionItemResponse(BaseModel):
 class RFPDocumentChecklistCreate(BaseModel):
     name: str
     template_url: Optional[str] = None
+    answer_url: Optional[str] = None
     position: Optional[int] = 0
 
 class RFPDocumentChecklistUpdate(BaseModel):
     name: Optional[str] = None
     template_url: Optional[str] = None
+    answer_url: Optional[str] = None
     status: Optional[str] = None
     position: Optional[int] = None
 
@@ -403,6 +407,7 @@ class RFPDocumentChecklistResponse(BaseModel):
     rfp_id: UUID
     name: str
     template_url: Optional[str] = None
+    answer_url: Optional[str] = None
     status: str
     position: int
     created_at: datetime

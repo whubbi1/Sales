@@ -70,39 +70,53 @@ function EventDetailContent() {
   )
   if (!event) return <div style={{ padding: '48px', textAlign: 'center', color: '#94A3B8' }}>Event not found.</div>
 
+  // These all merge into local state instead of calling load() — a full refetch of the event
+  // + every sub-list after each single-field edit caused a visible reload/flicker on every blur.
   const updateField = async (fields: any) => {
     setError('')
     try {
-      await marketingAPI.updateEvent(event.id, fields)
+      const updated = await marketingAPI.updateEvent(event.id, fields)
       setEditingField(null)
-      load()
+      setEvent((prev: any) => ({ ...prev, ...updated }))
     } catch (e: any) { setError(e.message) }
   }
 
   const addContributor = async () => {
     if (!contributorEmail) return
     const u = users.find((u: any) => u.email === contributorEmail)
-    await marketingAPI.addContributor(event.id, { user_email: contributorEmail, user_name: u?.display_name || `${u?.first_name} ${u?.last_name}` })
+    const user_name = u?.display_name || `${u?.first_name || ''} ${u?.last_name || ''}`.trim()
+    const { id } = await marketingAPI.addContributor(event.id, { user_email: contributorEmail, user_name })
     setContributorEmail('')
-    load()
+    setEvent((prev: any) => ({ ...prev, contributors: [...(prev.contributors || []), { id, user_email: contributorEmail, user_name }] }))
   }
-  const removeContributor = async (cid: string) => { await marketingAPI.removeContributor(event.id, cid); load() }
+  const removeContributor = async (cid: string) => {
+    await marketingAPI.removeContributor(event.id, cid)
+    setEvent((prev: any) => ({ ...prev, contributors: (prev.contributors || []).filter((c: any) => c.id !== cid) }))
+  }
 
   const addLink = async () => {
     if (!linkLabel.trim() || !linkUrl.trim()) return
-    await marketingAPI.addUrl(event.id, { label: linkLabel.trim(), url: linkUrl.trim() })
+    const label = linkLabel.trim(), url = linkUrl.trim()
+    const { id } = await marketingAPI.addUrl(event.id, { label, url })
     setLinkLabel(''); setLinkUrl(''); setShowAddLink(false)
-    load()
+    setEvent((prev: any) => ({ ...prev, urls: [...(prev.urls || []), { id, label, url }] }))
   }
-  const removeLink = async (uid: string) => { await marketingAPI.removeUrl(event.id, uid); load() }
+  const removeLink = async (uid: string) => {
+    await marketingAPI.removeUrl(event.id, uid)
+    setEvent((prev: any) => ({ ...prev, urls: (prev.urls || []).filter((u: any) => u.id !== uid) }))
+  }
 
   const linkPartner = async () => {
     if (!addPartnerId) return
+    const partner = partners.find((p: any) => p.id === addPartnerId)
     await marketingAPI.linkPartner(event.id, addPartnerId)
     setAddPartnerId('')
-    load()
+    if (partner) setEvent((prev: any) => ({ ...prev, partners: [...(prev.partners || []), { id: partner.id, name: partner.name, status: partner.status }] }))
   }
-  const unlinkPartner = async (partnerId: string) => { await marketingAPI.unlinkPartner(event.id, partnerId); load() }
+  const unlinkPartner = async (partnerId: string) => {
+    await marketingAPI.unlinkPartner(event.id, partnerId)
+    setEvent((prev: any) => ({ ...prev, partners: (prev.partners || []).filter((p: any) => p.id !== partnerId) }))
+  }
 
   const linkedPartnerIds = new Set((event.partners || []).map((p: any) => p.id))
   const availablePartners = partners.filter((p: any) => !linkedPartnerIds.has(p.id))
@@ -135,11 +149,17 @@ function EventDetailContent() {
           </div>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '14px', marginTop: '16px', paddingTop: '16px', borderTop: '1px solid #F1F5F9' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: '14px', marginTop: '16px', paddingTop: '16px', borderTop: '1px solid #F1F5F9' }}>
           <div>
-            <div style={lbl}>Date</div>
+            <div style={lbl}>Start Date</div>
             <EditableCell display={fmtDate(event.event_date)} editing={editingField === 'event_date'} canEdit={canEdit} onStartEdit={() => setEditingField('event_date')}>
               <input autoFocus type="date" style={inp} defaultValue={event.event_date ? event.event_date.slice(0, 10) : ''} onBlur={e => updateField({ event_date: e.target.value })} />
+            </EditableCell>
+          </div>
+          <div>
+            <div style={lbl}>End Date</div>
+            <EditableCell display={fmtDate(event.end_date)} editing={editingField === 'end_date'} canEdit={canEdit} onStartEdit={() => setEditingField('end_date')}>
+              <input autoFocus type="date" style={inp} defaultValue={event.end_date ? event.end_date.slice(0, 10) : ''} onBlur={e => updateField({ end_date: e.target.value })} />
             </EditableCell>
           </div>
           <div>
