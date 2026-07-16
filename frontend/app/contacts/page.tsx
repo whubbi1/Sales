@@ -6,7 +6,7 @@ import { Sidebar } from '@/components/Sidebar'
 import { contactsAPI } from '@/lib/api'
 import { PageHeader, EmptyState } from '@/components/shared/RecordLayout'
 import { ContactModal } from '@/components/contacts/ContactModal'
-import { useReportBuilder, applyReport, ReportPanel, ReportColumn, REPORT_CELL_STYLE } from '@/components/it/ReportBuilder'
+import { useReportBuilder, applyReport, ReportPanel, ReportColumn, REPORT_CELL_STYLE, SortArrow, Pagination } from '@/components/it/ReportBuilder'
 import { getStoredUser } from '@/lib/auth'
 
 const ANTHROPIC_API = 'https://api.anthropic.com/v1/messages'
@@ -94,6 +94,7 @@ export default function ContactsPage() {
     company_name: c.company?.name || '',
   }))
   const reported = applyReport(withDisplay, COLUMNS, rb.filters, rb.sortField, rb.sortDir)
+  const pageRows = reported.slice((rb.page - 1) * 20, rb.page * 20)
   const isVisible = (key: string) => rb.visibleCols.includes(key)
 
   return (
@@ -121,7 +122,7 @@ export default function ContactsPage() {
               <thead style={{ background: '#FAFBFC' }}>
                 <tr>
                   {COLUMNS.filter(c => isVisible(c.key)).map(c => (
-                    <th key={c.key} style={{ textAlign: 'left', padding: '10px 16px', fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#9B9B9B', borderBottom: '1px solid #E2E8F0', whiteSpace: 'nowrap' }}>{c.label}</th>
+                    <th key={c.key} onClick={() => rb.toggleSort(c.key)} style={{ textAlign: 'left', padding: '10px 16px', fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#9B9B9B', borderBottom: '1px solid #E2E8F0', whiteSpace: 'nowrap', cursor: 'pointer', userSelect: 'none' }}>{c.label}<SortArrow active={rb.sortField === c.key} dir={rb.sortDir} /></th>
                   ))}
                   <th style={{ borderBottom: '1px solid #E2E8F0' }} />
                 </tr>
@@ -131,7 +132,7 @@ export default function ContactsPage() {
                   <tr><td colSpan={COLUMNS.length + 1} style={{ textAlign: 'center', padding: '48px', color: '#9B9B9B', fontSize: '13px' }}>Loading...</td></tr>
                 ) : reported.length === 0 ? (
                   <tr><td colSpan={COLUMNS.length + 1}><EmptyState icon="👤" title="No contacts yet" description="Create your first contact by clicking New Contact" /></td></tr>
-                ) : reported.map(contact => (
+                ) : pageRows.map(contact => (
                   <tr key={contact.id} onClick={() => router.push(`/contacts/${contact.id}`)} style={{ cursor: 'pointer', position: 'relative' }}
                     onMouseEnter={e => (e.currentTarget.style.background = '#FAFBFC')}
                     onMouseLeave={e => (e.currentTarget.style.background = 'white')}>
@@ -183,6 +184,7 @@ export default function ContactsPage() {
                 ))}
               </tbody>
             </table>
+            <Pagination page={rb.page} setPage={rb.setPage} total={reported.length} />
           </div>
         </div>
 

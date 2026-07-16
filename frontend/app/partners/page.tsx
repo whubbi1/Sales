@@ -6,7 +6,7 @@ import { Sidebar } from '@/components/Sidebar'
 import { partnersAPI } from '@/lib/api'
 import { PageHeader, EmptyState } from '@/components/shared/RecordLayout'
 import { PartnerModal } from '@/components/partners/PartnerModal'
-import { useReportBuilder, applyReport, ReportPanel, ReportColumn, REPORT_CELL_STYLE } from '@/components/it/ReportBuilder'
+import { useReportBuilder, applyReport, ReportPanel, ReportColumn, REPORT_CELL_STYLE, SortArrow, Pagination } from '@/components/it/ReportBuilder'
 import { getStoredUser } from '@/lib/auth'
 
 const COLUMNS: ReportColumn[] = [
@@ -48,6 +48,7 @@ export default function PartnersPage() {
     main_contact_display: p.main_contact_first_name ? `${p.main_contact_first_name} ${p.main_contact_last_name}` : '',
   }))
   const reported = applyReport(withDisplay, COLUMNS, rb.filters, rb.sortField, rb.sortDir)
+  const pageRows = reported.slice((rb.page - 1) * 20, rb.page * 20)
   const isVisible = (key: string) => rb.visibleCols.includes(key)
 
   return (
@@ -74,7 +75,7 @@ export default function PartnersPage() {
               <thead style={{ background: '#FAFBFC' }}>
                 <tr>
                   {COLUMNS.filter(c => isVisible(c.key)).map(c => (
-                    <th key={c.key} style={{ textAlign: 'left', padding: '10px 16px', fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#9B9B9B', borderBottom: '1px solid #E2E8F0', whiteSpace: 'nowrap' }}>{c.label}</th>
+                    <th key={c.key} onClick={() => rb.toggleSort(c.key)} style={{ textAlign: 'left', padding: '10px 16px', fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#9B9B9B', borderBottom: '1px solid #E2E8F0', whiteSpace: 'nowrap', cursor: 'pointer', userSelect: 'none' }}>{c.label}<SortArrow active={rb.sortField === c.key} dir={rb.sortDir} /></th>
                   ))}
                 </tr>
               </thead>
@@ -83,7 +84,7 @@ export default function PartnersPage() {
                   <tr><td colSpan={COLUMNS.length} style={{ textAlign: 'center', padding: '48px', color: '#9B9B9B', fontSize: '13px' }}>Loading...</td></tr>
                 ) : reported.length === 0 ? (
                   <tr><td colSpan={COLUMNS.length}><EmptyState icon="🤝" title="No partners yet" description="Create your first partner by clicking New Partner" /></td></tr>
-                ) : reported.map(partner => (
+                ) : pageRows.map(partner => (
                   <tr key={partner.id} onClick={() => router.push(`/partners/${partner.id}`)} style={{ cursor: 'pointer', transition: 'background 0.1s' }}
                     onMouseEnter={e => (e.currentTarget.style.background = '#FAFBFC')}
                     onMouseLeave={e => (e.currentTarget.style.background = 'white')}>
@@ -119,6 +120,7 @@ export default function PartnersPage() {
                 ))}
               </tbody>
             </table>
+            <Pagination page={rb.page} setPage={rb.setPage} total={reported.length} />
           </div>
         </div>
 

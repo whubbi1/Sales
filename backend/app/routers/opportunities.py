@@ -10,6 +10,7 @@ from app.database import get_db
 from app.models.opportunity import Opportunity
 from app.models.contact import Contact
 from app.models.company import Company
+from app.models.rfp import RFP, rfp_opportunity
 from app.models.opportunity_extra import OpportunityStaffing, OpportunityChecklistItem, OpportunityComment
 from app.schemas.schemas import (
     OpportunityCreate, OpportunityUpdate, OpportunityResponse, OpportunitySummary,
@@ -63,6 +64,30 @@ async def _lookup_names(db: AsyncSession, company_id, partner_id):
     return company_name, partner_name
 
 
+async def _maybe_create_rfp(db: AsyncSession, opp: Opportunity):
+    # Fires once per opportunity — the moment its status is (or becomes) "RFP Ongoing" and it
+    # isn't already linked to an RFP. Returns the new RFP's id so the caller can tell the
+    # frontend to redirect there; returns None the rest of the time (status unchanged, already
+    # linked, etc.) so nothing else about create/update behavior changes.
+    if opp.deal_status != 'RFP Ongoing':
+        return None
+    r = await db.execute(select(rfp_opportunity.c.rfp_id).where(rfp_opportunity.c.opportunity_id == opp.id))
+    if r.first():
+        return None
+    company_name, partner_name = await _lookup_names(db, opp.company_id, opp.partner_id)
+    rfp = RFP(
+        name=f"RFP - {company_name or partner_name or 'Unknown'} - {opp.project_name or opp.deal_name}",
+        company_id=opp.company_id,
+        partner_id=opp.partner_id,
+        owner_email=opp.assigned_to_email,
+        owner=opp.assigned_to,
+    )
+    rfp.opportunities.append(opp)
+    db.add(rfp)
+    await db.commit()
+    return rfp.id
+
+
 @router.get("/", response_model=List[OpportunityResponse])
 async def list_opportunities(
     skip: int = 0, limit: int = 100,
@@ -108,10 +133,12 @@ async def create_opportunity(opp: OpportunityCreate, db: AsyncSession = Depends(
 
     db.add(db_opp)
     await db.commit()
+    new_rfp_id = await _maybe_create_rfp(db, db_opp)
     r = await db.execute(select(Opportunity).options(selectinload(Opportunity.company), selectinload(Opportunity.contacts)).where(Opportunity.id == db_opp.id))
     row = r.scalar_one()
     await _attach_partners(db, [row])
     await _attach_contracting_party(db, [row])
+    row.rfp_id = new_rfp_id
     return row
 
 @router.get("/{opportunity_id}", response_model=OpportunityResponse)
@@ -148,10 +175,12 @@ async def update_opportunity(opportunity_id: UUID, data: OpportunityUpdate, db: 
         opp.contacts = r.scalars().all()
 
     await db.commit()
+    new_rfp_id = await _maybe_create_rfp(db, opp)
     r = await db.execute(select(Opportunity).options(selectinload(Opportunity.company), selectinload(Opportunity.contacts)).where(Opportunity.id == opportunity_id))
     row = r.scalar_one()
     await _attach_partners(db, [row])
     await _attach_contracting_party(db, [row])
+    row.rfp_id = new_rfp_id
     return row
 
 @router.delete("/{opportunity_id}", status_code=status.HTTP_204_NO_CONTENT)

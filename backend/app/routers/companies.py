@@ -5,8 +5,11 @@ from sqlalchemy import select, or_
 from sqlalchemy.orm import selectinload
 from typing import List
 from uuid import UUID
+import os, httpx
 
 from sqlalchemy import text as sql_text
+
+ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 
 from app.database import get_db
 from app.models.company import Company, CompanyNote, CompanyArticle, CompanyTask
@@ -102,6 +105,37 @@ async def get_dashboard_stats(db: AsyncSession = Depends(get_db)):
         "won_count": row.won_count,
         "won_amount": float(row.won_amount),
     }
+
+# Must also come before /{company_id} for the same reason as dashboard-stats above.
+# Server-side proxy for the company Research tab's AI web search — the frontend previously
+# called api.anthropic.com directly with no x-api-key header (would 401 every time); this
+# does the actual call, same httpx/header shape as hr.py's existing Claude calls.
+@router.post("/research")
+async def research(data: dict):
+    prompt = data.get("prompt", "")
+    if not prompt:
+        raise HTTPException(status_code=400, detail="prompt is required")
+    if not ANTHROPIC_API_KEY:
+        raise HTTPException(status_code=500, detail="ANTHROPIC_API_KEY not configured")
+    async with httpx.AsyncClient(timeout=30) as client:
+        r = await client.post(
+            "https://api.anthropic.com/v1/messages",
+            headers={
+                "x-api-key": ANTHROPIC_API_KEY,
+                "anthropic-version": "2023-06-01",
+                "content-type": "application/json",
+            },
+            json={
+                "model": "claude-sonnet-4-6", "max_tokens": 1500,
+                "tools": [{"type": "web_search_20250305", "name": "web_search"}],
+                "messages": [{"role": "user", "content": prompt}],
+            },
+        )
+        if r.status_code != 200:
+            raise HTTPException(status_code=502, detail=f"Claude API error {r.status_code}: {r.text[:200]}")
+        d = r.json()
+        result = "\n".join(b["text"] for b in d.get("content", []) if b.get("type") == "text") or "No results found."
+        return {"result": result}
 
 @router.get("/{company_id}", response_model=CompanyResponse)
 async def get_company(company_id: UUID, db: AsyncSession = Depends(get_db)):

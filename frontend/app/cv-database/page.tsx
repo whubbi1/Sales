@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { Sidebar } from '@/components/Sidebar'
 import { getStoredUser } from '@/lib/auth'
-import { useReportBuilder, applyReport, ReportPanel, ReportColumn } from '@/components/it/ReportBuilder'
+import { useReportBuilder, applyReport, ReportPanel, ReportColumn, SortArrow, Pagination } from '@/components/it/ReportBuilder'
 
 const API = 'https://api.whubbi.wcomply.com'
 
@@ -101,6 +101,7 @@ function CvDatabaseContent() {
     cv_status: u.has_cv ? 'Complete' : 'Not started',
   }))
   const reported = applyReport(withDisplay, COLUMNS, rb.filters, rb.sortField, rb.sortDir)
+  const pageRows = reported.slice((rb.page - 1) * 20, rb.page * 20)
   const isVisible = (key: string) => rb.visibleCols.includes(key)
 
   return (
@@ -122,7 +123,7 @@ function CvDatabaseContent() {
           <thead style={{ background: '#FAFBFC' }}>
             <tr>
               {COLUMNS.filter(c => isVisible(c.key)).map(c => (
-                <th key={c.key} style={{ padding: '10px 16px', textAlign: 'left', fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#45B6E4', borderBottom: '1px solid #EDF2F7' }}>{c.label}</th>
+                <th key={c.key} onClick={() => rb.toggleSort(c.key)} style={{ padding: '10px 16px', textAlign: 'left', fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#45B6E4', borderBottom: '1px solid #EDF2F7', cursor: 'pointer', userSelect: 'none' }}>{c.label}<SortArrow active={rb.sortField === c.key} dir={rb.sortDir} /></th>
               ))}
               <th style={{ padding: '10px 16px', borderBottom: '1px solid #EDF2F7' }}>Actions</th>
             </tr>
@@ -132,7 +133,7 @@ function CvDatabaseContent() {
               <tr><td colSpan={COLUMNS.length + 1} style={{ textAlign: 'center', padding: '32px', color: '#45B6E4' }}>Loading…</td></tr>
             ) : reported.length === 0 ? (
               <tr><td colSpan={COLUMNS.length + 1} style={{ textAlign: 'center', padding: '32px', color: '#94A3B8' }}>No employees found.</td></tr>
-            ) : reported.map(u => (
+            ) : pageRows.map(u => (
               <tr key={u.email} style={{ borderBottom: '1px solid #F1F5F9' }}>
                 {isVisible('employee_name') && <td style={{ padding: '10px 16px', fontWeight: '700', color: '#156082' }}>{u.employee_name}</td>}
                 {isVisible('cv_title') && <td style={{ padding: '10px 16px', color: '#3F3F3F' }}>{u.cv_title || '—'}</td>}
@@ -156,6 +157,7 @@ function CvDatabaseContent() {
             ))}
           </tbody>
         </table>
+        <Pagination page={rb.page} setPage={rb.setPage} total={reported.length} />
       </div>
 
       {shortCvUser && <ShortCvModal user={shortCvUser} onClose={() => setShortCvUser(null)} />}

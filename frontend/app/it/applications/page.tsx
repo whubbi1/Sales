@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import ITLayout, { useITPerm } from '@/components/ITLayout'
-import { useReportBuilder, applyReport, ReportPanel, ReportColumn, ColumnResizeHandle } from '@/components/it/ReportBuilder'
+import { useReportBuilder, applyReport, ReportPanel, ReportColumn, ColumnResizeHandle, SortArrow, Pagination } from '@/components/it/ReportBuilder'
 import { getStoredUser } from '@/lib/auth'
 
 const API = 'https://api.whubbi.wcomply.com'
@@ -237,6 +237,7 @@ function ApplicationsContent() {
   const withDisplay = applications.map(a => ({ ...a, locations_display: a.all_locations ? 'All' : (a.location_names || []).join(', ') }))
   const searched = withDisplay.filter(a => !search || `${a.name} ${a.editor}`.toLowerCase().includes(search.toLowerCase()))
   const reported = applyReport(searched, COLUMNS, rb.filters, rb.sortField, rb.sortDir)
+  const pageRows = reported.slice((rb.page - 1) * 20, rb.page * 20)
   const isVisible = (key: string) => rb.visibleCols.includes(key)
 
   const createItem = async (form: any) => {
@@ -292,8 +293,8 @@ function ApplicationsContent() {
           <thead style={{ background: '#FAFBFC' }}>
             <tr>
               {COLUMNS.filter(c => isVisible(c.key)).map(c => (
-                <th key={c.key} style={{ position: 'relative', padding: '10px 12px', textAlign: 'left', fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#45B6E4', borderBottom: '1px solid #EDF2F7', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', width: `${rb.columnWidths[c.key] || DEFAULT_COLUMN_WIDTHS[c.key] || 150}px` }}>
-                  {c.label}
+                <th key={c.key} onClick={() => rb.toggleSort(c.key)} style={{ position: 'relative', padding: '10px 12px', textAlign: 'left', fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#45B6E4', borderBottom: '1px solid #EDF2F7', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', width: `${rb.columnWidths[c.key] || DEFAULT_COLUMN_WIDTHS[c.key] || 150}px`, cursor: 'pointer', userSelect: 'none' }}>
+                  {c.label}<SortArrow active={rb.sortField === c.key} dir={rb.sortDir} />
                   <ColumnResizeHandle colKey={c.key} rb={rb} />
                 </th>
               ))}
@@ -305,7 +306,7 @@ function ApplicationsContent() {
               <tr><td colSpan={COLUMNS.length + 1} style={{ textAlign: 'center', padding: '48px', color: '#45B6E4' }}>Loading…</td></tr>
             ) : reported.length === 0 ? (
               <tr><td colSpan={COLUMNS.length + 1} style={{ textAlign: 'center', padding: '48px', color: '#94A3B8' }}>No applications recorded yet.</td></tr>
-            ) : reported.map(item => (
+            ) : pageRows.map(item => (
               <tr key={item.id} style={{ borderBottom: '1px solid #F1F5F9' }}>
                 {isVisible('name') && (
                   <td style={{ padding: '10px 12px', minWidth: '160px', fontWeight: '700', color: '#156082' }}>
@@ -367,6 +368,7 @@ function ApplicationsContent() {
             ))}
           </tbody>
         </table>
+        <Pagination page={rb.page} setPage={rb.setPage} total={reported.length} />
       </div>
 
       {showNew && <NewApplicationModal users={users} locations={locations} onClose={() => setShowNew(false)} onSave={createItem} />}

@@ -1,9 +1,10 @@
 'use client'
 // components/opportunities/OpportunityModal.tsx
 import { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import { opportunitiesAPI, companiesAPI, contactsAPI, partnersAPI } from '@/lib/api'
 
-const DEAL_STATUSES = ['Presentation To Be Scheduled','Presentation Done','Proposition Ongoing','Proposition Accepted','Contract Ongoing','Contract Finalised','PO Received','Contract Lost']
+const DEAL_STATUSES = ['Presentation To Be Scheduled','Presentation Done','Proposition Ongoing','Proposition Accepted','RFP Ongoing','Contract Ongoing','Contract Finalised','PO Received','Contract Lost']
 const PROJECT_STATUSES = ['Daily Invoicing','Project','Software Licenses']
 const DEAL_TYPES = ['SAP','GRC','Smart Global Governance','SecurityBridge','Onapsis','BowBridge IBM OpenPages']
 
@@ -30,6 +31,7 @@ function FormField({ label, children, full }: { label: string; children: React.R
 }
 
 export function OpportunityModal({ opportunity, initialCompanyId, initialPartnerId, initialContactId, onClose, onSave }: any) {
+  const router = useRouter()
   const [companies, setCompanies] = useState<any[]>([])
   const [partners, setPartners] = useState<any[]>([])
   const [contacts, setContacts] = useState<any[]>([])
@@ -117,8 +119,13 @@ export function OpportunityModal({ opportunity, initialCompanyId, initialPartner
         project_status: form.project_status || null,
         deal_type: form.deal_type || null,
       }
-      if (opportunity) { await opportunitiesAPI.update(opportunity.id, payload) }
-      else { await opportunitiesAPI.create(payload) }
+      const result = opportunity
+        ? await opportunitiesAPI.update(opportunity.id, payload)
+        : await opportunitiesAPI.create(payload)
+      // rfp_id is only present when this save just auto-created a new RFP (status flipped
+      // to "RFP Ongoing" for the first time) — send the user straight there to finish setting
+      // it up, instead of the normal reload-and-close.
+      if (result?.rfp_id) { router.push(`/rfp/${result.rfp_id}`); return }
       onSave()
     } catch (e: any) { setError(e.message) }
     finally { setSaving(false) }

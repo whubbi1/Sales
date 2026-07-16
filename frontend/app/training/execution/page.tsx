@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect, Fragment } from 'react'
 import TrainingLayout from '@/components/TrainingLayout'
-import { useReportBuilder, applyReport, ReportPanel, ReportColumn } from '@/components/it/ReportBuilder'
+import { useReportBuilder, applyReport, ReportPanel, ReportColumn, SortArrow, Pagination } from '@/components/it/ReportBuilder'
 import { getStoredUser } from '@/lib/auth'
 
 const API = 'https://api.whubbi.wcomply.com'
@@ -50,6 +50,7 @@ function ByEmployee() {
     return name.includes(search.toLowerCase())
   })
   const filtered = applyReport(searched, EMPLOYEE_COLUMNS, rb.filters, rb.sortField, rb.sortDir)
+  const pageRows = filtered.slice((rb.page - 1) * 20, rb.page * 20)
   const isVisible = (key: string) => rb.visibleCols.includes(key)
 
   if (loading) return <div style={{ textAlign: 'center', padding: '32px', color: '#45B6E4' }}>Loading…</div>
@@ -65,7 +66,7 @@ function ByEmployee() {
         <thead style={{ background: '#FAFBFC' }}>
           <tr>
             {EMPLOYEE_COLUMNS.filter(c => isVisible(c.key)).map(c => (
-              <th key={c.key} style={{ padding: '10px 16px', textAlign: 'left', fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#45B6E4', borderBottom: '1px solid #EDF2F7' }}>{c.label}</th>
+              <th key={c.key} onClick={() => rb.toggleSort(c.key)} style={{ padding: '10px 16px', textAlign: 'left', fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#45B6E4', borderBottom: '1px solid #EDF2F7', cursor: 'pointer', userSelect: 'none' }}>{c.label}<SortArrow active={rb.sortField === c.key} dir={rb.sortDir} /></th>
             ))}
             <th style={{ padding: '10px 16px', borderBottom: '1px solid #EDF2F7' }} />
           </tr>
@@ -73,7 +74,7 @@ function ByEmployee() {
         <tbody>
           {filtered.length === 0 ? (
             <tr><td colSpan={EMPLOYEE_COLUMNS.filter(c => isVisible(c.key)).length + 1} style={{ textAlign: 'center', padding: '32px', color: '#94A3B8' }}>No employees match your search.</td></tr>
-          ) : filtered.map((u: any) => (
+          ) : pageRows.map((u: any) => (
             <Fragment key={u.email}>
               <tr style={{ borderBottom: '1px solid #F1F5F9' }}>
                 {isVisible('employee_display') && <td style={{ padding: '10px 16px', fontWeight: '700', color: '#156082' }}>{u.display_name || `${u.first_name} ${u.last_name}`}</td>}
@@ -135,6 +136,7 @@ function ByEmployee() {
         </tbody>
       </table>
       </div>
+      <Pagination page={rb.page} setPage={rb.setPage} total={filtered.length} />
     </div>
   )
 }
@@ -169,6 +171,7 @@ function ByTraining() {
 
   const withDisplay = assignments.map((a: any) => ({ ...a, employee_display: (a.first_name || a.last_name) ? `${a.first_name} ${a.last_name}`.trim() : a.user_email, assigned_by_name: a.assigned_by_name || a.assigned_by_email || '' }))
   const filtered = applyReport(withDisplay, BY_TRAINING_COLUMNS, rb.filters, rb.sortField, rb.sortDir)
+  const pageRows = filtered.slice((rb.page - 1) * 20, rb.page * 20)
   const isVisible = (key: string) => rb.visibleCols.includes(key)
 
   return (
@@ -190,14 +193,14 @@ function ByTraining() {
           <thead style={{ background: '#FAFBFC' }}>
             <tr>
               {BY_TRAINING_COLUMNS.filter(c => isVisible(c.key)).map(c => (
-                <th key={c.key} style={{ padding: '10px 16px', textAlign: 'left', fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#45B6E4', borderBottom: '1px solid #EDF2F7' }}>{c.label}</th>
+                <th key={c.key} onClick={() => rb.toggleSort(c.key)} style={{ padding: '10px 16px', textAlign: 'left', fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#45B6E4', borderBottom: '1px solid #EDF2F7', cursor: 'pointer', userSelect: 'none' }}>{c.label}<SortArrow active={rb.sortField === c.key} dir={rb.sortDir} /></th>
               ))}
             </tr>
           </thead>
           <tbody>
             {filtered.length === 0 ? (
               <tr><td colSpan={BY_TRAINING_COLUMNS.filter(c => isVisible(c.key)).length} style={{ textAlign: 'center', padding: '32px', color: '#94A3B8' }}>No one has been assigned this training yet.</td></tr>
-            ) : filtered.map((a: any) => {
+            ) : pageRows.map((a: any) => {
               const overdue = a.status === 'assigned' && a.due_date && new Date(a.due_date) < new Date()
               return (
                 <tr key={a.id} style={{ borderBottom: '1px solid #F1F5F9' }}>
@@ -216,6 +219,7 @@ function ByTraining() {
             })}
           </tbody>
         </table>
+        <Pagination page={rb.page} setPage={rb.setPage} total={filtered.length} />
         </div>
       )}
     </div>

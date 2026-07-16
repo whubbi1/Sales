@@ -31,6 +31,7 @@ export const companiesAPI = {
   getContacts:     (id: string) => fetchAPI(`/companies/${id}/contacts`),
   getOpportunities:(id: string) => fetchAPI(`/companies/${id}/opportunities`),
   dashboardStats:  () => fetchAPI(`/companies/dashboard-stats`),
+  research:        (prompt: string) => fetchAPI(`/companies/research`, { method: 'POST', body: JSON.stringify({ prompt }) }),
 
   getNotes:    (id: string) => fetchAPI(`/companies/${id}/notes`),
   createNote:  (id: string, d: any) => fetchAPI(`/companies/${id}/notes`, { method: 'POST', body: JSON.stringify(d) }),
@@ -130,6 +131,30 @@ export const opportunitiesAPI = {
   addLink:    (id: string, d: any) => fetchAPI(`/opportunities/${id}/links`, { method: 'POST', body: JSON.stringify(d) }),
   updateLink: (id: string, lid: string, d: any) => fetchAPI(`/opportunities/${id}/links/${lid}`, { method: 'PUT', body: JSON.stringify(d) }),
   deleteLink: (id: string, lid: string) => fetchAPI(`/opportunities/${id}/links/${lid}`, { method: 'DELETE' }),
+}
+
+// ─── RFPs ─────────────────────────────────────────────────────────────────────
+export const rfpAPI = {
+  list:   (p?: any) => fetchAPI(`/rfps/${qs(p)}`),
+  get:    (id: string) => fetchAPI(`/rfps/${id}`),
+  create: (d: any) => fetchAPI('/rfps/', { method: 'POST', body: JSON.stringify(d) }),
+  update: (id: string, d: any) => fetchAPI(`/rfps/${id}`, { method: 'PUT', body: JSON.stringify(d) }),
+  delete: (id: string) => fetchAPI(`/rfps/${id}`, { method: 'DELETE' }),
+
+  linkOpportunity:   (id: string, opportunityId: string) => fetchAPI(`/rfps/${id}/opportunities/${opportunityId}`, { method: 'POST' }),
+  unlinkOpportunity: (id: string, opportunityId: string) => fetchAPI(`/rfps/${id}/opportunities/${opportunityId}`, { method: 'DELETE' }),
+
+  getActionItems:    (id: string) => fetchAPI(`/rfps/${id}/action-items`),
+  addActionItem:     (id: string, d: any) => fetchAPI(`/rfps/${id}/action-items`, { method: 'POST', body: JSON.stringify(d) }),
+  updateActionItem:  (id: string, itemId: string, d: any) => fetchAPI(`/rfps/${id}/action-items/${itemId}`, { method: 'PUT', body: JSON.stringify(d) }),
+  deleteActionItem:  (id: string, itemId: string) => fetchAPI(`/rfps/${id}/action-items/${itemId}`, { method: 'DELETE' }),
+
+  getDocumentChecklist:    (id: string) => fetchAPI(`/rfps/${id}/document-checklist`),
+  addDocumentChecklist:    (id: string, d: any) => fetchAPI(`/rfps/${id}/document-checklist`, { method: 'POST', body: JSON.stringify(d) }),
+  updateDocumentChecklist: (id: string, itemId: string, d: any) => fetchAPI(`/rfps/${id}/document-checklist/${itemId}`, { method: 'PUT', body: JSON.stringify(d) }),
+  deleteDocumentChecklist: (id: string, itemId: string) => fetchAPI(`/rfps/${id}/document-checklist/${itemId}`, { method: 'DELETE' }),
+
+  analyze: (id: string) => fetchAPI(`/rfps/${id}/analyze`, { method: 'POST' }),
 }
 
 // ─── Sales Tasks (legacy — superseded by taskManagerAPI, kept for rollback safety) ─

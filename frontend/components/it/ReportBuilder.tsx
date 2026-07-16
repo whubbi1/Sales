@@ -30,6 +30,7 @@ export function useReportBuilder(module: string, columns: ReportColumn[], userEm
   const [savedViews, setSavedViews] = useState<any[]>([])
   const [activeViewId, setActiveViewId] = useState<string>('')
   const [restored, setRestored] = useState(false)
+  const [page, setPage] = useState(1)
 
   const reload = () => {
     if (!userEmail) return
@@ -79,6 +80,14 @@ export function useReportBuilder(module: string, columns: ReportColumn[], userEm
 
   const setFilter = (key: string, value: string) => {
     setFilters(f => ({ ...f, [key]: value }))
+    setPage(1)
+  }
+
+  // Clicking a column header: same field again flips direction, a different field resets to asc.
+  const toggleSort = (key: string) => {
+    if (sortField === key) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
+    else { setSortField(key); setSortDir('asc') }
+    setPage(1)
   }
 
   const setColumnWidth = (key: string, width: number) => {
@@ -113,9 +122,10 @@ export function useReportBuilder(module: string, columns: ReportColumn[], userEm
   return {
     visibleCols, setVisibleCols, toggleCol,
     filters, setFilter,
-    sortField, setSortField, sortDir, setSortDir,
+    sortField, setSortField, sortDir, setSortDir, toggleSort,
     columnWidths, setColumnWidth,
     savedViews, activeViewId, applyView, saveView, deleteView, resetToDefault,
+    page, setPage,
   }
 }
 
@@ -139,6 +149,34 @@ export function applyReport(data: any[], columns: ReportColumn[], filters: Recor
     })
   }
   return result
+}
+
+// Small ▲/▼ indicator for a sortable column header — renders nothing when this column isn't
+// the active sort field, so headers don't all show a permanent arrow.
+export function SortArrow({ active, dir }: { active: boolean; dir: 'asc' | 'desc' }) {
+  if (!active) return null
+  return <span style={{ marginLeft: '4px', fontSize: '9px' }}>{dir === 'asc' ? '▲' : '▼'}</span>
+}
+
+// Client-side pager for a report table already filtered/sorted down to its final array —
+// every report page loads its full list up front, so this just slices what's already in memory.
+export function Pagination({ page, setPage, total, pageSize = 20 }: { page: number; setPage: (p: number) => void; total: number; pageSize?: number }) {
+  const pageCount = Math.max(1, Math.ceil(total / pageSize))
+  if (total <= pageSize) return null
+  const from = total === 0 ? 0 : (page - 1) * pageSize + 1
+  const to = Math.min(page * pageSize, total)
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', fontSize: '12px', color: '#64748B', fontFamily: 'Montserrat, sans-serif' }}>
+      <span>Showing {from}–{to} of {total}</span>
+      <div style={{ display: 'flex', gap: '6px' }}>
+        <button onClick={() => setPage(Math.max(1, page - 1))} disabled={page <= 1}
+          style={{ padding: '5px 12px', background: page <= 1 ? '#F1F5F9' : 'white', color: page <= 1 ? '#CBD5E0' : '#156082', border: '1px solid #E2E8F0', borderRadius: '6px', cursor: page <= 1 ? 'default' : 'pointer', fontSize: '11px', fontWeight: '700', fontFamily: 'Montserrat, sans-serif' }}>Prev</button>
+        <span style={{ padding: '5px 8px' }}>{page} / {pageCount}</span>
+        <button onClick={() => setPage(Math.min(pageCount, page + 1))} disabled={page >= pageCount}
+          style={{ padding: '5px 12px', background: page >= pageCount ? '#F1F5F9' : 'white', color: page >= pageCount ? '#CBD5E0' : '#156082', border: '1px solid #E2E8F0', borderRadius: '6px', cursor: page >= pageCount ? 'default' : 'pointer', fontSize: '11px', fontWeight: '700', fontFamily: 'Montserrat, sans-serif' }}>Next</button>
+      </div>
+    </div>
+  )
 }
 
 const inp: React.CSSProperties = {

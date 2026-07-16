@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import TasksLayout, { useTasksPerm } from '@/components/TasksLayout'
-import { useReportBuilder, applyReport, ReportPanel, ReportColumn } from '@/components/it/ReportBuilder'
+import { useReportBuilder, applyReport, ReportPanel, ReportColumn, SortArrow, Pagination } from '@/components/it/ReportBuilder'
 import { taskManagerAPI } from '@/lib/api'
 import { getStoredUser } from '@/lib/auth'
 import { TaskModal } from '@/components/tasks/TaskModal'
@@ -60,6 +60,7 @@ function TaskManagerContent() {
   const withDisplay = tasks.map(t => ({ ...t, owner_display: t.owner_name || t.owner_email, assignee_display: t.assignee_name || t.assignee_email }))
   const searched = withDisplay.filter(t => !search || `${t.title} ${t.task_number || ''}`.toLowerCase().includes(search.toLowerCase()))
   const reported = applyReport(searched, COLUMNS, rb.filters, rb.sortField, rb.sortDir)
+  const pageRows = reported.slice((rb.page - 1) * 20, rb.page * 20)
   const isVisible = (key: string) => rb.visibleCols.includes(key)
 
   const groups = groupBySubject
@@ -88,7 +89,7 @@ function TaskManagerContent() {
   const headerRow = (
     <tr>
       {COLUMNS.filter(c => isVisible(c.key)).map(c => (
-        <th key={c.key} style={{ padding: '10px 12px', textAlign: 'left', fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#45B6E4', borderBottom: '1px solid #EDF2F7', whiteSpace: 'nowrap' }}>{c.label}</th>
+        <th key={c.key} onClick={() => rb.toggleSort(c.key)} style={{ padding: '10px 12px', textAlign: 'left', fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#45B6E4', borderBottom: '1px solid #EDF2F7', whiteSpace: 'nowrap', cursor: 'pointer', userSelect: 'none' }}>{c.label}<SortArrow active={rb.sortField === c.key} dir={rb.sortDir} /></th>
       ))}
     </tr>
   )
@@ -144,8 +145,9 @@ function TaskManagerContent() {
         <div style={{ background: 'white', borderRadius: '12px', border: '1px solid #EDF2F7', overflowX: 'auto', overflowY: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.06)', maxWidth: '100%' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
             <thead style={{ background: '#FAFBFC' }}>{headerRow}</thead>
-            <tbody>{reported.map(Row)}</tbody>
+            <tbody>{pageRows.map(Row)}</tbody>
           </table>
+          <Pagination page={rb.page} setPage={rb.setPage} total={reported.length} />
         </div>
       )}
 

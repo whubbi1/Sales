@@ -212,6 +212,9 @@ class OpportunityResponse(OpportunityBase):
     contacts: Optional[List[ContactSummary]] = []
     created_at: datetime
     updated_at: datetime
+    # Only set (transiently, not a real column) on the single create/update response where this
+    # request just auto-created a new RFP for this opportunity — tells the frontend to redirect.
+    rfp_id: Optional[UUID] = None
     class Config:
         from_attributes = True
 
@@ -298,6 +301,110 @@ class SalesTaskResponse(SalesTaskBase):
     id: UUID
     created_by_email: Optional[str] = None
     outlook_task_id: Optional[str] = None
+    created_at: datetime
+    updated_at: datetime
+    class Config:
+        from_attributes = True
+
+# ─── RFP ────────────────────────────────────────────────────────────────────────
+class RFPBase(BaseModel):
+    name: str
+    company_id: Optional[UUID] = None
+    partner_id: Optional[UUID] = None
+    owner_email: Optional[str] = None
+    owner: Optional[str] = None
+    approvers: Optional[List[ConsultantEntry]] = []  # reuses Opportunity's {email, name} shape
+    documents_folder_url: Optional[str] = None
+    status: Optional[str] = "Open"
+
+class RFPCreate(RFPBase):
+    opportunity_ids: Optional[List[UUID]] = []
+
+class RFPUpdate(BaseModel):
+    name: Optional[str] = None
+    company_id: Optional[UUID] = None
+    partner_id: Optional[UUID] = None
+    owner_email: Optional[str] = None
+    owner: Optional[str] = None
+    approvers: Optional[List[ConsultantEntry]] = None
+    documents_folder_url: Optional[str] = None
+    status: Optional[str] = None
+
+class RFPResponse(RFPBase):
+    id: UUID
+    ai_summary: Optional[str] = None
+    key_dates: Optional[List[dict]] = []
+    analysis_status: Optional[str] = "pending"
+    analysis_error: Optional[str] = None
+    created_at: datetime
+    updated_at: datetime
+    company: Optional[CompanySummary] = None
+    partner: Optional[PartnerSummary] = None
+    opportunities: Optional[List[OpportunitySummary]] = []
+    class Config:
+        from_attributes = True
+
+class RFPSummary(BaseModel):
+    id: UUID
+    name: str
+    status: Optional[str] = None
+    class Config:
+        from_attributes = True
+
+class RFPActionItemCreate(BaseModel):
+    description: str
+    due_date: Optional[datetime] = None
+    owner_type: Optional[str] = None
+    owner_email: Optional[str] = None
+    owner_name: Optional[str] = None
+    owner_contact_id: Optional[UUID] = None
+    position: Optional[int] = 0
+
+class RFPActionItemUpdate(BaseModel):
+    description: Optional[str] = None
+    due_date: Optional[datetime] = None
+    owner_type: Optional[str] = None
+    owner_email: Optional[str] = None
+    owner_name: Optional[str] = None
+    owner_contact_id: Optional[UUID] = None
+    status: Optional[str] = None
+    position: Optional[int] = None
+
+class RFPActionItemResponse(BaseModel):
+    id: UUID
+    rfp_id: UUID
+    description: str
+    due_date: Optional[datetime] = None
+    owner_type: Optional[str] = None
+    owner_email: Optional[str] = None
+    owner_name: Optional[str] = None
+    owner_contact_id: Optional[UUID] = None
+    task_id: Optional[UUID] = None
+    status: str
+    position: int
+    created_at: datetime
+    updated_at: datetime
+    class Config:
+        from_attributes = True
+
+class RFPDocumentChecklistCreate(BaseModel):
+    name: str
+    template_url: Optional[str] = None
+    position: Optional[int] = 0
+
+class RFPDocumentChecklistUpdate(BaseModel):
+    name: Optional[str] = None
+    template_url: Optional[str] = None
+    status: Optional[str] = None
+    position: Optional[int] = None
+
+class RFPDocumentChecklistResponse(BaseModel):
+    id: UUID
+    rfp_id: UUID
+    name: str
+    template_url: Optional[str] = None
+    status: str
+    position: int
     created_at: datetime
     updated_at: datetime
     class Config:

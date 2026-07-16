@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect } from 'react'
 import TrainingLayout, { useTrainingPerm } from '@/components/TrainingLayout'
-import { useReportBuilder, applyReport, ReportPanel, ReportColumn } from '@/components/it/ReportBuilder'
+import { useReportBuilder, applyReport, ReportPanel, ReportColumn, SortArrow, Pagination } from '@/components/it/ReportBuilder'
 import { getStoredUser } from '@/lib/auth'
 
 const API = 'https://api.whubbi.wcomply.com'
@@ -183,6 +183,7 @@ function CatalogueContent() {
   const withDisplay = catalog.map(c => ({ ...c, languages_display: (c.languages || []).join(', ') }))
   const searched = withDisplay.filter(c => !search || `${c.title} ${c.company}`.toLowerCase().includes(search.toLowerCase()))
   const filtered = applyReport(searched, COLUMNS, rb.filters, rb.sortField, rb.sortDir)
+  const pageRows = filtered.slice((rb.page - 1) * 20, rb.page * 20)
   const isVisible = (key: string) => rb.visibleCols.includes(key)
 
   const createItem = async (form: any) => {
@@ -233,7 +234,7 @@ function CatalogueContent() {
             <tr>
               <th style={{ padding: '10px 12px', textAlign: 'left', fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#45B6E4', borderBottom: '1px solid #EDF2F7', whiteSpace: 'nowrap' }}>ID</th>
               {COLUMNS.filter(c => isVisible(c.key)).map(c => (
-                <th key={c.key} style={{ padding: '10px 12px', textAlign: 'left', fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#45B6E4', borderBottom: '1px solid #EDF2F7', whiteSpace: 'nowrap' }}>{c.label}</th>
+                <th key={c.key} onClick={() => rb.toggleSort(c.key)} style={{ padding: '10px 12px', textAlign: 'left', fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#45B6E4', borderBottom: '1px solid #EDF2F7', whiteSpace: 'nowrap', cursor: 'pointer', userSelect: 'none' }}>{c.label}<SortArrow active={rb.sortField === c.key} dir={rb.sortDir} /></th>
               ))}
               {canEdit && <th style={{ padding: '10px 12px', borderBottom: '1px solid #EDF2F7' }} />}
             </tr>
@@ -243,7 +244,7 @@ function CatalogueContent() {
               <tr><td colSpan={COLUMNS.filter(c => isVisible(c.key)).length + 1 + (canEdit ? 1 : 0)} style={{ textAlign: 'center', padding: '48px', color: '#45B6E4' }}>Loading…</td></tr>
             ) : filtered.length === 0 ? (
               <tr><td colSpan={COLUMNS.filter(c => isVisible(c.key)).length + 1 + (canEdit ? 1 : 0)} style={{ textAlign: 'center', padding: '48px', color: '#94A3B8' }}>No trainings in the catalogue yet.</td></tr>
-            ) : filtered.map(item => (
+            ) : pageRows.map(item => (
               <tr key={item.id} style={{ borderBottom: '1px solid #F1F5F9' }}>
                 <td style={{ padding: '10px 12px', color: '#94A3B8', fontFamily: 'monospace', fontSize: '11px' }} title={item.id}>{item.id.slice(0, 8)}</td>
                 {isVisible('training_type') && (
@@ -318,6 +319,7 @@ function CatalogueContent() {
             ))}
           </tbody>
         </table>
+        <Pagination page={rb.page} setPage={rb.setPage} total={filtered.length} />
       </div>
 
       {showNew && <NewTrainingModal onClose={() => setShowNew(false)} onSave={createItem} />}

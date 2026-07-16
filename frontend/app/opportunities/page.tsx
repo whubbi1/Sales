@@ -6,10 +6,10 @@ import { Sidebar } from '@/components/Sidebar'
 import { opportunitiesAPI } from '@/lib/api'
 import { PageHeader, EmptyState } from '@/components/shared/RecordLayout'
 import { OpportunityModal } from '@/components/opportunities/OpportunityModal'
-import { useReportBuilder, applyReport, ReportPanel, ReportColumn, REPORT_CELL_STYLE } from '@/components/it/ReportBuilder'
+import { useReportBuilder, applyReport, ReportPanel, ReportColumn, REPORT_CELL_STYLE, SortArrow, Pagination } from '@/components/it/ReportBuilder'
 import { getStoredUser } from '@/lib/auth'
 
-const STATUS_OPTIONS = ['Presentation To Be Scheduled','Presentation Done','Proposition Ongoing','Proposition Accepted','Contract Ongoing','Contract Finalised','PO Received','Contract Lost']
+const STATUS_OPTIONS = ['Presentation To Be Scheduled','Presentation Done','Proposition Ongoing','Proposition Accepted','RFP Ongoing','Contract Ongoing','Contract Finalised','PO Received','Contract Lost']
 
 const COLUMNS: ReportColumn[] = [
   { key: 'deal_name', label: 'Opportunity', filterable: 'text' },
@@ -62,6 +62,7 @@ function OpportunitiesContent() {
     contacts_count: o.contacts?.length || 0,
   }))
   const reported = applyReport(withDisplay, COLUMNS, rb.filters, rb.sortField, rb.sortDir)
+  const pageRows = reported.slice((rb.page - 1) * 20, rb.page * 20)
   const isVisible = (key: string) => rb.visibleCols.includes(key)
 
   return (
@@ -104,7 +105,7 @@ function OpportunitiesContent() {
               <thead style={{ background: '#FAFBFC' }}>
                 <tr>
                   {COLUMNS.filter(c => isVisible(c.key)).map(c => (
-                    <th key={c.key} style={{ textAlign: 'left', padding: '10px 16px', fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#9B9B9B', borderBottom: '1px solid #E2E8F0', whiteSpace: 'nowrap' }}>{c.label}</th>
+                    <th key={c.key} onClick={() => rb.toggleSort(c.key)} style={{ textAlign: 'left', padding: '10px 16px', fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#9B9B9B', borderBottom: '1px solid #E2E8F0', whiteSpace: 'nowrap', cursor: 'pointer', userSelect: 'none' }}>{c.label}<SortArrow active={rb.sortField === c.key} dir={rb.sortDir} /></th>
                   ))}
                   <th style={{ borderBottom: '1px solid #E2E8F0' }} />
                 </tr>
@@ -114,7 +115,7 @@ function OpportunitiesContent() {
                   <tr><td colSpan={COLUMNS.length + 1} style={{ textAlign: 'center', padding: '48px', color: '#9B9B9B', fontSize: '13px' }}>Loading...</td></tr>
                 ) : reported.length === 0 ? (
                   <tr><td colSpan={COLUMNS.length + 1}><EmptyState icon="💼" title="No opportunities yet" description="Create your first opportunity by clicking New Opportunity" /></td></tr>
-                ) : reported.map(opp => (
+                ) : pageRows.map(opp => (
                   <tr key={opp.id} onClick={() => router.push(`/opportunities/${opp.id}`)} style={{ cursor: 'pointer' }}
                     onMouseEnter={e => (e.currentTarget.style.background = '#FAFBFC')}
                     onMouseLeave={e => (e.currentTarget.style.background = 'white')}>
@@ -172,6 +173,7 @@ function OpportunitiesContent() {
                 ))}
               </tbody>
             </table>
+            <Pagination page={rb.page} setPage={rb.setPage} total={reported.length} />
           </div>
         </div>
         {showModal && (

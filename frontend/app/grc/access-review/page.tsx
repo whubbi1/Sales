@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { GRCLayout, useGRCPerm } from '@/components/GRCLayout'
-import { useReportBuilder, applyReport, ReportPanel, ReportColumn } from '@/components/it/ReportBuilder'
+import { useReportBuilder, applyReport, ReportPanel, ReportColumn, SortArrow, Pagination } from '@/components/it/ReportBuilder'
 import { grcAccessReviewAPI } from '@/lib/api'
 import { getStoredUser } from '@/lib/auth'
 
@@ -129,6 +129,7 @@ function AccessReviewContent() {
   const withDisplay = cycles.map(c => ({ ...c, owner_display: c.owner_name || c.owner_email, review_type_label: REVIEW_TYPE_LABEL[c.review_type] || c.review_type }))
   const searched = withDisplay.filter(c => !search || `${c.cycle_name} ${c.cycle_number}`.toLowerCase().includes(search.toLowerCase()))
   const reported = applyReport(searched, COLUMNS, rb.filters, rb.sortField, rb.sortDir)
+  const pageRows = reported.slice((rb.page - 1) * 20, rb.page * 20)
   const isVisible = (key: string) => rb.visibleCols.includes(key)
 
   return (
@@ -160,7 +161,7 @@ function AccessReviewContent() {
           <thead style={{ background: '#FAFBFC' }}>
             <tr>
               {COLUMNS.filter(c => isVisible(c.key)).map(c => (
-                <th key={c.key} style={{ padding: '10px 12px', textAlign: 'left', fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#45B6E4', borderBottom: '1px solid #EDF2F7', whiteSpace: 'nowrap' }}>{c.label}</th>
+                <th key={c.key} onClick={() => rb.toggleSort(c.key)} style={{ padding: '10px 12px', textAlign: 'left', fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#45B6E4', borderBottom: '1px solid #EDF2F7', whiteSpace: 'nowrap', cursor: 'pointer', userSelect: 'none' }}>{c.label}<SortArrow active={rb.sortField === c.key} dir={rb.sortDir} /></th>
               ))}
             </tr>
           </thead>
@@ -169,7 +170,7 @@ function AccessReviewContent() {
               <tr><td colSpan={COLUMNS.length} style={{ textAlign: 'center', padding: '48px', color: '#45B6E4' }}>Loading…</td></tr>
             ) : reported.length === 0 ? (
               <tr><td colSpan={COLUMNS.length} style={{ textAlign: 'center', padding: '48px', color: '#94A3B8' }}>No review cycles yet.</td></tr>
-            ) : reported.map(c => (
+            ) : pageRows.map(c => (
               <tr key={c.id} onClick={() => router.push(`/grc/access-review/${c.id}`)} style={{ borderBottom: '1px solid #F1F5F9', cursor: 'pointer' }}
                 onMouseEnter={e => (e.currentTarget.style.background = '#FAFBFC')} onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
                 {isVisible('cycle_number') && <td style={{ padding: '10px 12px', color: '#94A3B8', fontFamily: 'monospace', fontSize: '11px', whiteSpace: 'nowrap' }}>{c.cycle_number}</td>}
@@ -184,6 +185,7 @@ function AccessReviewContent() {
             ))}
           </tbody>
         </table>
+        <Pagination page={rb.page} setPage={rb.setPage} total={reported.length} />
       </div>
 
       {showLaunch && (

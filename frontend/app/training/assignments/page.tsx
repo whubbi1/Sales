@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect } from 'react'
 import TrainingLayout, { useTrainingPerm } from '@/components/TrainingLayout'
-import { useReportBuilder, applyReport, ReportPanel, ReportColumn } from '@/components/it/ReportBuilder'
+import { useReportBuilder, applyReport, ReportPanel, ReportColumn, SortArrow, Pagination } from '@/components/it/ReportBuilder'
 import { getStoredUser } from '@/lib/auth'
 
 const API = 'https://api.whubbi.wcomply.com'
@@ -177,6 +177,7 @@ function AssignmentsContent() {
 
   const withDisplay = assignments.map(a => ({ ...a, recurrence_display: a.recurrence ? 'Yearly' : '—', assigned_by_name: a.assigned_by_name || a.assigned_by_email || '' }))
   const filtered = applyReport(withDisplay, COLUMNS, rb.filters, rb.sortField, rb.sortDir)
+  const pageRows = filtered.slice((rb.page - 1) * 20, rb.page * 20)
   const isVisible = (key: string) => rb.visibleCols.includes(key)
 
   return (
@@ -199,7 +200,7 @@ function AssignmentsContent() {
           <thead style={{ background: '#FAFBFC' }}>
             <tr>
               {COLUMNS.filter(c => isVisible(c.key)).map(c => (
-                <th key={c.key} style={{ padding: '10px 16px', textAlign: 'left', fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#45B6E4', borderBottom: '1px solid #EDF2F7' }}>{c.label}</th>
+                <th key={c.key} onClick={() => rb.toggleSort(c.key)} style={{ padding: '10px 16px', textAlign: 'left', fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#45B6E4', borderBottom: '1px solid #EDF2F7', cursor: 'pointer', userSelect: 'none' }}>{c.label}<SortArrow active={rb.sortField === c.key} dir={rb.sortDir} /></th>
               ))}
               {canEdit && <th style={{ padding: '10px 16px', borderBottom: '1px solid #EDF2F7' }} />}
             </tr>
@@ -209,7 +210,7 @@ function AssignmentsContent() {
               <tr><td colSpan={COLUMNS.filter(c => isVisible(c.key)).length + (canEdit ? 1 : 0)} style={{ textAlign: 'center', padding: '32px', color: '#45B6E4' }}>Loading…</td></tr>
             ) : filtered.length === 0 ? (
               <tr><td colSpan={COLUMNS.filter(c => isVisible(c.key)).length + (canEdit ? 1 : 0)} style={{ textAlign: 'center', padding: '32px', color: '#94A3B8' }}>No assignments found.</td></tr>
-            ) : filtered.map(a => {
+            ) : pageRows.map(a => {
               const overdue = a.status === 'assigned' && a.due_date && new Date(a.due_date) < new Date()
               return (
                 <tr key={a.id} style={{ borderBottom: '1px solid #F1F5F9' }}>
@@ -237,6 +238,7 @@ function AssignmentsContent() {
             })}
           </tbody>
         </table>
+        <Pagination page={rb.page} setPage={rb.setPage} total={filtered.length} />
       </div>
 
       {showNew && <NewAssignmentModal catalog={catalog} plans={plans} users={users} onClose={() => setShowNew(false)} onSave={createAssignment} />}

@@ -1293,6 +1293,62 @@ async def startup():
                     created_at TIMESTAMP DEFAULT NOW(),
                     updated_at TIMESTAMP DEFAULT NOW()
                 )""",
+
+                # RFP tracking, auto-created from an Opportunity when its status flips to
+                # "RFP Ongoing" — ADD VALUE must be its own statement (can't run inside a
+                # transaction that also uses the new value), which this migration runner already
+                # guarantees since every string here gets its own execute+commit.
+                "ALTER TYPE deal_status_enum ADD VALUE IF NOT EXISTS 'RFP Ongoing'",
+
+                """CREATE TABLE IF NOT EXISTS rfps (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    name VARCHAR(500) NOT NULL,
+                    company_id UUID REFERENCES companies(id) ON DELETE SET NULL,
+                    partner_id UUID REFERENCES partners(id) ON DELETE SET NULL,
+                    owner_email VARCHAR(255),
+                    owner VARCHAR(255),
+                    approvers JSONB DEFAULT '[]',
+                    documents_folder_url TEXT,
+                    status VARCHAR(20) DEFAULT 'Open',
+                    ai_summary TEXT,
+                    key_dates JSONB DEFAULT '[]',
+                    analysis_status VARCHAR(20) DEFAULT 'pending',
+                    analysis_error TEXT,
+                    created_at TIMESTAMP DEFAULT NOW(),
+                    updated_at TIMESTAMP DEFAULT NOW()
+                )""",
+
+                """CREATE TABLE IF NOT EXISTS rfp_opportunities (
+                    rfp_id UUID REFERENCES rfps(id) ON DELETE CASCADE,
+                    opportunity_id UUID REFERENCES opportunities(id) ON DELETE CASCADE
+                )""",
+
+                """CREATE TABLE IF NOT EXISTS rfp_action_items (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    rfp_id UUID NOT NULL REFERENCES rfps(id) ON DELETE CASCADE,
+                    description TEXT NOT NULL,
+                    due_date TIMESTAMP,
+                    owner_type VARCHAR(10),
+                    owner_email VARCHAR(255),
+                    owner_name VARCHAR(255),
+                    owner_contact_id UUID,
+                    task_id UUID,
+                    status VARCHAR(20) DEFAULT 'pending',
+                    position INTEGER DEFAULT 0,
+                    created_at TIMESTAMP DEFAULT NOW(),
+                    updated_at TIMESTAMP DEFAULT NOW()
+                )""",
+
+                """CREATE TABLE IF NOT EXISTS rfp_document_checklist (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    rfp_id UUID NOT NULL REFERENCES rfps(id) ON DELETE CASCADE,
+                    name VARCHAR(500) NOT NULL,
+                    template_url TEXT,
+                    status VARCHAR(20) DEFAULT 'pending',
+                    position INTEGER DEFAULT 0,
+                    created_at TIMESTAMP DEFAULT NOW(),
+                    updated_at TIMESTAMP DEFAULT NOW()
+                )""",
             ]
             for sql in sqls:
                 try:
@@ -1347,6 +1403,7 @@ def _include(module_path: str, prefix: str, tag: str):
 _include("app.routers.companies",      "/companies",    "Companies")
 _include("app.routers.contacts",       "/contacts",     "Contacts")
 _include("app.routers.opportunities",  "/opportunities","Opportunities")
+_include("app.routers.rfp",            "/rfps",         "RFPs")
 _include("app.routers.tasks",          "/tasks",        "Tasks")
 _include("app.routers.partners",       "/partners",     "Partners")
 _include("app.routers.marketing",      "/marketing",    "Marketing")
