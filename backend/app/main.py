@@ -1297,8 +1297,11 @@ async def startup():
                 # RFP tracking, auto-created from an Opportunity when its status flips to
                 # "RFP Ongoing" — ADD VALUE must be its own statement (can't run inside a
                 # transaction that also uses the new value), which this migration runner already
-                # guarantees since every string here gets its own execute+commit.
-                "ALTER TYPE deal_status_enum ADD VALUE IF NOT EXISTS 'RFP Ongoing'",
+                # guarantees since every string here gets its own execute+commit. No "IF NOT
+                # EXISTS" (unsupported in some Postgres versions/contexts — silently swallowed
+                # by this runner's per-statement try/except, leaving the value never added);
+                # re-running this after the value already exists is caught the same way instead.
+                "ALTER TYPE deal_status_enum ADD VALUE 'RFP Ongoing'",
 
                 """CREATE TABLE IF NOT EXISTS rfps (
                     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

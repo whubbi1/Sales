@@ -28,7 +28,7 @@ class Opportunity(Base):
     closing_date        = Column(DateTime)
     deal_status         = Column(SAEnum(
         'Presentation To Be Scheduled', 'Presentation Done', 'Proposition Ongoing',
-        'Proposition Accepted', 'Contract Ongoing', 'Contract Finalised',
+        'Proposition Accepted', 'RFP Ongoing', 'Contract Ongoing', 'Contract Finalised',
         'PO Received', 'Contract Lost',
         name='deal_status_enum'
     ), default='Presentation To Be Scheduled')
