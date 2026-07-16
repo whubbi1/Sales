@@ -15,6 +15,13 @@ router = APIRouter()
 MAX_LINKS = 200  # keeps one run's time/cost bounded — surfaced to the caller if hit, not silently dropped
 CONCURRENCY = 10
 TIMEOUT = 8.0
+HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36"}
+
+# linkedin.com blocks any unauthenticated request with a 999 regardless of whether the profile/page
+# is real (logging in to check would violate its ToS — see the LinkedIn-check feature's design), and
+# sharepoint.com requires a signed-in Microsoft session — a 401/403 there means "can't verify", not
+# "broken". Report these separately so real dead links aren't buried under expected auth-wall noise.
+AUTH_WALLED_DOMAINS = ("linkedin.com", "sharepoint.com")
 
 
 async def _gather_links(db: AsyncSession):
@@ -62,16 +69,24 @@ async def _gather_links(db: AsyncSession):
     return links
 
 
+def _is_auth_walled(url: str) -> bool:
+    return any(d in url for d in AUTH_WALLED_DOMAINS)
+
+
 async def _check_one(client: httpx.AsyncClient, sem: asyncio.Semaphore, link: dict) -> dict | None:
     async with sem:
+        url = link["url"]
+        if not url.startswith(("http://", "https://")):
+            return {**link, "error": "malformed_url", "bucket": "broken"}
         try:
-            r = await client.head(link["url"], timeout=TIMEOUT, follow_redirects=True)
+            r = await client.head(url, timeout=TIMEOUT, follow_redirects=True, headers=HEADERS)
             if r.status_code >= 400:
-                r = await client.get(link["url"], timeout=TIMEOUT, follow_redirects=True)
+                r = await client.get(url, timeout=TIMEOUT, follow_redirects=True, headers=HEADERS)
         except Exception as e:
-            return {**link, "error": str(e)[:150]}
-        if r.status_code >= 400:
-            return {**link, "status_code": r.status_code}
+            return {**link, "error": str(e)[:150], "bucket": "broken"}
+        if r.status_code >= 400 or r.status_code == 999:
+            bucket = "unverifiable" if _is_auth_walled(url) and r.status_code in (401, 403, 999) else "broken"
+            return {**link, "status_code": r.status_code, "bucket": bucket}
         return None
 
 
@@ -84,11 +99,14 @@ async def check_broken_links(db: AsyncSession = Depends(get_db)):
     sem = asyncio.Semaphore(CONCURRENCY)
     async with httpx.AsyncClient() as client:
         results = await asyncio.gather(*[_check_one(client, sem, l) for l in checked_links])
-    broken = [r for r in results if r]
+    flagged = [r for r in results if r]
+    broken = [{k: v for k, v in r.items() if k != "bucket"} for r in flagged if r["bucket"] == "broken"]
+    unverifiable = [{k: v for k, v in r.items() if k != "bucket"} for r in flagged if r["bucket"] == "unverifiable"]
 
     return {
         "total_checked": len(checked_links),
         "total_found": len(all_links),
         "truncated": truncated,
         "broken": broken,
+        "unverifiable": unverifiable,
     }

@@ -156,6 +156,23 @@ function EmailCheckTab({ contacts }: { contacts: any[] }) {
   )
 }
 
+function LinkRow({ b, router, tone }: { b: any; router: ReturnType<typeof useRouter>; tone: 'broken' | 'unverifiable' }) {
+  const routeFn = ROUTE_FOR[b.source_type]
+  const color = tone === 'broken' ? '#DC2626' : '#D97706'
+  const bg = tone === 'broken' ? '#FEF2F2' : '#FFFBEB'
+  const border = tone === 'broken' ? '#FEE2E2' : '#FDE68A'
+  return (
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 12px', border: `1px solid ${border}`, background: bg, borderRadius: '8px' }}>
+      <div style={{ minWidth: 0 }}>
+        <div style={{ fontSize: '12px', fontWeight: '700', color }}>{b.source_name || '(unnamed)'} <span style={{ fontWeight: '400', color: '#94A3B8', textTransform: 'capitalize' as const }}>· {b.source_type.replace('_', ' ')}</span></div>
+        <div style={{ fontSize: '11px', color: '#94A3B8', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{b.url}</div>
+        <div style={{ fontSize: '11px', color }}>{b.status_code ? `HTTP ${b.status_code}` : b.error}</div>
+      </div>
+      {routeFn && <button onClick={() => router.push(routeFn(b.source_id))} style={{ padding: '5px 10px', background: 'white', border: `1px solid ${color}`, borderRadius: '6px', cursor: 'pointer', fontSize: '11px', color, fontWeight: '700', flexShrink: 0 }}>View</button>}
+    </div>
+  )
+}
+
 function BrokenLinksTab() {
   const router = useRouter()
   const [loading, setLoading] = useState(false)
@@ -178,23 +195,25 @@ function BrokenLinksTab() {
           <p style={{ fontSize: '12px', color: '#64748B', marginBottom: '12px' }}>
             Checked {result.total_checked} of {result.total_found} links found.
             {result.truncated && <span style={{ color: '#D97706' }}> Stopped at the 200-link cap — run again after fixing some to check the rest.</span>}
-            {' '}{result.broken.length} broken.
+            {' '}{result.broken.length} broken, {result.unverifiable?.length || 0} could not be verified.
           </p>
-          {result.broken.length === 0 ? <p style={{ fontSize: '13px', color: '#059669' }}>✅ No broken links found.</p> : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-              {result.broken.map((b: any, i: number) => {
-                const routeFn = ROUTE_FOR[b.source_type]
-                return (
-                  <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 12px', border: '1px solid #FEE2E2', background: '#FEF2F2', borderRadius: '8px' }}>
-                    <div style={{ minWidth: 0 }}>
-                      <div style={{ fontSize: '12px', fontWeight: '700', color: '#DC2626' }}>{b.source_name || '(unnamed)'} <span style={{ fontWeight: '400', color: '#94A3B8', textTransform: 'capitalize' as const }}>· {b.source_type.replace('_', ' ')}</span></div>
-                      <div style={{ fontSize: '11px', color: '#94A3B8', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{b.url}</div>
-                      <div style={{ fontSize: '11px', color: '#DC2626' }}>{b.status_code ? `HTTP ${b.status_code}` : b.error}</div>
-                    </div>
-                    {routeFn && <button onClick={() => router.push(routeFn(b.source_id))} style={{ padding: '5px 10px', background: 'white', border: '1px solid #FCA5A5', borderRadius: '6px', cursor: 'pointer', fontSize: '11px', color: '#DC2626', fontWeight: '700', flexShrink: 0 }}>View</button>}
-                  </div>
-                )
-              })}
+          {result.broken.length === 0 ? <p style={{ fontSize: '13px', color: '#059669', marginBottom: '18px' }}>✅ No broken links found.</p> : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '18px' }}>
+              {result.broken.map((b: any, i: number) => (
+                <LinkRow key={i} b={b} router={router} tone="broken" />
+              ))}
+            </div>
+          )}
+          {result.unverifiable?.length > 0 && (
+            <div>
+              <p style={{ fontSize: '10px', fontWeight: '700', textTransform: 'uppercase' as const, letterSpacing: '0.07em', color: '#9B9B9B', marginBottom: '8px' }}>
+                Could not verify ({result.unverifiable.length}) — LinkedIn and SharePoint block automated, logged-out requests, so these may well be working links. Open them manually to confirm.
+              </p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                {result.unverifiable.map((b: any, i: number) => (
+                  <LinkRow key={i} b={b} router={router} tone="unverifiable" />
+                ))}
+              </div>
             </div>
           )}
         </div>
