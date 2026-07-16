@@ -280,14 +280,14 @@ export default function OpportunityDetailPage() {
               <div style={{ display: 'flex', gap: '8px', marginBottom: '14px' }}>
                 <select className="form-input" style={{ width: '220px' }} value={addStaffEmail} onChange={e => setAddStaffEmail(e.target.value)}>
                   <option value="">Select employee…</option>
-                  {users.map((u: any) => <option key={u.email} value={u.email}>{u.display_name || `${u.first_name} ${u.last_name}`}</option>)}
+                  {[...users].sort((a, b) => (a.display_name || `${a.first_name} ${a.last_name}`).localeCompare(b.display_name || `${b.first_name} ${b.last_name}`)).map((u: any) => <option key={u.email} value={u.email}>{u.display_name || `${u.first_name} ${u.last_name}`}</option>)}
                 </select>
                 <input className="form-input" style={{ width: '180px' }} placeholder="Role (optional)" value={addStaffRole} onChange={e => setAddStaffRole(e.target.value)} />
                 <button className="btn-primary" onClick={addStaffing} disabled={!addStaffEmail}>+ Add</button>
               </div>
               {staffing.length === 0 ? <p style={{ color: '#9B9B9B', fontSize: '13px' }}>No one staffed on this opportunity yet.</p> : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  {staffing.map((s: any) => (
+                  {[...staffing].sort((a, b) => (a.user_name || a.user_email).localeCompare(b.user_name || b.user_email)).map((s: any) => (
                     <div key={s.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', border: '1px solid #EDF2F7', borderRadius: '8px' }}>
                       <div>
                         <div style={{ fontWeight: '700', color: '#144766', fontSize: '13px' }}>{s.user_name || s.user_email}</div>

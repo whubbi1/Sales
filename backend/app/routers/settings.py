@@ -377,7 +377,9 @@ async def list_users(db: AsyncSession = Depends(get_db)):
             }
             for u in members if u.get("mail")
         ]
-        users.sort(key=lambda u: (u["last_name"] or "", u["first_name"] or ""))
+        # Sort by first_name/last_name — every "select employee" dropdown across the app
+        # displays "First Last", so sorting by last_name first left them looking unsorted.
+        users.sort(key=lambda u: ((u["first_name"] or "").lower(), (u["last_name"] or "").lower()))
         return {"users": users, "source": "ms_ad_group"}
 
     # Fallback: return cached DB users (predates group-scoping, so unfiltered by
@@ -385,7 +387,7 @@ async def list_users(db: AsyncSession = Depends(get_db)):
     result = await db.execute(text("""
         SELECT email, first_name, last_name, display_name, job_title, department, last_sync,
                main_location_id, main_location_name, is_excluded
-        FROM user_profiles ORDER BY last_name, first_name
+        FROM user_profiles ORDER BY LOWER(first_name), LOWER(last_name)
     """))
     rows = result.fetchall()
     users = []
