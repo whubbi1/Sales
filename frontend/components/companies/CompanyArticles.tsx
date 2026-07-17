@@ -4,8 +4,10 @@ import { companiesAPI, contactsAPI } from '@/lib/api'
 import { EmptyState } from '@/components/shared/RecordLayout'
 
 // Small expandable panel for managing an article's *additional* company/contact links
-// (beyond the one company it was created under) — lazy-loads only when opened.
-function ArticleLinksPanel({ article, companyId, onClose }: { article: any; companyId: string; onClose: () => void }) {
+// (beyond the one company/contact it was created under) — lazy-loads only when opened.
+// Exported so ContactArticles.tsx can reuse it — the underlying company_articles/
+// article_companies/article_contacts tables are shared regardless of which side created it.
+export function ArticleLinksPanel({ article, companyId, onClose }: { article: any; companyId: string; onClose: () => void }) {
   const [links, setLinks] = useState<{ companies: any[]; contacts: any[] }>({ companies: [], contacts: [] })
   const [allCompanies, setAllCompanies] = useState<any[]>([])
   const [allContacts, setAllContacts] = useState<any[]>([])

@@ -56,6 +56,7 @@ export function OpportunityModal({ opportunity, initialCompanyId, initialPartner
     contract_end_date: toDateStr(opportunity?.contract_end_date),
     project_status: opportunity?.project_status || '',
     contracting_party_id: opportunity?.contracting_party_id || opportunity?.contracting_party_company?.id || '',
+    contracting_party_partner_id: opportunity?.contracting_party_partner_id || opportunity?.contracting_party_partner?.id || '',
     contracting_party: opportunity?.contracting_party || '',
     deal_type: opportunity?.deal_type || '',
     notes: opportunity?.notes || '',
@@ -112,6 +113,7 @@ export function OpportunityModal({ opportunity, initialCompanyId, initialPartner
         company_id: form.company_id && form.company_id.trim() !== '' ? form.company_id : null,
         partner_id: form.partner_id && form.partner_id.trim() !== '' ? form.partner_id : null,
         contracting_party_id: form.contracting_party_id && form.contracting_party_id.trim() !== '' ? form.contracting_party_id : null,
+        contracting_party_partner_id: form.contracting_party_partner_id && form.contracting_party_partner_id.trim() !== '' ? form.contracting_party_partner_id : null,
         deal_amount: form.deal_amount ? Number(form.deal_amount) : null,
         closing_date: form.closing_date || null,
         contract_start_date: form.contract_start_date || null,
@@ -206,12 +208,25 @@ export function OpportunityModal({ opportunity, initialCompanyId, initialPartner
                 </select>
               </FormField>
               <FormField label="Contracting Party">
-                <select className="form-input" value={form.contracting_party_id} onChange={e => {
-                  const c = companies.find((cc: any) => cc.id === e.target.value)
-                  setForm(p => ({ ...p, contracting_party_id: e.target.value, contracting_party: c ? c.name : '' }))
+                <select className="form-input" value={form.contracting_party_id ? `company:${form.contracting_party_id}` : form.contracting_party_partner_id ? `partner:${form.contracting_party_partner_id}` : ''} onChange={e => {
+                  const [kind, id] = e.target.value.split(':')
+                  if (kind === 'company') {
+                    const c = companies.find((cc: any) => cc.id === id)
+                    setForm(p => ({ ...p, contracting_party_id: id, contracting_party_partner_id: '', contracting_party: c ? c.name : '' }))
+                  } else if (kind === 'partner') {
+                    const pt = partners.find((pp: any) => pp.id === id)
+                    setForm(p => ({ ...p, contracting_party_id: '', contracting_party_partner_id: id, contracting_party: pt ? pt.name : '' }))
+                  } else {
+                    setForm(p => ({ ...p, contracting_party_id: '', contracting_party_partner_id: '', contracting_party: '' }))
+                  }
                 }}>
-                  <option value="">Select company...</option>
-                  {companies.map((c: any) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                  <option value="">Select...</option>
+                  <optgroup label="Companies">
+                    {companies.slice().sort((a: any, b: any) => a.name.localeCompare(b.name)).map((c: any) => <option key={c.id} value={`company:${c.id}`}>{c.name}</option>)}
+                  </optgroup>
+                  <optgroup label="Partners">
+                    {partners.slice().sort((a: any, b: any) => a.name.localeCompare(b.name)).map((p: any) => <option key={p.id} value={`partner:${p.id}`}>{p.name}</option>)}
+                  </optgroup>
                 </select>
               </FormField>
               <FormField label="Assigned To">

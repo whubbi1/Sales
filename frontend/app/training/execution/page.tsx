@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect, Fragment } from 'react'
 import TrainingLayout from '@/components/TrainingLayout'
-import { useReportBuilder, applyReport, ReportPanel, ReportColumn, SortArrow, Pagination } from '@/components/it/ReportBuilder'
+import { useReportBuilder, applyReport, ReportPanel, ReportColumn, ColumnResizeHandle, SortArrow, Pagination } from '@/components/it/ReportBuilder'
 import { getStoredUser } from '@/lib/auth'
 
 const API = 'https://api.whubbi.wcomply.com'
@@ -19,6 +19,11 @@ const EMPLOYEE_COLUMNS: ReportColumn[] = [
   { key: 'active_assignments_count', label: 'Active Assignments' },
   { key: 'late_assignments_count', label: 'Overdue' },
 ]
+
+const EMPLOYEE_DEFAULT_WIDTHS: Record<string, number> = {
+  employee_display: 200, department: 160, trainings_count: 120,
+  certifications_count: 140, active_assignments_count: 160, late_assignments_count: 110,
+}
 
 function ByEmployee() {
   const [overview, setOverview] = useState<any[]>([])
@@ -62,13 +67,16 @@ function ByEmployee() {
         <ReportPanel columns={EMPLOYEE_COLUMNS} rb={rb} />
       </div>
       <div style={{ overflowX: 'auto' }}>
-      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
+      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px', tableLayout: 'fixed' }}>
         <thead style={{ background: '#FAFBFC' }}>
           <tr>
             {EMPLOYEE_COLUMNS.filter(c => isVisible(c.key)).map(c => (
-              <th key={c.key} onClick={() => rb.toggleSort(c.key)} style={{ padding: '10px 16px', textAlign: 'left', fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#45B6E4', borderBottom: '1px solid #EDF2F7', cursor: 'pointer', userSelect: 'none' }}>{c.label}<SortArrow active={rb.sortField === c.key} dir={rb.sortDir} /></th>
+              <th key={c.key} onClick={() => rb.toggleSort(c.key)} style={{ position: 'relative', padding: '10px 16px', textAlign: 'left', fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#45B6E4', borderBottom: '1px solid #EDF2F7', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', width: `${rb.columnWidths[c.key] || EMPLOYEE_DEFAULT_WIDTHS[c.key] || 150}px`, cursor: 'pointer', userSelect: 'none' }}>
+                {c.label}<SortArrow active={rb.sortField === c.key} dir={rb.sortDir} />
+                <ColumnResizeHandle colKey={c.key} rb={rb} />
+              </th>
             ))}
-            <th style={{ padding: '10px 16px', borderBottom: '1px solid #EDF2F7' }} />
+            <th style={{ padding: '10px 16px', borderBottom: '1px solid #EDF2F7', width: '90px' }} />
           </tr>
         </thead>
         <tbody>
@@ -148,6 +156,10 @@ const BY_TRAINING_COLUMNS: ReportColumn[] = [
   { key: 'assigned_by_name', label: 'Assigned By', filterable: 'text' },
 ]
 
+const BY_TRAINING_DEFAULT_WIDTHS: Record<string, number> = {
+  employee_display: 220, due_date: 150, status: 140, assigned_by_name: 180,
+}
+
 function ByTraining() {
   const [catalog, setCatalog] = useState<any[]>([])
   const [selected, setSelected] = useState('')
@@ -189,11 +201,14 @@ function ByTraining() {
         <div style={{ textAlign: 'center', padding: '32px', color: '#45B6E4' }}>Loading…</div>
       ) : (
         <div style={{ overflowX: 'auto' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px', tableLayout: 'fixed' }}>
           <thead style={{ background: '#FAFBFC' }}>
             <tr>
               {BY_TRAINING_COLUMNS.filter(c => isVisible(c.key)).map(c => (
-                <th key={c.key} onClick={() => rb.toggleSort(c.key)} style={{ padding: '10px 16px', textAlign: 'left', fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#45B6E4', borderBottom: '1px solid #EDF2F7', cursor: 'pointer', userSelect: 'none' }}>{c.label}<SortArrow active={rb.sortField === c.key} dir={rb.sortDir} /></th>
+                <th key={c.key} onClick={() => rb.toggleSort(c.key)} style={{ position: 'relative', padding: '10px 16px', textAlign: 'left', fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#45B6E4', borderBottom: '1px solid #EDF2F7', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', width: `${rb.columnWidths[c.key] || BY_TRAINING_DEFAULT_WIDTHS[c.key] || 150}px`, cursor: 'pointer', userSelect: 'none' }}>
+                  {c.label}<SortArrow active={rb.sortField === c.key} dir={rb.sortDir} />
+                  <ColumnResizeHandle colKey={c.key} rb={rb} />
+                </th>
               ))}
             </tr>
           </thead>

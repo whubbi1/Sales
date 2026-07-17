@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { Sidebar } from '@/components/Sidebar'
 import { getStoredUser } from '@/lib/auth'
-import { useReportBuilder, applyReport, ReportPanel, ReportColumn, SortArrow, Pagination } from '@/components/it/ReportBuilder'
+import { useReportBuilder, applyReport, ReportPanel, ReportColumn, ColumnResizeHandle, SortArrow, Pagination } from '@/components/it/ReportBuilder'
 import { PageHeader } from '@/components/shared/RecordLayout'
 
 const API = 'https://api.whubbi.wcomply.com'
@@ -15,6 +15,10 @@ const COLUMNS: ReportColumn[] = [
   { key: 'cv_status', label: 'CV', filterable: 'select', options: ['Complete', 'Not started'] },
   { key: 'experience_count', label: 'Experiences' },
 ]
+
+const DEFAULT_COLUMN_WIDTHS: Record<string, number> = {
+  employee_name: 200, cv_title: 200, department: 160, cv_status: 130, experience_count: 110,
+}
 
 function ShortCvModal({ user, onClose }: any) {
   const [cv, setCv] = useState<any>(null)
@@ -110,13 +114,16 @@ function CvDatabaseContent() {
       />
 
       <div style={{ background: 'white', borderRadius: '12px', border: '1px solid #EDF2F7', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px', tableLayout: 'fixed' }}>
           <thead style={{ background: '#FAFBFC' }}>
             <tr>
               {COLUMNS.filter(c => isVisible(c.key)).map(c => (
-                <th key={c.key} onClick={() => rb.toggleSort(c.key)} style={{ padding: '10px 16px', textAlign: 'left', fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#45B6E4', borderBottom: '1px solid #EDF2F7', cursor: 'pointer', userSelect: 'none' }}>{c.label}<SortArrow active={rb.sortField === c.key} dir={rb.sortDir} /></th>
+                <th key={c.key} onClick={() => rb.toggleSort(c.key)} style={{ position: 'relative', padding: '10px 16px', textAlign: 'left', fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#45B6E4', borderBottom: '1px solid #EDF2F7', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', width: `${rb.columnWidths[c.key] || DEFAULT_COLUMN_WIDTHS[c.key] || 150}px`, cursor: 'pointer', userSelect: 'none' }}>
+                  {c.label}<SortArrow active={rb.sortField === c.key} dir={rb.sortDir} />
+                  <ColumnResizeHandle colKey={c.key} rb={rb} />
+                </th>
               ))}
-              <th style={{ padding: '10px 16px', borderBottom: '1px solid #EDF2F7' }}>Actions</th>
+              <th style={{ padding: '10px 16px', borderBottom: '1px solid #EDF2F7', width: '160px' }}>Actions</th>
             </tr>
           </thead>
           <tbody>

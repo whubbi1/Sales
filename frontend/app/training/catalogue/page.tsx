@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect } from 'react'
 import TrainingLayout, { useTrainingPerm } from '@/components/TrainingLayout'
-import { useReportBuilder, applyReport, ReportPanel, ReportColumn, SortArrow, Pagination } from '@/components/it/ReportBuilder'
+import { useReportBuilder, applyReport, ReportPanel, ReportColumn, ColumnResizeHandle, SortArrow, Pagination } from '@/components/it/ReportBuilder'
 import { getStoredUser } from '@/lib/auth'
 
 const API = 'https://api.whubbi.wcomply.com'
@@ -32,6 +32,11 @@ const COLUMNS: ReportColumn[] = [
   { key: 'expertise_level', label: 'Expertise', filterable: 'select', options: EXPERTISE_LEVELS },
   { key: 'material_link', label: 'Material Link' },
 ]
+
+const DEFAULT_COLUMN_WIDTHS: Record<string, number> = {
+  training_type: 110, company: 150, title: 200, description: 240,
+  duration: 110, languages_display: 180, expertise_level: 130, material_link: 130,
+}
 
 function LanguageChecklist({ selected, onToggle }: { selected: string[]; onToggle: (lang: string) => void }) {
   return (
@@ -229,14 +234,17 @@ function CatalogueContent() {
       </div>
 
       <div style={{ background: 'white', borderRadius: '12px', border: '1px solid #EDF2F7', overflowX: 'auto', overflowY: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.06)', maxWidth: '100%' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px', tableLayout: 'fixed' }}>
           <thead style={{ background: '#FAFBFC' }}>
             <tr>
-              <th style={{ padding: '10px 12px', textAlign: 'left', fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#45B6E4', borderBottom: '1px solid #EDF2F7', whiteSpace: 'nowrap' }}>ID</th>
+              <th style={{ padding: '10px 12px', textAlign: 'left', fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#45B6E4', borderBottom: '1px solid #EDF2F7', whiteSpace: 'nowrap', width: '90px' }}>ID</th>
               {COLUMNS.filter(c => isVisible(c.key)).map(c => (
-                <th key={c.key} onClick={() => rb.toggleSort(c.key)} style={{ padding: '10px 12px', textAlign: 'left', fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#45B6E4', borderBottom: '1px solid #EDF2F7', whiteSpace: 'nowrap', cursor: 'pointer', userSelect: 'none' }}>{c.label}<SortArrow active={rb.sortField === c.key} dir={rb.sortDir} /></th>
+                <th key={c.key} onClick={() => rb.toggleSort(c.key)} style={{ position: 'relative', padding: '10px 12px', textAlign: 'left', fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#45B6E4', borderBottom: '1px solid #EDF2F7', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', width: `${rb.columnWidths[c.key] || DEFAULT_COLUMN_WIDTHS[c.key] || 150}px`, cursor: 'pointer', userSelect: 'none' }}>
+                  {c.label}<SortArrow active={rb.sortField === c.key} dir={rb.sortDir} />
+                  <ColumnResizeHandle colKey={c.key} rb={rb} />
+                </th>
               ))}
-              {canEdit && <th style={{ padding: '10px 12px', borderBottom: '1px solid #EDF2F7' }} />}
+              {canEdit && <th style={{ padding: '10px 12px', borderBottom: '1px solid #EDF2F7', width: '90px' }} />}
             </tr>
           </thead>
           <tbody>

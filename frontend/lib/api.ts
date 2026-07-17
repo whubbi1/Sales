@@ -123,6 +123,14 @@ export const contactsAPI = {
   update: (id: string, d: any) => fetchAPI(`/contacts/${id}`, { method: 'PUT', body: JSON.stringify(d) }),
   delete: (id: string) => fetchAPI(`/contacts/${id}`, { method: 'DELETE' }),
   getOpportunities: (id: string) => fetchAPI(`/contacts/${id}/opportunities`),
+
+  getNotes:    (id: string) => fetchAPI(`/contacts/${id}/notes`),
+  createNote:  (id: string, d: any) => fetchAPI(`/contacts/${id}/notes`, { method: 'POST', body: JSON.stringify(d) }),
+  deleteNote:  (cid: string, nid: string) => fetchAPI(`/contacts/${cid}/notes/${nid}`, { method: 'DELETE' }),
+
+  getArticles:   (id: string) => fetchAPI(`/contacts/${id}/articles`),
+  createArticle: (id: string, d: any) => fetchAPI(`/contacts/${id}/articles`, { method: 'POST', body: JSON.stringify(d) }),
+  deleteArticle: (cid: string, aid: string) => fetchAPI(`/contacts/${cid}/articles/${aid}`, { method: 'DELETE' }),
 }
 
 // ─── Opportunities ────────────────────────────────────────────────────────────

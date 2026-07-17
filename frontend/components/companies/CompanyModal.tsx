@@ -50,6 +50,14 @@ export function CompanyModal({ company, companies = [], onClose, onSave }: any) 
     fetch('https://api.whubbi.wcomply.com/settings/users').then(r => r.json()).then(d => setUsers(d.users || [])).catch(() => {})
   }, [])
 
+  // Main Contact is scoped to contacts whose email domain matches one of this company's
+  // domains — falls back to every contact when no domain is set yet, so the field isn't
+  // uselessly empty for a company that hasn't been given a domain.
+  const domainContacts = form.domain_names.length === 0 ? contacts : contacts.filter((c: any) => {
+    const domain = (c.email || '').split('@')[1]?.toLowerCase()
+    return domain && form.domain_names.some((d: string) => d.toLowerCase() === domain)
+  })
+
   const toggle = (field: string, value: string) => {
     setForm(p => ({ ...p, [field]: (p as any)[field].includes(value) ? (p as any)[field].filter((v: string) => v !== value) : [...(p as any)[field], value] }))
   }
@@ -103,7 +111,7 @@ export function CompanyModal({ company, companies = [], onClose, onSave }: any) 
               <FormField label="Main Contact">
                 <select className="form-input" value={form.main_contact_id} onChange={e => setForm(p => ({ ...p, main_contact_id: e.target.value }))}>
                   <option value="">Select contact…</option>
-                  {contacts.map((c: any) => <option key={c.id} value={c.id}>{c.first_name} {c.last_name}</option>)}
+                  {domainContacts.map((c: any) => <option key={c.id} value={c.id}>{c.first_name} {c.last_name}</option>)}
                 </select>
               </FormField>
               <FormField label="Phone">

@@ -6,6 +6,7 @@ import { getStoredUser } from '@/lib/auth'
 import { RecordLayout, PropertyRow, SidebarSection, SidebarCard, StatusBadge, TabNav, EmptyState } from '@/components/shared/RecordLayout'
 import { PartnerActionItems } from '@/components/partners/PartnerActionItems'
 import { PartnerModal } from '@/components/partners/PartnerModal'
+import { ActivityFeed } from '@/components/shared/ActivityFeed'
 
 const ERP_OPTIONS     = ["SAP", "Dynamics", "IFS", "Infor", "Odoo", "Oracle", "JDE", "SAGE", "Unknown", "Other"]
 const CYBER_OPTIONS   = ["SAP ETD", "SAP GRC", "SAP Focused Run", "Cloud ALM", "SecurityBridge", "Onapsis", "Layer Seven Security", "Other"]
@@ -62,6 +63,7 @@ export default function PartnerDetailPage() {
   const [newLinkUrl, setNewLinkUrl] = useState('')
   const [addingLink, setAddingLink] = useState(false)
   const [events, setEvents] = useState<any[]>([])
+  const [actionItems, setActionItems] = useState<any[]>([])
   const [customers, setCustomers] = useState<any[]>([])
   const [allContacts, setAllContacts] = useState<any[]>([])
   const [allOpportunities, setAllOpportunities] = useState<any[]>([])
@@ -76,7 +78,7 @@ export default function PartnerDetailPage() {
 
   const load = async () => {
     try {
-      const [p, ctcts, opps, cmts, lnks, evts, custs, allC, allO, usersResp] = await Promise.all([
+      const [p, ctcts, opps, cmts, lnks, evts, custs, allC, allO, usersResp, actItems] = await Promise.all([
         partnersAPI.get(id as string),
         partnersAPI.getContacts(id as string),
         partnersAPI.getOpportunities(id as string),
@@ -87,6 +89,7 @@ export default function PartnerDetailPage() {
         contactsAPI.list({}),
         opportunitiesAPI.list({}),
         fetch('https://api.whubbi.wcomply.com/settings/users').then(r => r.json()).catch(() => ({ users: [] })),
+        partnersAPI.getActionItems(id as string),
       ])
       setPartner(p)
       setContacts(ctcts)
@@ -98,6 +101,7 @@ export default function PartnerDetailPage() {
       setAllContacts(allC)
       setAllOpportunities(allO)
       setUsers(usersResp.users || [])
+      setActionItems(actItems)
     } catch {
       router.push('/partners')
     } finally {
@@ -268,37 +272,46 @@ export default function PartnerDetailPage() {
 
       <div style={{ background: 'white', borderRadius: '10px', border: '1px solid #EDF2F7', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
         <div style={{ padding: '0 20px', background: '#FAFBFC', borderBottom: '2px solid #E2E8F0' }}>
-          <TabNav tabs={['Overview', 'Contacts', 'Opportunities', 'Action List', 'Events', 'Information', 'Customers']} active={tab} onChange={setTab} />
+          <TabNav tabs={['Overview', 'Notes', 'Contacts', 'Opportunities', 'Action List', 'Events', 'Information', 'Customers']} active={tab} onChange={setTab} />
         </div>
         <div style={{ padding: '20px' }}>
           {tab === 'Overview' && (
             <div>
-              <div style={{ marginBottom: '10px' }}>
+              <div style={{ marginBottom: '18px' }}>
                 <EditableText value={partner.notes} editing={editing === 'notes'} onStartEdit={() => setEditing('notes')} onSave={(v: string) => patchField('notes', v)} placeholder="No general notes." textarea />
               </div>
-              <div style={{ marginTop: '18px', paddingTop: '14px', borderTop: '1px solid #F1F5F9' }}>
-                <p style={{ fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#9B9B9B', marginBottom: '10px' }}>Comments</p>
-                <div style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
-                  <textarea className="form-input" style={{ flex: 1, resize: 'vertical' }} rows={2} placeholder="Write a comment…" value={newComment} onChange={e => setNewComment(e.target.value)} />
-                  <button className="btn-primary" onClick={postComment} style={{ alignSelf: 'flex-end' }}>Post</button>
-                </div>
-                {comments.length === 0 ? <p style={{ color: '#9B9B9B', fontSize: '13px' }}>No comments yet.</p> : (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                    {comments.map((c: any) => (
-                      <div key={c.id} style={{ padding: '10px 14px', border: '1px solid #EDF2F7', borderRadius: '8px' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-                          <span style={{ fontWeight: '700', color: '#144766', fontSize: '12px' }}>{c.author_name || c.author_email}</span>
-                          <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-                            <span style={{ fontSize: '10px', color: '#9B9B9B' }}>{new Date(c.created_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
-                            <button onClick={() => deleteComment(c)} style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#DC2626', fontSize: '14px', padding: 0, lineHeight: 1 }}>×</button>
-                          </div>
-                        </div>
-                        <p style={{ fontSize: '13px', color: '#3F3F3F', margin: 0, whiteSpace: 'pre-wrap' }}>{c.comment}</p>
-                      </div>
-                    ))}
-                  </div>
-                )}
+              <p className="section-label">Activity</p>
+              <ActivityFeed
+                opportunities={opportunities}
+                notes={comments.map((c: any) => ({ id: c.id, content: c.comment, created_at: c.created_at }))}
+                tasks={actionItems}
+                opportunityHref={o => `/opportunities/${o.id}`}
+              />
+            </div>
+          )}
+
+          {tab === 'Notes' && (
+            <div>
+              <div style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
+                <textarea className="form-input" style={{ flex: 1, resize: 'vertical' }} rows={2} placeholder="Write a note…" value={newComment} onChange={e => setNewComment(e.target.value)} />
+                <button className="btn-primary" onClick={postComment} style={{ alignSelf: 'flex-end' }}>Post</button>
               </div>
+              {comments.length === 0 ? <p style={{ color: '#9B9B9B', fontSize: '13px' }}>No notes yet.</p> : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  {comments.map((c: any) => (
+                    <div key={c.id} style={{ padding: '10px 14px', border: '1px solid #EDF2F7', borderRadius: '8px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                        <span style={{ fontWeight: '700', color: '#144766', fontSize: '12px' }}>{c.author_name || c.author_email}</span>
+                        <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                          <span style={{ fontSize: '10px', color: '#9B9B9B' }}>{new Date(c.created_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
+                          <button onClick={() => deleteComment(c)} style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#DC2626', fontSize: '14px', padding: 0, lineHeight: 1 }}>×</button>
+                        </div>
+                      </div>
+                      <p style={{ fontSize: '13px', color: '#3F3F3F', margin: 0, whiteSpace: 'pre-wrap' }}>{c.comment}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
 

@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import TasksLayout, { useTasksPerm } from '@/components/TasksLayout'
-import { useReportBuilder, applyReport, ReportPanel, ReportColumn, SortArrow, Pagination } from '@/components/it/ReportBuilder'
+import { useReportBuilder, applyReport, ReportPanel, ReportColumn, ColumnResizeHandle, SortArrow, Pagination } from '@/components/it/ReportBuilder'
 import { taskManagerAPI } from '@/lib/api'
 import { getStoredUser } from '@/lib/auth'
 import { TaskModal } from '@/components/tasks/TaskModal'
@@ -28,6 +28,11 @@ const COLUMNS: ReportColumn[] = [
   { key: 'status', label: 'Status', filterable: 'select', options: Object.keys(STATUS_LABEL) },
   { key: 'subtask_count', label: 'Subtasks' },
 ]
+
+const DEFAULT_COLUMN_WIDTHS: Record<string, number> = {
+  task_number: 110, title: 220, source: 130, owner_display: 160,
+  assignee_display: 160, due_date: 130, status: 140, subtask_count: 110,
+}
 
 function fmtDate(d: string) {
   return d ? new Date(d).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'
@@ -90,7 +95,10 @@ function TaskManagerContent() {
   const headerRow = (
     <tr>
       {COLUMNS.filter(c => isVisible(c.key)).map(c => (
-        <th key={c.key} onClick={() => rb.toggleSort(c.key)} style={{ padding: '10px 12px', textAlign: 'left', fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#45B6E4', borderBottom: '1px solid #EDF2F7', whiteSpace: 'nowrap', cursor: 'pointer', userSelect: 'none' }}>{c.label}<SortArrow active={rb.sortField === c.key} dir={rb.sortDir} /></th>
+        <th key={c.key} onClick={() => rb.toggleSort(c.key)} style={{ position: 'relative', padding: '10px 12px', textAlign: 'left', fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#45B6E4', borderBottom: '1px solid #EDF2F7', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', width: `${rb.columnWidths[c.key] || DEFAULT_COLUMN_WIDTHS[c.key] || 150}px`, cursor: 'pointer', userSelect: 'none' }}>
+          {c.label}<SortArrow active={rb.sortField === c.key} dir={rb.sortDir} />
+          <ColumnResizeHandle colKey={c.key} rb={rb} />
+        </th>
       ))}
     </tr>
   )
@@ -141,7 +149,7 @@ function TaskManagerContent() {
             <div key={name}>
               <div style={{ fontSize: '11px', fontWeight: '800', color: '#7C3AED', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '8px' }}>📁 {name} ({groups[name].length})</div>
               <div style={{ background: 'white', borderRadius: '12px', border: '1px solid #EDF2F7', overflowX: 'auto', overflowY: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.06)', maxWidth: '100%' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px', tableLayout: 'fixed' }}>
                   <thead style={{ background: '#FAFBFC' }}>{headerRow}</thead>
                   <tbody>{groups[name].map(Row)}</tbody>
                 </table>
@@ -151,7 +159,7 @@ function TaskManagerContent() {
         </div>
       ) : (
         <div style={{ background: 'white', borderRadius: '12px', border: '1px solid #EDF2F7', overflowX: 'auto', overflowY: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.06)', maxWidth: '100%' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px', tableLayout: 'fixed' }}>
             <thead style={{ background: '#FAFBFC' }}>{headerRow}</thead>
             <tbody>{pageRows.map(Row)}</tbody>
           </table>

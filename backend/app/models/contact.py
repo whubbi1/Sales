@@ -51,3 +51,12 @@ class Contact(Base):
 
     company      = relationship("Company", back_populates="contacts", foreign_keys=[company_id])
     opportunities = relationship("Opportunity", secondary=contact_opportunity, back_populates="contacts")
+
+class ContactNote(Base):
+    __tablename__ = "contact_notes"
+    id         = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    contact_id = Column(UUID(as_uuid=True), nullable=False)
+    content    = Column(Text, nullable=False)
+    created_by = Column(String(255))
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

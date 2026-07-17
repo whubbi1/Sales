@@ -1402,6 +1402,17 @@ async def startup():
                 # documents (resolved to a presigned URL on read).
                 "ALTER TABLE companies ADD COLUMN IF NOT EXISTS logo_url TEXT",
                 "ALTER TABLE marketing_events ADD COLUMN IF NOT EXISTS logo_url TEXT",
+
+                # Contact Articles — articles can now be anchored under a Contact instead of a
+                # Company, sharing the same company_articles/article_companies/article_contacts
+                # tables. Loosen the old NOT NULL so a contact-only article has no company_id.
+                "ALTER TABLE company_articles ALTER COLUMN company_id DROP NOT NULL",
+                "ALTER TABLE company_articles ADD COLUMN IF NOT EXISTS contact_id UUID",
+
+                # Opportunity Contracting Party — can now be a Partner instead of only a Company;
+                # kept as a separate plain column (no FK) rather than loosening the existing
+                # contracting_party_id FK, same pattern already used for opportunities.partner_id.
+                "ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS contracting_party_partner_id UUID",
             ]
             for sql in sqls:
                 try:

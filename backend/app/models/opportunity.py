@@ -20,6 +20,9 @@ class Opportunity(Base):
     # relationships to other tables; attached manually in the router (see _attach_contracting_party),
     # same trick used for `partner` above, to avoid a repeat of the AmbiguousForeignKeysError.
     contracting_party_id = Column(UUID(as_uuid=True), ForeignKey("companies.id", ondelete="SET NULL"), nullable=True)
+    # The contracting party can also be a Partner — separate plain column (no FK, same reasoning
+    # as partner_id above) rather than loosening contracting_party_id's existing FK.
+    contracting_party_partner_id = Column(UUID(as_uuid=True), nullable=True)
 
     deal_id             = Column(String(100))
     deal_name           = Column(String(500), nullable=False)

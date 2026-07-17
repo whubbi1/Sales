@@ -65,7 +65,11 @@ class CompanyNote(Base):
 class CompanyArticle(Base):
     __tablename__ = "company_articles"
     id          = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    company_id  = Column(UUID(as_uuid=True), nullable=False)
+    # An article is anchored to whichever of these it was created under — nullable so a
+    # Contact-created article doesn't need a Company (loosened from company_id NOT NULL via
+    # migration in main.py; existing rows are unaffected).
+    company_id  = Column(UUID(as_uuid=True), nullable=True)
+    contact_id  = Column(UUID(as_uuid=True), nullable=True)
     title       = Column(String(500), nullable=False)
     url         = Column(String(1000), nullable=False)
     description = Column(Text)

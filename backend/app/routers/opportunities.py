@@ -39,7 +39,8 @@ async def _attach_partners(db: AsyncSession, objs: list):
 
 async def _attach_contracting_party(db: AsyncSession, objs: list):
     # contracting_party_id isn't an ORM relationship (plain FK, see opportunity.py) — attach it
-    # as a plain instance attribute, same trick as _attach_partners above.
+    # as a plain instance attribute, same trick as _attach_partners above. The contracting party
+    # can be either a Company (contracting_party_id) or a Partner (contracting_party_partner_id).
     ids = {o.contracting_party_id for o in objs if getattr(o, "contracting_party_id", None)}
     companies = {}
     if ids:
@@ -47,6 +48,16 @@ async def _attach_contracting_party(db: AsyncSession, objs: list):
         companies = {c.id: c for c in r.scalars().all()}
     for o in objs:
         o.contracting_party_company = companies.get(o.contracting_party_id) if getattr(o, "contracting_party_id", None) else None
+
+    partner_ids = {str(o.contracting_party_partner_id) for o in objs if getattr(o, "contracting_party_partner_id", None)}
+    partners = {}
+    for pid in partner_ids:
+        r = await db.execute(text("SELECT id, internal_id, name, status FROM partners WHERE id = CAST(:id AS UUID)"), {"id": pid})
+        row = r.fetchone()
+        if row:
+            partners[pid] = PartnerSummary(id=row.id, internal_id=row.internal_id, name=row.name, status=row.status)
+    for o in objs:
+        o.contracting_party_partner = partners.get(str(o.contracting_party_partner_id)) if getattr(o, "contracting_party_partner_id", None) else None
 
 
 async def _lookup_names(db: AsyncSession, company_id, partner_id):

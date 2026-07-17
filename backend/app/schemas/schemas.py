@@ -173,6 +173,7 @@ class OpportunityBase(BaseModel):
     company_id: Optional[UUID] = None
     partner_id: Optional[UUID] = None
     contracting_party_id: Optional[UUID] = None
+    contracting_party_partner_id: Optional[UUID] = None
     # deal_id is server-generated on create (see next_internal_id) and never changes after —
     # kept here as Optional/ignored-on-write so responses can still round-trip it.
     deal_id: Optional[str] = None
@@ -214,6 +215,7 @@ class OpportunityResponse(OpportunityBase):
     company: Optional[CompanySummary] = None
     partner: Optional[PartnerSummary] = None
     contracting_party_company: Optional[CompanySummary] = None
+    contracting_party_partner: Optional[PartnerSummary] = None
     contacts: Optional[List[ContactSummary]] = []
     created_at: datetime
     updated_at: datetime

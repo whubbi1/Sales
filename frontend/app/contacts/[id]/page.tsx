@@ -4,6 +4,9 @@ import { useParams, useRouter } from 'next/navigation'
 import { contactsAPI } from '@/lib/api'
 import { RecordLayout, PropertyRow, SidebarSection, SidebarCard, StatusBadge, TabNav } from '@/components/shared/RecordLayout'
 import { ContactModal } from '@/components/contacts/ContactModal'
+import { ContactNotes } from '@/components/contacts/ContactNotes'
+import { ContactArticles } from '@/components/contacts/ContactArticles'
+import { ActivityFeed } from '@/components/shared/ActivityFeed'
 
 const SUB_LABELS: Record<string, string> = { 'Marketing Information': '📧', 'Customer Service Communication': '💬', 'One to One': '🤝' }
 
@@ -12,6 +15,7 @@ export default function ContactDetailPage() {
   const router = useRouter()
   const [contact, setContact] = useState<any>(null)
   const [opportunities, setOpportunities] = useState<any[]>([])
+  const [notes, setNotes] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [tab, setTab] = useState('Overview')
   const [showEdit, setShowEdit] = useState(false)
@@ -21,12 +25,14 @@ export default function ContactDetailPage() {
 
   const load = async () => {
     try {
-      const [c, opps] = await Promise.all([
+      const [c, opps, ntes] = await Promise.all([
         contactsAPI.get(id as string),
         contactsAPI.getOpportunities(id as string),
+        contactsAPI.getNotes(id as string),
       ])
       setContact(c)
       setOpportunities(opps)
+      setNotes(ntes)
     } catch {
       router.push('/contacts')
     } finally {
@@ -91,10 +97,18 @@ export default function ContactDetailPage() {
 
       <div style={{ background: 'white', borderRadius: '10px', border: '1px solid #EDF2F7', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
         <div style={{ padding: '0 20px', background: '#FAFBFC', borderBottom: '2px solid #E2E8F0' }}>
-          <TabNav tabs={['Overview', 'Opportunities']} active={tab} onChange={setTab} />
+          <TabNav tabs={['Overview', 'Opportunities', 'Notes', 'Articles']} active={tab} onChange={setTab} />
         </div>
         <div style={{ padding: '20px' }}>
-          {tab === 'Overview' && <p style={{ color: contact.notes ? '#3F3F3F' : '#CBD5E0', fontSize: '13px', lineHeight: '1.8' }}>{contact.notes || 'No notes.'}</p>}
+          {tab === 'Overview' && (
+            <div>
+              <p style={{ color: contact.notes ? '#3F3F3F' : '#CBD5E0', fontSize: '13px', lineHeight: '1.8', marginBottom: '18px' }}>{contact.notes || 'No notes.'}</p>
+              <p className="section-label">Activity</p>
+              <ActivityFeed opportunities={opportunities} notes={notes} opportunityHref={o => `/opportunities/${o.id}`} />
+            </div>
+          )}
+          {tab === 'Notes' && <ContactNotes contactId={id as string} />}
+          {tab === 'Articles' && <ContactArticles contactId={id as string} />}
           {tab === 'Opportunities' && (
             <div>
               {opportunities.length === 0 ? <p style={{ color: '#9B9B9B', fontSize: '13px' }}>No opportunities linked.</p> : (

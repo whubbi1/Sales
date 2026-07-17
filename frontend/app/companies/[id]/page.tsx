@@ -9,6 +9,7 @@ import { CompanyNotes } from '@/components/companies/CompanyNotes'
 import { CompanyArticles } from '@/components/companies/CompanyArticles'
 import { CompanyTasks } from '@/components/companies/CompanyTasks'
 import { CompanyServices } from '@/components/companies/CompanyServices'
+import { ActivityFeed } from '@/components/shared/ActivityFeed'
 
 const LEVEL_COLORS: Record<number, string> = { 1: '#144766', 2: '#1a5a84', 3: '#219BD6', 4: '#7DD3F0' }
 const LEVEL_LABELS: Record<number, string> = { 1: 'Group', 2: 'Parent', 3: 'Child', 4: 'Sub-Child' }
@@ -20,6 +21,8 @@ export default function CompanyDetailPage() {
   const [allCompanies, setAllCompanies] = useState<any[]>([])
   const [contacts, setContacts] = useState<any[]>([])
   const [opportunities, setOpportunities] = useState<any[]>([])
+  const [notes, setNotes] = useState<any[]>([])
+  const [tasks, setTasks] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [tab, setTab] = useState('Overview')
   const [showEdit, setShowEdit] = useState(false)
@@ -64,16 +67,20 @@ export default function CompanyDetailPage() {
 
   const load = async () => {
     try {
-      const [c, all, ctcts, opps] = await Promise.all([
+      const [c, all, ctcts, opps, ntes, tsks] = await Promise.all([
         companiesAPI.get(id as string),
         companiesAPI.list({}),
         companiesAPI.getContacts(id as string),
         companiesAPI.getOpportunities(id as string),
+        companiesAPI.getNotes(id as string),
+        companiesAPI.getTasks(id as string),
       ])
       setCompany(c)
       setAllCompanies(all)
       setContacts(ctcts)
       setOpportunities(opps)
+      setNotes(ntes)
+      setTasks(tsks)
     } catch {
       router.push('/companies')
     } finally {
@@ -176,7 +183,13 @@ export default function CompanyDetailPage() {
           <TabNav tabs={['Overview', 'Research', 'Services', 'Notes', 'Articles', 'Tasks']} active={tab} onChange={setTab} />
         </div>
         <div style={{ padding: '20px' }}>
-          {tab === 'Overview' && <p style={{ color: company.notes ? '#3F3F3F' : '#CBD5E0', fontSize: '13px', lineHeight: '1.8', whiteSpace: 'pre-wrap' }}>{company.notes || 'No general notes.'}</p>}
+          {tab === 'Overview' && (
+            <div>
+              <p style={{ color: company.notes ? '#3F3F3F' : '#CBD5E0', fontSize: '13px', lineHeight: '1.8', whiteSpace: 'pre-wrap', marginBottom: '18px' }}>{company.notes || 'No general notes.'}</p>
+              <p className="section-label">Activity</p>
+              <ActivityFeed opportunities={opportunities} notes={notes} tasks={tasks} opportunityHref={o => `/opportunities/${o.id}`} />
+            </div>
+          )}
           {tab === 'Research' && (
             <div>
               <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '16px' }}>

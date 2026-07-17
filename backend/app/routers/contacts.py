@@ -7,10 +7,13 @@ from typing import List
 from uuid import UUID
 
 from app.database import get_db
-from app.models.contact import Contact
-from app.models.company import Company
+from app.models.contact import Contact, ContactNote
+from app.models.company import Company, CompanyArticle
 from app.models.opportunity import Opportunity
-from app.schemas.schemas import ContactCreate, ContactUpdate, ContactResponse, ContactSummary, OpportunitySummary, PartnerSummary
+from app.schemas.schemas import (
+    ContactCreate, ContactUpdate, ContactResponse, ContactSummary, OpportunitySummary, PartnerSummary,
+    NoteCreate, NoteResponse, ArticleCreate, ArticleResponse,
+)
 from app.services.ids import next_internal_id
 
 router = APIRouter()
@@ -112,3 +115,60 @@ async def get_contact_opportunities(contact_id: UUID, db: AsyncSession = Depends
     if not contact:
         raise HTTPException(status_code=404, detail="Contact not found")
     return contact.opportunities
+
+# ─── Notes ────────────────────────────────────────────────────────────────────
+@router.get("/{contact_id}/notes", response_model=List[NoteResponse])
+async def list_contact_notes(contact_id: UUID, db: AsyncSession = Depends(get_db)):
+    r = await db.execute(select(ContactNote).where(ContactNote.contact_id == contact_id).order_by(ContactNote.created_at.desc()))
+    return r.scalars().all()
+
+@router.post("/{contact_id}/notes", response_model=NoteResponse, status_code=status.HTTP_201_CREATED)
+async def create_contact_note(contact_id: UUID, note: NoteCreate, db: AsyncSession = Depends(get_db)):
+    db_note = ContactNote(contact_id=contact_id, **note.model_dump())
+    db.add(db_note)
+    await db.commit()
+    await db.refresh(db_note)
+    return db_note
+
+@router.delete("/{contact_id}/notes/{note_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_contact_note(contact_id: UUID, note_id: UUID, db: AsyncSession = Depends(get_db)):
+    r = await db.execute(select(ContactNote).where(ContactNote.id == note_id, ContactNote.contact_id == contact_id))
+    note = r.scalar_one_or_none()
+    if not note:
+        raise HTTPException(status_code=404, detail="Note not found")
+    await db.delete(note)
+    await db.commit()
+
+# ─── Articles ─────────────────────────────────────────────────────────────────
+# Shares company_articles/article_companies/article_contacts with the Companies module
+# (see companies.py's Articles section) — an article created here has contact_id set and
+# company_id null, but can still be additionally linked to companies via article_companies.
+@router.get("/{contact_id}/articles", response_model=List[ArticleResponse])
+async def list_contact_articles(contact_id: UUID, db: AsyncSession = Depends(get_db)):
+    r = await db.execute(text("""
+        SELECT * FROM (
+            SELECT a.* FROM company_articles a WHERE a.contact_id = :cid
+            UNION
+            SELECT a.* FROM company_articles a
+            JOIN article_contacts ac ON ac.article_id = a.id
+            WHERE ac.contact_id = :cid
+        ) sub ORDER BY created_at DESC
+    """), {"cid": str(contact_id)})
+    return [dict(row._mapping) for row in r.fetchall()]
+
+@router.post("/{contact_id}/articles", response_model=ArticleResponse, status_code=status.HTTP_201_CREATED)
+async def create_contact_article(contact_id: UUID, article: ArticleCreate, db: AsyncSession = Depends(get_db)):
+    db_article = CompanyArticle(contact_id=contact_id, **article.model_dump())
+    db.add(db_article)
+    await db.commit()
+    await db.refresh(db_article)
+    return db_article
+
+@router.delete("/{contact_id}/articles/{article_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_contact_article(contact_id: UUID, article_id: UUID, db: AsyncSession = Depends(get_db)):
+    r = await db.execute(select(CompanyArticle).where(CompanyArticle.id == article_id, CompanyArticle.contact_id == contact_id))
+    article = r.scalar_one_or_none()
+    if not article:
+        raise HTTPException(status_code=404, detail="Article not found")
+    await db.delete(article)
+    await db.commit()

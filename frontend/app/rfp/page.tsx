@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { Sidebar } from '@/components/Sidebar'
 import { rfpAPI } from '@/lib/api'
 import { PageHeader, EmptyState } from '@/components/shared/RecordLayout'
-import { useReportBuilder, applyReport, ReportPanel, ReportColumn, REPORT_CELL_STYLE, SortArrow, Pagination } from '@/components/it/ReportBuilder'
+import { useReportBuilder, applyReport, ReportPanel, ReportColumn, ColumnResizeHandle, REPORT_CELL_STYLE, SortArrow, Pagination } from '@/components/it/ReportBuilder'
 import { getStoredUser } from '@/lib/auth'
 
 const STATUS_OPTIONS = ['Open', 'Submitted', 'Won', 'Lost']
@@ -17,6 +17,10 @@ const COLUMNS: ReportColumn[] = [
   { key: 'status', label: 'Status', filterable: 'select', options: STATUS_OPTIONS },
   { key: 'opportunities_count', label: 'Opportunities' },
 ]
+
+const DEFAULT_COLUMN_WIDTHS: Record<string, number> = {
+  name: 240, customer_name: 170, owner: 160, status: 130, opportunities_count: 150,
+}
 
 export default function RFPPage() {
   const router = useRouter()
@@ -84,11 +88,14 @@ export default function RFPPage() {
           </div>
 
           <div style={{ background: 'white', borderRadius: '10px', border: '1px solid #EDF2F7', boxShadow: '0 1px 3px rgba(0,0,0,0.06)', overflow: 'hidden' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
               <thead style={{ background: '#FAFBFC' }}>
                 <tr>
                   {COLUMNS.filter(c => isVisible(c.key)).map(c => (
-                    <th key={c.key} onClick={() => rb.toggleSort(c.key)} style={{ textAlign: 'left', padding: '10px 16px', fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#9B9B9B', borderBottom: '1px solid #E2E8F0', whiteSpace: 'nowrap', cursor: 'pointer', userSelect: 'none' }}>{c.label}<SortArrow active={rb.sortField === c.key} dir={rb.sortDir} /></th>
+                    <th key={c.key} onClick={() => rb.toggleSort(c.key)} style={{ position: 'relative', textAlign: 'left', padding: '10px 16px', fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#9B9B9B', borderBottom: '1px solid #E2E8F0', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', width: `${rb.columnWidths[c.key] || DEFAULT_COLUMN_WIDTHS[c.key] || 150}px`, cursor: 'pointer', userSelect: 'none' }}>
+                      {c.label}<SortArrow active={rb.sortField === c.key} dir={rb.sortDir} />
+                      <ColumnResizeHandle colKey={c.key} rb={rb} />
+                    </th>
                   ))}
                 </tr>
               </thead>
