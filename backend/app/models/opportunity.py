@@ -43,6 +43,10 @@ class Opportunity(Base):
         name='project_status_enum'
     ))
     contracting_party   = Column(String(255))
+    # Daily Invoicing only — deal_amount is computed from these two (see opportunities.py)
+    # rather than entered directly, so it always reflects days x rate.
+    invoice_days        = Column(Float)
+    daily_rate          = Column(Float)
     deal_type           = Column(SAEnum(
         'SAP', 'GRC', 'Smart Global Governance', 'SecurityBridge',
         'Onapsis', 'BowBridge', 'IBM OpenPages',

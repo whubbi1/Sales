@@ -24,7 +24,7 @@ async def global_exception_handler(request: Request, exc: Exception):
 async def startup():
     try:
         from app.database import engine, Base
-        from app.models import company, contact, opportunity, opportunity_extra, error_log, url_monitor, user_profile, helpdesk, background_jobs, grc, hr
+        from app.models import company, contact, opportunity, opportunity_extra, error_log, url_monitor, user_profile, helpdesk, background_jobs, grc, hr, project, timesheet
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
 
@@ -1182,6 +1182,7 @@ async def startup():
                 "CREATE SEQUENCE IF NOT EXISTS contact_internal_id_seq",
                 "CREATE SEQUENCE IF NOT EXISTS partner_internal_id_seq",
                 "CREATE SEQUENCE IF NOT EXISTS opportunity_deal_id_seq",
+                "CREATE SEQUENCE IF NOT EXISTS project_number_seq",
 
                 "ALTER TABLE companies ADD COLUMN IF NOT EXISTS internal_id VARCHAR(20)",
                 "ALTER TABLE contacts ADD COLUMN IF NOT EXISTS internal_id VARCHAR(20)",
@@ -1450,6 +1451,14 @@ async def startup():
                 # kept as a separate plain column (no FK) rather than loosening the existing
                 # contracting_party_id FK, same pattern already used for opportunities.partner_id.
                 "ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS contracting_party_partner_id UUID",
+
+                # Daily Invoicing — deal_amount is computed server-side from these two.
+                "ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS invoice_days FLOAT",
+                "ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS daily_rate FLOAT",
+
+                # Projects (Operations module) — lets the generic Task Manager tasks table
+                # be filtered to a project's own tasks tab via entity_type='project'.
+                "ALTER TYPE sales_task_entity_type ADD VALUE IF NOT EXISTS 'project'",
             ]
             for sql in sqls:
                 try:
@@ -1532,6 +1541,8 @@ _include("app.routers.training",       "/training",     "Training")
 _include("app.routers.task_manager",   "/task-manager", "TaskManager")
 _include("app.routers.task_teams",     "/task-manager", "TaskTeams")
 _include("app.routers.finance",        "/finance",      "Finance")
+_include("app.routers.projects",       "/projects",     "Projects")
+_include("app.routers.timesheets",     "/timesheets",   "Timesheets")
 
 try:
     from app.routers import auth, outlook, copilot

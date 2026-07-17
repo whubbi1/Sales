@@ -187,6 +187,8 @@ class OpportunityBase(BaseModel):
     project_status: Optional[str] = None
     contracting_party: Optional[str] = None
     deal_type: Optional[str] = None
+    invoice_days: Optional[float] = None
+    daily_rate: Optional[float] = None
     notes: Optional[str] = None
     assigned_to: Optional[str] = None
     assigned_to_email: Optional[str] = None
@@ -471,5 +473,139 @@ class RFPStaffingRateCreate(BaseModel):
 class RFPStaffingRateResponse(RFPStaffingRateCreate):
     id: UUID
     rfp_id: UUID
+    class Config:
+        from_attributes = True
+
+# ─── Projects (Operations module) ───────────────────────────────────────────────
+class ProjectCreate(BaseModel):
+    project_name: str
+    is_internal: Optional[bool] = False
+    opportunity_id: Optional[UUID] = None
+    partner_id: Optional[UUID] = None
+    description: Optional[str] = None
+    start_date: Optional[datetime] = None
+    end_date: Optional[datetime] = None
+
+class ProjectUpdate(BaseModel):
+    project_name: Optional[str] = None
+    partner_id: Optional[UUID] = None
+    description: Optional[str] = None
+    start_date: Optional[datetime] = None
+    end_date: Optional[datetime] = None
+    # Attributed to the activity log entries this update produces, not persisted on the row.
+    changed_by_email: Optional[str] = None
+    changed_by_name: Optional[str] = None
+
+class ProjectResponse(BaseModel):
+    id: UUID
+    project_number: Optional[str] = None
+    is_internal: bool
+    opportunity_id: Optional[UUID] = None
+    partner_id: Optional[UUID] = None
+    project_name: str
+    description: Optional[str] = None
+    start_date: Optional[datetime] = None
+    end_date: Optional[datetime] = None
+    created_at: datetime
+    updated_at: datetime
+    opportunity: Optional[OpportunitySummary] = None
+    company: Optional[CompanySummary] = None
+    partner: Optional[PartnerSummary] = None
+    class Config:
+        from_attributes = True
+
+class ProjectCommentCreate(BaseModel):
+    author_email: str
+    author_name: Optional[str] = None
+    comment: str
+
+class ProjectCommentResponse(ProjectCommentCreate):
+    id: UUID
+    project_id: UUID
+    created_at: datetime
+    class Config:
+        from_attributes = True
+
+class ProjectDocumentCreate(BaseModel):
+    category: str
+    title: str
+    url: str
+    description: Optional[str] = None
+    created_by: Optional[str] = None
+
+class ProjectDocumentResponse(ProjectDocumentCreate):
+    id: UUID
+    project_id: UUID
+    created_at: datetime
+    class Config:
+        from_attributes = True
+
+class ProjectActivityLogResponse(BaseModel):
+    id: UUID
+    project_id: UUID
+    field_name: str
+    old_value: Optional[str] = None
+    new_value: Optional[str] = None
+    changed_by_email: Optional[str] = None
+    changed_by_name: Optional[str] = None
+    changed_at: datetime
+    class Config:
+        from_attributes = True
+
+class ProjectStaffingTaskCreate(BaseModel):
+    plan_type: str
+    title: str
+    resource_email: Optional[str] = None
+    resource_name: Optional[str] = None
+    position: Optional[int] = 0
+
+class ProjectStaffingTaskUpdate(BaseModel):
+    title: Optional[str] = None
+    resource_email: Optional[str] = None
+    resource_name: Optional[str] = None
+    position: Optional[int] = None
+
+class ProjectStaffingAllocationIn(BaseModel):
+    period_start: datetime
+    period_type: str
+    days: float
+
+class ProjectStaffingAllocationResponse(ProjectStaffingAllocationIn):
+    id: UUID
+    class Config:
+        from_attributes = True
+
+class ProjectStaffingTaskResponse(ProjectStaffingTaskCreate):
+    id: UUID
+    project_id: UUID
+    created_at: datetime
+    updated_at: datetime
+    allocations: Optional[List[ProjectStaffingAllocationResponse]] = []
+    class Config:
+        from_attributes = True
+
+class ProjectStaffingAllocationsSet(BaseModel):
+    allocations: List[ProjectStaffingAllocationIn]
+
+# ─── Timesheets ─────────────────────────────────────────────────────────────────
+class TimesheetEntryCreate(BaseModel):
+    user_email: str
+    user_name: Optional[str] = None
+    project_id: UUID
+    entry_date: datetime
+    unit: str = 'days'
+    amount: float
+    description: Optional[str] = None
+
+class TimesheetEntryUpdate(BaseModel):
+    entry_date: Optional[datetime] = None
+    unit: Optional[str] = None
+    amount: Optional[float] = None
+    description: Optional[str] = None
+
+class TimesheetEntryResponse(TimesheetEntryCreate):
+    id: UUID
+    created_at: datetime
+    updated_at: datetime
     class Config:
         from_attributes = True

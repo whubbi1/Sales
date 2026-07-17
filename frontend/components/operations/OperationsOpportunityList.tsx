@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation'
 import { opportunitiesAPI } from '@/lib/api'
 import { getStoredUser } from '@/lib/auth'
 import { useReportBuilder, applyReport, ReportPanel, ReportColumn, ColumnResizeHandle, REPORT_CELL_STYLE, SortArrow, Pagination } from '@/components/it/ReportBuilder'
+import { PageHeader } from '@/components/shared/RecordLayout'
 
 const STATUSES = ['Contract Ongoing', 'Contract Finalised']
 
@@ -49,13 +50,12 @@ export function OperationsOpportunityList({ module, title, icon, projectTypes }:
 
   return (
     <div style={{ padding: '24px 28px' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-        <div>
-          <h1 style={{ fontSize: '20px', fontWeight: '800', color: '#156082', margin: '0 0 4px' }}>{icon} {title}</h1>
-          <p style={{ fontSize: '12px', color: '#94A3B8', margin: 0 }}>{reported.length} opportunit{reported.length !== 1 ? 'ies' : 'y'} · Contract Ongoing or Contract Finalised</p>
-        </div>
-        <ReportPanel columns={COLUMNS} rb={rb} />
-      </div>
+      <PageHeader
+        title={`${icon} ${title}`}
+        count={reported.length}
+        search={{ value: search, onChange: setSearch }}
+        action={<ReportPanel columns={COLUMNS} rb={rb} />}
+      />
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '12px', marginBottom: '16px', maxWidth: '480px' }}>
         <div style={{ background: 'white', borderRadius: '10px', border: '1px solid #EDF2F7', padding: '14px 16px', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
@@ -66,10 +66,6 @@ export function OperationsOpportunityList({ module, title, icon, projectTypes }:
           <div style={{ fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#9B9B9B', marginBottom: '4px' }}>Total Amount</div>
           <div style={{ fontSize: '20px', fontWeight: '800', color: '#059669' }}>€{totalAmount.toLocaleString('en-US')}</div>
         </div>
-      </div>
-
-      <div style={{ marginBottom: '14px' }}>
-        <input className="form-input" style={{ width: '260px' }} placeholder="Search opportunity…" value={search} onChange={e => setSearch(e.target.value)} />
       </div>
 
       <div style={{ background: 'white', borderRadius: '10px', border: '1px solid #EDF2F7', boxShadow: '0 1px 3px rgba(0,0,0,0.06)', overflow: 'auto' }}>

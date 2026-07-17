@@ -49,6 +49,8 @@ export function OpportunityModal({ opportunity, initialCompanyId, initialPartner
     deal_id: opportunity?.deal_id || '',
     project_name: opportunity?.project_name || '',
     deal_amount: opportunity?.deal_amount || '',
+    invoice_days: opportunity?.invoice_days ?? '',
+    daily_rate: opportunity?.daily_rate ?? '',
     closing_date: toDateStr(opportunity?.closing_date),
     deal_status: opportunity?.deal_status || 'Presentation To Be Scheduled',
     assigned_consultants: opportunity?.assigned_consultants || [],
@@ -115,6 +117,8 @@ export function OpportunityModal({ opportunity, initialCompanyId, initialPartner
         contracting_party_id: form.contracting_party_id && form.contracting_party_id.trim() !== '' ? form.contracting_party_id : null,
         contracting_party_partner_id: form.contracting_party_partner_id && form.contracting_party_partner_id.trim() !== '' ? form.contracting_party_partner_id : null,
         deal_amount: form.deal_amount ? Number(form.deal_amount) : null,
+        invoice_days: form.invoice_days !== '' ? Number(form.invoice_days) : null,
+        daily_rate: form.daily_rate !== '' ? Number(form.daily_rate) : null,
         closing_date: form.closing_date || null,
         contract_start_date: form.contract_start_date || null,
         contract_end_date: form.contract_end_date || null,
@@ -183,9 +187,23 @@ export function OpportunityModal({ opportunity, initialCompanyId, initialPartner
           <div>
             <p className="section-label">Financial & Timeline</p>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-              <FormField label="Opportunity Amount (EUR)">
-                <input className="form-input" type="number" value={form.deal_amount} onChange={e => setForm(p => ({ ...p, deal_amount: e.target.value }))} placeholder="50000" />
-              </FormField>
+              {form.project_status === 'Daily Invoicing' ? (
+                <>
+                  <FormField label="Days to Invoice">
+                    <input className="form-input" type="number" min={0} value={form.invoice_days} onChange={e => setForm(p => ({ ...p, invoice_days: e.target.value }))} placeholder="20" />
+                  </FormField>
+                  <FormField label="Daily Invoice Rate (EUR)">
+                    <input className="form-input" type="number" min={0} value={form.daily_rate} onChange={e => setForm(p => ({ ...p, daily_rate: e.target.value }))} placeholder="800" />
+                  </FormField>
+                  <FormField label="Opportunity Amount (EUR)" full>
+                    <input className="form-input" readOnly disabled value={form.invoice_days && form.daily_rate ? (Number(form.invoice_days) * Number(form.daily_rate)).toLocaleString('en-US') : ''} placeholder="Days × Rate" style={{ color: '#6B7280', background: '#F8FAFC' }} />
+                  </FormField>
+                </>
+              ) : (
+                <FormField label="Opportunity Amount (EUR)">
+                  <input className="form-input" type="number" value={form.deal_amount} onChange={e => setForm(p => ({ ...p, deal_amount: e.target.value }))} placeholder="50000" />
+                </FormField>
+              )}
               <FormField label="Closing Date">
                 <input className="form-input" type="date" value={form.closing_date} onChange={e => setForm(p => ({ ...p, closing_date: e.target.value }))} />
               </FormField>

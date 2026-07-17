@@ -9,6 +9,7 @@ const NAV = [
   { href: '/operations/projects', icon: '📁', label: 'Projects' },
   { href: '/operations/licenses', icon: '🔑', label: 'Licenses' },
   { href: '/operations/staffing', icon: '👥', label: 'Staffing' },
+  { href: '/operations/timesheets', icon: '🕒', label: 'Timesheets' },
 ]
 
 type PermLevel = 'loading' | 'none' | 'view' | 'edit'

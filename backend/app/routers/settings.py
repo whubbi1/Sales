@@ -39,7 +39,7 @@ MODULES = {
     "training":     ["manager"],
     "tasks":        ["manager"],
     "marketing":    ["events", "company_website", "competitor_analysis", "social_marketing", "marketing_plan", "marketing_material"],
-    "operations":   ["projects", "licenses", "staffing"],
+    "operations":   ["projects", "licenses", "staffing", "timesheets"],
 }
 
 LEGAL_ENTITIES = ["all", "france", "portugal", "czech_republic", "romania", "spain"]

@@ -207,6 +207,40 @@ export const rfpAPI = {
   setStaffingRate:  (id: string, d: any) => fetchAPI(`/rfps/${id}/staffing-rates`, { method: 'PUT', body: JSON.stringify(d) }),
 }
 
+// ─── Projects (Operations module — auto-created from Opportunities, or internal) ─
+export const projectsAPI = {
+  list:   (p?: any) => fetchAPI(`/projects/${qs(p)}`),
+  get:    (id: string) => fetchAPI(`/projects/${id}`),
+  createInternal: (d: any) => fetchAPI('/projects/internal', { method: 'POST', body: JSON.stringify(d) }),
+  update: (id: string, d: any) => fetchAPI(`/projects/${id}`, { method: 'PUT', body: JSON.stringify(d) }),
+
+  getActivityLog: (id: string) => fetchAPI(`/projects/${id}/activity-log`),
+
+  getComments:   (id: string) => fetchAPI(`/projects/${id}/comments/`),
+  addComment:    (id: string, d: any) => fetchAPI(`/projects/${id}/comments/`, { method: 'POST', body: JSON.stringify(d) }),
+  deleteComment: (id: string, cid: string) => fetchAPI(`/projects/${id}/comments/${cid}/`, { method: 'DELETE' }),
+
+  getDocuments:   (id: string, category?: string) => fetchAPI(`/projects/${id}/documents/${qs(category ? { category } : {})}`),
+  addDocument:    (id: string, d: any) => fetchAPI(`/projects/${id}/documents/`, { method: 'POST', body: JSON.stringify(d) }),
+  deleteDocument: (id: string, did: string) => fetchAPI(`/projects/${id}/documents/${did}/`, { method: 'DELETE' }),
+
+  getStaffing:    (id: string, planType?: string) => fetchAPI(`/projects/${id}/staffing${qs(planType ? { plan_type: planType } : {})}`),
+  addStaffing:    (id: string, d: any) => fetchAPI(`/projects/${id}/staffing`, { method: 'POST', body: JSON.stringify(d) }),
+  updateStaffing: (id: string, taskId: string, d: any) => fetchAPI(`/projects/${id}/staffing/${taskId}`, { method: 'PUT', body: JSON.stringify(d) }),
+  deleteStaffing: (id: string, taskId: string) => fetchAPI(`/projects/${id}/staffing/${taskId}`, { method: 'DELETE' }),
+  setStaffingAllocations: (id: string, taskId: string, allocations: { period_start: string; period_type: string; days: number }[]) =>
+    fetchAPI(`/projects/${id}/staffing/${taskId}/allocations`, { method: 'PUT', body: JSON.stringify({ allocations }) }),
+  getStaffingActuals: (id: string) => fetchAPI(`/projects/${id}/staffing/actuals`),
+}
+
+// ─── Timesheets (Operations module) ────────────────────────────────────────────
+export const timesheetsAPI = {
+  list:   (p?: any) => fetchAPI(`/timesheets/${qs(p)}`),
+  create: (d: any) => fetchAPI('/timesheets/', { method: 'POST', body: JSON.stringify(d) }),
+  update: (id: string, d: any) => fetchAPI(`/timesheets/${id}`, { method: 'PUT', body: JSON.stringify(d) }),
+  delete: (id: string) => fetchAPI(`/timesheets/${id}`, { method: 'DELETE' }),
+}
+
 // ─── Sales Tasks (legacy — superseded by taskManagerAPI, kept for rollback safety) ─
 export const tasksAPI = {
   list:   (p?: any) => fetchAPI(`/tasks/${qs(p)}`),

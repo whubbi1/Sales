@@ -19,6 +19,7 @@ from app.schemas.schemas import (
     CommentCreate, CommentResponse, PartnerSummary,
 )
 from app.services.ids import next_internal_id, compute_deal_name
+from app.routers.projects import _maybe_create_project
 
 router = APIRouter()
 
@@ -58,6 +59,13 @@ async def _attach_contracting_party(db: AsyncSession, objs: list):
             partners[pid] = PartnerSummary(id=row.id, internal_id=row.internal_id, name=row.name, status=row.status)
     for o in objs:
         o.contracting_party_partner = partners.get(str(o.contracting_party_partner_id)) if getattr(o, "contracting_party_partner_id", None) else None
+
+
+def _apply_daily_invoicing_amount(opp: Opportunity):
+    # deal_amount is derived, not entered directly, whenever both inputs are present —
+    # keeps it always equal to days x rate rather than letting the two drift apart.
+    if opp.project_status == 'Daily Invoicing' and opp.invoice_days is not None and opp.daily_rate is not None:
+        opp.deal_amount = opp.invoice_days * opp.daily_rate
 
 
 async def _lookup_names(db: AsyncSession, company_id, partner_id):
@@ -137,6 +145,7 @@ async def create_opportunity(opp: OpportunityCreate, db: AsyncSession = Depends(
     data['deal_name'] = compute_deal_name(data.get('closing_date'), company_name, partner_name, data.get('project_name'))
 
     db_opp = Opportunity(**data)
+    _apply_daily_invoicing_amount(db_opp)
 
     if contact_ids:
         r = await db.execute(select(Contact).where(Contact.id.in_(contact_ids)))
@@ -145,6 +154,7 @@ async def create_opportunity(opp: OpportunityCreate, db: AsyncSession = Depends(
     db.add(db_opp)
     await db.commit()
     new_rfp_id = await _maybe_create_rfp(db, db_opp)
+    await _maybe_create_project(db, db_opp)
     r = await db.execute(select(Opportunity).options(selectinload(Opportunity.company), selectinload(Opportunity.contacts)).where(Opportunity.id == db_opp.id))
     row = r.scalar_one()
     await _attach_partners(db, [row])
@@ -175,6 +185,7 @@ async def update_opportunity(opportunity_id: UUID, data: OpportunityUpdate, db: 
 
     for k, v in update_data.items():
         setattr(opp, k, v)
+    _apply_daily_invoicing_amount(opp)
 
     # Recompute unconditionally so deal_name always reflects the row's current company/partner
     # /project/closing_date, whichever of those fields this particular update touched.
@@ -187,6 +198,7 @@ async def update_opportunity(opportunity_id: UUID, data: OpportunityUpdate, db: 
 
     await db.commit()
     new_rfp_id = await _maybe_create_rfp(db, opp)
+    await _maybe_create_project(db, opp)
     r = await db.execute(select(Opportunity).options(selectinload(Opportunity.company), selectinload(Opportunity.contacts)).where(Opportunity.id == opportunity_id))
     row = r.scalar_one()
     await _attach_partners(db, [row])
@@ -200,6 +212,12 @@ async def delete_opportunity(opportunity_id: UUID, db: AsyncSession = Depends(ge
     opp = r.scalar_one_or_none()
     if not opp:
         raise HTTPException(status_code=404, detail="Opportunity not found")
+    rfp_check = await db.execute(text("SELECT 1 FROM rfp_opportunities WHERE opportunity_id = :id"), {"id": str(opportunity_id)})
+    if rfp_check.first():
+        raise HTTPException(status_code=400, detail="Cannot delete: this Opportunity is linked to an RFP. Unlink it from the RFP first.")
+    project_check = await db.execute(text("SELECT 1 FROM projects WHERE opportunity_id = :id"), {"id": str(opportunity_id)})
+    if project_check.first():
+        raise HTTPException(status_code=400, detail="Cannot delete: a Project already exists for this Opportunity.")
     await db.delete(opp)
     await db.commit()
 

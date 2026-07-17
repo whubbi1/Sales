@@ -491,6 +491,12 @@ export default function OpportunityDetailPage() {
         <PropertyRow label="Opportunity Type" value={opp.deal_type} />
         <PropertyRow label="Project Type" value={opp.project_status} />
         <PropertyRow label="Amount" value={opp.deal_amount ? `€${opp.deal_amount.toLocaleString()}` : null} />
+        {opp.project_status === 'Daily Invoicing' && (
+          <>
+            <PropertyRow label="Days to Invoice" value={opp.invoice_days} />
+            <PropertyRow label="Daily Invoice Rate" value={opp.daily_rate ? `€${opp.daily_rate.toLocaleString()}` : null} />
+          </>
+        )}
         <EditableDateRow label="Closing Date" value={opp.closing_date} editing={editingDateField === 'closing_date'} onStartEdit={() => setEditingDateField('closing_date')} onSave={v => saveDateField('closing_date', v)} />
         <EditableDateRow label="Contract Start" value={opp.contract_start_date} editing={editingDateField === 'contract_start_date'} onStartEdit={() => setEditingDateField('contract_start_date')} onSave={v => saveDateField('contract_start_date', v)} />
         <EditableDateRow label="Contract End" value={opp.contract_end_date} editing={editingDateField === 'contract_end_date'} onStartEdit={() => setEditingDateField('contract_end_date')} onSave={v => saveDateField('contract_end_date', v)} />
