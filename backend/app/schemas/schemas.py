@@ -1,6 +1,6 @@
 # backend/app/schemas/schemas.py
 from pydantic import BaseModel, field_validator
-from typing import Optional, List
+from typing import Optional, List, Dict
 from datetime import datetime
 from uuid import UUID
 
@@ -33,6 +33,7 @@ class CompanyBase(BaseModel):
     cybersecurity_solutions: Optional[List[str]] = []
     grc_solutions: Optional[List[str]] = []
     sap_hosting_partner: Optional[List[str]] = []
+    services_provided: Optional[Dict[str, List[str]]] = {}
     linkedin_url: Optional[str] = None
     notes: Optional[str] = None
     assigned_to: Optional[str] = None

@@ -1394,6 +1394,9 @@ async def startup():
                 # GRC Solutions — separate from Cybersecurity Solutions (renamed to SAP
                 # Cybersecurity Solutions), tracks GRC-specific tooling per company.
                 "ALTER TABLE companies ADD COLUMN IF NOT EXISTS grc_solutions JSONB DEFAULT '[]'",
+
+                # Services tab — manually-toggled project types provided per Opportunity Type.
+                "ALTER TABLE companies ADD COLUMN IF NOT EXISTS services_provided JSONB DEFAULT '{}'",
             ]
             for sql in sqls:
                 try:

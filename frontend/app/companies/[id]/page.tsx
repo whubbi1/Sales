@@ -8,6 +8,7 @@ import { CompanyModal } from '@/components/companies/CompanyModal'
 import { CompanyNotes } from '@/components/companies/CompanyNotes'
 import { CompanyArticles } from '@/components/companies/CompanyArticles'
 import { CompanyTasks } from '@/components/companies/CompanyTasks'
+import { CompanyServices } from '@/components/companies/CompanyServices'
 
 const LEVEL_COLORS: Record<number, string> = { 1: '#144766', 2: '#1a5a84', 3: '#219BD6', 4: '#7DD3F0' }
 const LEVEL_LABELS: Record<number, string> = { 1: 'Group', 2: 'Parent', 3: 'Child', 4: 'Sub-Child' }
@@ -154,7 +155,7 @@ export default function CompanyDetailPage() {
 
       <div style={{ background: 'white', borderRadius: '10px', border: '1px solid #EDF2F7', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
         <div style={{ padding: '0 20px', background: '#FAFBFC', borderBottom: '2px solid #E2E8F0' }}>
-          <TabNav tabs={['Overview', 'Research', 'Notes', 'Articles', 'Tasks']} active={tab} onChange={setTab} />
+          <TabNav tabs={['Overview', 'Research', 'Services', 'Notes', 'Articles', 'Tasks']} active={tab} onChange={setTab} />
         </div>
         <div style={{ padding: '20px' }}>
           {tab === 'Overview' && <p style={{ color: company.notes ? '#3F3F3F' : '#CBD5E0', fontSize: '13px', lineHeight: '1.8', whiteSpace: 'pre-wrap' }}>{company.notes || 'No general notes.'}</p>}
@@ -198,6 +199,7 @@ export default function CompanyDetailPage() {
               )}
             </div>
           )}
+          {tab === 'Services' && <CompanyServices companyId={id as string} />}
           {tab === 'Notes' && <CompanyNotes companyId={id as string} />}
           {tab === 'Articles' && <CompanyArticles companyId={id as string} />}
           {tab === 'Tasks' && <CompanyTasks companyId={id as string} />}

@@ -36,6 +36,11 @@ class Company(Base):
     cybersecurity_solutions = Column(JSONB, default=list)
     grc_solutions           = Column(JSONB, default=list)
     sap_hosting_partner     = Column(JSONB, default=list)
+    # Services tab — which project types we've provided, keyed by Opportunity Type,
+    # e.g. {"SAP": ["Project", "Daily Invoicing"]}. Manually toggled, independent of
+    # the actual Opportunity records (those only drive the "Contract Finalised" list
+    # shown underneath each toggle).
+    services_provided       = Column(JSONB, default=dict)
     linkedin_url    = Column(String(500))
     notes           = Column(Text)
     assigned_to     = Column(String(255))                   # display name of the assigned wcomply employee

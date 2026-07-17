@@ -1,6 +1,6 @@
 'use client'
 // app/opportunities/page.tsx
-import { useState, useEffect, Suspense } from 'react'
+import { useState, useEffect, Suspense, Fragment } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Sidebar } from '@/components/Sidebar'
 import { opportunitiesAPI } from '@/lib/api'
@@ -29,6 +29,7 @@ function OpportunitiesContent() {
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
   const [showPipelineBreakdown, setShowPipelineBreakdown] = useState(false)
+  const [expandedStatus, setExpandedStatus] = useState<string | null>(null)
   const [userEmail, setUserEmail] = useState('')
   const [nameSearch, setNameSearch] = useState('')
 
@@ -59,7 +60,7 @@ function OpportunitiesContent() {
   const totalValue = opportunities.filter(o => o.deal_amount).reduce((sum, o) => sum + o.deal_amount, 0)
   const pipelineByStatus = STATUS_OPTIONS.map(s => {
     const inStatus = opportunities.filter(o => o.deal_status === s)
-    return { status: s, count: inStatus.length, total: inStatus.filter(o => o.deal_amount).reduce((sum, o) => sum + o.deal_amount, 0) }
+    return { status: s, count: inStatus.length, total: inStatus.filter(o => o.deal_amount).reduce((sum, o) => sum + o.deal_amount, 0), opportunities: inStatus }
   })
 
   const withDisplay = opportunities.map(o => ({
@@ -100,7 +101,7 @@ function OpportunitiesContent() {
               { label: 'Won', value: opportunities.filter(o => ['PO Received', 'Contract Finalised'].includes(o.deal_status)).length, color: '#059669' },
               { label: 'Lost', value: opportunities.filter(o => o.deal_status === 'Contract Lost').length, color: '#DC2626' },
             ].map(stat => (
-              <div key={stat.label} onClick={stat.label === 'Total Pipeline' ? () => setShowPipelineBreakdown(true) : undefined}
+              <div key={stat.label} onClick={stat.label === 'Total Pipeline' ? () => { setExpandedStatus(null); setShowPipelineBreakdown(true) } : undefined}
                 style={{ background: 'white', borderRadius: '10px', border: '1px solid #EDF2F7', padding: '14px 16px', boxShadow: '0 1px 3px rgba(0,0,0,0.06)', cursor: stat.label === 'Total Pipeline' ? 'pointer' : 'default' }}>
                 <div style={{ fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#9B9B9B', marginBottom: '4px' }}>{stat.label}</div>
                 <div style={{ fontSize: '20px', fontWeight: '800', color: stat.color }}>{stat.value}</div>
@@ -126,11 +127,30 @@ function OpportunitiesContent() {
                     </thead>
                     <tbody>
                       {pipelineByStatus.map(row => (
-                        <tr key={row.status}>
-                          <td style={{ padding: '8px', fontSize: '12px', color: '#3F3F3F', borderBottom: '1px solid #F1F5F9' }}>{row.status}</td>
-                          <td style={{ padding: '8px', fontSize: '12px', color: '#3F3F3F', borderBottom: '1px solid #F1F5F9', textAlign: 'right' }}>{row.count}</td>
-                          <td style={{ padding: '8px', fontSize: '12px', fontWeight: '600', color: '#144766', borderBottom: '1px solid #F1F5F9', textAlign: 'right' }}>€{row.total.toLocaleString('en-US', { minimumFractionDigits: 0 })}</td>
-                        </tr>
+                        <Fragment key={row.status}>
+                          <tr>
+                            <td style={{ padding: '8px', fontSize: '12px', color: '#3F3F3F', borderBottom: '1px solid #F1F5F9' }}>{row.status}</td>
+                            <td onClick={() => row.count > 0 && setExpandedStatus(expandedStatus === row.status ? null : row.status)}
+                              style={{ padding: '8px', fontSize: '12px', color: row.count > 0 ? '#219BD6' : '#3F3F3F', fontWeight: row.count > 0 ? '700' : '400', borderBottom: '1px solid #F1F5F9', textAlign: 'right', cursor: row.count > 0 ? 'pointer' : 'default', textDecoration: row.count > 0 ? 'underline' : 'none' }}>
+                              {row.count}
+                            </td>
+                            <td style={{ padding: '8px', fontSize: '12px', fontWeight: '600', color: '#144766', borderBottom: '1px solid #F1F5F9', textAlign: 'right' }}>€{row.total.toLocaleString('en-US', { minimumFractionDigits: 0 })}</td>
+                          </tr>
+                          {expandedStatus === row.status && (
+                            <tr>
+                              <td colSpan={3} style={{ padding: '4px 8px 10px 20px', borderBottom: '1px solid #F1F5F9', background: '#FAFBFC' }}>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                  {row.opportunities.map((o: any) => (
+                                    <div key={o.id} onClick={() => router.push(`/opportunities/${o.id}`)} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', cursor: 'pointer' }}>
+                                      <span style={{ color: '#219BD6', fontWeight: '600' }}>{o.deal_name}</span>
+                                      <span style={{ color: '#3F3F3F' }}>{o.deal_amount ? `€${o.deal_amount.toLocaleString('en-US')}` : '—'}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              </td>
+                            </tr>
+                          )}
+                        </Fragment>
                       ))}
                       <tr>
                         <td style={{ padding: '10px 8px', fontSize: '12px', fontWeight: '700', color: '#144766' }}>Total</td>

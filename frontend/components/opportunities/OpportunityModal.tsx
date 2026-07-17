@@ -155,7 +155,7 @@ export function OpportunityModal({ opportunity, initialCompanyId, initialPartner
               <FormField label="Company">
                 <select className="form-input" value={form.company_id} onChange={e => setForm(p => ({ ...p, company_id: e.target.value }))}>
                   <option value="">No company</option>
-                  {companies.map((c: any) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                  {companies.slice().sort((a: any, b: any) => a.name.localeCompare(b.name)).map((c: any) => <option key={c.id} value={c.id}>{c.name}</option>)}
                 </select>
               </FormField>
               <FormField label="Partner">
