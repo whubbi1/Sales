@@ -6,7 +6,7 @@ import { opportunitiesAPI, companiesAPI, contactsAPI, partnersAPI } from '@/lib/
 
 const DEAL_STATUSES = ['Presentation To Be Scheduled','Presentation Done','Proposition Ongoing','Proposition Accepted','RFP Ongoing','Contract Ongoing','Contract Finalised','PO Received','Contract Lost']
 const PROJECT_STATUSES = ['Daily Invoicing','Project','Software Licenses']
-const DEAL_TYPES = ['SAP','GRC','Smart Global Governance','SecurityBridge','Onapsis','BowBridge IBM OpenPages']
+const DEAL_TYPES = ['SAP','GRC','Smart Global Governance','SecurityBridge','Onapsis','BowBridge','IBM OpenPages']
 
 // Mirrors compute_deal_name() in backend/app/services/ids.py — preview only, the
 // authoritative value always comes back from the server on save.
@@ -199,7 +199,7 @@ export function OpportunityModal({ opportunity, initialCompanyId, initialPartner
           <div>
             <p className="section-label">Project Details</p>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-              <FormField label="Project Status">
+              <FormField label="Project Type">
                 <select className="form-input" value={form.project_status} onChange={e => setForm(p => ({ ...p, project_status: e.target.value }))}>
                   <option value="">Select...</option>
                   {PROJECT_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}

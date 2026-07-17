@@ -18,7 +18,7 @@ const COLUMNS: ReportColumn[] = [
   { key: 'deal_amount', label: 'Amount' },
   { key: 'deal_status', label: 'Status', filterable: 'select', options: STATUS_OPTIONS },
   { key: 'closing_date', label: 'Closing Date' },
-  { key: 'project_status', label: 'Project Status', filterable: 'text' },
+  { key: 'project_status', label: 'Project Type', filterable: 'text' },
   { key: 'contacts_count', label: 'Contacts' },
 ]
 

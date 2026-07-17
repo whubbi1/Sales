@@ -42,7 +42,7 @@ class Opportunity(Base):
     contracting_party   = Column(String(255))
     deal_type           = Column(SAEnum(
         'SAP', 'GRC', 'Smart Global Governance', 'SecurityBridge',
-        'Onapsis', 'BowBridge IBM OpenPages',
+        'Onapsis', 'BowBridge', 'IBM OpenPages',
         name='deal_type_enum'
     ))
     notes               = Column(Text)

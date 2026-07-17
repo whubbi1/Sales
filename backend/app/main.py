@@ -1385,6 +1385,11 @@ async def startup():
                 # Multi-day events — nullable so single-day events (event_date only) keep working.
                 "ALTER TABLE marketing_events ADD COLUMN IF NOT EXISTS end_date DATE",
                 "UPDATE marketing_events SET end_date = event_date WHERE end_date IS NULL",
+
+                # Opportunity Type — split the combined "BowBridge IBM OpenPages" option into
+                # its two underlying vendors, now tracked as distinct types.
+                "ALTER TYPE deal_type_enum ADD VALUE 'BowBridge'",
+                "ALTER TYPE deal_type_enum ADD VALUE 'IBM OpenPages'",
             ]
             for sql in sqls:
                 try:
