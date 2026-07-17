@@ -235,9 +235,12 @@ async def add_staffing(opportunity_id: UUID, data: StaffingCreate, db: AsyncSess
     row = OpportunityStaffing(opportunity_id=opportunity_id, **data.model_dump())
     db.add(row)
     await db.commit()
-    await db.refresh(row)
-    row.months = []
-    return row
+    # Re-query with an eager load rather than db.refresh() + assigning the relationship —
+    # refresh() re-expires already-loaded relationships, and AsyncSession can't lazy-load
+    # them afterwards outside the request's active DB context (FastAPI's response
+    # serialization runs after the handler returns, triggering a MissingGreenlet error).
+    r = await db.execute(select(OpportunityStaffing).options(selectinload(OpportunityStaffing.months)).where(OpportunityStaffing.id == row.id))
+    return r.scalar_one()
 
 @router.delete("/{opportunity_id}/staffing/{staffing_id}/", status_code=status.HTTP_204_NO_CONTENT)
 async def remove_staffing(opportunity_id: UUID, staffing_id: UUID, db: AsyncSession = Depends(get_db)):

@@ -275,9 +275,11 @@ async def add_project_staffing(project_id: UUID, data: ProjectStaffingTaskCreate
     row = ProjectStaffingTask(project_id=project_id, **data.model_dump())
     db.add(row)
     await db.commit()
-    await db.refresh(row)
-    row.allocations = []
-    return row
+    # Re-query with an eager load rather than db.refresh() — refresh() re-expires
+    # relationships, and AsyncSession can't lazy-load them during response serialization
+    # (which runs after the handler returns, outside the active DB context).
+    r = await db.execute(select(ProjectStaffingTask).options(selectinload(ProjectStaffingTask.allocations)).where(ProjectStaffingTask.id == row.id))
+    return r.scalar_one()
 
 @router.put("/{project_id}/staffing/{task_id}", response_model=ProjectStaffingTaskResponse)
 async def update_project_staffing(project_id: UUID, task_id: UUID, data: ProjectStaffingTaskUpdate, db: AsyncSession = Depends(get_db)):
@@ -291,8 +293,10 @@ async def update_project_staffing(project_id: UUID, task_id: UUID, data: Project
     for k, v in data.model_dump(exclude_unset=True).items():
         setattr(row, k, v)
     await db.commit()
-    await db.refresh(row)
-    return row
+    # db.refresh() would re-expire the allocations relationship loaded above, and
+    # AsyncSession can't lazy-load it during response serialization — re-query instead.
+    r = await db.execute(select(ProjectStaffingTask).options(selectinload(ProjectStaffingTask.allocations)).where(ProjectStaffingTask.id == task_id))
+    return r.scalar_one()
 
 @router.delete("/{project_id}/staffing/{task_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_project_staffing(project_id: UUID, task_id: UUID, db: AsyncSession = Depends(get_db)):

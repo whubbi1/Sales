@@ -404,9 +404,11 @@ async def create_staffing_task(rfp_id: UUID, data: RFPStaffingTaskCreate, db: As
     task = RFPStaffingTask(rfp_id=rfp_id, **data.model_dump())
     db.add(task)
     await db.commit()
-    await db.refresh(task)
-    task.allocations = []
-    return task
+    # Re-query with an eager load rather than db.refresh() — refresh() re-expires
+    # relationships, and AsyncSession can't lazy-load them during response serialization
+    # (which runs after the handler returns, outside the active DB context).
+    r = await db.execute(select(RFPStaffingTask).options(selectinload(RFPStaffingTask.allocations)).where(RFPStaffingTask.id == task.id))
+    return r.scalar_one()
 
 
 @router.put("/{rfp_id}/staffing-tasks/{task_id}", response_model=RFPStaffingTaskResponse)
@@ -419,8 +421,10 @@ async def update_staffing_task(rfp_id: UUID, task_id: UUID, data: RFPStaffingTas
     for k, v in data.model_dump(exclude_unset=True).items():
         setattr(task, k, v)
     await db.commit()
-    await db.refresh(task)
-    return task
+    # db.refresh() would re-expire the allocations relationship loaded above, and
+    # AsyncSession can't lazy-load it during response serialization — re-query instead.
+    r = await db.execute(select(RFPStaffingTask).options(selectinload(RFPStaffingTask.allocations)).where(RFPStaffingTask.id == task_id))
+    return r.scalar_one()
 
 
 @router.delete("/{rfp_id}/staffing-tasks/{task_id}", status_code=status.HTTP_204_NO_CONTENT)
