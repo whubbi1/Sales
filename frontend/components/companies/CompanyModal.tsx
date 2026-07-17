@@ -5,6 +5,7 @@ import { companiesAPI, contactsAPI } from '@/lib/api'
 
 const ERP_OPTIONS     = ["SAP", "Dynamics", "IFS", "Infor", "Odoo", "Oracle", "JDE", "SAGE", "Unknown", "Other"]
 const CYBER_OPTIONS   = ["SAP ETD", "SAP GRC", "SAP Focused Run", "Cloud ALM", "SecurityBridge", "Onapsis", "Layer Seven Security", "Other"]
+const GRC_OPTIONS     = ["Smart Global Governance", "IBM OpenPages", "Provigis", "Other"]
 const HOSTING_OPTIONS = ["RISE", "AWS", "Azure", "GXP", "BLUE", "SENS", "Scaleway", "Private Datacenter", "Other"]
 const LEVEL_LABELS: Record<number, string> = { 1: 'Level 1 - Group', 2: 'Level 2 - Parent', 3: 'Level 3 - Child', 4: 'Level 4 - Sub-Child' }
 
@@ -31,6 +32,7 @@ export function CompanyModal({ company, companies = [], onClose, onSave }: any) 
     status: company?.status || 'lead',
     main_erp: company?.main_erp || [],
     cybersecurity_solutions: company?.cybersecurity_solutions || [],
+    grc_solutions: company?.grc_solutions || [],
     sap_hosting_partner: company?.sap_hosting_partner || [],
     linkedin_url: company?.linkedin_url || '',
     notes: company?.notes || '',
@@ -115,7 +117,7 @@ export function CompanyModal({ company, companies = [], onClose, onSave }: any) 
               </FormField>
               <FormField label="Status">
                 <select className="form-input" value={form.status} onChange={e => setForm(p => ({ ...p, status: e.target.value }))}>
-                  <option value="lead">Lead</option><option value="prospect">Prospect</option><option value="client">Client</option><option value="partner">Partner</option>
+                  <option value="lead">Lead</option><option value="prospect">Prospect</option><option value="client">Client</option>{company && <option value="partner">Partner</option>}
                 </select>
               </FormField>
               <FormField label="Assigned To">
@@ -166,7 +168,8 @@ export function CompanyModal({ company, companies = [], onClose, onSave }: any) 
 
           {[
             { label: 'Main ERP', field: 'main_erp', options: ERP_OPTIONS },
-            { label: 'Cybersecurity Solutions', field: 'cybersecurity_solutions', options: CYBER_OPTIONS },
+            { label: 'SAP Cybersecurity Solutions', field: 'cybersecurity_solutions', options: CYBER_OPTIONS },
+            { label: 'GRC Solutions', field: 'grc_solutions', options: GRC_OPTIONS },
             { label: 'SAP Hosting Partner', field: 'sap_hosting_partner', options: HOSTING_OPTIONS },
           ].map(({ label, field, options }) => (
             <div key={field}>

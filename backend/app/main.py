@@ -1390,6 +1390,10 @@ async def startup():
                 # its two underlying vendors, now tracked as distinct types.
                 "ALTER TYPE deal_type_enum ADD VALUE 'BowBridge'",
                 "ALTER TYPE deal_type_enum ADD VALUE 'IBM OpenPages'",
+
+                # GRC Solutions — separate from Cybersecurity Solutions (renamed to SAP
+                # Cybersecurity Solutions), tracks GRC-specific tooling per company.
+                "ALTER TABLE companies ADD COLUMN IF NOT EXISTS grc_solutions JSONB DEFAULT '[]'",
             ]
             for sql in sqls:
                 try:

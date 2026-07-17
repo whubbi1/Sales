@@ -28,6 +28,7 @@ function OpportunitiesContent() {
   const [opportunities, setOpportunities] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
+  const [showPipelineBreakdown, setShowPipelineBreakdown] = useState(false)
   const [userEmail, setUserEmail] = useState('')
   const [nameSearch, setNameSearch] = useState('')
 
@@ -56,6 +57,10 @@ function OpportunitiesContent() {
   }, [])
 
   const totalValue = opportunities.filter(o => o.deal_amount).reduce((sum, o) => sum + o.deal_amount, 0)
+  const pipelineByStatus = STATUS_OPTIONS.map(s => {
+    const inStatus = opportunities.filter(o => o.deal_status === s)
+    return { status: s, count: inStatus.length, total: inStatus.filter(o => o.deal_amount).reduce((sum, o) => sum + o.deal_amount, 0) }
+  })
 
   const withDisplay = opportunities.map(o => ({
     ...o,
@@ -95,12 +100,49 @@ function OpportunitiesContent() {
               { label: 'Won', value: opportunities.filter(o => ['PO Received', 'Contract Finalised'].includes(o.deal_status)).length, color: '#059669' },
               { label: 'Lost', value: opportunities.filter(o => o.deal_status === 'Contract Lost').length, color: '#DC2626' },
             ].map(stat => (
-              <div key={stat.label} style={{ background: 'white', borderRadius: '10px', border: '1px solid #EDF2F7', padding: '14px 16px', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
+              <div key={stat.label} onClick={stat.label === 'Total Pipeline' ? () => setShowPipelineBreakdown(true) : undefined}
+                style={{ background: 'white', borderRadius: '10px', border: '1px solid #EDF2F7', padding: '14px 16px', boxShadow: '0 1px 3px rgba(0,0,0,0.06)', cursor: stat.label === 'Total Pipeline' ? 'pointer' : 'default' }}>
                 <div style={{ fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#9B9B9B', marginBottom: '4px' }}>{stat.label}</div>
                 <div style={{ fontSize: '20px', fontWeight: '800', color: stat.color }}>{stat.value}</div>
               </div>
             ))}
           </div>
+
+          {showPipelineBreakdown && (
+            <div className="modal-overlay" onClick={() => setShowPipelineBreakdown(false)}>
+              <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '480px' }}>
+                <div className="modal-header">
+                  <h2 style={{ fontSize: '15px', fontWeight: '700', color: '#144766' }}>Total Pipeline by Status</h2>
+                  <button onClick={() => setShowPipelineBreakdown(false)} style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: '20px', color: '#9B9B9B', lineHeight: 1 }}>×</button>
+                </div>
+                <div className="modal-body">
+                  <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                    <thead>
+                      <tr>
+                        <th style={{ textAlign: 'left', padding: '6px 8px', fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#9B9B9B', borderBottom: '1px solid #E2E8F0' }}>Status</th>
+                        <th style={{ textAlign: 'right', padding: '6px 8px', fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#9B9B9B', borderBottom: '1px solid #E2E8F0' }}>Count</th>
+                        <th style={{ textAlign: 'right', padding: '6px 8px', fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#9B9B9B', borderBottom: '1px solid #E2E8F0' }}>Amount</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {pipelineByStatus.map(row => (
+                        <tr key={row.status}>
+                          <td style={{ padding: '8px', fontSize: '12px', color: '#3F3F3F', borderBottom: '1px solid #F1F5F9' }}>{row.status}</td>
+                          <td style={{ padding: '8px', fontSize: '12px', color: '#3F3F3F', borderBottom: '1px solid #F1F5F9', textAlign: 'right' }}>{row.count}</td>
+                          <td style={{ padding: '8px', fontSize: '12px', fontWeight: '600', color: '#144766', borderBottom: '1px solid #F1F5F9', textAlign: 'right' }}>€{row.total.toLocaleString('en-US', { minimumFractionDigits: 0 })}</td>
+                        </tr>
+                      ))}
+                      <tr>
+                        <td style={{ padding: '10px 8px', fontSize: '12px', fontWeight: '700', color: '#144766' }}>Total</td>
+                        <td style={{ padding: '10px 8px', fontSize: '12px', fontWeight: '700', color: '#144766', textAlign: 'right' }}>{opportunities.length}</td>
+                        <td style={{ padding: '10px 8px', fontSize: '13px', fontWeight: '800', color: '#144766', textAlign: 'right' }}>€{totalValue.toLocaleString('en-US', { minimumFractionDigits: 0 })}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Table */}
           <div style={{ background: 'white', borderRadius: '10px', border: '1px solid #EDF2F7', boxShadow: '0 1px 3px rgba(0,0,0,0.06)', overflow: 'hidden' }}>

@@ -31,6 +31,7 @@ class CompanyBase(BaseModel):
     status: Optional[str] = "lead"
     main_erp: Optional[List[str]] = []
     cybersecurity_solutions: Optional[List[str]] = []
+    grc_solutions: Optional[List[str]] = []
     sap_hosting_partner: Optional[List[str]] = []
     linkedin_url: Optional[str] = None
     notes: Optional[str] = None

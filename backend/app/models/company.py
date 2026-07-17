@@ -34,6 +34,7 @@ class Company(Base):
     status          = Column(SAEnum(CompanyStatus), default=CompanyStatus.lead, nullable=False)
     main_erp        = Column(JSONB, default=list)
     cybersecurity_solutions = Column(JSONB, default=list)
+    grc_solutions           = Column(JSONB, default=list)
     sap_hosting_partner     = Column(JSONB, default=list)
     linkedin_url    = Column(String(500))
     notes           = Column(Text)
