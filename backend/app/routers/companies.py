@@ -168,15 +168,21 @@ async def get_company(company_id: UUID, db: AsyncSession = Depends(get_db)):
 
 @router.post("/{company_id}/logo")
 async def upload_company_logo(company_id: UUID, file: UploadFile = File(...), db: AsyncSession = Depends(get_db)):
-    r = await db.execute(select(Company).where(Company.id == company_id))
-    company = r.scalar_one_or_none()
-    if not company:
-        raise HTTPException(status_code=404, detail="Company not found")
-    content = await file.read()
-    logo_ref = await upload_to_s3(f"companies/{company_id}/logo", content, file.content_type or "application/octet-stream")
-    company.logo_url = logo_ref
-    await db.commit()
-    return {"status": "ok", "logo_url": await s3_ref_to_presigned(logo_ref)}
+    import traceback
+    try:
+        r = await db.execute(select(Company).where(Company.id == company_id))
+        company = r.scalar_one_or_none()
+        if not company:
+            raise HTTPException(status_code=404, detail="Company not found")
+        content = await file.read()
+        logo_ref = await upload_to_s3(f"companies/{company_id}/logo", content, file.content_type or "application/octet-stream")
+        company.logo_url = logo_ref
+        await db.commit()
+        return {"status": "ok", "logo_url": await s3_ref_to_presigned(logo_ref)}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"DEBUG {type(e).__name__}: {e}\n{traceback.format_exc()[-1500:]}")
 
 @router.put("/{company_id}", response_model=CompanyResponse)
 async def update_company(company_id: UUID, data: CompanyUpdate, db: AsyncSession = Depends(get_db)):
@@ -276,7 +282,7 @@ async def delete_article(company_id: UUID, article_id: UUID, db: AsyncSession = 
     await db.delete(article)
     await db.commit()
 
-# Additional company/contact links for an article, beyond the one it was created under.
+# Additional company/contact/partner links for an article, beyond whichever it was created under.
 @router.get("/articles/{article_id}/links")
 async def get_article_links(article_id: UUID, db: AsyncSession = Depends(get_db)):
     companies_r = await db.execute(sql_text("""
@@ -285,9 +291,13 @@ async def get_article_links(article_id: UUID, db: AsyncSession = Depends(get_db)
     contacts_r = await db.execute(sql_text("""
         SELECT ct.id, ct.first_name, ct.last_name FROM article_contacts ac JOIN contacts ct ON ct.id = ac.contact_id WHERE ac.article_id = :aid
     """), {"aid": str(article_id)})
+    partners_r = await db.execute(sql_text("""
+        SELECT p.id, p.name FROM article_partners ap JOIN partners p ON p.id = ap.partner_id WHERE ap.article_id = :aid
+    """), {"aid": str(article_id)})
     return {
         "companies": [{"id": str(row.id), "name": row.name} for row in companies_r.fetchall()],
         "contacts": [{"id": str(row.id), "name": f"{row.first_name} {row.last_name}"} for row in contacts_r.fetchall()],
+        "partners": [{"id": str(row.id), "name": row.name} for row in partners_r.fetchall()],
     }
 
 @router.post("/articles/{article_id}/companies/{company_id}")
@@ -316,6 +326,20 @@ async def link_article_contact(article_id: UUID, contact_id: UUID, db: AsyncSess
 async def unlink_article_contact(article_id: UUID, contact_id: UUID, db: AsyncSession = Depends(get_db)):
     await db.execute(sql_text("DELETE FROM article_contacts WHERE article_id = :aid AND contact_id = :cid"), {"aid": str(article_id), "cid": str(contact_id)})
     await db.commit()
+
+@router.post("/articles/{article_id}/partners/{partner_id}")
+async def link_article_partner(article_id: UUID, partner_id: UUID, db: AsyncSession = Depends(get_db)):
+    exists = await db.execute(sql_text("SELECT 1 FROM article_partners WHERE article_id = :aid AND partner_id = :pid"), {"aid": str(article_id), "pid": str(partner_id)})
+    if not exists.first():
+        await db.execute(sql_text("INSERT INTO article_partners (article_id, partner_id) VALUES (:aid, :pid)"), {"aid": str(article_id), "pid": str(partner_id)})
+        await db.commit()
+    return {"status": "ok"}
+
+@router.delete("/articles/{article_id}/partners/{partner_id}")
+async def unlink_article_partner(article_id: UUID, partner_id: UUID, db: AsyncSession = Depends(get_db)):
+    await db.execute(sql_text("DELETE FROM article_partners WHERE article_id = :aid AND partner_id = :pid"), {"aid": str(article_id), "pid": str(partner_id)})
+    await db.commit()
+    return {"status": "ok"}
 
 # ─── Tasks ────────────────────────────────────────────────────────────────────
 @router.get("/{company_id}/tasks", response_model=List[TaskResponse])
