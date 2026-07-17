@@ -189,6 +189,16 @@ async def update_project(project_id: UUID, data: ProjectUpdate, db: AsyncSession
     return proj
 
 
+@router.delete("/{project_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_project(project_id: UUID, db: AsyncSession = Depends(get_db)):
+    r = await db.execute(select(Project).where(Project.id == project_id))
+    proj = r.scalar_one_or_none()
+    if not proj:
+        raise HTTPException(status_code=404, detail="Project not found")
+    await db.delete(proj)
+    await db.commit()
+
+
 # ─── Activity log ───────────────────────────────────────────────────────────────
 @router.get("/{project_id}/activity-log", response_model=List[ProjectActivityLogResponse])
 async def list_activity_log(project_id: UUID, db: AsyncSession = Depends(get_db)):

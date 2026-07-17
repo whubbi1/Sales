@@ -213,6 +213,7 @@ export const projectsAPI = {
   get:    (id: string) => fetchAPI(`/projects/${id}`),
   createInternal: (d: any) => fetchAPI('/projects/internal', { method: 'POST', body: JSON.stringify(d) }),
   update: (id: string, d: any) => fetchAPI(`/projects/${id}`, { method: 'PUT', body: JSON.stringify(d) }),
+  delete: (id: string) => fetchAPI(`/projects/${id}`, { method: 'DELETE' }),
 
   getActivityLog: (id: string) => fetchAPI(`/projects/${id}/activity-log`),
 
