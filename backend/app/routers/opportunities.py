@@ -162,6 +162,40 @@ async def create_opportunity(opp: OpportunityCreate, db: AsyncSession = Depends(
     row.rfp_id = new_rfp_id
     return row
 
+@router.post("/{opportunity_id}/duplicate", response_model=OpportunityResponse, status_code=status.HTTP_201_CREATED)
+async def duplicate_opportunity(opportunity_id: UUID, db: AsyncSession = Depends(get_db)):
+    r = await db.execute(select(Opportunity).options(selectinload(Opportunity.contacts)).where(Opportunity.id == opportunity_id))
+    opp = r.scalar_one_or_none()
+    if not opp:
+        raise HTTPException(status_code=404, detail="Opportunity not found")
+
+    # Same data everywhere except identity columns — deal_id is freshly generated, the
+    # rest (including deal_status/project_status) is copied verbatim, so the usual
+    # RFP/Project auto-create rules apply exactly as they would on a freshly-entered
+    # Opportunity in the same state.
+    data = {c.name: getattr(opp, c.name) for c in Opportunity.__table__.columns if c.name not in ('id', 'deal_id', 'created_at', 'updated_at')}
+    data['deal_id'] = await next_internal_id(db, 'opportunity_deal_id_seq', 'OPP')
+    new_opp = Opportunity(**data)
+    new_opp.contacts = list(opp.contacts)
+    db.add(new_opp)
+    await db.commit()
+
+    r2 = await db.execute(select(OpportunityStaffing).options(selectinload(OpportunityStaffing.months)).where(OpportunityStaffing.opportunity_id == opportunity_id))
+    for s in r2.scalars().all():
+        new_staffing = OpportunityStaffing(opportunity_id=new_opp.id, user_email=s.user_email, user_name=s.user_name, role=s.role)
+        new_staffing.months = [OpportunityStaffingMonth(month=m.month, days=m.days) for m in s.months]
+        db.add(new_staffing)
+    await db.commit()
+
+    new_rfp_id = await _maybe_create_rfp(db, new_opp)
+    await _maybe_create_project(db, new_opp)
+    r3 = await db.execute(select(Opportunity).options(selectinload(Opportunity.company), selectinload(Opportunity.contacts)).where(Opportunity.id == new_opp.id))
+    row = r3.scalar_one()
+    await _attach_partners(db, [row])
+    await _attach_contracting_party(db, [row])
+    row.rfp_id = new_rfp_id
+    return row
+
 @router.get("/{opportunity_id}", response_model=OpportunityResponse)
 async def get_opportunity(opportunity_id: UUID, db: AsyncSession = Depends(get_db)):
     r = await db.execute(select(Opportunity).options(selectinload(Opportunity.company), selectinload(Opportunity.contacts)).where(Opportunity.id == opportunity_id))

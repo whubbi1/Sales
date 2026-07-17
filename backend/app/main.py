@@ -24,7 +24,7 @@ async def global_exception_handler(request: Request, exc: Exception):
 async def startup():
     try:
         from app.database import engine, Base
-        from app.models import company, contact, opportunity, opportunity_extra, error_log, url_monitor, user_profile, helpdesk, background_jobs, grc, hr, project, timesheet
+        from app.models import company, contact, opportunity, opportunity_extra, error_log, url_monitor, user_profile, helpdesk, background_jobs, grc, hr, project, timesheet, lead, reporting
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
 
@@ -1183,12 +1183,15 @@ async def startup():
                 "CREATE SEQUENCE IF NOT EXISTS partner_internal_id_seq",
                 "CREATE SEQUENCE IF NOT EXISTS opportunity_deal_id_seq",
                 "CREATE SEQUENCE IF NOT EXISTS project_number_seq",
+                "CREATE SEQUENCE IF NOT EXISTS rfp_reference_seq",
+                "CREATE SEQUENCE IF NOT EXISTS lead_number_seq",
 
                 "ALTER TABLE companies ADD COLUMN IF NOT EXISTS internal_id VARCHAR(20)",
                 "ALTER TABLE contacts ADD COLUMN IF NOT EXISTS internal_id VARCHAR(20)",
                 "ALTER TABLE partners ADD COLUMN IF NOT EXISTS internal_id VARCHAR(20)",
                 "ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS contracting_party_id UUID REFERENCES companies(id) ON DELETE SET NULL",
                 "ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS assigned_to_email VARCHAR(255)",
+                "ALTER TABLE rfps ADD COLUMN IF NOT EXISTS reference VARCHAR(20)",
 
                 # Backfill existing rows (oldest first), then advance each sequence past the backfilled max
                 """UPDATE companies SET internal_id = 'CMP-' || LPAD(t.rn::text, 5, '0')
@@ -1211,6 +1214,12 @@ async def startup():
                     FROM (SELECT id, ROW_NUMBER() OVER (ORDER BY created_at) AS rn FROM opportunities WHERE deal_id IS NULL) t
                     WHERE opportunities.id = t.id""",
                 "SELECT setval('opportunity_deal_id_seq', GREATEST((SELECT COALESCE(MAX(SUBSTRING(deal_id FROM 5)::int), 0) FROM opportunities WHERE deal_id ~ '^OPP-[0-9]+$'), 1))",
+
+                """UPDATE rfps SET reference = 'RFP-' || LPAD(t.rn::text, 5, '0')
+                    FROM (SELECT id, ROW_NUMBER() OVER (ORDER BY created_at) AS rn FROM rfps WHERE reference IS NULL) t
+                    WHERE rfps.id = t.id""",
+                "SELECT setval('rfp_reference_seq', GREATEST((SELECT COALESCE(MAX(SUBSTRING(reference FROM 5)::int), 0) FROM rfps WHERE reference ~ '^RFP-[0-9]+$'), 1))",
+                "CREATE UNIQUE INDEX IF NOT EXISTS idx_rfps_reference ON rfps(reference)",
 
                 "CREATE UNIQUE INDEX IF NOT EXISTS idx_companies_internal_id ON companies(internal_id)",
                 "CREATE UNIQUE INDEX IF NOT EXISTS idx_contacts_internal_id ON contacts(internal_id)",
@@ -1459,6 +1468,14 @@ async def startup():
                 # Projects (Operations module) — lets the generic Task Manager tasks table
                 # be filtered to a project's own tasks tab via entity_type='project'.
                 "ALTER TYPE sales_task_entity_type ADD VALUE IF NOT EXISTS 'project'",
+
+                # Staffing Roles — Task now points at a Role (which resolves to a resource)
+                # instead of a resource directly, so one person can hold several roles.
+                # rfp_staffing_roles/project_staffing_roles are brand-new tables, created by
+                # create_all(); these two ALTERs add the new FK column to the pre-existing
+                # task tables.
+                "ALTER TABLE rfp_staffing_tasks ADD COLUMN IF NOT EXISTS role_id UUID REFERENCES rfp_staffing_roles(id) ON DELETE SET NULL",
+                "ALTER TABLE project_staffing_tasks ADD COLUMN IF NOT EXISTS role_id UUID REFERENCES project_staffing_roles(id) ON DELETE SET NULL",
             ]
             for sql in sqls:
                 try:
@@ -1543,6 +1560,8 @@ _include("app.routers.task_teams",     "/task-manager", "TaskTeams")
 _include("app.routers.finance",        "/finance",      "Finance")
 _include("app.routers.projects",       "/projects",     "Projects")
 _include("app.routers.timesheets",     "/timesheets",   "Timesheets")
+_include("app.routers.leads",          "/leads",        "Leads")
+_include("app.routers.reporting",      "/reporting",    "Reporting")
 
 try:
     from app.routers import auth, outlook, copilot

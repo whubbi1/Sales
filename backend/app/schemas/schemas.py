@@ -1,6 +1,6 @@
 # backend/app/schemas/schemas.py
 from pydantic import BaseModel, field_validator
-from typing import Optional, List, Dict
+from typing import Optional, List, Dict, Any
 from datetime import datetime
 from uuid import UUID
 
@@ -349,6 +349,7 @@ class RFPUpdate(BaseModel):
 
 class RFPResponse(RFPBase):
     id: UUID
+    reference: Optional[str] = None
     ai_summary: Optional[str] = None
     key_dates: Optional[List[dict]] = []
     analysis_status: Optional[str] = "pending"
@@ -441,16 +442,32 @@ class RFPStaffingAllocationResponse(RFPStaffingAllocationIn):
     class Config:
         from_attributes = True
 
-class RFPStaffingTaskCreate(BaseModel):
-    title: str
+class RFPStaffingRoleCreate(BaseModel):
+    name: str
     resource_email: Optional[str] = None
     resource_name: Optional[str] = None
+
+class RFPStaffingRoleUpdate(BaseModel):
+    name: Optional[str] = None
+    resource_email: Optional[str] = None
+    resource_name: Optional[str] = None
+
+class RFPStaffingRoleResponse(RFPStaffingRoleCreate):
+    id: UUID
+    rfp_id: UUID
+    created_at: datetime
+    updated_at: datetime
+    class Config:
+        from_attributes = True
+
+class RFPStaffingTaskCreate(BaseModel):
+    title: str
+    role_id: Optional[UUID] = None
     position: Optional[int] = 0
 
 class RFPStaffingTaskUpdate(BaseModel):
     title: Optional[str] = None
-    resource_email: Optional[str] = None
-    resource_name: Optional[str] = None
+    role_id: Optional[UUID] = None
     position: Optional[int] = None
 
 class RFPStaffingTaskResponse(RFPStaffingTaskCreate):
@@ -458,6 +475,7 @@ class RFPStaffingTaskResponse(RFPStaffingTaskCreate):
     rfp_id: UUID
     created_at: datetime
     updated_at: datetime
+    role: Optional[RFPStaffingRoleResponse] = None
     allocations: Optional[List[RFPStaffingAllocationResponse]] = []
     class Config:
         from_attributes = True
@@ -552,17 +570,34 @@ class ProjectActivityLogResponse(BaseModel):
     class Config:
         from_attributes = True
 
+class ProjectStaffingRoleCreate(BaseModel):
+    plan_type: str
+    name: str
+    resource_email: Optional[str] = None
+    resource_name: Optional[str] = None
+
+class ProjectStaffingRoleUpdate(BaseModel):
+    name: Optional[str] = None
+    resource_email: Optional[str] = None
+    resource_name: Optional[str] = None
+
+class ProjectStaffingRoleResponse(ProjectStaffingRoleCreate):
+    id: UUID
+    project_id: UUID
+    created_at: datetime
+    updated_at: datetime
+    class Config:
+        from_attributes = True
+
 class ProjectStaffingTaskCreate(BaseModel):
     plan_type: str
     title: str
-    resource_email: Optional[str] = None
-    resource_name: Optional[str] = None
+    role_id: Optional[UUID] = None
     position: Optional[int] = 0
 
 class ProjectStaffingTaskUpdate(BaseModel):
     title: Optional[str] = None
-    resource_email: Optional[str] = None
-    resource_name: Optional[str] = None
+    role_id: Optional[UUID] = None
     position: Optional[int] = None
 
 class ProjectStaffingAllocationIn(BaseModel):
@@ -580,6 +615,7 @@ class ProjectStaffingTaskResponse(ProjectStaffingTaskCreate):
     project_id: UUID
     created_at: datetime
     updated_at: datetime
+    role: Optional[ProjectStaffingRoleResponse] = None
     allocations: Optional[List[ProjectStaffingAllocationResponse]] = []
     class Config:
         from_attributes = True
@@ -609,3 +645,166 @@ class TimesheetEntryResponse(TimesheetEntryCreate):
     updated_at: datetime
     class Config:
         from_attributes = True
+
+# ─── Leads (Sales module) ───────────────────────────────────────────────────────
+class LeadCreate(BaseModel):
+    title: str
+    company_id: Optional[UUID] = None
+    contact_id: Optional[UUID] = None
+    partner_ids: Optional[List[UUID]] = []
+    partner_contact_ids: Optional[List[UUID]] = []
+    start_date: Optional[datetime] = None
+    end_date: Optional[datetime] = None
+    origin: Optional[str] = None
+    status: Optional[str] = 'Open'
+    assigned_to: Optional[str] = None
+    assigned_to_email: Optional[str] = None
+
+class LeadUpdate(BaseModel):
+    title: Optional[str] = None
+    company_id: Optional[UUID] = None
+    contact_id: Optional[UUID] = None
+    partner_ids: Optional[List[UUID]] = None
+    partner_contact_ids: Optional[List[UUID]] = None
+    start_date: Optional[datetime] = None
+    end_date: Optional[datetime] = None
+    origin: Optional[str] = None
+    status: Optional[str] = None
+    assigned_to: Optional[str] = None
+    assigned_to_email: Optional[str] = None
+    # Attributed to the activity log entries this update produces, not persisted on the row.
+    changed_by_email: Optional[str] = None
+    changed_by_name: Optional[str] = None
+
+class LeadResponse(BaseModel):
+    id: UUID
+    lead_number: Optional[str] = None
+    title: str
+    company_id: Optional[UUID] = None
+    contact_id: Optional[UUID] = None
+    start_date: Optional[datetime] = None
+    end_date: Optional[datetime] = None
+    origin: Optional[str] = None
+    status: str
+    opportunity_id: Optional[UUID] = None
+    assigned_to: Optional[str] = None
+    assigned_to_email: Optional[str] = None
+    created_at: datetime
+    updated_at: datetime
+    company: Optional[CompanySummary] = None
+    contact: Optional[ContactSummary] = None
+    partners: Optional[List[PartnerSummary]] = []
+    partner_contacts: Optional[List[ContactSummary]] = []
+    class Config:
+        from_attributes = True
+
+class LeadActivityLogResponse(BaseModel):
+    id: UUID
+    lead_id: UUID
+    field_name: str
+    old_value: Optional[str] = None
+    new_value: Optional[str] = None
+    changed_by_email: Optional[str] = None
+    changed_by_name: Optional[str] = None
+    changed_at: datetime
+    class Config:
+        from_attributes = True
+
+class LeadNoteCreate(BaseModel):
+    content: str
+    created_by: Optional[str] = None
+
+class LeadNoteResponse(LeadNoteCreate):
+    id: UUID
+    lead_id: UUID
+    created_at: datetime
+    updated_at: datetime
+    class Config:
+        from_attributes = True
+
+class LeadFileCreate(BaseModel):
+    title: str
+    url: str
+    description: Optional[str] = None
+    created_by: Optional[str] = None
+
+class LeadFileResponse(LeadFileCreate):
+    id: UUID
+    lead_id: UUID
+    created_at: datetime
+    class Config:
+        from_attributes = True
+
+# ─── Reporting & Analytics ──────────────────────────────────────────────────────
+class ReportSpecFilter(BaseModel):
+    column: str
+    operator: str
+    value: Optional[Any] = None
+
+class ReportSpecAggregate(BaseModel):
+    column: str
+    function: str
+
+class ReportSpecSort(BaseModel):
+    column: str
+    dir: Optional[str] = 'asc'
+
+class ReportSpec(BaseModel):
+    entity: str
+    columns: Optional[List[str]] = []
+    filters: Optional[List[ReportSpecFilter]] = []
+    group_by: Optional[List[str]] = []
+    aggregates: Optional[List[ReportSpecAggregate]] = []
+    sort: Optional[ReportSpecSort] = None
+    chart_type: Optional[str] = 'table'
+    limit: Optional[int] = 500
+
+class SavedReportCreate(BaseModel):
+    name: str
+    owner_email: str
+    spec: ReportSpec
+    chart_type: Optional[str] = 'table'
+    shared_with: Optional[List[str]] = []
+
+class SavedReportUpdate(BaseModel):
+    name: Optional[str] = None
+    spec: Optional[ReportSpec] = None
+    chart_type: Optional[str] = None
+    shared_with: Optional[List[str]] = None
+
+class SavedReportResponse(BaseModel):
+    id: UUID
+    name: str
+    owner_email: str
+    spec: dict
+    chart_type: str
+    shared_with: List[str] = []
+    created_at: datetime
+    updated_at: datetime
+    class Config:
+        from_attributes = True
+
+class SavedDashboardCreate(BaseModel):
+    name: str
+    owner_email: str
+    report_ids: Optional[List[UUID]] = []
+    shared_with: Optional[List[str]] = []
+
+class SavedDashboardUpdate(BaseModel):
+    name: Optional[str] = None
+    report_ids: Optional[List[UUID]] = None
+    shared_with: Optional[List[str]] = None
+
+class SavedDashboardResponse(BaseModel):
+    id: UUID
+    name: str
+    owner_email: str
+    report_ids: List[str] = []
+    shared_with: List[str] = []
+    created_at: datetime
+    updated_at: datetime
+    class Config:
+        from_attributes = True
+
+class AIReportDraftRequest(BaseModel):
+    prompt: str

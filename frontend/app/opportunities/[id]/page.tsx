@@ -71,6 +71,7 @@ export default function OpportunityDetailPage() {
   const [showDelete, setShowDelete] = useState(false)
   const [deleteConfirm, setDeleteConfirm] = useState('')
   const [deleting, setDeleting] = useState(false)
+  const [duplicating, setDuplicating] = useState(false)
 
   const [users, setUsers] = useState<any[]>([])
   const [staffing, setStaffing] = useState<any[]>([])
@@ -155,6 +156,17 @@ export default function OpportunityDetailPage() {
     setEditingDateField(null)
   }
 
+  const duplicateOpportunity = async () => {
+    setDuplicating(true)
+    try {
+      const copy = await opportunitiesAPI.duplicate(opp.id)
+      router.push(`/opportunities/${copy.id}`)
+    } catch (e: any) {
+      alert(e.message)
+      setDuplicating(false)
+    }
+  }
+
   const saveSharepointUrl = async () => {
     await opportunitiesAPI.update(opp.id, { sharepoint_site_url: sharepointUrl })
     setOpp((o: any) => ({ ...o, sharepoint_site_url: sharepointUrl }))
@@ -164,12 +176,14 @@ export default function OpportunityDetailPage() {
   const addStaffing = async () => {
     if (!addStaffEmail) return
     const u = users.find((uu: any) => uu.email === addStaffEmail)
-    await opportunitiesAPI.addStaffing(opp.id, { user_email: addStaffEmail, user_name: u?.display_name || `${u?.first_name} ${u?.last_name}`, role: addStaffRole })
+    try {
+      await opportunitiesAPI.addStaffing(opp.id, { user_email: addStaffEmail, user_name: u?.display_name || `${u?.first_name} ${u?.last_name}`, role: addStaffRole })
+    } catch (e: any) { alert(e.message); return }
     setAddStaffEmail(''); setAddStaffRole('')
     setStaffing(await opportunitiesAPI.getStaffing(opp.id))
   }
   const removeStaffing = async (sid: string) => {
-    await opportunitiesAPI.removeStaffing(opp.id, sid)
+    try { await opportunitiesAPI.removeStaffing(opp.id, sid) } catch (e: any) { alert(e.message); return }
     setStaffing(await opportunitiesAPI.getStaffing(opp.id))
   }
 
@@ -254,6 +268,7 @@ export default function OpportunityDetailPage() {
           </div>
           <div style={{ display: 'flex', gap: '8px' }}>
             <button onClick={() => setShowEdit(true)} style={{ background: 'white', color: '#144766', padding: '7px 14px', borderRadius: '7px', fontSize: '12px', fontWeight: '600', border: '1.5px solid #CBD5E0', cursor: 'pointer' }}>Edit</button>
+            <button onClick={duplicateOpportunity} disabled={duplicating} style={{ background: 'white', color: '#144766', padding: '7px 14px', borderRadius: '7px', fontSize: '12px', fontWeight: '600', border: '1.5px solid #CBD5E0', cursor: duplicating ? 'default' : 'pointer', opacity: duplicating ? 0.6 : 1 }}>{duplicating ? 'Duplicating…' : 'Duplicate'}</button>
             <button onClick={() => { setDeleteConfirm(''); setShowDelete(true) }} style={{ background: 'white', color: '#DC2626', padding: '7px 14px', borderRadius: '7px', fontSize: '12px', fontWeight: '600', border: '1.5px solid #FCA5A5', cursor: 'pointer' }}>Delete</button>
           </div>
         </div>

@@ -212,6 +212,7 @@ export default function RFPDetailPage() {
             <div style={{ flex: 1 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginBottom: '4px' }}>
                 <h1 style={{ fontSize: '18px', fontWeight: '800', color: '#144766', margin: 0 }}>{rfp.name}</h1>
+                {rfp.reference && <span style={{ background: '#F1F5F9', color: '#64748B', padding: '2px 9px', borderRadius: '10px', fontSize: '10px', fontWeight: '700' }}>{rfp.reference}</span>}
                 <StatusBadge value={rfp.status} />
               </div>
               <p style={{ color: '#9B9B9B', fontSize: '12px', margin: 0 }}>

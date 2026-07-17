@@ -50,33 +50,13 @@ export default function LoginPage() {
           <img src="/logo.png" alt="WHUBBI" style={{ width: '140px', height: 'auto', objectFit: 'contain', marginBottom: '32px' }} />
           <h1 style={{ fontSize: '40px', fontWeight: '900', letterSpacing: '-0.02em', lineHeight: 1.1, marginBottom: '16px', color: 'white' }}>WHUBBI</h1>
           <p style={{ fontSize: '15px', color: 'rgba(255,255,255,0.65)', lineHeight: '1.7', fontWeight: '400' }}>
-            Your all-in-one business platform. Sales, Finance, HR, GRC and IT — all in one place.
+            Your all-in-one business platform.
           </p>
-          <div style={{ marginTop: '40px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
-            {[
-              { icon: '💼', title: 'Sales',   desc: 'Pipeline & commercial management' },
-              { icon: '💰', title: 'Finance', desc: 'Budgets & financial tracking' },
-              { icon: '🛡️', title: 'GRC',    desc: 'Governance, Risk & Compliance' },
-            ].map(item => (
-              <div key={item.title} style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                <div style={{ width: '36px', height: '36px', borderRadius: '8px', background: 'rgba(255,255,255,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '16px', flexShrink: 0 }}>{item.icon}</div>
-                <div>
-                  <div style={{ fontSize: '13px', fontWeight: '700' }}>{item.title}</div>
-                  <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.55)' }}>{item.desc}</div>
-                </div>
-              </div>
-            ))}
-          </div>
         </div>
       </div>
 
       {/* Right panel */}
       <div style={{ width: '420px', background: 'white', display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '48px 40px' }}>
-        <div style={{ marginBottom: '32px' }}>
-          <h2 style={{ fontSize: '22px', fontWeight: '800', color: '#156082', marginBottom: '6px', letterSpacing: '-0.01em' }}>Sign in to WHUBBI</h2>
-          <p style={{ fontSize: '12px', color: '#848EA5' }}>Use your WCOMPLY Microsoft account.</p>
-        </div>
-
         <button onClick={handleMicrosoftSSO} disabled={loading}
           style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px', padding: '13px 20px', background: loading ? '#F5F7FA' : '#156082', color: loading ? '#848EA5' : 'white', border: 'none', borderRadius: '10px', fontSize: '13px', fontWeight: '700', fontFamily: 'Montserrat, sans-serif', cursor: loading ? 'not-allowed' : 'pointer', transition: 'all 0.15s' }}>
           {!loading && (
@@ -96,15 +76,6 @@ export default function LoginPage() {
             {error}
           </div>
         )}
-
-        <div style={{ marginTop: '40px', padding: '16px', background: '#F5F7FA', borderRadius: '10px' }}>
-          <p style={{ fontSize: '11px', color: '#848EA5', lineHeight: '1.5', textAlign: 'center' }}>
-            By signing in, you agree to WCOMPLY's internal use policies. Your session is secured via AWS Cognito.
-          </p>
-        </div>
-        <div style={{ marginTop: '24px', textAlign: 'center' }}>
-          <p style={{ fontSize: '10px', color: '#848EA5' }}>WHUBBI · Powered by WCOMPLY</p>
-        </div>
       </div>
     </div>
   )

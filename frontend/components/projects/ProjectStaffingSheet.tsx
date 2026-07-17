@@ -41,20 +41,24 @@ function monthsBetween(start?: string, end?: string): { key: string; label: stri
 export function ProjectStaffingSheet({ projectId, startDate, endDate, users }: { projectId: string; startDate?: string; endDate?: string; users: any[] }) {
   const [planType, setPlanType] = useState<'initial' | 'current'>('current')
   const [granularity, setGranularity] = useState<'week' | 'month'>('month')
+  const [roles, setRoles] = useState<any[]>([])
   const [tasks, setTasks] = useState<any[]>([])
   const [entries, setEntries] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
+  const [newRoleName, setNewRoleName] = useState('')
+  const [newRoleResource, setNewRoleResource] = useState('')
   const [newTaskTitle, setNewTaskTitle] = useState('')
-  const [newTaskResource, setNewTaskResource] = useState('')
+  const [newTaskRole, setNewTaskRole] = useState('')
   const [drilldown, setDrilldown] = useState<{ email: string; resource: string; monthKey: string; monthLabel: string } | null>(null)
 
   const load = async () => {
     setLoading(true)
-    const [t, e] = await Promise.all([
+    const [rl, t, e] = await Promise.all([
+      projectsAPI.getStaffingRoles(projectId, planType),
       projectsAPI.getStaffing(projectId, planType),
       timesheetsAPI.list({ project_id: projectId }),
     ])
-    setTasks(t); setEntries(e); setLoading(false)
+    setRoles(rl); setTasks(t); setEntries(e); setLoading(false)
   }
   useEffect(() => { load() }, [projectId, planType])
 
@@ -63,23 +67,49 @@ export function ProjectStaffingSheet({ projectId, startDate, endDate, users }: {
 
   const employeeName = (u: any) => u.display_name || `${u.first_name} ${u.last_name}`
   const sortedUsers = [...users].sort((a, b) => employeeName(a).localeCompare(employeeName(b)))
+  const sortedRoles = [...roles].sort((a, b) => a.name.localeCompare(b.name))
   const isReadOnly = planType === 'initial'
+
+  // ─── Roles — each holds one assigned resource; a resource can hold several roles ───
+  const addRole = async () => {
+    if (!newRoleName.trim()) return
+    const u = users.find((uu: any) => uu.email === newRoleResource)
+    try {
+      await projectsAPI.addStaffingRole(projectId, { plan_type: 'current', name: newRoleName.trim(), resource_email: newRoleResource || null, resource_name: u ? employeeName(u) : null })
+    } catch (e: any) { alert(e.message); return }
+    setNewRoleName(''); setNewRoleResource('')
+    load()
+  }
+  const patchRoleResource = async (role: any, email: string) => {
+    const u = users.find((uu: any) => uu.email === email)
+    try {
+      await projectsAPI.updateStaffingRole(projectId, role.id, { resource_email: email || null, resource_name: u ? employeeName(u) : null })
+    } catch (e: any) { alert(e.message); return }
+    load()
+  }
+  const deleteRole = async (role: any) => {
+    if (!confirm(`Delete role "${role.name}"? Tasks using it will become unassigned.`)) return
+    try { await projectsAPI.deleteStaffingRole(projectId, role.id) } catch (e: any) { alert(e.message); return }
+    load()
+  }
 
   const addTask = async () => {
     if (!newTaskTitle.trim()) return
-    const u = users.find((uu: any) => uu.email === newTaskResource)
-    await projectsAPI.addStaffing(projectId, { plan_type: 'current', title: newTaskTitle.trim(), resource_email: newTaskResource || null, resource_name: u ? employeeName(u) : null, position: tasks.length })
-    setNewTaskTitle(''); setNewTaskResource('')
+    try {
+      await projectsAPI.addStaffing(projectId, { plan_type: 'current', title: newTaskTitle.trim(), role_id: newTaskRole || null, position: tasks.length })
+    } catch (e: any) { alert(e.message); return }
+    setNewTaskTitle(''); setNewTaskRole('')
     load()
   }
   const deleteTask = async (task: any) => {
     if (!confirm(`Delete task "${task.title}"?`)) return
-    await projectsAPI.deleteStaffing(projectId, task.id)
+    try { await projectsAPI.deleteStaffing(projectId, task.id) } catch (e: any) { alert(e.message); return }
     load()
   }
-  const patchTaskResource = async (task: any, email: string) => {
-    const u = users.find((uu: any) => uu.email === email)
-    await projectsAPI.updateStaffing(projectId, task.id, { resource_email: email || null, resource_name: u ? employeeName(u) : null })
+  const patchTaskRole = async (task: any, roleId: string) => {
+    try {
+      await projectsAPI.updateStaffing(projectId, task.id, { role_id: roleId || null })
+    } catch (e: any) { alert(e.message); return }
     load()
   }
 
@@ -133,12 +163,42 @@ export function ProjectStaffingSheet({ projectId, startDate, endDate, users }: {
 
       {isReadOnly && <p style={{ fontSize: '11px', color: '#94A3B8', marginBottom: '10px' }}>🔒 Frozen baseline copied from the quotation — switch to Current Plan to make adjustments.</p>}
 
+      <p className="section-label" style={{ marginBottom: '8px' }}>Roles</p>
+      {!isReadOnly && (
+        <div style={{ display: 'flex', gap: '8px', marginBottom: '14px' }}>
+          <input className="form-input" style={{ flex: 1 }} placeholder="Role name (e.g. Project Manager)…" value={newRoleName} onChange={e => setNewRoleName(e.target.value)} onKeyDown={e => e.key === 'Enter' && addRole()} />
+          <select className="form-input" style={{ width: '200px' }} value={newRoleResource} onChange={e => setNewRoleResource(e.target.value)}>
+            <option value="">No one yet…</option>
+            {sortedUsers.map((u: any) => <option key={u.email} value={u.email}>{employeeName(u)}</option>)}
+          </select>
+          <button className="btn-primary" onClick={addRole} disabled={!newRoleName.trim()}>+ Add Role</button>
+        </div>
+      )}
+      {roles.length === 0 ? <p style={{ color: '#9B9B9B', fontSize: '13px', marginBottom: '18px' }}>No roles defined in this plan yet.</p> : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '24px' }}>
+          {sortedRoles.map((role: any) => (
+            <div key={role.id} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '8px 12px', border: '1px solid #EDF2F7', borderRadius: '8px' }}>
+              <div style={{ flex: 1, fontWeight: '700', color: '#144766', fontSize: '13px' }}>{role.name}</div>
+              {isReadOnly ? (
+                <span style={{ fontSize: '11px', color: '#64748B', width: '200px' }}>{role.resource_name || role.resource_email || 'Unassigned'}</span>
+              ) : (
+                <select className="form-input" style={{ fontSize: '11px', padding: '3px 6px', width: '200px' }} value={role.resource_email || ''} onChange={e => patchRoleResource(role, e.target.value)}>
+                  <option value="">Unassigned</option>
+                  {sortedUsers.map((u: any) => <option key={u.email} value={u.email}>{employeeName(u)}</option>)}
+                </select>
+              )}
+              {!isReadOnly && <button onClick={() => deleteRole(role)} style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#DC2626', fontSize: '15px', padding: 0, lineHeight: 1 }}>×</button>}
+            </div>
+          ))}
+        </div>
+      )}
+
       {!isReadOnly && (
         <div style={{ display: 'flex', gap: '8px', marginBottom: '14px' }}>
           <input className="form-input" style={{ flex: 1 }} placeholder="Task name…" value={newTaskTitle} onChange={e => setNewTaskTitle(e.target.value)} onKeyDown={e => e.key === 'Enter' && addTask()} />
-          <select className="form-input" style={{ width: '200px' }} value={newTaskResource} onChange={e => setNewTaskResource(e.target.value)}>
-            <option value="">No resource yet…</option>
-            {sortedUsers.map((u: any) => <option key={u.email} value={u.email}>{employeeName(u)}</option>)}
+          <select className="form-input" style={{ width: '200px' }} value={newTaskRole} onChange={e => setNewTaskRole(e.target.value)}>
+            <option value="">No role yet…</option>
+            {sortedRoles.map((role: any) => <option key={role.id} value={role.id}>{role.name}{role.resource_name ? ` — ${role.resource_name}` : ''}</option>)}
           </select>
           <button className="btn-primary" onClick={addTask} disabled={!newTaskTitle.trim()}>+ Add Task</button>
         </div>
@@ -150,7 +210,7 @@ export function ProjectStaffingSheet({ projectId, startDate, endDate, users }: {
             <thead>
               <tr>
                 <th style={{ textAlign: 'left', padding: '8px 10px', fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', color: '#9B9B9B', borderBottom: '1px solid #E2E8F0', whiteSpace: 'nowrap' }}>Task</th>
-                <th style={{ textAlign: 'left', padding: '8px 10px', fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', color: '#9B9B9B', borderBottom: '1px solid #E2E8F0', whiteSpace: 'nowrap' }}>Resource</th>
+                <th style={{ textAlign: 'left', padding: '8px 10px', fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', color: '#9B9B9B', borderBottom: '1px solid #E2E8F0', whiteSpace: 'nowrap' }}>Role</th>
                 {periods.map(p => <th key={p.key} style={{ textAlign: 'center', padding: '8px 6px', fontSize: '10px', fontWeight: '700', color: '#9B9B9B', borderBottom: '1px solid #E2E8F0', whiteSpace: 'nowrap' }}>{p.label}</th>)}
                 <th style={{ textAlign: 'center', padding: '8px 10px', fontSize: '10px', fontWeight: '700', color: '#144766', borderBottom: '1px solid #E2E8F0' }}>Total</th>
                 {!isReadOnly && <th style={{ borderBottom: '1px solid #E2E8F0' }} />}
@@ -163,10 +223,10 @@ export function ProjectStaffingSheet({ projectId, startDate, endDate, users }: {
                   <tr key={t.id}>
                     <td style={{ padding: '6px 10px', borderBottom: '1px solid #F1F5F9', fontWeight: '700', color: '#144766', whiteSpace: 'nowrap' }}>{t.title}</td>
                     <td style={{ padding: '6px 10px', borderBottom: '1px solid #F1F5F9' }}>
-                      {isReadOnly ? (t.resource_name || t.resource_email || '—') : (
-                        <select className="form-input" style={{ fontSize: '11px', padding: '3px 6px' }} value={t.resource_email || ''} onChange={e => patchTaskResource(t, e.target.value)}>
+                      {isReadOnly ? (t.role?.name ? `${t.role.name}${t.role.resource_name ? ` — ${t.role.resource_name}` : ''}` : '—') : (
+                        <select className="form-input" style={{ fontSize: '11px', padding: '3px 6px' }} value={t.role_id || ''} onChange={e => patchTaskRole(t, e.target.value)}>
                           <option value="">Unassigned</option>
-                          {sortedUsers.map((u: any) => <option key={u.email} value={u.email}>{employeeName(u)}</option>)}
+                          {sortedRoles.map((role: any) => <option key={role.id} value={role.id}>{role.name}{role.resource_name ? ` — ${role.resource_name}` : ''}</option>)}
                         </select>
                       )}
                     </td>

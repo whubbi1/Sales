@@ -38,16 +38,19 @@ function monthsBetween(start?: string, end?: string): { key: string; label: stri
 }
 
 export function StaffingCostingSheet({ rfpId, opportunities, users }: { rfpId: string; opportunities: any[]; users: any[] }) {
+  const [roles, setRoles] = useState<any[]>([])
   const [tasks, setTasks] = useState<any[]>([])
   const [rates, setRates] = useState<any[]>([])
   const [granularity, setGranularity] = useState<'week' | 'month'>('month')
+  const [newRoleName, setNewRoleName] = useState('')
+  const [newRoleResource, setNewRoleResource] = useState('')
   const [newTaskTitle, setNewTaskTitle] = useState('')
-  const [newTaskResource, setNewTaskResource] = useState('')
+  const [newTaskRole, setNewTaskRole] = useState('')
   const [loading, setLoading] = useState(true)
 
   const load = async () => {
-    const [t, r] = await Promise.all([rfpAPI.getStaffingTasks(rfpId), rfpAPI.getStaffingRates(rfpId)])
-    setTasks(t); setRates(r); setLoading(false)
+    const [rl, t, r] = await Promise.all([rfpAPI.getStaffingRoles(rfpId), rfpAPI.getStaffingTasks(rfpId), rfpAPI.getStaffingRates(rfpId)])
+    setRoles(rl); setTasks(t); setRates(r); setLoading(false)
   }
   useEffect(() => { load() }, [rfpId])
 
@@ -61,22 +64,48 @@ export function StaffingCostingSheet({ rfpId, opportunities, users }: { rfpId: s
 
   const employeeName = (u: any) => u.display_name || `${u.first_name} ${u.last_name}`
   const sortedUsers = [...users].sort((a, b) => employeeName(a).localeCompare(employeeName(b)))
+  const sortedRoles = [...roles].sort((a, b) => a.name.localeCompare(b.name))
+
+  // ─── Roles — each holds one assigned resource; a resource can hold several roles ───
+  const addRole = async () => {
+    if (!newRoleName.trim()) return
+    const u = users.find((uu: any) => uu.email === newRoleResource)
+    try {
+      await rfpAPI.addStaffingRole(rfpId, { name: newRoleName.trim(), resource_email: newRoleResource || null, resource_name: u ? employeeName(u) : null })
+    } catch (e: any) { alert(e.message); return }
+    setNewRoleName(''); setNewRoleResource('')
+    load()
+  }
+  const patchRoleResource = async (role: any, email: string) => {
+    const u = users.find((uu: any) => uu.email === email)
+    try {
+      await rfpAPI.updateStaffingRole(rfpId, role.id, { resource_email: email || null, resource_name: u ? employeeName(u) : null })
+    } catch (e: any) { alert(e.message); return }
+    load()
+  }
+  const deleteRole = async (role: any) => {
+    if (!confirm(`Delete role "${role.name}"? Tasks using it will become unassigned.`)) return
+    try { await rfpAPI.deleteStaffingRole(rfpId, role.id) } catch (e: any) { alert(e.message); return }
+    load()
+  }
 
   const addTask = async () => {
     if (!newTaskTitle.trim()) return
-    const u = users.find((uu: any) => uu.email === newTaskResource)
-    await rfpAPI.addStaffingTask(rfpId, { title: newTaskTitle.trim(), resource_email: newTaskResource || null, resource_name: u ? employeeName(u) : null, position: tasks.length })
-    setNewTaskTitle(''); setNewTaskResource('')
+    try {
+      await rfpAPI.addStaffingTask(rfpId, { title: newTaskTitle.trim(), role_id: newTaskRole || null, position: tasks.length })
+    } catch (e: any) { alert(e.message); return }
+    setNewTaskTitle(''); setNewTaskRole('')
     load()
   }
   const deleteTask = async (task: any) => {
     if (!confirm(`Delete task "${task.title}"?`)) return
-    await rfpAPI.deleteStaffingTask(rfpId, task.id)
+    try { await rfpAPI.deleteStaffingTask(rfpId, task.id) } catch (e: any) { alert(e.message); return }
     load()
   }
-  const patchTaskResource = async (task: any, email: string) => {
-    const u = users.find((uu: any) => uu.email === email)
-    await rfpAPI.updateStaffingTask(rfpId, task.id, { resource_email: email || null, resource_name: u ? employeeName(u) : null })
+  const patchTaskRole = async (task: any, roleId: string) => {
+    try {
+      await rfpAPI.updateStaffingTask(rfpId, task.id, { role_id: roleId || null })
+    } catch (e: any) { alert(e.message); return }
     load()
   }
 
@@ -91,14 +120,17 @@ export function StaffingCostingSheet({ rfpId, opportunities, users }: { rfpId: s
     await rfpAPI.setStaffingAllocations(rfpId, task.id, next)
   }
 
-  // Resource summary — total days (in the currently viewed granularity) and sales cost.
+  // Resource summary — total days (in the currently viewed granularity) and sales cost,
+  // rolled up by PERSON (via each task's role), not by role — the same person can hold
+  // several roles and their time should still sum into one line.
   const resourceMap = new Map<string, { email: string; name: string; days: number }>()
   tasks.forEach(t => {
-    if (!t.resource_email) return
+    const email = t.role?.resource_email
+    if (!email) return
     const days = (t.allocations || []).filter((a: any) => a.period_type === granularity).reduce((s: number, a: any) => s + a.days, 0)
-    const entry = resourceMap.get(t.resource_email) || { email: t.resource_email, name: t.resource_name || t.resource_email, days: 0 }
+    const entry = resourceMap.get(email) || { email, name: t.role?.resource_name || email, days: 0 }
     entry.days += days
-    resourceMap.set(t.resource_email, entry)
+    resourceMap.set(email, entry)
   })
   const resourceRows = [...resourceMap.values()].sort((a, b) => a.name.localeCompare(b.name))
   const rateFor = (email: string) => rates.find(r => r.resource_email === email)?.day_rate || 0
@@ -119,6 +151,31 @@ export function StaffingCostingSheet({ rfpId, opportunities, users }: { rfpId: s
 
   return (
     <div>
+      <p className="section-label" style={{ marginBottom: '8px' }}>Roles</p>
+      <p style={{ fontSize: '12px', color: '#94A3B8', marginTop: 0, marginBottom: '10px' }}>Define the roles needed on this RFP and assign one person to each — a person can hold more than one role.</p>
+      <div style={{ display: 'flex', gap: '8px', marginBottom: '14px' }}>
+        <input className="form-input" style={{ flex: 1 }} placeholder="Role name (e.g. Project Manager)…" value={newRoleName} onChange={e => setNewRoleName(e.target.value)} onKeyDown={e => e.key === 'Enter' && addRole()} />
+        <select className="form-input" style={{ width: '200px' }} value={newRoleResource} onChange={e => setNewRoleResource(e.target.value)}>
+          <option value="">No one yet…</option>
+          {sortedUsers.map((u: any) => <option key={u.email} value={u.email}>{employeeName(u)}</option>)}
+        </select>
+        <button className="btn-primary" onClick={addRole} disabled={!newRoleName.trim()}>+ Add Role</button>
+      </div>
+      {roles.length === 0 ? <p style={{ color: '#9B9B9B', fontSize: '13px', marginBottom: '18px' }}>No roles defined yet.</p> : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '18px' }}>
+          {sortedRoles.map((role: any) => (
+            <div key={role.id} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '8px 12px', border: '1px solid #EDF2F7', borderRadius: '8px' }}>
+              <div style={{ flex: 1, fontWeight: '700', color: '#144766', fontSize: '13px' }}>{role.name}</div>
+              <select className="form-input" style={{ fontSize: '11px', padding: '3px 6px', width: '200px' }} value={role.resource_email || ''} onChange={e => patchRoleResource(role, e.target.value)}>
+                <option value="">Unassigned</option>
+                {sortedUsers.map((u: any) => <option key={u.email} value={u.email}>{employeeName(u)}</option>)}
+              </select>
+              <button onClick={() => deleteRole(role)} style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#DC2626', fontSize: '15px', padding: 0, lineHeight: 1 }}>×</button>
+            </div>
+          ))}
+        </div>
+      )}
+
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
         <p className="section-label" style={{ margin: 0 }}>Resources & Sales Cost</p>
         <div style={{ display: 'flex', gap: '3px', background: '#F1F5F9', padding: '3px', borderRadius: '8px' }}>
@@ -129,7 +186,7 @@ export function StaffingCostingSheet({ rfpId, opportunities, users }: { rfpId: s
       </div>
 
       {resourceRows.length === 0 ? (
-        <p style={{ color: '#9B9B9B', fontSize: '12px', marginBottom: '18px' }}>Assign a resource to a task below to see them here.</p>
+        <p style={{ color: '#9B9B9B', fontSize: '12px', marginBottom: '18px' }}>Assign a role to a task below to see resources here.</p>
       ) : (
         <div style={{ marginBottom: '18px', overflowX: 'auto' }}>
           <table style={{ borderCollapse: 'collapse', fontSize: '12px' }}>
@@ -168,9 +225,9 @@ export function StaffingCostingSheet({ rfpId, opportunities, users }: { rfpId: s
       <p className="section-label">Tasks</p>
       <div style={{ display: 'flex', gap: '8px', marginBottom: '14px' }}>
         <input className="form-input" style={{ flex: 1 }} placeholder="Task name…" value={newTaskTitle} onChange={e => setNewTaskTitle(e.target.value)} onKeyDown={e => e.key === 'Enter' && addTask()} />
-        <select className="form-input" style={{ width: '200px' }} value={newTaskResource} onChange={e => setNewTaskResource(e.target.value)}>
-          <option value="">No resource yet…</option>
-          {sortedUsers.map((u: any) => <option key={u.email} value={u.email}>{employeeName(u)}</option>)}
+        <select className="form-input" style={{ width: '200px' }} value={newTaskRole} onChange={e => setNewTaskRole(e.target.value)}>
+          <option value="">No role yet…</option>
+          {sortedRoles.map((role: any) => <option key={role.id} value={role.id}>{role.name}{role.resource_name ? ` — ${role.resource_name}` : ''}</option>)}
         </select>
         <button className="btn-primary" onClick={addTask} disabled={!newTaskTitle.trim()}>+ Add Task</button>
       </div>
@@ -181,7 +238,7 @@ export function StaffingCostingSheet({ rfpId, opportunities, users }: { rfpId: s
             <thead>
               <tr>
                 <th style={{ textAlign: 'left', padding: '8px 10px', fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', color: '#9B9B9B', borderBottom: '1px solid #E2E8F0', whiteSpace: 'nowrap' }}>Task</th>
-                <th style={{ textAlign: 'left', padding: '8px 10px', fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', color: '#9B9B9B', borderBottom: '1px solid #E2E8F0', whiteSpace: 'nowrap' }}>Resource</th>
+                <th style={{ textAlign: 'left', padding: '8px 10px', fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', color: '#9B9B9B', borderBottom: '1px solid #E2E8F0', whiteSpace: 'nowrap' }}>Role</th>
                 {periods.map(p => <th key={p.key} style={{ textAlign: 'center', padding: '8px 6px', fontSize: '10px', fontWeight: '700', color: '#9B9B9B', borderBottom: '1px solid #E2E8F0', whiteSpace: 'nowrap' }}>{p.label}</th>)}
                 <th style={{ textAlign: 'center', padding: '8px 10px', fontSize: '10px', fontWeight: '700', color: '#144766', borderBottom: '1px solid #E2E8F0' }}>Total</th>
                 <th style={{ borderBottom: '1px solid #E2E8F0' }} />
@@ -194,9 +251,9 @@ export function StaffingCostingSheet({ rfpId, opportunities, users }: { rfpId: s
                   <tr key={t.id}>
                     <td style={{ padding: '6px 10px', borderBottom: '1px solid #F1F5F9', fontWeight: '700', color: '#144766', whiteSpace: 'nowrap' }}>{t.title}</td>
                     <td style={{ padding: '6px 10px', borderBottom: '1px solid #F1F5F9' }}>
-                      <select className="form-input" style={{ fontSize: '11px', padding: '3px 6px' }} value={t.resource_email || ''} onChange={e => patchTaskResource(t, e.target.value)}>
+                      <select className="form-input" style={{ fontSize: '11px', padding: '3px 6px' }} value={t.role_id || ''} onChange={e => patchTaskRole(t, e.target.value)}>
                         <option value="">Unassigned</option>
-                        {sortedUsers.map((u: any) => <option key={u.email} value={u.email}>{employeeName(u)}</option>)}
+                        {sortedRoles.map((role: any) => <option key={role.id} value={role.id}>{role.name}{role.resource_name ? ` — ${role.resource_name}` : ''}</option>)}
                       </select>
                     </td>
                     {periods.map(p => (

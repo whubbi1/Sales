@@ -11,6 +11,7 @@ import { getStoredUser } from '@/lib/auth'
 const STATUS_OPTIONS = ['Open', 'Submitted', 'Won', 'Lost']
 
 const COLUMNS: ReportColumn[] = [
+  { key: 'reference', label: 'Reference', filterable: 'text' },
   { key: 'name', label: 'RFP', filterable: 'text' },
   { key: 'customer_name', label: 'Customer', filterable: 'text' },
   { key: 'owner', label: 'Owner', filterable: 'text' },
@@ -19,7 +20,7 @@ const COLUMNS: ReportColumn[] = [
 ]
 
 const DEFAULT_COLUMN_WIDTHS: Record<string, number> = {
-  name: 240, customer_name: 170, owner: 160, status: 130, opportunities_count: 150,
+  reference: 110, name: 240, customer_name: 170, owner: 160, status: 130, opportunities_count: 150,
 }
 
 export default function RFPPage() {
@@ -108,6 +109,9 @@ export default function RFPPage() {
                   <tr key={rfp.id} onClick={() => router.push(`/rfp/${rfp.id}`)} style={{ cursor: 'pointer' }}
                     onMouseEnter={e => (e.currentTarget.style.background = '#FAFBFC')}
                     onMouseLeave={e => (e.currentTarget.style.background = 'white')}>
+                    {isVisible('reference') && (
+                      <td style={{ padding: '11px 16px', borderBottom: '1px solid #F1F5F9', ...REPORT_CELL_STYLE, fontWeight: 700, color: '#64748B' }}>{rfp.reference || '—'}</td>
+                    )}
                     {isVisible('name') && (
                       <td style={{ padding: '11px 16px', borderBottom: '1px solid #F1F5F9', ...REPORT_CELL_STYLE }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>

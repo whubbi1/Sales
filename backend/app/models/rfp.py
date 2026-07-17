@@ -21,6 +21,7 @@ class RFP(Base):
     __tablename__ = "rfps"
 
     id          = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    reference   = Column(String(20), unique=True)
     name        = Column(String(500), nullable=False)
     company_id  = Column(UUID(as_uuid=True), ForeignKey("companies.id", ondelete="SET NULL"), nullable=True)
     # Partner isn't an ORM model (raw-SQL table, see partners.py) — plain column, FK enforced at
@@ -95,16 +96,33 @@ class RFPDocumentChecklist(Base):
     rfp = relationship("RFP", back_populates="document_checklist")
 
 
+# A named role on this RFP (e.g. "Project Manager"), with one assigned wcomply resource.
+# A resource can hold more than one role by being assigned to more than one row here.
+class RFPStaffingRole(Base):
+    __tablename__ = "rfp_staffing_roles"
+
+    id             = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    rfp_id         = Column(UUID(as_uuid=True), ForeignKey("rfps.id", ondelete="CASCADE"), nullable=False)
+    name           = Column(String(255), nullable=False)
+    resource_email = Column(String(255))
+    resource_name  = Column(String(255))
+
+    created_at     = Column(DateTime, default=datetime.utcnow)
+    updated_at     = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
 # ─── Staffing/Costing Sheet ─────────────────────────────────────────────────────
-# A task row, assigned to one wcomply resource. Its time allocation lives in
-# RFPStaffingAllocation so the sheet can be viewed/edited by week or by month without
-# losing whichever granularity the numbers were actually entered at.
+# A task row, assigned to one Role (which in turn resolves to one wcomply resource). Its
+# time allocation lives in RFPStaffingAllocation so the sheet can be viewed/edited by week
+# or by month without losing whichever granularity the numbers were actually entered at.
 class RFPStaffingTask(Base):
     __tablename__ = "rfp_staffing_tasks"
 
     id             = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     rfp_id         = Column(UUID(as_uuid=True), ForeignKey("rfps.id", ondelete="CASCADE"), nullable=False)
     title          = Column(String(500), nullable=False)
+    role_id        = Column(UUID(as_uuid=True), ForeignKey("rfp_staffing_roles.id", ondelete="SET NULL"), nullable=True)
+    # Superseded by role_id (kept only so pre-existing rows aren't silently blanked out).
     resource_email = Column(String(255))
     resource_name  = Column(String(255))
     position       = Column(Integer, default=0)
@@ -112,6 +130,7 @@ class RFPStaffingTask(Base):
     created_at     = Column(DateTime, default=datetime.utcnow)
     updated_at     = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
+    role        = relationship("RFPStaffingRole")
     allocations = relationship("RFPStaffingAllocation", cascade="all, delete-orphan", order_by="RFPStaffingAllocation.period_start")
 
 

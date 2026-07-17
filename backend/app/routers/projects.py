@@ -9,12 +9,12 @@ from uuid import UUID
 from app.database import get_db
 from app.models.project import (
     Project, ProjectComment, ProjectDocument, ProjectActivityLog,
-    ProjectStaffingTask, ProjectStaffingAllocation,
+    ProjectStaffingTask, ProjectStaffingAllocation, ProjectStaffingRole,
 )
 from app.models.timesheet import TimesheetEntry
 from app.models.opportunity import Opportunity
 from app.models.company import Company
-from app.models.rfp import rfp_opportunity, RFPStaffingTask
+from app.models.rfp import rfp_opportunity, RFPStaffingTask, RFPStaffingRole
 from app.schemas.schemas import (
     ProjectCreate, ProjectUpdate, ProjectResponse,
     ProjectCommentCreate, ProjectCommentResponse,
@@ -22,6 +22,7 @@ from app.schemas.schemas import (
     ProjectActivityLogResponse,
     ProjectStaffingTaskCreate, ProjectStaffingTaskUpdate, ProjectStaffingTaskResponse,
     ProjectStaffingAllocationsSet,
+    ProjectStaffingRoleCreate, ProjectStaffingRoleUpdate, ProjectStaffingRoleResponse,
     PartnerSummary,
 )
 from app.services.ids import next_internal_id
@@ -98,6 +99,21 @@ async def _maybe_create_project(db: AsyncSession, opp: Opportunity):
     r = await db.execute(select(rfp_opportunity.c.rfp_id).where(rfp_opportunity.c.opportunity_id == opp.id))
     rfp_id = r.scalar_one_or_none()
     if rfp_id:
+        r_roles = await db.execute(select(RFPStaffingRole).where(RFPStaffingRole.rfp_id == rfp_id))
+        rfp_roles = r_roles.scalars().all()
+        # Roles are copied into both plan_type buckets, same as tasks — Initial stays a
+        # frozen baseline while Current can be edited independently from here on.
+        role_id_map = {'initial': {}, 'current': {}}
+        for role in rfp_roles:
+            for plan_type in ('initial', 'current'):
+                new_role = ProjectStaffingRole(
+                    project_id=proj.id, plan_type=plan_type, name=role.name,
+                    resource_email=role.resource_email, resource_name=role.resource_name,
+                )
+                db.add(new_role)
+                await db.flush()
+                role_id_map[plan_type][role.id] = new_role.id
+
         r2 = await db.execute(
             select(RFPStaffingTask).options(selectinload(RFPStaffingTask.allocations))
             .where(RFPStaffingTask.rfp_id == rfp_id)
@@ -106,7 +122,7 @@ async def _maybe_create_project(db: AsyncSession, opp: Opportunity):
             for plan_type in ('initial', 'current'):
                 new_task = ProjectStaffingTask(
                     project_id=proj.id, plan_type=plan_type, title=task.title,
-                    resource_email=task.resource_email, resource_name=task.resource_name,
+                    role_id=role_id_map[plan_type].get(task.role_id),
                     position=task.position,
                 )
                 new_task.allocations = [
@@ -258,10 +274,61 @@ async def delete_project_document(project_id: UUID, document_id: UUID, db: Async
     await db.commit()
 
 
+# ─── Staffing Roles (one assigned resource each; a resource can hold several roles) ────
+# Scoped per plan_type, same as tasks — Initial keeps its own frozen role set separate
+# from Current's, which can be freely edited from here on.
+@router.get("/{project_id}/staffing-roles", response_model=List[ProjectStaffingRoleResponse])
+async def list_project_staffing_roles(project_id: UUID, plan_type: str = None, db: AsyncSession = Depends(get_db)):
+    q = select(ProjectStaffingRole).where(ProjectStaffingRole.project_id == project_id)
+    if plan_type:
+        q = q.where(ProjectStaffingRole.plan_type == plan_type)
+    q = q.order_by(ProjectStaffingRole.created_at)
+    r = await db.execute(q)
+    return r.scalars().all()
+
+
+@router.post("/{project_id}/staffing-roles", response_model=ProjectStaffingRoleResponse, status_code=status.HTTP_201_CREATED)
+async def create_project_staffing_role(project_id: UUID, data: ProjectStaffingRoleCreate, db: AsyncSession = Depends(get_db)):
+    if data.plan_type == 'initial':
+        raise HTTPException(status_code=400, detail="The initial plan is a frozen baseline and cannot be added to directly.")
+    role = ProjectStaffingRole(project_id=project_id, **data.model_dump())
+    db.add(role)
+    await db.commit()
+    await db.refresh(role)
+    return role
+
+
+@router.put("/{project_id}/staffing-roles/{role_id}", response_model=ProjectStaffingRoleResponse)
+async def update_project_staffing_role(project_id: UUID, role_id: UUID, data: ProjectStaffingRoleUpdate, db: AsyncSession = Depends(get_db)):
+    r = await db.execute(select(ProjectStaffingRole).where(ProjectStaffingRole.id == role_id, ProjectStaffingRole.project_id == project_id))
+    role = r.scalar_one_or_none()
+    if not role:
+        raise HTTPException(status_code=404, detail="Role not found")
+    if role.plan_type == 'initial':
+        raise HTTPException(status_code=400, detail="The initial plan is a frozen baseline and cannot be edited.")
+    for k, v in data.model_dump(exclude_unset=True).items():
+        setattr(role, k, v)
+    await db.commit()
+    await db.refresh(role)
+    return role
+
+
+@router.delete("/{project_id}/staffing-roles/{role_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_project_staffing_role(project_id: UUID, role_id: UUID, db: AsyncSession = Depends(get_db)):
+    r = await db.execute(select(ProjectStaffingRole).where(ProjectStaffingRole.id == role_id, ProjectStaffingRole.project_id == project_id))
+    role = r.scalar_one_or_none()
+    if not role:
+        raise HTTPException(status_code=404, detail="Role not found")
+    if role.plan_type == 'initial':
+        raise HTTPException(status_code=400, detail="The initial plan is a frozen baseline and cannot be deleted from.")
+    await db.delete(role)
+    await db.commit()
+
+
 # ─── Staffing plan (Initial frozen baseline + Current editable) ────────────────
 @router.get("/{project_id}/staffing", response_model=List[ProjectStaffingTaskResponse])
 async def list_project_staffing(project_id: UUID, plan_type: str = None, db: AsyncSession = Depends(get_db)):
-    q = select(ProjectStaffingTask).options(selectinload(ProjectStaffingTask.allocations)).where(ProjectStaffingTask.project_id == project_id)
+    q = select(ProjectStaffingTask).options(selectinload(ProjectStaffingTask.allocations), selectinload(ProjectStaffingTask.role)).where(ProjectStaffingTask.project_id == project_id)
     if plan_type:
         q = q.where(ProjectStaffingTask.plan_type == plan_type)
     q = q.order_by(ProjectStaffingTask.plan_type, ProjectStaffingTask.position, ProjectStaffingTask.created_at)
@@ -278,12 +345,12 @@ async def add_project_staffing(project_id: UUID, data: ProjectStaffingTaskCreate
     # Re-query with an eager load rather than db.refresh() — refresh() re-expires
     # relationships, and AsyncSession can't lazy-load them during response serialization
     # (which runs after the handler returns, outside the active DB context).
-    r = await db.execute(select(ProjectStaffingTask).options(selectinload(ProjectStaffingTask.allocations)).where(ProjectStaffingTask.id == row.id))
+    r = await db.execute(select(ProjectStaffingTask).options(selectinload(ProjectStaffingTask.allocations), selectinload(ProjectStaffingTask.role)).where(ProjectStaffingTask.id == row.id))
     return r.scalar_one()
 
 @router.put("/{project_id}/staffing/{task_id}", response_model=ProjectStaffingTaskResponse)
 async def update_project_staffing(project_id: UUID, task_id: UUID, data: ProjectStaffingTaskUpdate, db: AsyncSession = Depends(get_db)):
-    r = await db.execute(select(ProjectStaffingTask).options(selectinload(ProjectStaffingTask.allocations))
+    r = await db.execute(select(ProjectStaffingTask).options(selectinload(ProjectStaffingTask.allocations), selectinload(ProjectStaffingTask.role))
                           .where(ProjectStaffingTask.id == task_id, ProjectStaffingTask.project_id == project_id))
     row = r.scalar_one_or_none()
     if not row:
@@ -295,7 +362,7 @@ async def update_project_staffing(project_id: UUID, task_id: UUID, data: Project
     await db.commit()
     # db.refresh() would re-expire the allocations relationship loaded above, and
     # AsyncSession can't lazy-load it during response serialization — re-query instead.
-    r = await db.execute(select(ProjectStaffingTask).options(selectinload(ProjectStaffingTask.allocations)).where(ProjectStaffingTask.id == task_id))
+    r = await db.execute(select(ProjectStaffingTask).options(selectinload(ProjectStaffingTask.allocations), selectinload(ProjectStaffingTask.role)).where(ProjectStaffingTask.id == task_id))
     return r.scalar_one()
 
 @router.delete("/{project_id}/staffing/{task_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -311,7 +378,7 @@ async def delete_project_staffing(project_id: UUID, task_id: UUID, db: AsyncSess
 
 @router.put("/{project_id}/staffing/{task_id}/allocations", response_model=ProjectStaffingTaskResponse)
 async def set_project_staffing_allocations(project_id: UUID, task_id: UUID, data: ProjectStaffingAllocationsSet, db: AsyncSession = Depends(get_db)):
-    r = await db.execute(select(ProjectStaffingTask).options(selectinload(ProjectStaffingTask.allocations))
+    r = await db.execute(select(ProjectStaffingTask).options(selectinload(ProjectStaffingTask.allocations), selectinload(ProjectStaffingTask.role))
                           .where(ProjectStaffingTask.id == task_id, ProjectStaffingTask.project_id == project_id))
     row = r.scalar_one_or_none()
     if not row:
@@ -320,7 +387,7 @@ async def set_project_staffing_allocations(project_id: UUID, task_id: UUID, data
         raise HTTPException(status_code=400, detail="The initial plan is a frozen baseline and cannot be edited.")
     row.allocations = [ProjectStaffingAllocation(period_start=a.period_start, period_type=a.period_type, days=a.days) for a in data.allocations]
     await db.commit()
-    r = await db.execute(select(ProjectStaffingTask).options(selectinload(ProjectStaffingTask.allocations)).where(ProjectStaffingTask.id == task_id))
+    r = await db.execute(select(ProjectStaffingTask).options(selectinload(ProjectStaffingTask.allocations), selectinload(ProjectStaffingTask.role)).where(ProjectStaffingTask.id == task_id))
     return r.scalar_one()
 
 

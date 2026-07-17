@@ -12,6 +12,7 @@ const MODULES = [
   { id:'sales',    title:'Sales',            description:'Manage companies, contacts, opportunities and partners. Track your commercial pipeline.',   icon:'💼', href:'/dashboard', color:'#156082', available:true  },
   { id:'marketing', title:'Marketing',       description:'Events, company website, competitor analysis, social marketing and marketing plans.', icon:'📣', href:'/marketing/events', color:'#e97132', available:true  },
   { id:'operations', title:'Operations',     description:'Running projects, software licenses, and wcomply resource staffing utilization.',    icon:'🛠️', href:'/operations/projects', color:'#059669', available:true  },
+  { id:'reporting', title:'Reporting & Analytics', description:'Build, share, and chart your own reports across the WHUBBI data model.',       icon:'📊', href:'/reporting/reports', color:'#7C3AED', available:true  },
   { id:'finance',  title:'Finance',           description:'Supplier contracts, purchase orders and invoice approvals.',              icon:'💰', href:'/finance',   color:'#e97132', available:true  },
   { id:'legal',       title:'Legal',            description:'Legal entities, template documents and compliance. Manage WCOMPLY legal structure.', icon:'⚖️', href:'/legal',        color:'#1a2744', available:true  },
   { id:'rh',       title:'Human Resources',   description:'Manage employees, contracts, onboarding and HR processes.',                       icon:'👥', href:'/rh',        color:'#45B6E4', available:true  },

@@ -142,12 +142,31 @@ export const contactsAPI = {
 }
 
 // ─── Opportunities ────────────────────────────────────────────────────────────
+export const leadsAPI = {
+  list:   (p?: any) => fetchAPI(`/leads/${qs(p)}`),
+  get:    (id: string) => fetchAPI(`/leads/${id}`),
+  create: (d: any) => fetchAPI('/leads/', { method: 'POST', body: JSON.stringify(d) }),
+  update: (id: string, d: any) => fetchAPI(`/leads/${id}`, { method: 'PUT', body: JSON.stringify(d) }),
+  delete: (id: string) => fetchAPI(`/leads/${id}`, { method: 'DELETE' }),
+
+  getActivityLog: (id: string) => fetchAPI(`/leads/${id}/activity-log`),
+
+  getNotes:   (id: string) => fetchAPI(`/leads/${id}/notes/`),
+  addNote:    (id: string, d: any) => fetchAPI(`/leads/${id}/notes/`, { method: 'POST', body: JSON.stringify(d) }),
+  deleteNote: (id: string, noteId: string) => fetchAPI(`/leads/${id}/notes/${noteId}/`, { method: 'DELETE' }),
+
+  getFiles:   (id: string) => fetchAPI(`/leads/${id}/files/`),
+  addFile:    (id: string, d: any) => fetchAPI(`/leads/${id}/files/`, { method: 'POST', body: JSON.stringify(d) }),
+  deleteFile: (id: string, fileId: string) => fetchAPI(`/leads/${id}/files/${fileId}/`, { method: 'DELETE' }),
+}
+
 export const opportunitiesAPI = {
   list:   (p?: any) => fetchAPI(`/opportunities/${qs(p)}`),
   get:    (id: string) => fetchAPI(`/opportunities/${id}`),
   create: (d: any) => fetchAPI('/opportunities/', { method: 'POST', body: JSON.stringify(d) }),
   update: (id: string, d: any) => fetchAPI(`/opportunities/${id}`, { method: 'PUT', body: JSON.stringify(d) }),
   delete: (id: string) => fetchAPI(`/opportunities/${id}`, { method: 'DELETE' }),
+  duplicate: (id: string) => fetchAPI(`/opportunities/${id}/duplicate`, { method: 'POST' }),
 
   getStaffing:    (id: string) => fetchAPI(`/opportunities/${id}/staffing/`),
   addStaffing:    (id: string, d: any) => fetchAPI(`/opportunities/${id}/staffing/`, { method: 'POST', body: JSON.stringify(d) }),
@@ -196,6 +215,11 @@ export const rfpAPI = {
 
   analyze: (id: string) => fetchAPI(`/rfps/${id}/analyze`, { method: 'POST' }),
 
+  getStaffingRoles:   (id: string) => fetchAPI(`/rfps/${id}/staffing-roles`),
+  addStaffingRole:    (id: string, d: any) => fetchAPI(`/rfps/${id}/staffing-roles`, { method: 'POST', body: JSON.stringify(d) }),
+  updateStaffingRole: (id: string, roleId: string, d: any) => fetchAPI(`/rfps/${id}/staffing-roles/${roleId}`, { method: 'PUT', body: JSON.stringify(d) }),
+  deleteStaffingRole: (id: string, roleId: string) => fetchAPI(`/rfps/${id}/staffing-roles/${roleId}`, { method: 'DELETE' }),
+
   getStaffingTasks:      (id: string) => fetchAPI(`/rfps/${id}/staffing-tasks`),
   addStaffingTask:       (id: string, d: any) => fetchAPI(`/rfps/${id}/staffing-tasks`, { method: 'POST', body: JSON.stringify(d) }),
   updateStaffingTask:    (id: string, taskId: string, d: any) => fetchAPI(`/rfps/${id}/staffing-tasks/${taskId}`, { method: 'PUT', body: JSON.stringify(d) }),
@@ -225,6 +249,11 @@ export const projectsAPI = {
   addDocument:    (id: string, d: any) => fetchAPI(`/projects/${id}/documents/`, { method: 'POST', body: JSON.stringify(d) }),
   deleteDocument: (id: string, did: string) => fetchAPI(`/projects/${id}/documents/${did}/`, { method: 'DELETE' }),
 
+  getStaffingRoles:   (id: string, planType?: string) => fetchAPI(`/projects/${id}/staffing-roles${qs(planType ? { plan_type: planType } : {})}`),
+  addStaffingRole:    (id: string, d: any) => fetchAPI(`/projects/${id}/staffing-roles`, { method: 'POST', body: JSON.stringify(d) }),
+  updateStaffingRole: (id: string, roleId: string, d: any) => fetchAPI(`/projects/${id}/staffing-roles/${roleId}`, { method: 'PUT', body: JSON.stringify(d) }),
+  deleteStaffingRole: (id: string, roleId: string) => fetchAPI(`/projects/${id}/staffing-roles/${roleId}`, { method: 'DELETE' }),
+
   getStaffing:    (id: string, planType?: string) => fetchAPI(`/projects/${id}/staffing${qs(planType ? { plan_type: planType } : {})}`),
   addStaffing:    (id: string, d: any) => fetchAPI(`/projects/${id}/staffing`, { method: 'POST', body: JSON.stringify(d) }),
   updateStaffing: (id: string, taskId: string, d: any) => fetchAPI(`/projects/${id}/staffing/${taskId}`, { method: 'PUT', body: JSON.stringify(d) }),
@@ -232,6 +261,26 @@ export const projectsAPI = {
   setStaffingAllocations: (id: string, taskId: string, allocations: { period_start: string; period_type: string; days: number }[]) =>
     fetchAPI(`/projects/${id}/staffing/${taskId}/allocations`, { method: 'PUT', body: JSON.stringify({ allocations }) }),
   getStaffingActuals: (id: string) => fetchAPI(`/projects/${id}/staffing/actuals`),
+}
+
+// ─── Reporting & Analytics ──────────────────────────────────────────────────────
+export const reportingAPI = {
+  getSchema: () => fetchAPI('/reporting/schema'),
+  runAdHoc: (spec: any) => fetchAPI('/reporting/run', { method: 'POST', body: JSON.stringify(spec) }),
+  aiDraft:  (prompt: string) => fetchAPI('/reporting/ai-draft', { method: 'POST', body: JSON.stringify({ prompt }) }),
+
+  listReports:  (userEmail: string) => fetchAPI(`/reporting/reports${qs({ user_email: userEmail })}`),
+  getReport:    (id: string) => fetchAPI(`/reporting/reports/${id}`),
+  createReport: (d: any) => fetchAPI('/reporting/reports', { method: 'POST', body: JSON.stringify(d) }),
+  updateReport: (id: string, d: any) => fetchAPI(`/reporting/reports/${id}`, { method: 'PUT', body: JSON.stringify(d) }),
+  deleteReport: (id: string) => fetchAPI(`/reporting/reports/${id}`, { method: 'DELETE' }),
+  runReport:    (id: string) => fetchAPI(`/reporting/reports/${id}/run`, { method: 'POST' }),
+
+  listDashboards:  (userEmail: string) => fetchAPI(`/reporting/dashboards${qs({ user_email: userEmail })}`),
+  getDashboard:    (id: string) => fetchAPI(`/reporting/dashboards/${id}`),
+  createDashboard: (d: any) => fetchAPI('/reporting/dashboards', { method: 'POST', body: JSON.stringify(d) }),
+  updateDashboard: (id: string, d: any) => fetchAPI(`/reporting/dashboards/${id}`, { method: 'PUT', body: JSON.stringify(d) }),
+  deleteDashboard: (id: string) => fetchAPI(`/reporting/dashboards/${id}`, { method: 'DELETE' }),
 }
 
 // ─── Timesheets (Operations module) ────────────────────────────────────────────

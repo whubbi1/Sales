@@ -9,7 +9,8 @@ from typing import List
 from uuid import UUID
 
 from app.database import get_db
-from app.models.rfp import RFP, RFPActionItem, RFPDocumentChecklist, RFPStaffingTask, RFPStaffingAllocation, RFPStaffingRate, rfp_opportunity
+from app.services.ids import next_internal_id
+from app.models.rfp import RFP, RFPActionItem, RFPDocumentChecklist, RFPStaffingTask, RFPStaffingAllocation, RFPStaffingRate, RFPStaffingRole, rfp_opportunity
 from app.models.opportunity import Opportunity
 from app.models.contact import Contact
 from app.schemas.schemas import (
@@ -17,6 +18,7 @@ from app.schemas.schemas import (
     RFPActionItemCreate, RFPActionItemUpdate, RFPActionItemResponse,
     RFPDocumentChecklistCreate, RFPDocumentChecklistUpdate, RFPDocumentChecklistResponse,
     RFPStaffingTaskCreate, RFPStaffingTaskUpdate, RFPStaffingTaskResponse, RFPStaffingAllocationsSet,
+    RFPStaffingRoleCreate, RFPStaffingRoleUpdate, RFPStaffingRoleResponse,
     RFPStaffingRateCreate, RFPStaffingRateResponse,
     PartnerSummary,
 )
@@ -62,6 +64,7 @@ async def create_rfp(data: RFPCreate, db: AsyncSession = Depends(get_db)):
     opportunity_ids = data.opportunity_ids or []
     payload = data.model_dump(exclude={'opportunity_ids'})
     payload['approvers'] = [a.model_dump() if hasattr(a, 'model_dump') else a for a in (payload.get('approvers') or [])]
+    payload['reference'] = await next_internal_id(db, 'rfp_reference_seq', 'RFP')
     rfp = RFP(**payload)
     if opportunity_ids:
         r = await db.execute(select(Opportunity).where(Opportunity.id.in_(opportunity_ids)))
@@ -389,11 +392,50 @@ Return ONLY the JSON, no markdown, no explanation."""
         raise HTTPException(status_code=502, detail=str(e))
 
 
+# ─── Staffing Roles (one assigned resource each; a resource can hold several roles) ────
+@router.get("/{rfp_id}/staffing-roles", response_model=List[RFPStaffingRoleResponse])
+async def list_staffing_roles(rfp_id: UUID, db: AsyncSession = Depends(get_db)):
+    r = await db.execute(select(RFPStaffingRole).where(RFPStaffingRole.rfp_id == rfp_id).order_by(RFPStaffingRole.created_at))
+    return r.scalars().all()
+
+
+@router.post("/{rfp_id}/staffing-roles", response_model=RFPStaffingRoleResponse, status_code=status.HTTP_201_CREATED)
+async def create_staffing_role(rfp_id: UUID, data: RFPStaffingRoleCreate, db: AsyncSession = Depends(get_db)):
+    role = RFPStaffingRole(rfp_id=rfp_id, **data.model_dump())
+    db.add(role)
+    await db.commit()
+    await db.refresh(role)
+    return role
+
+
+@router.put("/{rfp_id}/staffing-roles/{role_id}", response_model=RFPStaffingRoleResponse)
+async def update_staffing_role(rfp_id: UUID, role_id: UUID, data: RFPStaffingRoleUpdate, db: AsyncSession = Depends(get_db)):
+    r = await db.execute(select(RFPStaffingRole).where(RFPStaffingRole.id == role_id, RFPStaffingRole.rfp_id == rfp_id))
+    role = r.scalar_one_or_none()
+    if not role:
+        raise HTTPException(status_code=404, detail="Role not found")
+    for k, v in data.model_dump(exclude_unset=True).items():
+        setattr(role, k, v)
+    await db.commit()
+    await db.refresh(role)
+    return role
+
+
+@router.delete("/{rfp_id}/staffing-roles/{role_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_staffing_role(rfp_id: UUID, role_id: UUID, db: AsyncSession = Depends(get_db)):
+    r = await db.execute(select(RFPStaffingRole).where(RFPStaffingRole.id == role_id, RFPStaffingRole.rfp_id == rfp_id))
+    role = r.scalar_one_or_none()
+    if not role:
+        raise HTTPException(status_code=404, detail="Role not found")
+    await db.delete(role)
+    await db.commit()
+
+
 # ─── Staffing/Costing Sheet ─────────────────────────────────────────────────────
 @router.get("/{rfp_id}/staffing-tasks", response_model=List[RFPStaffingTaskResponse])
 async def list_staffing_tasks(rfp_id: UUID, db: AsyncSession = Depends(get_db)):
     r = await db.execute(
-        select(RFPStaffingTask).options(selectinload(RFPStaffingTask.allocations))
+        select(RFPStaffingTask).options(selectinload(RFPStaffingTask.allocations), selectinload(RFPStaffingTask.role))
         .where(RFPStaffingTask.rfp_id == rfp_id).order_by(RFPStaffingTask.position, RFPStaffingTask.created_at)
     )
     return r.scalars().all()
@@ -407,13 +449,13 @@ async def create_staffing_task(rfp_id: UUID, data: RFPStaffingTaskCreate, db: As
     # Re-query with an eager load rather than db.refresh() — refresh() re-expires
     # relationships, and AsyncSession can't lazy-load them during response serialization
     # (which runs after the handler returns, outside the active DB context).
-    r = await db.execute(select(RFPStaffingTask).options(selectinload(RFPStaffingTask.allocations)).where(RFPStaffingTask.id == task.id))
+    r = await db.execute(select(RFPStaffingTask).options(selectinload(RFPStaffingTask.allocations), selectinload(RFPStaffingTask.role)).where(RFPStaffingTask.id == task.id))
     return r.scalar_one()
 
 
 @router.put("/{rfp_id}/staffing-tasks/{task_id}", response_model=RFPStaffingTaskResponse)
 async def update_staffing_task(rfp_id: UUID, task_id: UUID, data: RFPStaffingTaskUpdate, db: AsyncSession = Depends(get_db)):
-    r = await db.execute(select(RFPStaffingTask).options(selectinload(RFPStaffingTask.allocations))
+    r = await db.execute(select(RFPStaffingTask).options(selectinload(RFPStaffingTask.allocations), selectinload(RFPStaffingTask.role))
                           .where(RFPStaffingTask.id == task_id, RFPStaffingTask.rfp_id == rfp_id))
     task = r.scalar_one_or_none()
     if not task:
@@ -423,7 +465,7 @@ async def update_staffing_task(rfp_id: UUID, task_id: UUID, data: RFPStaffingTas
     await db.commit()
     # db.refresh() would re-expire the allocations relationship loaded above, and
     # AsyncSession can't lazy-load it during response serialization — re-query instead.
-    r = await db.execute(select(RFPStaffingTask).options(selectinload(RFPStaffingTask.allocations)).where(RFPStaffingTask.id == task_id))
+    r = await db.execute(select(RFPStaffingTask).options(selectinload(RFPStaffingTask.allocations), selectinload(RFPStaffingTask.role)).where(RFPStaffingTask.id == task_id))
     return r.scalar_one()
 
 
@@ -442,7 +484,7 @@ async def delete_staffing_task(rfp_id: UUID, task_id: UUID, db: AsyncSession = D
 # rows, if any, are left untouched.
 @router.put("/{rfp_id}/staffing-tasks/{task_id}/allocations", response_model=RFPStaffingTaskResponse)
 async def set_staffing_allocations(rfp_id: UUID, task_id: UUID, data: RFPStaffingAllocationsSet, db: AsyncSession = Depends(get_db)):
-    r = await db.execute(select(RFPStaffingTask).options(selectinload(RFPStaffingTask.allocations))
+    r = await db.execute(select(RFPStaffingTask).options(selectinload(RFPStaffingTask.allocations), selectinload(RFPStaffingTask.role))
                           .where(RFPStaffingTask.id == task_id, RFPStaffingTask.rfp_id == rfp_id))
     task = r.scalar_one_or_none()
     if not task:
@@ -451,7 +493,7 @@ async def set_staffing_allocations(rfp_id: UUID, task_id: UUID, data: RFPStaffin
     kept = [a for a in task.allocations if granularity and a.period_type != granularity]
     task.allocations = kept + [RFPStaffingAllocation(period_start=a.period_start, period_type=a.period_type, days=a.days) for a in data.allocations]
     await db.commit()
-    r = await db.execute(select(RFPStaffingTask).options(selectinload(RFPStaffingTask.allocations)).where(RFPStaffingTask.id == task_id))
+    r = await db.execute(select(RFPStaffingTask).options(selectinload(RFPStaffingTask.allocations), selectinload(RFPStaffingTask.role)).where(RFPStaffingTask.id == task_id))
     return r.scalar_one()
 
 
