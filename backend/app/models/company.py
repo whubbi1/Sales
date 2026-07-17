@@ -41,6 +41,7 @@ class Company(Base):
     # the actual Opportunity records (those only drive the "Contract Finalised" list
     # shown underneath each toggle).
     services_provided       = Column(JSONB, default=dict)
+    logo_url        = Column(Text)  # s3://bucket/key ref, resolved to a presigned URL on read
     linkedin_url    = Column(String(500))
     notes           = Column(Text)
     assigned_to     = Column(String(255))                   # display name of the assigned wcomply employee

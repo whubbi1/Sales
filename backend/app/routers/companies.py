@@ -1,5 +1,5 @@
 # backend/app/routers/companies.py
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, or_
 from sqlalchemy.orm import selectinload
@@ -27,6 +27,7 @@ from app.schemas.schemas import (
     TaskCreate, TaskUpdate, TaskResponse, ContactSummary, OpportunitySummary
 )
 from app.services.ids import next_internal_id
+from app.routers.hr import upload_to_s3, s3_ref_to_presigned
 
 router = APIRouter()
 
@@ -45,6 +46,15 @@ async def _attach_main_contacts(db: AsyncSession, companies: list):
         c.main_contact = contacts.get(c.main_contact_id) if getattr(c, "main_contact_id", None) else None
 
 
+async def _attach_logos(companies: list):
+    # Mutates the transient in-memory attribute only — safe here since none of this
+    # router's read paths commit again after fetching, so the presigned value (unlike
+    # the stored s3:// ref) never gets flushed back to the DB.
+    for c in companies:
+        if c.logo_url and c.logo_url.startswith("s3://"):
+            c.logo_url = await s3_ref_to_presigned(c.logo_url)
+
+
 @router.get("/", response_model=List[CompanyResponse])
 async def list_companies(
     skip: int = 0, limit: int = 100,
@@ -60,6 +70,7 @@ async def list_companies(
     result = await db.execute(query)
     companies = result.scalars().all()
     await _attach_main_contacts(db, companies)
+    await _attach_logos(companies)
     return companies
 
 @router.post("/", response_model=CompanyResponse, status_code=status.HTTP_201_CREATED)
@@ -79,6 +90,7 @@ async def create_company(company: CompanyCreate, db: AsyncSession = Depends(get_
     r = await db.execute(select(Company).options(selectinload(Company.parent), selectinload(Company.children)).where(Company.id == db_company.id))
     row = r.scalar_one()
     await _attach_main_contacts(db, [row])
+    await _attach_logos([row])
     return row
 
 # Must come before /{company_id} — otherwise FastAPI tries to parse "dashboard-stats"
@@ -151,7 +163,20 @@ async def get_company(company_id: UUID, db: AsyncSession = Depends(get_db)):
     if not company:
         raise HTTPException(status_code=404, detail="Company not found")
     await _attach_main_contacts(db, [company])
+    await _attach_logos([company])
     return company
+
+@router.post("/{company_id}/logo")
+async def upload_company_logo(company_id: UUID, file: UploadFile = File(...), db: AsyncSession = Depends(get_db)):
+    r = await db.execute(select(Company).where(Company.id == company_id))
+    company = r.scalar_one_or_none()
+    if not company:
+        raise HTTPException(status_code=404, detail="Company not found")
+    content = await file.read()
+    logo_ref = await upload_to_s3(f"companies/{company_id}/logo", content, file.content_type or "application/octet-stream")
+    company.logo_url = logo_ref
+    await db.commit()
+    return {"status": "ok", "logo_url": await s3_ref_to_presigned(logo_ref)}
 
 @router.put("/{company_id}", response_model=CompanyResponse)
 async def update_company(company_id: UUID, data: CompanyUpdate, db: AsyncSession = Depends(get_db)):
@@ -171,6 +196,7 @@ async def update_company(company_id: UUID, data: CompanyUpdate, db: AsyncSession
     r = await db.execute(select(Company).options(selectinload(Company.parent), selectinload(Company.children)).where(Company.id == company_id))
     row = r.scalar_one()
     await _attach_main_contacts(db, [row])
+    await _attach_logos([row])
     return row
 
 @router.delete("/{company_id}", status_code=status.HTTP_204_NO_CONTENT)

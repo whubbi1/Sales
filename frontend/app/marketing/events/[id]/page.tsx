@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { MarketingLayout, useMarketingPerm } from '@/components/MarketingLayout'
 import { marketingAPI, partnersAPI } from '@/lib/api'
@@ -45,6 +45,11 @@ function EventDetailContent() {
   const [linkLabel, setLinkLabel] = useState('')
   const [linkUrl, setLinkUrl] = useState('')
   const [addPartnerId, setAddPartnerId] = useState('')
+  const [uploadingLogo, setUploadingLogo] = useState(false)
+  const logoInputRef = useRef<HTMLInputElement>(null)
+  const [showDelete, setShowDelete] = useState(false)
+  const [deleteConfirm, setDeleteConfirm] = useState('')
+  const [deleting, setDeleting] = useState(false)
 
   const load = async () => {
     setLoading(true)
@@ -118,6 +123,23 @@ function EventDetailContent() {
     setEvent((prev: any) => ({ ...prev, partners: (prev.partners || []).filter((p: any) => p.id !== partnerId) }))
   }
 
+  const uploadLogo = async (file: File) => {
+    setUploadingLogo(true)
+    try {
+      const { logo_url } = await marketingAPI.uploadEventLogo(event.id, file)
+      setEvent((prev: any) => ({ ...prev, logo_url }))
+    } finally { setUploadingLogo(false) }
+  }
+
+  const handleDelete = async () => {
+    if (deleteConfirm !== 'DELETE') return
+    setDeleting(true)
+    try {
+      await marketingAPI.deleteEvent(event.id)
+      router.push('/marketing/events')
+    } catch (e: any) { setError(e.message); setDeleting(false) }
+  }
+
   const linkedPartnerIds = new Set((event.partners || []).map((p: any) => p.id))
   const availablePartners = partners.filter((p: any) => !linkedPartnerIds.has(p.id))
 
@@ -126,7 +148,14 @@ function EventDetailContent() {
       <button onClick={() => router.push('/marketing/events')} style={{ background: 'none', border: 'none', color: '#45B6E4', fontSize: '12px', fontWeight: '700', cursor: 'pointer', padding: 0, marginBottom: '14px' }}>← Back to Events</button>
 
       <div style={card}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '14px' }}>
+          {canEdit && (
+            <div onClick={() => logoInputRef.current?.click()} title="Click to change logo"
+              style={{ width: '48px', height: '48px', borderRadius: '10px', background: event.logo_url ? 'white' : '#EFF6FF', color: '#156082', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '20px', flexShrink: 0, cursor: 'pointer', overflow: 'hidden', border: '1px solid #EDF2F7' }}>
+              {uploadingLogo ? <span style={{ fontSize: '9px', color: '#9B9B9B' }}>...</span> : event.logo_url ? <img src={event.logo_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'contain' }} /> : '🎪'}
+              <input ref={logoInputRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={e => { const f = e.target.files?.[0]; if (f) uploadLogo(f); e.target.value = '' }} />
+            </div>
+          )}
           <div style={{ flex: 1 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
               <EditableCell display={<span style={{ background: '#F1F5F9', color: '#3F3F3F', padding: '2px 9px', borderRadius: '10px', fontSize: '10px', fontWeight: '700' }}>{TYPE_LABEL[event.event_type] || event.event_type}</span>}
@@ -147,6 +176,12 @@ function EventDetailContent() {
                 onBlur={e => updateField({ description: e.target.value })} />
             </EditableCell>
           </div>
+          {canEdit && (
+            <button onClick={() => { setDeleteConfirm(''); setShowDelete(true) }}
+              style={{ ...btn, background: 'white', color: '#DC2626', border: '1.5px solid #FCA5A5', flexShrink: 0 }}>
+              Delete
+            </button>
+          )}
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: '14px', marginTop: '16px', paddingTop: '16px', borderTop: '1px solid #F1F5F9' }}>
@@ -269,6 +304,43 @@ function EventDetailContent() {
           </div>
         )}
       </div>
+
+      {showDelete && (
+        <div className="modal-overlay" onClick={() => setShowDelete(false)}>
+          <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '420px' }}>
+            <div className="modal-header">
+              <h2 style={{ fontSize: '15px', fontWeight: '700', color: '#DC2626' }}>Delete Event</h2>
+              <button onClick={() => setShowDelete(false)} style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: '20px', color: '#9B9B9B', lineHeight: 1 }}>×</button>
+            </div>
+            <div className="modal-body">
+              <p style={{ fontSize: '13px', color: '#3F3F3F', marginBottom: '8px' }}>
+                You are about to permanently delete <strong>{event.title}</strong>. This action cannot be undone.
+              </p>
+              <p style={{ fontSize: '13px', color: '#3F3F3F', marginBottom: '12px' }}>
+                Type <strong style={{ color: '#DC2626' }}>DELETE</strong> to confirm.
+              </p>
+              <input
+                className="form-input"
+                value={deleteConfirm}
+                onChange={e => setDeleteConfirm(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && handleDelete()}
+                placeholder="Type DELETE to confirm"
+                autoFocus
+              />
+            </div>
+            <div className="modal-footer">
+              <button className="btn-secondary" onClick={() => setShowDelete(false)}>Cancel</button>
+              <button
+                onClick={handleDelete}
+                disabled={deleteConfirm !== 'DELETE' || deleting}
+                style={{ background: deleteConfirm === 'DELETE' ? '#DC2626' : '#FCA5A5', color: 'white', padding: '8px 16px', borderRadius: '7px', fontSize: '13px', fontWeight: '600', border: 'none', cursor: deleteConfirm === 'DELETE' ? 'pointer' : 'not-allowed', transition: 'background 0.15s' }}
+              >
+                {deleting ? 'Deleting...' : 'Delete Event'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

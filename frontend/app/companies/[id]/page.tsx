@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { companiesAPI } from '@/lib/api'
@@ -29,6 +29,16 @@ export default function CompanyDetailPage() {
   const [aiLoading, setAiLoading] = useState(false)
   const [aiResult, setAiResult] = useState('')
   const [searchType, setSearchType] = useState('')
+  const [uploadingLogo, setUploadingLogo] = useState(false)
+  const logoInputRef = useRef<HTMLInputElement>(null)
+
+  const uploadLogo = async (file: File) => {
+    setUploadingLogo(true)
+    try {
+      const { logo_url } = await companiesAPI.uploadLogo(id as string, file)
+      setCompany((p: any) => ({ ...p, logo_url }))
+    } finally { setUploadingLogo(false) }
+  }
 
   const runSearch = async (type: string) => {
     setAiLoading(true); setAiResult(''); setSearchType(type)
@@ -101,8 +111,16 @@ export default function CompanyDetailPage() {
       <div style={{ background: 'white', borderRadius: '10px', border: '1px solid #EDF2F7', padding: '20px', marginBottom: '16px', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
           <div style={{ display: 'flex', gap: '14px', alignItems: 'flex-start', flex: 1 }}>
-            <div style={{ width: '48px', height: '48px', borderRadius: '10px', background: color, color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px', fontWeight: '800', flexShrink: 0 }}>
-              {company.name[0]?.toUpperCase()}
+            <div onClick={() => logoInputRef.current?.click()} title="Click to change logo"
+              style={{ width: '48px', height: '48px', borderRadius: '10px', background: company.logo_url ? 'white' : color, color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px', fontWeight: '800', flexShrink: 0, cursor: 'pointer', overflow: 'hidden', border: company.logo_url ? '1px solid #EDF2F7' : 'none', position: 'relative' }}>
+              {uploadingLogo ? (
+                <span style={{ fontSize: '9px', color: company.logo_url ? '#9B9B9B' : 'white' }}>...</span>
+              ) : company.logo_url ? (
+                <img src={company.logo_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+              ) : (
+                company.name[0]?.toUpperCase()
+              )}
+              <input ref={logoInputRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={e => { const f = e.target.files?.[0]; if (f) uploadLogo(f); e.target.value = '' }} />
             </div>
             <div style={{ flex: 1 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginBottom: '4px' }}>

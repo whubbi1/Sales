@@ -28,6 +28,14 @@ export const companiesAPI = {
   update: (id: string, d: any) => fetchAPI(`/companies/${id}`, { method: 'PUT', body: JSON.stringify(d) }),
   delete: (id: string) => fetchAPI(`/companies/${id}`, { method: 'DELETE' }),
 
+  uploadLogo: async (id: string, file: File) => {
+    const fd = new FormData()
+    fd.append('file', file)
+    const res = await fetch(`${API_URL}/companies/${id}/logo`, { method: 'POST', body: fd })
+    if (!res.ok) { const err = await res.json().catch(() => ({})); throw new Error(err.detail || 'Upload failed') }
+    return res.json()
+  },
+
   getContacts:     (id: string) => fetchAPI(`/companies/${id}/contacts`),
   getOpportunities:(id: string) => fetchAPI(`/companies/${id}/opportunities`),
   dashboardStats:  () => fetchAPI(`/companies/dashboard-stats`),
@@ -88,6 +96,14 @@ export const marketingAPI = {
   createEvent: (d: any) => fetchAPI('/marketing/events', { method: 'POST', body: JSON.stringify(d) }),
   updateEvent: (id: string, d: any) => fetchAPI(`/marketing/events/${id}`, { method: 'PUT', body: JSON.stringify(d) }),
   deleteEvent: (id: string) => fetchAPI(`/marketing/events/${id}`, { method: 'DELETE' }),
+
+  uploadEventLogo: async (id: string, file: File) => {
+    const fd = new FormData()
+    fd.append('file', file)
+    const res = await fetch(`${API_URL}/marketing/events/${id}/logo`, { method: 'POST', body: fd })
+    if (!res.ok) { const err = await res.json().catch(() => ({})); throw new Error(err.detail || 'Upload failed') }
+    return res.json()
+  },
 
   addContributor:    (id: string, d: any) => fetchAPI(`/marketing/events/${id}/contributors`, { method: 'POST', body: JSON.stringify(d) }),
   removeContributor: (id: string, cid: string) => fetchAPI(`/marketing/events/${id}/contributors/${cid}`, { method: 'DELETE' }),

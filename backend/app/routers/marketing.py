@@ -2,10 +2,11 @@
 # Marketing — Events (owner, contributors, named URLs, linked Partners).
 # Company Website / Competitor Analysis / Social Marketing / Marketing Plan / Marketing Material
 # are nav placeholders only for now — no backend endpoints for those yet.
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
 from app.database import get_db
+from app.routers.hr import upload_to_s3, s3_ref_to_presigned
 import uuid
 
 router = APIRouter()
@@ -20,10 +21,16 @@ def _row(d: dict) -> dict:
     return d
 
 
+async def _presign_logo(d: dict) -> dict:
+    if (d.get("logo_url") or "").startswith("s3://"):
+        d["logo_url"] = await s3_ref_to_presigned(d["logo_url"])
+    return d
+
+
 async def _get_event(db: AsyncSession, event_id: str) -> dict | None:
     r = await db.execute(text("SELECT * FROM marketing_events WHERE id = CAST(:id AS UUID)"), {"id": event_id})
     row = r.fetchone()
-    return _row(dict(row._mapping)) if row else None
+    return await _presign_logo(_row(dict(row._mapping))) if row else None
 
 
 # ─── Events ──────────────────────────────────────────────────────────────────────
@@ -32,7 +39,7 @@ async def list_events(event_type: str = None, db: AsyncSession = Depends(get_db)
     where = "WHERE event_type = :t" if event_type else ""
     params = {"t": event_type} if event_type else {}
     r = await db.execute(text(f"SELECT * FROM marketing_events {where} ORDER BY event_date DESC NULLS LAST, created_at DESC"), params)
-    return {"events": [_row(dict(row._mapping)) for row in r.fetchall()]}
+    return {"events": [await _presign_logo(_row(dict(row._mapping))) for row in r.fetchall()]}
 
 
 @router.post("/events")
@@ -114,6 +121,19 @@ async def delete_event(event_id: str, db: AsyncSession = Depends(get_db)):
     await db.execute(text("DELETE FROM marketing_events WHERE id = CAST(:id AS UUID)"), {"id": event_id})
     await db.commit()
     return {"status": "ok"}
+
+
+@router.post("/events/{event_id}/logo")
+async def upload_event_logo(event_id: str, file: UploadFile = File(...), db: AsyncSession = Depends(get_db)):
+    event = await _get_event(db, event_id)
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found")
+    content = await file.read()
+    logo_ref = await upload_to_s3(f"marketing/events/{event_id}/logo", content, file.content_type or "application/octet-stream")
+    await db.execute(text("UPDATE marketing_events SET logo_url = :ref, updated_at = NOW() WHERE id = CAST(:id AS UUID)"),
+                      {"ref": logo_ref, "id": event_id})
+    await db.commit()
+    return {"status": "ok", "logo_url": await s3_ref_to_presigned(logo_ref)}
 
 
 # ─── Contributors ────────────────────────────────────────────────────────────────

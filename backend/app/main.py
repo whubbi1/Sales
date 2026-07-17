@@ -1397,6 +1397,11 @@ async def startup():
 
                 # Services tab — manually-toggled project types provided per Opportunity Type.
                 "ALTER TABLE companies ADD COLUMN IF NOT EXISTS services_provided JSONB DEFAULT '{}'",
+
+                # Logos — S3-backed, same s3://bucket/key ref pattern as HR/Training/Testing
+                # documents (resolved to a presigned URL on read).
+                "ALTER TABLE companies ADD COLUMN IF NOT EXISTS logo_url TEXT",
+                "ALTER TABLE marketing_events ADD COLUMN IF NOT EXISTS logo_url TEXT",
             ]
             for sql in sqls:
                 try:

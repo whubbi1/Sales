@@ -34,6 +34,7 @@ class CompanyBase(BaseModel):
     grc_solutions: Optional[List[str]] = []
     sap_hosting_partner: Optional[List[str]] = []
     services_provided: Optional[Dict[str, List[str]]] = {}
+    logo_url: Optional[str] = None
     linkedin_url: Optional[str] = None
     notes: Optional[str] = None
     assigned_to: Optional[str] = None
