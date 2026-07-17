@@ -1,7 +1,7 @@
 # backend/app/models/rfp.py
 import uuid
 from datetime import datetime
-from sqlalchemy import Column, String, Text, DateTime, Integer, ForeignKey, Table
+from sqlalchemy import Column, String, Text, DateTime, Integer, Float, ForeignKey, Table
 from sqlalchemy import Enum as SAEnum
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import relationship
@@ -93,3 +93,51 @@ class RFPDocumentChecklist(Base):
     updated_at   = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     rfp = relationship("RFP", back_populates="document_checklist")
+
+
+# ─── Staffing/Costing Sheet ─────────────────────────────────────────────────────
+# A task row, assigned to one wcomply resource. Its time allocation lives in
+# RFPStaffingAllocation so the sheet can be viewed/edited by week or by month without
+# losing whichever granularity the numbers were actually entered at.
+class RFPStaffingTask(Base):
+    __tablename__ = "rfp_staffing_tasks"
+
+    id             = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    rfp_id         = Column(UUID(as_uuid=True), ForeignKey("rfps.id", ondelete="CASCADE"), nullable=False)
+    title          = Column(String(500), nullable=False)
+    resource_email = Column(String(255))
+    resource_name  = Column(String(255))
+    position       = Column(Integer, default=0)
+
+    created_at     = Column(DateTime, default=datetime.utcnow)
+    updated_at     = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    allocations = relationship("RFPStaffingAllocation", cascade="all, delete-orphan", order_by="RFPStaffingAllocation.period_start")
+
+
+class RFPStaffingAllocation(Base):
+    __tablename__ = "rfp_staffing_allocations"
+
+    id           = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    task_id      = Column(UUID(as_uuid=True), ForeignKey("rfp_staffing_tasks.id", ondelete="CASCADE"), nullable=False)
+    # 'week' periods start on a Monday, 'month' periods start on the 1st — the sheet's
+    # week/month toggle only changes which of these it displays/edits, nothing is lost
+    # switching back and forth.
+    period_start = Column(DateTime, nullable=False)
+    period_type  = Column(SAEnum('week', 'month', name='rfp_staffing_period_type_enum'), nullable=False)
+    days         = Column(Float, nullable=False, default=0)
+
+
+# One sales day-rate per resource, scoped to this RFP only (a resource can be priced
+# differently on a different RFP).
+class RFPStaffingRate(Base):
+    __tablename__ = "rfp_staffing_rates"
+
+    id             = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    rfp_id         = Column(UUID(as_uuid=True), ForeignKey("rfps.id", ondelete="CASCADE"), nullable=False)
+    resource_email = Column(String(255), nullable=False)
+    resource_name  = Column(String(255))
+    day_rate       = Column(Float, nullable=False, default=0)
+
+    created_at     = Column(DateTime, default=datetime.utcnow)
+    updated_at     = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

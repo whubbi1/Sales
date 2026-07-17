@@ -11,10 +11,10 @@ from app.models.opportunity import Opportunity
 from app.models.contact import Contact
 from app.models.company import Company
 from app.models.rfp import RFP, rfp_opportunity
-from app.models.opportunity_extra import OpportunityStaffing, OpportunityChecklistItem, OpportunityComment
+from app.models.opportunity_extra import OpportunityStaffing, OpportunityStaffingMonth, OpportunityChecklistItem, OpportunityComment
 from app.schemas.schemas import (
     OpportunityCreate, OpportunityUpdate, OpportunityResponse, OpportunitySummary,
-    StaffingCreate, StaffingResponse,
+    StaffingCreate, StaffingResponse, StaffingMonthsUpdate,
     ChecklistItemCreate, ChecklistItemUpdate, ChecklistItemResponse,
     CommentCreate, CommentResponse, PartnerSummary,
 )
@@ -206,7 +206,10 @@ async def delete_opportunity(opportunity_id: UUID, db: AsyncSession = Depends(ge
 # ─── Staffing (employees assigned to this opportunity) ─────────────────────────
 @router.get("/{opportunity_id}/staffing/", response_model=List[StaffingResponse])
 async def list_staffing(opportunity_id: UUID, db: AsyncSession = Depends(get_db)):
-    r = await db.execute(select(OpportunityStaffing).where(OpportunityStaffing.opportunity_id == opportunity_id).order_by(OpportunityStaffing.created_at))
+    r = await db.execute(
+        select(OpportunityStaffing).options(selectinload(OpportunityStaffing.months))
+        .where(OpportunityStaffing.opportunity_id == opportunity_id).order_by(OpportunityStaffing.created_at)
+    )
     return r.scalars().all()
 
 @router.post("/{opportunity_id}/staffing/", response_model=StaffingResponse, status_code=status.HTTP_201_CREATED)
@@ -215,6 +218,7 @@ async def add_staffing(opportunity_id: UUID, data: StaffingCreate, db: AsyncSess
     db.add(row)
     await db.commit()
     await db.refresh(row)
+    row.months = []
     return row
 
 @router.delete("/{opportunity_id}/staffing/{staffing_id}/", status_code=status.HTTP_204_NO_CONTENT)
@@ -226,11 +230,26 @@ async def remove_staffing(opportunity_id: UUID, staffing_id: UUID, db: AsyncSess
     await db.delete(row)
     await db.commit()
 
+# Replaces this staffing assignment's whole month->days allocation (simplest correct
+# semantics for an editable grid — the frontend always sends its full current state).
+@router.put("/{opportunity_id}/staffing/{staffing_id}/months", response_model=StaffingResponse)
+async def set_staffing_months(opportunity_id: UUID, staffing_id: UUID, data: StaffingMonthsUpdate, db: AsyncSession = Depends(get_db)):
+    r = await db.execute(select(OpportunityStaffing).options(selectinload(OpportunityStaffing.months))
+                          .where(OpportunityStaffing.id == staffing_id, OpportunityStaffing.opportunity_id == opportunity_id))
+    row = r.scalar_one_or_none()
+    if not row:
+        raise HTTPException(status_code=404, detail="Staffing entry not found")
+    row.months = [OpportunityStaffingMonth(month=m.month, days=m.days) for m in data.months]
+    await db.commit()
+    r = await db.execute(select(OpportunityStaffing).options(selectinload(OpportunityStaffing.months)).where(OpportunityStaffing.id == staffing_id))
+    return r.scalar_one()
+
 @router.get("/staffing/all", response_model=None)
 async def list_all_staffing(db: AsyncSession = Depends(get_db)):
     r = await db.execute(
-        select(OpportunityStaffing, Opportunity.deal_name)
+        select(OpportunityStaffing, Opportunity.deal_name, Opportunity.deal_status)
         .join(Opportunity, Opportunity.id == OpportunityStaffing.opportunity_id)
+        .options(selectinload(OpportunityStaffing.months))
         .order_by(OpportunityStaffing.user_name)
     )
     return [
@@ -238,10 +257,12 @@ async def list_all_staffing(db: AsyncSession = Depends(get_db)):
             "id": str(row.OpportunityStaffing.id),
             "opportunity_id": str(row.OpportunityStaffing.opportunity_id),
             "opportunity_name": row.deal_name,
+            "deal_status": row.deal_status,
             "user_email": row.OpportunityStaffing.user_email,
             "user_name": row.OpportunityStaffing.user_name,
             "role": row.OpportunityStaffing.role,
             "created_at": row.OpportunityStaffing.created_at,
+            "months": [{"month": m.month, "days": m.days} for m in row.OpportunityStaffing.months],
         }
         for row in r.all()
     ]

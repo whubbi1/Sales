@@ -144,6 +144,8 @@ export const opportunitiesAPI = {
   getStaffing:    (id: string) => fetchAPI(`/opportunities/${id}/staffing/`),
   addStaffing:    (id: string, d: any) => fetchAPI(`/opportunities/${id}/staffing/`, { method: 'POST', body: JSON.stringify(d) }),
   removeStaffing: (id: string, sid: string) => fetchAPI(`/opportunities/${id}/staffing/${sid}/`, { method: 'DELETE' }),
+  setStaffingMonths: (id: string, sid: string, months: { month: string; days: number }[]) =>
+    fetchAPI(`/opportunities/${id}/staffing/${sid}/months`, { method: 'PUT', body: JSON.stringify({ months }) }),
   getAllStaffing: () => fetchAPI(`/opportunities/staffing/all`),
 
   getChecklist:      (id: string) => fetchAPI(`/opportunities/${id}/checklist/`),
@@ -185,6 +187,16 @@ export const rfpAPI = {
   deleteDocumentChecklist: (id: string, itemId: string) => fetchAPI(`/rfps/${id}/document-checklist/${itemId}`, { method: 'DELETE' }),
 
   analyze: (id: string) => fetchAPI(`/rfps/${id}/analyze`, { method: 'POST' }),
+
+  getStaffingTasks:      (id: string) => fetchAPI(`/rfps/${id}/staffing-tasks`),
+  addStaffingTask:       (id: string, d: any) => fetchAPI(`/rfps/${id}/staffing-tasks`, { method: 'POST', body: JSON.stringify(d) }),
+  updateStaffingTask:    (id: string, taskId: string, d: any) => fetchAPI(`/rfps/${id}/staffing-tasks/${taskId}`, { method: 'PUT', body: JSON.stringify(d) }),
+  deleteStaffingTask:    (id: string, taskId: string) => fetchAPI(`/rfps/${id}/staffing-tasks/${taskId}`, { method: 'DELETE' }),
+  setStaffingAllocations: (id: string, taskId: string, allocations: { period_start: string; period_type: string; days: number }[]) =>
+    fetchAPI(`/rfps/${id}/staffing-tasks/${taskId}/allocations`, { method: 'PUT', body: JSON.stringify({ allocations }) }),
+
+  getStaffingRates: (id: string) => fetchAPI(`/rfps/${id}/staffing-rates`),
+  setStaffingRate:  (id: string, d: any) => fetchAPI(`/rfps/${id}/staffing-rates`, { method: 'PUT', body: JSON.stringify(d) }),
 }
 
 // ─── Sales Tasks (legacy — superseded by taskManagerAPI, kept for rollback safety) ─

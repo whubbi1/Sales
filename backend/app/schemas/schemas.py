@@ -231,12 +231,20 @@ class StaffingCreate(BaseModel):
     user_name: Optional[str] = None
     role: Optional[str] = None
 
+class StaffingMonth(BaseModel):
+    month: datetime
+    days: float
+
 class StaffingResponse(StaffingCreate):
     id: UUID
     opportunity_id: UUID
     created_at: datetime
+    months: Optional[List[StaffingMonth]] = []
     class Config:
         from_attributes = True
+
+class StaffingMonthsUpdate(BaseModel):
+    months: List[StaffingMonth]
 
 # ─── Opportunity Checklist ──────────────────────────────────────────────────────
 class ChecklistItemCreate(BaseModel):
@@ -417,5 +425,51 @@ class RFPDocumentChecklistResponse(BaseModel):
     position: int
     created_at: datetime
     updated_at: datetime
+    class Config:
+        from_attributes = True
+
+# ─── RFP Staffing/Costing Sheet ─────────────────────────────────────────────────
+class RFPStaffingAllocationIn(BaseModel):
+    period_start: datetime
+    period_type: str
+    days: float
+
+class RFPStaffingAllocationResponse(RFPStaffingAllocationIn):
+    id: UUID
+    class Config:
+        from_attributes = True
+
+class RFPStaffingTaskCreate(BaseModel):
+    title: str
+    resource_email: Optional[str] = None
+    resource_name: Optional[str] = None
+    position: Optional[int] = 0
+
+class RFPStaffingTaskUpdate(BaseModel):
+    title: Optional[str] = None
+    resource_email: Optional[str] = None
+    resource_name: Optional[str] = None
+    position: Optional[int] = None
+
+class RFPStaffingTaskResponse(RFPStaffingTaskCreate):
+    id: UUID
+    rfp_id: UUID
+    created_at: datetime
+    updated_at: datetime
+    allocations: Optional[List[RFPStaffingAllocationResponse]] = []
+    class Config:
+        from_attributes = True
+
+class RFPStaffingAllocationsSet(BaseModel):
+    allocations: List[RFPStaffingAllocationIn]
+
+class RFPStaffingRateCreate(BaseModel):
+    resource_email: str
+    resource_name: Optional[str] = None
+    day_rate: float
+
+class RFPStaffingRateResponse(RFPStaffingRateCreate):
+    id: UUID
+    rfp_id: UUID
     class Config:
         from_attributes = True

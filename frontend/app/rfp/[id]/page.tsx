@@ -4,6 +4,7 @@ import { useParams, useRouter } from 'next/navigation'
 import { rfpAPI, companiesAPI, partnersAPI, opportunitiesAPI } from '@/lib/api'
 import { RecordLayout, PropertyRow, SidebarSection, SidebarCard, StatusBadge, TabNav } from '@/components/shared/RecordLayout'
 import { RFPModal } from '@/components/rfp/RFPModal'
+import { StaffingCostingSheet } from '@/components/rfp/StaffingCostingSheet'
 
 const API = 'https://api.whubbi.wcomply.com'
 
@@ -228,7 +229,7 @@ export default function RFPDetailPage() {
 
       <div style={{ background: 'white', borderRadius: '10px', border: '1px solid #EDF2F7', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
         <div style={{ padding: '0 20px', background: '#FAFBFC', borderBottom: '2px solid #E2E8F0' }}>
-          <TabNav tabs={['Overview', 'Action Plan', 'Documents Checklist', 'Answer', 'Files']} active={tab} onChange={setTab} />
+          <TabNav tabs={['Overview', 'Action Plan', 'Documents Checklist', 'Answer', 'Staffing/Costing Sheet', 'Files']} active={tab} onChange={setTab} />
         </div>
         <div style={{ padding: '20px' }}>
           {tab === 'Overview' && (
@@ -383,6 +384,10 @@ export default function RFPDetailPage() {
                 </div>
               )}
             </div>
+          )}
+
+          {tab === 'Staffing/Costing Sheet' && (
+            <StaffingCostingSheet rfpId={rfp.id} opportunities={rfp.opportunities || []} users={users} />
           )}
 
           {tab === 'Files' && (

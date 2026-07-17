@@ -9,13 +9,15 @@ from typing import List
 from uuid import UUID
 
 from app.database import get_db
-from app.models.rfp import RFP, RFPActionItem, RFPDocumentChecklist, rfp_opportunity
+from app.models.rfp import RFP, RFPActionItem, RFPDocumentChecklist, RFPStaffingTask, RFPStaffingAllocation, RFPStaffingRate, rfp_opportunity
 from app.models.opportunity import Opportunity
 from app.models.contact import Contact
 from app.schemas.schemas import (
     RFPCreate, RFPUpdate, RFPResponse, RFPSummary,
     RFPActionItemCreate, RFPActionItemUpdate, RFPActionItemResponse,
     RFPDocumentChecklistCreate, RFPDocumentChecklistUpdate, RFPDocumentChecklistResponse,
+    RFPStaffingTaskCreate, RFPStaffingTaskUpdate, RFPStaffingTaskResponse, RFPStaffingAllocationsSet,
+    RFPStaffingRateCreate, RFPStaffingRateResponse,
     PartnerSummary,
 )
 from app.routers.task_manager import create_task as tm_create_task
@@ -385,3 +387,86 @@ Return ONLY the JSON, no markdown, no explanation."""
         rfp.analysis_error = str(e)[:500]
         await db.commit()
         raise HTTPException(status_code=502, detail=str(e))
+
+
+# ─── Staffing/Costing Sheet ─────────────────────────────────────────────────────
+@router.get("/{rfp_id}/staffing-tasks", response_model=List[RFPStaffingTaskResponse])
+async def list_staffing_tasks(rfp_id: UUID, db: AsyncSession = Depends(get_db)):
+    r = await db.execute(
+        select(RFPStaffingTask).options(selectinload(RFPStaffingTask.allocations))
+        .where(RFPStaffingTask.rfp_id == rfp_id).order_by(RFPStaffingTask.position, RFPStaffingTask.created_at)
+    )
+    return r.scalars().all()
+
+
+@router.post("/{rfp_id}/staffing-tasks", response_model=RFPStaffingTaskResponse, status_code=status.HTTP_201_CREATED)
+async def create_staffing_task(rfp_id: UUID, data: RFPStaffingTaskCreate, db: AsyncSession = Depends(get_db)):
+    task = RFPStaffingTask(rfp_id=rfp_id, **data.model_dump())
+    db.add(task)
+    await db.commit()
+    await db.refresh(task)
+    task.allocations = []
+    return task
+
+
+@router.put("/{rfp_id}/staffing-tasks/{task_id}", response_model=RFPStaffingTaskResponse)
+async def update_staffing_task(rfp_id: UUID, task_id: UUID, data: RFPStaffingTaskUpdate, db: AsyncSession = Depends(get_db)):
+    r = await db.execute(select(RFPStaffingTask).options(selectinload(RFPStaffingTask.allocations))
+                          .where(RFPStaffingTask.id == task_id, RFPStaffingTask.rfp_id == rfp_id))
+    task = r.scalar_one_or_none()
+    if not task:
+        raise HTTPException(status_code=404, detail="Staffing task not found")
+    for k, v in data.model_dump(exclude_unset=True).items():
+        setattr(task, k, v)
+    await db.commit()
+    await db.refresh(task)
+    return task
+
+
+@router.delete("/{rfp_id}/staffing-tasks/{task_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_staffing_task(rfp_id: UUID, task_id: UUID, db: AsyncSession = Depends(get_db)):
+    r = await db.execute(select(RFPStaffingTask).where(RFPStaffingTask.id == task_id, RFPStaffingTask.rfp_id == rfp_id))
+    task = r.scalar_one_or_none()
+    if not task:
+        raise HTTPException(status_code=404, detail="Staffing task not found")
+    await db.delete(task)
+    await db.commit()
+
+
+# Replaces this task's whole allocation set — the frontend always sends its full current
+# state for the granularity (week/month) currently being edited; the other granularity's
+# rows, if any, are left untouched.
+@router.put("/{rfp_id}/staffing-tasks/{task_id}/allocations", response_model=RFPStaffingTaskResponse)
+async def set_staffing_allocations(rfp_id: UUID, task_id: UUID, data: RFPStaffingAllocationsSet, db: AsyncSession = Depends(get_db)):
+    r = await db.execute(select(RFPStaffingTask).options(selectinload(RFPStaffingTask.allocations))
+                          .where(RFPStaffingTask.id == task_id, RFPStaffingTask.rfp_id == rfp_id))
+    task = r.scalar_one_or_none()
+    if not task:
+        raise HTTPException(status_code=404, detail="Staffing task not found")
+    granularity = data.allocations[0].period_type if data.allocations else None
+    kept = [a for a in task.allocations if granularity and a.period_type != granularity]
+    task.allocations = kept + [RFPStaffingAllocation(period_start=a.period_start, period_type=a.period_type, days=a.days) for a in data.allocations]
+    await db.commit()
+    r = await db.execute(select(RFPStaffingTask).options(selectinload(RFPStaffingTask.allocations)).where(RFPStaffingTask.id == task_id))
+    return r.scalar_one()
+
+
+@router.get("/{rfp_id}/staffing-rates", response_model=List[RFPStaffingRateResponse])
+async def list_staffing_rates(rfp_id: UUID, db: AsyncSession = Depends(get_db)):
+    r = await db.execute(select(RFPStaffingRate).where(RFPStaffingRate.rfp_id == rfp_id))
+    return r.scalars().all()
+
+
+@router.put("/{rfp_id}/staffing-rates", response_model=RFPStaffingRateResponse)
+async def set_staffing_rate(rfp_id: UUID, data: RFPStaffingRateCreate, db: AsyncSession = Depends(get_db)):
+    r = await db.execute(select(RFPStaffingRate).where(RFPStaffingRate.rfp_id == rfp_id, RFPStaffingRate.resource_email == data.resource_email))
+    rate = r.scalar_one_or_none()
+    if rate:
+        rate.day_rate = data.day_rate
+        rate.resource_name = data.resource_name
+    else:
+        rate = RFPStaffingRate(rfp_id=rfp_id, **data.model_dump())
+        db.add(rate)
+    await db.commit()
+    await db.refresh(rate)
+    return rate

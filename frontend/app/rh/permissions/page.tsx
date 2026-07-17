@@ -16,6 +16,7 @@ const MODULES_META: Record<string, { label: string; icon: string; color: string 
   legal:    { label: 'Legal',            icon: '⚖️', color: '#1a2744' },
   training: { label: 'Training',         icon: '🎓', color: '#7C3AED' },
   tasks:    { label: 'Task Manager',     icon: '✅', color: '#219BD6' },
+  operations: { label: 'Operations',     icon: '🛠️', color: '#059669' },
 }
 
 const HR_SUBMODULE_META: Record<string, { label: string; href: string }> = {

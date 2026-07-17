@@ -46,6 +46,20 @@ const STATUS_COLOR: Record<string, { bg: string; color: string }> = {
 }
 const TASK_DONE_STATUSES = ['resolved', 'closed']
 
+// Every 1st-of-month between two dates (inclusive) — the staffing grid's columns.
+function monthsBetween(start?: string, end?: string): { key: string; label: string }[] {
+  if (!start || !end) return []
+  const s = new Date(start), e = new Date(end)
+  const months: { key: string; label: string }[] = []
+  let cur = new Date(s.getFullYear(), s.getMonth(), 1)
+  const last = new Date(e.getFullYear(), e.getMonth(), 1)
+  while (cur <= last) {
+    months.push({ key: `${cur.getFullYear()}-${String(cur.getMonth() + 1).padStart(2, '0')}-01`, label: cur.toLocaleDateString('en-US', { month: 'short', year: 'numeric' }) })
+    cur = new Date(cur.getFullYear(), cur.getMonth() + 1, 1)
+  }
+  return months
+}
+
 export default function OpportunityDetailPage() {
   const { id } = useParams()
   const router = useRouter()
@@ -157,6 +171,13 @@ export default function OpportunityDetailPage() {
   const removeStaffing = async (sid: string) => {
     await opportunitiesAPI.removeStaffing(opp.id, sid)
     setStaffing(await opportunitiesAPI.getStaffing(opp.id))
+  }
+
+  const saveStaffingMonth = async (staffingRow: any, monthKey: string, days: number) => {
+    const months = (staffingRow.months || []).filter((m: any) => m.month.slice(0, 10) !== monthKey)
+    if (days > 0) months.push({ month: monthKey, days })
+    setStaffing(prev => prev.map(s => s.id === staffingRow.id ? { ...s, months } : s))
+    await opportunitiesAPI.setStaffingMonths(opp.id, staffingRow.id, months)
   }
 
   const addChecklistItem = async () => {
@@ -285,19 +306,64 @@ export default function OpportunityDetailPage() {
                 <input className="form-input" style={{ width: '180px' }} placeholder="Role (optional)" value={addStaffRole} onChange={e => setAddStaffRole(e.target.value)} />
                 <button className="btn-primary" onClick={addStaffing} disabled={!addStaffEmail}>+ Add</button>
               </div>
-              {staffing.length === 0 ? <p style={{ color: '#9B9B9B', fontSize: '13px' }}>No one staffed on this opportunity yet.</p> : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  {[...staffing].sort((a, b) => (a.user_name || a.user_email).localeCompare(b.user_name || b.user_email)).map((s: any) => (
-                    <div key={s.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', border: '1px solid #EDF2F7', borderRadius: '8px' }}>
-                      <div>
-                        <div style={{ fontWeight: '700', color: '#144766', fontSize: '13px' }}>{s.user_name || s.user_email}</div>
-                        {s.role && <div style={{ fontSize: '11px', color: '#9B9B9B' }}>{s.role}</div>}
+              {staffing.length === 0 ? <p style={{ color: '#9B9B9B', fontSize: '13px' }}>No one staffed on this opportunity yet.</p> : !opp.contract_start_date || !opp.contract_end_date ? (
+                <div>
+                  <p style={{ color: '#D97706', fontSize: '12px', marginBottom: '14px' }}>Set Contract Start and Contract End (in the sidebar) to allocate days per month.</p>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    {[...staffing].sort((a, b) => (a.user_name || a.user_email).localeCompare(b.user_name || b.user_email)).map((s: any) => (
+                      <div key={s.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', border: '1px solid #EDF2F7', borderRadius: '8px' }}>
+                        <div>
+                          <div style={{ fontWeight: '700', color: '#144766', fontSize: '13px' }}>{s.user_name || s.user_email}</div>
+                          {s.role && <div style={{ fontSize: '11px', color: '#9B9B9B' }}>{s.role}</div>}
+                        </div>
+                        <button onClick={() => removeStaffing(s.id)} style={{ padding: '5px 10px', background: '#FEF2F2', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '11px', color: '#DC2626', fontWeight: '700' }}>Remove</button>
                       </div>
-                      <button onClick={() => removeStaffing(s.id)} style={{ padding: '5px 10px', background: '#FEF2F2', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '11px', color: '#DC2626', fontWeight: '700' }}>Remove</button>
-                    </div>
-                  ))}
+                    ))}
+                  </div>
                 </div>
-              )}
+              ) : (() => {
+                const months = monthsBetween(opp.contract_start_date, opp.contract_end_date)
+                const sorted = [...staffing].sort((a, b) => (a.user_name || a.user_email).localeCompare(b.user_name || b.user_email))
+                return (
+                  <div style={{ overflowX: 'auto' }}>
+                    <table style={{ borderCollapse: 'collapse', fontSize: '12px', width: '100%' }}>
+                      <thead>
+                        <tr>
+                          <th style={{ textAlign: 'left', padding: '8px 10px', fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.06em', color: '#9B9B9B', borderBottom: '1px solid #E2E8F0', whiteSpace: 'nowrap' }}>Resource</th>
+                          {months.map(m => <th key={m.key} style={{ textAlign: 'center', padding: '8px 8px', fontSize: '10px', fontWeight: '700', color: '#9B9B9B', borderBottom: '1px solid #E2E8F0', whiteSpace: 'nowrap' }}>{m.label}</th>)}
+                          <th style={{ textAlign: 'center', padding: '8px 10px', fontSize: '10px', fontWeight: '700', color: '#144766', borderBottom: '1px solid #E2E8F0' }}>Total</th>
+                          <th style={{ borderBottom: '1px solid #E2E8F0' }} />
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {sorted.map((s: any) => {
+                          const dayFor = (key: string) => (s.months || []).find((m: any) => m.month.slice(0, 10) === key)?.days || ''
+                          const total = (s.months || []).reduce((sum: number, m: any) => sum + (m.days || 0), 0)
+                          return (
+                            <tr key={s.id}>
+                              <td style={{ padding: '8px 10px', borderBottom: '1px solid #F1F5F9', whiteSpace: 'nowrap' }}>
+                                <div style={{ fontWeight: '700', color: '#144766' }}>{s.user_name || s.user_email}</div>
+                                {s.role && <div style={{ fontSize: '10px', color: '#9B9B9B' }}>{s.role}</div>}
+                              </td>
+                              {months.map(m => (
+                                <td key={m.key} style={{ padding: '4px', borderBottom: '1px solid #F1F5F9', textAlign: 'center' }}>
+                                  <input type="number" min={0} step={0.5} defaultValue={dayFor(m.key)} placeholder="0"
+                                    onBlur={e => saveStaffingMonth(s, m.key, Number(e.target.value) || 0)}
+                                    style={{ width: '52px', textAlign: 'center', fontSize: '12px', padding: '4px', border: '1px solid #E2E8F0', borderRadius: '5px' }} />
+                                </td>
+                              ))}
+                              <td style={{ padding: '8px 10px', borderBottom: '1px solid #F1F5F9', textAlign: 'center', fontWeight: '700', color: '#144766' }}>{total || '—'}</td>
+                              <td style={{ padding: '8px 10px', borderBottom: '1px solid #F1F5F9' }}>
+                                <button onClick={() => removeStaffing(s.id)} style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#DC2626', fontSize: '15px', padding: 0, lineHeight: 1 }}>×</button>
+                              </td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )
+              })()}
             </div>
           )}
 

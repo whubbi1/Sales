@@ -1353,6 +1353,35 @@ async def startup():
                     updated_at TIMESTAMP DEFAULT NOW()
                 )""",
 
+                # RFP Staffing/Costing Sheet — task rows (each assigned one resource), their
+                # per-week-or-month day allocations, and per-RFP resource day-rates.
+                """CREATE TABLE IF NOT EXISTS rfp_staffing_tasks (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    rfp_id UUID NOT NULL REFERENCES rfps(id) ON DELETE CASCADE,
+                    title VARCHAR(500) NOT NULL,
+                    resource_email VARCHAR(255),
+                    resource_name VARCHAR(255),
+                    position INTEGER DEFAULT 0,
+                    created_at TIMESTAMP DEFAULT NOW(),
+                    updated_at TIMESTAMP DEFAULT NOW()
+                )""",
+                """CREATE TABLE IF NOT EXISTS rfp_staffing_allocations (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    task_id UUID NOT NULL REFERENCES rfp_staffing_tasks(id) ON DELETE CASCADE,
+                    period_start TIMESTAMP NOT NULL,
+                    period_type VARCHAR(10) NOT NULL,
+                    days FLOAT NOT NULL DEFAULT 0
+                )""",
+                """CREATE TABLE IF NOT EXISTS rfp_staffing_rates (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    rfp_id UUID NOT NULL REFERENCES rfps(id) ON DELETE CASCADE,
+                    resource_email VARCHAR(255) NOT NULL,
+                    resource_name VARCHAR(255),
+                    day_rate FLOAT NOT NULL DEFAULT 0,
+                    created_at TIMESTAMP DEFAULT NOW(),
+                    updated_at TIMESTAMP DEFAULT NOW()
+                )""",
+
                 # Contact clean-up — LinkedIn-mismatch suggestions awaiting review (accept/deny)
                 """CREATE TABLE IF NOT EXISTS contact_cleanup_suggestions (
                     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
