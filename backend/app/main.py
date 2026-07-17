@@ -1438,6 +1438,14 @@ async def startup():
                 "ALTER TABLE company_articles ALTER COLUMN company_id DROP NOT NULL",
                 "ALTER TABLE company_articles ADD COLUMN IF NOT EXISTS contact_id UUID",
 
+                # Partner Articles — same sharing, now including Partners as a third anchor/link
+                # target alongside Company and Contact.
+                "ALTER TABLE company_articles ADD COLUMN IF NOT EXISTS partner_id UUID",
+                """CREATE TABLE IF NOT EXISTS article_partners (
+                    article_id UUID REFERENCES company_articles(id) ON DELETE CASCADE,
+                    partner_id UUID REFERENCES partners(id) ON DELETE CASCADE
+                )""",
+
                 # Opportunity Contracting Party — can now be a Partner instead of only a Company;
                 # kept as a separate plain column (no FK) rather than loosening the existing
                 # contracting_party_id FK, same pattern already used for opportunities.partner_id.

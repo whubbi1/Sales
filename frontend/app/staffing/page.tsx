@@ -5,64 +5,97 @@ import { useRouter } from 'next/navigation'
 import { Sidebar } from '@/components/Sidebar'
 import { opportunitiesAPI } from '@/lib/api'
 import { PageHeader } from '@/components/shared/RecordLayout'
+import { getStoredUser } from '@/lib/auth'
+import { useReportBuilder, applyReport, ReportPanel, ReportColumn, ColumnResizeHandle, SortArrow, Pagination } from '@/components/it/ReportBuilder'
+
+const EMPLOYEE_COLUMNS: ReportColumn[] = [
+  { key: 'employee_display', label: 'Employee', filterable: 'text' },
+  { key: 'department', label: 'Department', filterable: 'text' },
+  { key: 'opp_count', label: 'Opportunities Staffed' },
+]
+
+const EMPLOYEE_DEFAULT_WIDTHS: Record<string, number> = { employee_display: 220, department: 200, opp_count: 200 }
 
 function ByEmployee({ allStaffing, users, router, nameSearch }: any) {
   const [expanded, setExpanded] = useState<string | null>(null)
+  const [userEmail, setUserEmail] = useState('')
+  useEffect(() => { const u = getStoredUser(); if (u?.email) setUserEmail(u.email) }, [])
+  const rb = useReportBuilder('sales_staffing_by_employee', EMPLOYEE_COLUMNS, userEmail)
 
   const byEmail: Record<string, any[]> = {}
   for (const s of allStaffing) {
     (byEmail[s.user_email] = byEmail[s.user_email] || []).push(s)
   }
 
-  const rows = users.map((u: any) => ({ user: u, entries: byEmail[u.email] || [] }))
-    .filter((r: any) => r.entries.length > 0)
-    .filter((r: any) => !nameSearch.trim() || (r.user.display_name || `${r.user.first_name} ${r.user.last_name}`).toLowerCase().includes(nameSearch.trim().toLowerCase()))
-    .sort((a: any, b: any) => b.entries.length - a.entries.length)
+  const withDisplay = users.map((u: any) => ({
+    user: u,
+    entries: byEmail[u.email] || [],
+    employee_display: u.display_name || `${u.first_name} ${u.last_name}`,
+    department: u.department || '',
+    opp_count: (byEmail[u.email] || []).length,
+  })).filter((r: any) => r.entries.length > 0)
+
+  const searched = withDisplay.filter((r: any) => !nameSearch.trim() || r.employee_display.toLowerCase().includes(nameSearch.trim().toLowerCase()))
+  const reported = applyReport(searched, EMPLOYEE_COLUMNS, rb.filters, rb.sortField, rb.sortDir)
+  const pageRows = reported.slice((rb.page - 1) * 20, rb.page * 20)
+  const isVisible = (key: string) => rb.visibleCols.includes(key)
 
   return (
-    <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-      <thead style={{ background: '#FAFBFC' }}>
-        <tr>
-          {['Employee', 'Department', 'Opportunities Staffed', ''].map(h => (
-            <th key={h} style={{ textAlign: 'left', padding: '10px 16px', fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#9B9B9B', borderBottom: '1px solid #E2E8F0' }}>{h}</th>
-          ))}
-        </tr>
-      </thead>
-      <tbody>
-        {rows.length === 0 ? (
-          <tr><td colSpan={4} style={{ textAlign: 'center', padding: '40px', color: '#9B9B9B', fontSize: '13px' }}>No staffing assignments yet.</td></tr>
-        ) : rows.map(({ user, entries }: any) => (
-          <Fragment key={user.email}>
-            <tr style={{ borderBottom: '1px solid #F1F5F9' }}>
-              <td style={{ padding: '11px 16px', fontWeight: '700', color: '#144766', fontSize: '12px' }}>{user.display_name || `${user.first_name} ${user.last_name}`}</td>
-              <td style={{ padding: '11px 16px', fontSize: '12px', color: '#3F3F3F' }}>{user.department || '—'}</td>
-              <td style={{ padding: '11px 16px' }}>
-                <span style={{ background: '#EFF6FF', color: '#219BD6', padding: '2px 9px', borderRadius: '10px', fontSize: '10px', fontWeight: '700' }}>{entries.length}</span>
-              </td>
-              <td style={{ padding: '11px 16px' }}>
-                <button onClick={() => setExpanded(expanded === user.email ? null : user.email)} style={{ padding: '4px 10px', background: '#F1F5F9', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '11px', color: '#3F3F3F', fontWeight: '600' }}>
-                  {expanded === user.email ? '▲ Hide' : '▼ View'}
-                </button>
-              </td>
-            </tr>
-            {expanded === user.email && (
-              <tr>
-                <td colSpan={4} style={{ padding: 0, background: '#F8FAFC' }}>
-                  <div style={{ padding: '10px 20px' }}>
-                    {entries.map((e: any) => (
-                      <div key={e.id} onClick={() => router.push(`/opportunities/${e.opportunity_id}`)} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', fontSize: '12px', borderBottom: '1px solid #EDF2F7', cursor: 'pointer' }}>
-                        <span style={{ fontWeight: '600', color: '#219BD6' }}>{e.opportunity_name}</span>
-                        <span style={{ color: '#9B9B9B' }}>{e.role || ''}</span>
-                      </div>
-                    ))}
-                  </div>
+    <div>
+      <div style={{ display: 'flex', justifyContent: 'flex-end', padding: '10px 16px 0' }}>
+        <ReportPanel columns={EMPLOYEE_COLUMNS} rb={rb} />
+      </div>
+      <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
+        <thead style={{ background: '#FAFBFC' }}>
+          <tr>
+            {EMPLOYEE_COLUMNS.filter(c => isVisible(c.key)).map(c => (
+              <th key={c.key} onClick={() => rb.toggleSort(c.key)} style={{ position: 'relative', textAlign: 'left', padding: '10px 16px', fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#9B9B9B', borderBottom: '1px solid #E2E8F0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', width: `${rb.columnWidths[c.key] || EMPLOYEE_DEFAULT_WIDTHS[c.key] || 150}px`, cursor: 'pointer', userSelect: 'none' }}>
+                {c.label}<SortArrow active={rb.sortField === c.key} dir={rb.sortDir} />
+                <ColumnResizeHandle colKey={c.key} rb={rb} />
+              </th>
+            ))}
+            <th style={{ borderBottom: '1px solid #E2E8F0', width: '90px' }} />
+          </tr>
+        </thead>
+        <tbody>
+          {reported.length === 0 ? (
+            <tr><td colSpan={EMPLOYEE_COLUMNS.length + 1} style={{ textAlign: 'center', padding: '40px', color: '#9B9B9B', fontSize: '13px' }}>No staffing assignments yet.</td></tr>
+          ) : pageRows.map(({ user, entries, employee_display, department, opp_count }: any) => (
+            <Fragment key={user.email}>
+              <tr style={{ borderBottom: '1px solid #F1F5F9' }}>
+                {isVisible('employee_display') && <td style={{ padding: '11px 16px', fontWeight: '700', color: '#144766', fontSize: '12px' }}>{employee_display}</td>}
+                {isVisible('department') && <td style={{ padding: '11px 16px', fontSize: '12px', color: '#3F3F3F' }}>{department || '—'}</td>}
+                {isVisible('opp_count') && (
+                  <td style={{ padding: '11px 16px' }}>
+                    <span style={{ background: '#EFF6FF', color: '#219BD6', padding: '2px 9px', borderRadius: '10px', fontSize: '10px', fontWeight: '700' }}>{opp_count}</span>
+                  </td>
+                )}
+                <td style={{ padding: '11px 16px' }}>
+                  <button onClick={() => setExpanded(expanded === user.email ? null : user.email)} style={{ padding: '4px 10px', background: '#F1F5F9', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '11px', color: '#3F3F3F', fontWeight: '600' }}>
+                    {expanded === user.email ? '▲ Hide' : '▼ View'}
+                  </button>
                 </td>
               </tr>
-            )}
-          </Fragment>
-        ))}
-      </tbody>
-    </table>
+              {expanded === user.email && (
+                <tr>
+                  <td colSpan={EMPLOYEE_COLUMNS.length + 1} style={{ padding: 0, background: '#F8FAFC' }}>
+                    <div style={{ padding: '10px 20px' }}>
+                      {entries.map((e: any) => (
+                        <div key={e.id} onClick={() => router.push(`/opportunities/${e.opportunity_id}`)} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', fontSize: '12px', borderBottom: '1px solid #EDF2F7', cursor: 'pointer' }}>
+                          <span style={{ fontWeight: '600', color: '#219BD6' }}>{e.opportunity_name}</span>
+                          <span style={{ color: '#9B9B9B' }}>{e.role || ''}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </td>
+                </tr>
+              )}
+            </Fragment>
+          ))}
+        </tbody>
+      </table>
+      <Pagination page={rb.page} setPage={rb.setPage} total={reported.length} />
+    </div>
   )
 }
 

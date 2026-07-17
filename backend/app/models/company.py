@@ -70,6 +70,7 @@ class CompanyArticle(Base):
     # migration in main.py; existing rows are unaffected).
     company_id  = Column(UUID(as_uuid=True), nullable=True)
     contact_id  = Column(UUID(as_uuid=True), nullable=True)
+    partner_id  = Column(UUID(as_uuid=True), nullable=True)
     title       = Column(String(500), nullable=False)
     url         = Column(String(1000), nullable=False)
     description = Column(Text)

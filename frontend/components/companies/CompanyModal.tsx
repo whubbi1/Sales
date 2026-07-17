@@ -44,11 +44,33 @@ export function CompanyModal({ company, companies = [], onClose, onSave }: any) 
   const [error, setError] = useState('')
   const [contacts, setContacts] = useState<any[]>([])
   const [users, setUsers] = useState<any[]>([])
+  const [enriching, setEnriching] = useState(false)
+  const [enrichNote, setEnrichNote] = useState('')
 
   useEffect(() => {
     contactsAPI.list({}).then(setContacts).catch(() => {})
     fetch('https://api.whubbi.wcomply.com/settings/users').then(r => r.json()).then(d => setUsers(d.users || [])).catch(() => {})
   }, [])
+
+  // Fills in only whatever's currently empty — never overwrites something the user
+  // already typed. Works the same way whether creating (fill in the blanks) or editing
+  // an existing company (re-fetch to fill in anything still missing).
+  const fetchFromLinkedIn = async () => {
+    const url = form.linkedin_url.trim()
+    if (!url) return
+    setEnriching(true); setEnrichNote('')
+    try {
+      const data = await companiesAPI.linkedinEnrich(url)
+      setForm(p => ({
+        ...p,
+        name: p.name || data.name || p.name,
+        sector: p.sector || data.sector || p.sector,
+        country: p.country || data.country || p.country,
+        domain_names: p.domain_names.length ? p.domain_names : (data.domain_names || []),
+      }))
+    } catch (e: any) { setEnrichNote(e.message) }
+    finally { setEnriching(false) }
+  }
 
   // Main Contact is scoped to contacts whose email domain matches one of this company's
   // domains — falls back to every contact when no domain is set yet, so the field isn't
@@ -171,7 +193,13 @@ export function CompanyModal({ company, companies = [], onClose, onSave }: any) 
           </div>
 
           <FormField label="LinkedIn Company Page">
-            <input className="form-input" value={form.linkedin_url} onChange={e => setForm(p => ({ ...p, linkedin_url: e.target.value }))} placeholder="https://linkedin.com/company/..." />
+            <div style={{ display: 'flex', gap: '6px' }}>
+              <input className="form-input" style={{ flex: 1 }} value={form.linkedin_url} onChange={e => setForm(p => ({ ...p, linkedin_url: e.target.value }))} placeholder="https://linkedin.com/company/..." />
+              <button type="button" className="btn-secondary" onClick={fetchFromLinkedIn} disabled={!form.linkedin_url.trim() || enriching} style={{ whiteSpace: 'nowrap' }}>
+                {enriching ? 'Fetching…' : company ? '↻ Update from LinkedIn' : '⬇ Fetch from LinkedIn'}
+              </button>
+            </div>
+            {enrichNote && <p style={{ fontSize: '11px', color: '#D97706', margin: '6px 0 0' }}>{enrichNote}</p>}
           </FormField>
 
           {[

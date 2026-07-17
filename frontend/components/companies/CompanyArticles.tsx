@@ -1,28 +1,33 @@
 'use client'
 import { useState, useEffect } from 'react'
-import { companiesAPI, contactsAPI } from '@/lib/api'
+import { companiesAPI, contactsAPI, partnersAPI } from '@/lib/api'
 import { EmptyState } from '@/components/shared/RecordLayout'
 
-// Small expandable panel for managing an article's *additional* company/contact links
-// (beyond the one company/contact it was created under) — lazy-loads only when opened.
-// Exported so ContactArticles.tsx can reuse it — the underlying company_articles/
-// article_companies/article_contacts tables are shared regardless of which side created it.
+// Small expandable panel for managing an article's *additional* company/contact/partner
+// links (beyond whichever one it was created under) — lazy-loads only when opened.
+// Exported so ContactArticles.tsx/PartnerArticles.tsx can reuse it — the underlying
+// company_articles/article_companies/article_contacts/article_partners tables are shared
+// regardless of which side created it.
 export function ArticleLinksPanel({ article, companyId, onClose }: { article: any; companyId: string; onClose: () => void }) {
-  const [links, setLinks] = useState<{ companies: any[]; contacts: any[] }>({ companies: [], contacts: [] })
+  const [links, setLinks] = useState<{ companies: any[]; contacts: any[]; partners: any[] }>({ companies: [], contacts: [], partners: [] })
   const [allCompanies, setAllCompanies] = useState<any[]>([])
   const [allContacts, setAllContacts] = useState<any[]>([])
+  const [allPartners, setAllPartners] = useState<any[]>([])
   const [companySearch, setCompanySearch] = useState('')
   const [contactSearch, setContactSearch] = useState('')
+  const [partnerSearch, setPartnerSearch] = useState('')
 
   const load = () => companiesAPI.getArticleLinks(article.id).then(setLinks)
   useEffect(() => {
     load()
     companiesAPI.list({}).then(setAllCompanies).catch(() => {})
     contactsAPI.list({}).then(setAllContacts).catch(() => {})
+    partnersAPI.list({}).then(setAllPartners).catch(() => {})
   }, [article.id])
 
   const linkedCompanyIds = new Set(links.companies.map((c: any) => c.id))
   const linkedContactIds = new Set(links.contacts.map((c: any) => c.id))
+  const linkedPartnerIds = new Set((links.partners || []).map((p: any) => p.id))
 
   const companyOptions = allCompanies
     .filter((c: any) => c.id !== companyId && !linkedCompanyIds.has(c.id))
@@ -35,10 +40,15 @@ export function ArticleLinksPanel({ article, companyId, onClose }: { article: an
     .filter((c: any) => !contactSearch.trim() || contactName(c).toLowerCase().includes(contactSearch.trim().toLowerCase()))
     .sort((a: any, b: any) => contactName(a).localeCompare(contactName(b)))
 
+  const partnerOptions = allPartners
+    .filter((p: any) => !linkedPartnerIds.has(p.id))
+    .filter((p: any) => !partnerSearch.trim() || p.name.toLowerCase().includes(partnerSearch.trim().toLowerCase()))
+    .sort((a: any, b: any) => a.name.localeCompare(b.name))
+
   return (
     <div style={{ background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: '8px', padding: '12px', marginTop: '6px' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-        <span style={{ fontSize: '10px', fontWeight: '700', textTransform: 'uppercase' as const, letterSpacing: '0.07em', color: '#45B6E4' }}>Linked Companies & Contacts</span>
+        <span style={{ fontSize: '10px', fontWeight: '700', textTransform: 'uppercase' as const, letterSpacing: '0.07em', color: '#45B6E4' }}>Linked Companies, Contacts & Partners</span>
         <button onClick={onClose} style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#9B9B9B', fontSize: '14px', lineHeight: 1 }}>×</button>
       </div>
 
@@ -67,7 +77,7 @@ export function ArticleLinksPanel({ article, companyId, onClose }: { article: an
         )}
       </div>
 
-      <div>
+      <div style={{ marginBottom: '10px' }}>
         <div style={{ fontSize: '10px', color: '#94A3B8', marginBottom: '4px' }}>Contacts</div>
         {links.contacts.length > 0 && (
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px', marginBottom: '6px' }}>
@@ -87,6 +97,31 @@ export function ArticleLinksPanel({ article, companyId, onClose }: { article: an
                 style={{ padding: '6px 10px', fontSize: '12px', cursor: 'pointer' }}
                 onMouseEnter={e => (e.currentTarget.style.background = '#F1F5F9')}
                 onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>{contactName(c)}</div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div>
+        <div style={{ fontSize: '10px', color: '#94A3B8', marginBottom: '4px' }}>Partners</div>
+        {(links.partners || []).length > 0 && (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px', marginBottom: '6px' }}>
+            {links.partners.map((p: any) => (
+              <span key={p.id} style={{ background: '#F5F3FF', color: '#7C3AED', padding: '3px 9px', borderRadius: '12px', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                {p.name}
+                <button onClick={() => companiesAPI.unlinkArticlePartner(article.id, p.id).then(load)} style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#7C3AED', fontSize: '13px', lineHeight: 1, padding: 0 }}>×</button>
+              </span>
+            ))}
+          </div>
+        )}
+        <input className="form-input" style={{ width: '100%', boxSizing: 'border-box' as const, marginBottom: '4px' }} placeholder="Search partners to link…" value={partnerSearch} onChange={e => setPartnerSearch(e.target.value)} />
+        {partnerSearch.trim() && (
+          <div style={{ maxHeight: '120px', overflowY: 'auto', border: '1px solid #E2E8F0', borderRadius: '6px' }}>
+            {partnerOptions.slice(0, 15).map((p: any) => (
+              <div key={p.id} onClick={() => companiesAPI.linkArticlePartner(article.id, p.id).then(() => { setPartnerSearch(''); load() })}
+                style={{ padding: '6px 10px', fontSize: '12px', cursor: 'pointer' }}
+                onMouseEnter={e => (e.currentTarget.style.background = '#F1F5F9')}
+                onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>{p.name}</div>
             ))}
           </div>
         )}

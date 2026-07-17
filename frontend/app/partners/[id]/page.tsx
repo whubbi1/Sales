@@ -7,6 +7,7 @@ import { RecordLayout, PropertyRow, SidebarSection, SidebarCard, StatusBadge, Ta
 import { PartnerActionItems } from '@/components/partners/PartnerActionItems'
 import { PartnerModal } from '@/components/partners/PartnerModal'
 import { ActivityFeed } from '@/components/shared/ActivityFeed'
+import { PartnerArticles } from '@/components/partners/PartnerArticles'
 
 const ERP_OPTIONS     = ["SAP", "Dynamics", "IFS", "Infor", "Odoo", "Oracle", "JDE", "SAGE", "Unknown", "Other"]
 const CYBER_OPTIONS   = ["SAP ETD", "SAP GRC", "SAP Focused Run", "Cloud ALM", "SecurityBridge", "Onapsis", "Layer Seven Security", "Other"]
@@ -272,7 +273,7 @@ export default function PartnerDetailPage() {
 
       <div style={{ background: 'white', borderRadius: '10px', border: '1px solid #EDF2F7', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
         <div style={{ padding: '0 20px', background: '#FAFBFC', borderBottom: '2px solid #E2E8F0' }}>
-          <TabNav tabs={['Overview', 'Notes', 'Contacts', 'Opportunities', 'Action List', 'Events', 'Information', 'Customers']} active={tab} onChange={setTab} />
+          <TabNav tabs={['Overview', 'Notes', 'Contacts', 'Opportunities', 'Action List', 'Events', 'Information', 'Articles', 'Customers']} active={tab} onChange={setTab} />
         </div>
         <div style={{ padding: '20px' }}>
           {tab === 'Overview' && (
@@ -405,6 +406,8 @@ export default function PartnerDetailPage() {
               )}
             </div>
           )}
+
+          {tab === 'Articles' && <PartnerArticles partnerId={id as string} />}
 
           {tab === 'Customers' && (
             customers.length === 0 ? <EmptyState icon="🛡️" title="No customers yet" description={`Companies with "${partner.name}" as a Cybersecurity Solution will appear here`} /> : (

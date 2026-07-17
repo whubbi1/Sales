@@ -75,24 +75,11 @@ export default function CompaniesPage() {
     hosting_display: (c.sap_hosting_partner || []).join(', '),
   }))
 
-  // Default view: Group (level 1) companies first, each one's children nested directly
-  // underneath it (depth-first), rather than every level interleaved alphabetically. Only
-  // applies while the user hasn't picked their own sort — clicking a column header to sort
-  // is a deliberate override and falls back to a plain flat sort like any other report.
-  const isDefaultOrder = rb.sortField === 'name' && rb.sortDir === 'asc'
-  const buildTree = (rows: any[]) => {
-    const byParent: Record<string, any[]> = {}
-    rows.forEach(c => { const k = c.parent_id || 'root'; (byParent[k] = byParent[k] || []).push(c) })
-    const sortByName = (arr: any[]) => arr.slice().sort((a, b) => a.name.localeCompare(b.name))
-    const flatten = (parentKey: string): any[] => sortByName(byParent[parentKey] || []).flatMap(c => [c, ...flatten(c.id)])
-    return flatten('root')
-  }
-  const ordered = isDefaultOrder
-    ? [...buildTree(withDisplay.filter(c => !c._isPartner)), ...withDisplay.filter(c => c._isPartner).sort((a, b) => a.name.localeCompare(b.name))]
-    : withDisplay
-
-  const searched = ordered.filter(c => !nameSearch.trim() || c.name.toLowerCase().includes(nameSearch.trim().toLowerCase()))
-  const reported = applyReport(searched, COLUMNS, rb.filters, isDefaultOrder ? '' : rb.sortField, rb.sortDir)
+  // Flat list, sorted like any other report — default sortField is 'name' (COLUMNS[0]),
+  // so alphabetical is the out-of-the-box view, and clicking any column header re-sorts
+  // by that column same as everywhere else.
+  const searched = withDisplay.filter(c => !nameSearch.trim() || c.name.toLowerCase().includes(nameSearch.trim().toLowerCase()))
+  const reported = applyReport(searched, COLUMNS, rb.filters, rb.sortField, rb.sortDir)
   const pageRows = reported.slice((rb.page - 1) * 20, rb.page * 20)
   const isVisible = (key: string) => rb.visibleCols.includes(key)
 
@@ -159,7 +146,6 @@ export default function CompaniesPage() {
                     {isVisible('name') && (
                       <td style={{ padding: '12px 16px', borderBottom: '1px solid #F1F5F9', ...REPORT_CELL_STYLE }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                          {company.level > 1 && <span style={{ marginLeft: `${(company.level - 1) * 12}px` }}>└</span>}
                           <div style={{ width: '30px', height: '30px', borderRadius: '6px', background: '#144766', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Montserrat, sans-serif', fontSize: '12px', flexShrink: 0 }}>
                             {company.name[0]?.toUpperCase()}
                           </div>

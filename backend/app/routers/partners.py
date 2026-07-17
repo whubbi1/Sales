@@ -336,6 +336,48 @@ async def delete_link(partner_id: str, link_id: str, db: AsyncSession = Depends(
     return {"status": "ok"}
 
 
+# ─── Articles — shares company_articles/article_companies/article_contacts/
+# article_partners with Companies and Contacts (see companies.py's Articles section)
+# ────────────────────────────────────────────────────────────────────────────────
+@router.get("/{partner_id}/articles")
+async def list_partner_articles(partner_id: str, db: AsyncSession = Depends(get_db)):
+    r = await db.execute(text("""
+        SELECT * FROM (
+            SELECT a.* FROM company_articles a WHERE a.partner_id = CAST(:pid AS UUID)
+            UNION
+            SELECT a.* FROM company_articles a
+            JOIN article_partners ap ON ap.article_id = a.id
+            WHERE ap.partner_id = CAST(:pid AS UUID)
+        ) sub ORDER BY created_at DESC
+    """), {"pid": partner_id})
+    return [_row(dict(row._mapping)) for row in r.fetchall()]
+
+
+@router.post("/{partner_id}/articles")
+async def create_partner_article(partner_id: str, data: dict, db: AsyncSession = Depends(get_db)):
+    if not data.get("title") or not data.get("url"):
+        raise HTTPException(status_code=400, detail="title and url are required")
+    article_id = str(uuid.uuid4())
+    await db.execute(text("""
+        INSERT INTO company_articles (id, partner_id, title, url, description, created_by, created_at)
+        VALUES (CAST(:id AS UUID), CAST(:pid AS UUID), :title, :url, :description, :by, NOW())
+    """), {"id": article_id, "pid": partner_id, "title": data["title"], "url": data["url"],
+           "description": data.get("description"), "by": data.get("created_by")})
+    await db.commit()
+    return {"id": article_id, "partner_id": partner_id, "title": data["title"], "url": data["url"], "description": data.get("description")}
+
+
+@router.delete("/{partner_id}/articles/{article_id}")
+async def delete_partner_article(partner_id: str, article_id: str, db: AsyncSession = Depends(get_db)):
+    r = await db.execute(text("SELECT 1 FROM company_articles WHERE id = CAST(:id AS UUID) AND partner_id = CAST(:pid AS UUID)"),
+                          {"id": article_id, "pid": partner_id})
+    if not r.first():
+        raise HTTPException(status_code=404, detail="Article not found")
+    await db.execute(text("DELETE FROM company_articles WHERE id = CAST(:id AS UUID)"), {"id": article_id})
+    await db.commit()
+    return {"status": "ok"}
+
+
 # ─── Events — Marketing events linked to this partner ──────────────────────────
 @router.get("/{partner_id}/events")
 async def list_partner_events(partner_id: str, db: AsyncSession = Depends(get_db)):

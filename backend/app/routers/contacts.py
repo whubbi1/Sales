@@ -15,6 +15,8 @@ from app.schemas.schemas import (
     NoteCreate, NoteResponse, ArticleCreate, ArticleResponse,
 )
 from app.services.ids import next_internal_id
+from app.routers.companies import claude_web_search
+import json
 
 router = APIRouter()
 
@@ -75,6 +77,31 @@ async def create_contact(contact: ContactCreate, db: AsyncSession = Depends(get_
     row = r.scalar_one()
     await _attach_partners(db, [row])
     return row
+
+# Must come before /{contact_id} — otherwise FastAPI tries to parse "linkedin-enrich"
+# as a UUID for that route and 422s instead of falling through to this one.
+@router.post("/linkedin-enrich")
+async def linkedin_enrich_contact(data: dict):
+    url = (data.get("linkedin_url") or "").strip()
+    if not url:
+        raise HTTPException(status_code=400, detail="linkedin_url is required")
+    prompt = f"""Look up the public LinkedIn profile at this URL: {url}
+Return ONLY a valid JSON object with this exact structure (use null for anything you can't find):
+{{
+  "first_name": "their first name",
+  "last_name": "their last name",
+  "job_name": "their current job title",
+  "company_name": "their current employer's name",
+  "job_type": "the single closest match from this list, or null if none fit well: CIO, CTO, CISO, SAP Manager, SAP Architect, SAP GRC, SAP Security Manager, SAP Technical Manager, Cybersecurity Architect, SOC Manager, Internal Audit, CFO, Partner, Buyer, Other"
+}}
+Return ONLY the JSON, no markdown, no explanation."""
+    text = await claude_web_search(prompt)
+    try:
+        cleaned = text.strip().replace("```json", "").replace("```", "").strip()
+        return json.loads(cleaned)
+    except (json.JSONDecodeError, ValueError):
+        raise HTTPException(status_code=502, detail="Could not read profile data from that LinkedIn URL")
+
 
 @router.get("/{contact_id}", response_model=ContactResponse)
 async def get_contact(contact_id: UUID, db: AsyncSession = Depends(get_db)):

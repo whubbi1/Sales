@@ -156,6 +156,29 @@ async def research(data: dict):
     result = await claude_web_search(prompt)
     return {"result": result}
 
+# Must also come before /{company_id} for the same reason as dashboard-stats above.
+@router.post("/linkedin-enrich")
+async def linkedin_enrich_company(data: dict):
+    import json
+    url = (data.get("linkedin_url") or "").strip()
+    if not url:
+        raise HTTPException(status_code=400, detail="linkedin_url is required")
+    prompt = f"""Look up the public LinkedIn company page at this URL: {url}
+Return ONLY a valid JSON object with this exact structure (use null for anything you can't find):
+{{
+  "name": "the company's name",
+  "sector": "their industry",
+  "country": "the country of their headquarters",
+  "domain_names": ["their main website domain, no protocol, e.g. acme.com"]
+}}
+Return ONLY the JSON, no markdown, no explanation."""
+    text = await claude_web_search(prompt)
+    try:
+        cleaned = text.strip().replace("```json", "").replace("```", "").strip()
+        return json.loads(cleaned)
+    except (json.JSONDecodeError, ValueError):
+        raise HTTPException(status_code=502, detail="Could not read company data from that LinkedIn URL")
+
 @router.get("/{company_id}", response_model=CompanyResponse)
 async def get_company(company_id: UUID, db: AsyncSession = Depends(get_db)):
     r = await db.execute(select(Company).options(selectinload(Company.parent), selectinload(Company.children)).where(Company.id == company_id))
@@ -168,21 +191,15 @@ async def get_company(company_id: UUID, db: AsyncSession = Depends(get_db)):
 
 @router.post("/{company_id}/logo")
 async def upload_company_logo(company_id: UUID, file: UploadFile = File(...), db: AsyncSession = Depends(get_db)):
-    import traceback
-    try:
-        r = await db.execute(select(Company).where(Company.id == company_id))
-        company = r.scalar_one_or_none()
-        if not company:
-            raise HTTPException(status_code=404, detail="Company not found")
-        content = await file.read()
-        logo_ref = await upload_to_s3(f"companies/{company_id}/logo", content, file.content_type or "application/octet-stream")
-        company.logo_url = logo_ref
-        await db.commit()
-        return {"status": "ok", "logo_url": await s3_ref_to_presigned(logo_ref)}
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"DEBUG {type(e).__name__}: {e}\n{traceback.format_exc()[-1500:]}")
+    r = await db.execute(select(Company).where(Company.id == company_id))
+    company = r.scalar_one_or_none()
+    if not company:
+        raise HTTPException(status_code=404, detail="Company not found")
+    content = await file.read()
+    logo_ref = await upload_to_s3(f"companies/{company_id}/logo", content, file.content_type or "application/octet-stream")
+    company.logo_url = logo_ref
+    await db.commit()
+    return {"status": "ok", "logo_url": await s3_ref_to_presigned(logo_ref)}
 
 @router.put("/{company_id}", response_model=CompanyResponse)
 async def update_company(company_id: UUID, data: CompanyUpdate, db: AsyncSession = Depends(get_db)):

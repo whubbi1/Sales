@@ -40,6 +40,7 @@ export const companiesAPI = {
   getOpportunities:(id: string) => fetchAPI(`/companies/${id}/opportunities`),
   dashboardStats:  () => fetchAPI(`/companies/dashboard-stats`),
   research:        (prompt: string) => fetchAPI(`/companies/research`, { method: 'POST', body: JSON.stringify({ prompt }) }),
+  linkedinEnrich:  (linkedin_url: string) => fetchAPI(`/companies/linkedin-enrich`, { method: 'POST', body: JSON.stringify({ linkedin_url }) }),
 
   getNotes:    (id: string) => fetchAPI(`/companies/${id}/notes`),
   createNote:  (id: string, d: any) => fetchAPI(`/companies/${id}/notes`, { method: 'POST', body: JSON.stringify(d) }),
@@ -54,6 +55,8 @@ export const companiesAPI = {
   unlinkArticleCompany:(aid: string, cid: string) => fetchAPI(`/companies/articles/${aid}/companies/${cid}`, { method: 'DELETE' }),
   linkArticleContact:  (aid: string, cid: string) => fetchAPI(`/companies/articles/${aid}/contacts/${cid}`, { method: 'POST' }),
   unlinkArticleContact:(aid: string, cid: string) => fetchAPI(`/companies/articles/${aid}/contacts/${cid}`, { method: 'DELETE' }),
+  linkArticlePartner:  (aid: string, pid: string) => fetchAPI(`/companies/articles/${aid}/partners/${pid}`, { method: 'POST' }),
+  unlinkArticlePartner:(aid: string, pid: string) => fetchAPI(`/companies/articles/${aid}/partners/${pid}`, { method: 'DELETE' }),
 
   getTasks:   (id: string) => fetchAPI(`/companies/${id}/tasks`),
   createTask: (id: string, d: any) => fetchAPI(`/companies/${id}/tasks`, { method: 'POST', body: JSON.stringify(d) }),
@@ -84,6 +87,10 @@ export const partnersAPI = {
   getLinks:   (id: string) => fetchAPI(`/partners/${id}/links`),
   addLink:    (id: string, d: any) => fetchAPI(`/partners/${id}/links`, { method: 'POST', body: JSON.stringify(d) }),
   deleteLink: (id: string, lid: string) => fetchAPI(`/partners/${id}/links/${lid}`, { method: 'DELETE' }),
+
+  getArticles:   (id: string) => fetchAPI(`/partners/${id}/articles`),
+  createArticle: (id: string, d: any) => fetchAPI(`/partners/${id}/articles`, { method: 'POST', body: JSON.stringify(d) }),
+  deleteArticle: (pid: string, aid: string) => fetchAPI(`/partners/${pid}/articles/${aid}`, { method: 'DELETE' }),
 
   getEvents:    (id: string) => fetchAPI(`/partners/${id}/events`),
   getCustomers: (id: string) => fetchAPI(`/partners/${id}/customers`),
@@ -123,6 +130,7 @@ export const contactsAPI = {
   update: (id: string, d: any) => fetchAPI(`/contacts/${id}`, { method: 'PUT', body: JSON.stringify(d) }),
   delete: (id: string) => fetchAPI(`/contacts/${id}`, { method: 'DELETE' }),
   getOpportunities: (id: string) => fetchAPI(`/contacts/${id}/opportunities`),
+  linkedinEnrich: (linkedin_url: string) => fetchAPI(`/contacts/linkedin-enrich`, { method: 'POST', body: JSON.stringify({ linkedin_url }) }),
 
   getNotes:    (id: string) => fetchAPI(`/contacts/${id}/notes`),
   createNote:  (id: string, d: any) => fetchAPI(`/contacts/${id}/notes`, { method: 'POST', body: JSON.stringify(d) }),

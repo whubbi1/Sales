@@ -41,12 +41,39 @@ export function ContactModal({ contact, onClose, onSave }: any) {
   })
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  const [enriching, setEnriching] = useState(false)
+  const [enrichNote, setEnrichNote] = useState('')
 
   useEffect(() => {
     companiesAPI.list({}).then(setCompanies).catch(() => {})
     partnersAPI.list({}).then(setPartners).catch(() => {})
     fetch('https://api.whubbi.wcomply.com/settings/users').then(r => r.json()).then(d => setUsers(d.users || [])).catch(() => {})
   }, [])
+
+  // Fills in only whatever's currently empty — never overwrites something the user
+  // already typed. Works the same way whether creating (fill in the blanks) or editing
+  // an existing contact (re-fetch to fill in anything still missing).
+  const fetchFromLinkedIn = async () => {
+    const url = form.linkedin_url.trim()
+    if (!url) return
+    setEnriching(true); setEnrichNote('')
+    try {
+      const data = await contactsAPI.linkedinEnrich(url)
+      setForm(p => ({
+        ...p,
+        first_name: p.first_name || data.first_name || p.first_name,
+        last_name: p.last_name || data.last_name || p.last_name,
+        job_name: p.job_name || data.job_name || p.job_name,
+        job_type: p.job_type || (JOB_TYPES.includes(data.job_type) ? data.job_type : '') || p.job_type,
+      }))
+      if (data.company_name && !form.company_id && !form.partner_id) {
+        const match = companies.find((c: any) => c.name.toLowerCase() === data.company_name.toLowerCase())
+        if (match) setForm(p => ({ ...p, company_id: match.id }))
+        else setEnrichNote(`Detected company "${data.company_name}" — not found in the system, link it manually if needed.`)
+      }
+    } catch (e: any) { setEnrichNote(e.message) }
+    finally { setEnriching(false) }
+  }
 
   // Companies and Partners are two separate underlying links (company_id/partner_id), but a
   // contact only ever belongs to one of them — presented as a single merged picker instead of
@@ -131,8 +158,14 @@ export function ContactModal({ contact, onClose, onSave }: any) {
               <FormField label="Office Phone">
                 <input className="form-input" value={form.office_phone} onChange={e => setForm(p => ({ ...p, office_phone: e.target.value }))} placeholder="+32 2 000 00 00" />
               </FormField>
-              <FormField label="LinkedIn">
-                <input className="form-input" value={form.linkedin_url} onChange={e => setForm(p => ({ ...p, linkedin_url: e.target.value }))} placeholder="https://linkedin.com/in/..." />
+              <FormField label="LinkedIn" full>
+                <div style={{ display: 'flex', gap: '6px' }}>
+                  <input className="form-input" style={{ flex: 1 }} value={form.linkedin_url} onChange={e => setForm(p => ({ ...p, linkedin_url: e.target.value }))} placeholder="https://linkedin.com/in/..." />
+                  <button type="button" className="btn-secondary" onClick={fetchFromLinkedIn} disabled={!form.linkedin_url.trim() || enriching} style={{ whiteSpace: 'nowrap' }}>
+                    {enriching ? 'Fetching…' : contact ? '↻ Update from LinkedIn' : '⬇ Fetch from LinkedIn'}
+                  </button>
+                </div>
+                {enrichNote && <p style={{ fontSize: '11px', color: '#D97706', margin: '6px 0 0' }}>{enrichNote}</p>}
               </FormField>
             </div>
           </div>
