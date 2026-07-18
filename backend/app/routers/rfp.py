@@ -45,6 +45,37 @@ def _load_query():
     return select(RFP).options(selectinload(RFP.company), selectinload(RFP.opportunities))
 
 
+async def _sync_staffing_from_approvers(db: AsyncSession, rfp: RFP):
+    # Every approver gets a staffing role if they don't already have one — removing
+    # someone from approvers here does NOT delete their existing role, that stays a
+    # deliberate, separate action in the Staffing/Costing Sheet.
+    approvers = [a for a in (rfp.approvers or []) if a.get('email')]
+    if not approvers:
+        return
+    r = await db.execute(select(RFPStaffingRole).where(RFPStaffingRole.rfp_id == rfp.id))
+    existing_emails = {row.resource_email for row in r.scalars().all() if row.resource_email}
+    for a in approvers:
+        if a['email'] not in existing_emails:
+            db.add(RFPStaffingRole(rfp_id=rfp.id, name=a.get('name') or a['email'], resource_email=a['email'], resource_name=a.get('name')))
+    await db.commit()
+
+
+async def _sync_approvers_from_role(db: AsyncSession, rfp_id, resource_email, resource_name):
+    # The other direction of _sync_staffing_from_approvers — assigning someone to a
+    # staffing role also lists them as an approver, if they aren't already one.
+    if not resource_email:
+        return
+    r = await db.execute(select(RFP).where(RFP.id == rfp_id))
+    rfp = r.scalar_one_or_none()
+    if not rfp:
+        return
+    approvers = rfp.approvers or []
+    if any(a.get('email') == resource_email for a in approvers):
+        return
+    rfp.approvers = approvers + [{"email": resource_email, "name": resource_name or resource_email}]
+    await db.commit()
+
+
 @router.get("/", response_model=List[RFPResponse])
 async def list_rfps(company_id: str = None, status_filter: str = None, db: AsyncSession = Depends(get_db)):
     query = _load_query()
@@ -71,6 +102,7 @@ async def create_rfp(data: RFPCreate, db: AsyncSession = Depends(get_db)):
         rfp.opportunities = r.scalars().all()
     db.add(rfp)
     await db.commit()
+    await _sync_staffing_from_approvers(db, rfp)
     r = await db.execute(_load_query().where(RFP.id == rfp.id))
     row = r.scalar_one()
     await _attach_partners(db, [row])
@@ -99,6 +131,7 @@ async def update_rfp(rfp_id: UUID, data: RFPUpdate, db: AsyncSession = Depends(g
     for k, v in update_data.items():
         setattr(rfp, k, v)
     await db.commit()
+    await _sync_staffing_from_approvers(db, rfp)
     r = await db.execute(_load_query().where(RFP.id == rfp_id))
     row = r.scalar_one()
     await _attach_partners(db, [row])
@@ -405,6 +438,7 @@ async def create_staffing_role(rfp_id: UUID, data: RFPStaffingRoleCreate, db: As
     db.add(role)
     await db.commit()
     await db.refresh(role)
+    await _sync_approvers_from_role(db, rfp_id, role.resource_email, role.resource_name)
     return role
 
 
@@ -418,6 +452,7 @@ async def update_staffing_role(rfp_id: UUID, role_id: UUID, data: RFPStaffingRol
         setattr(role, k, v)
     await db.commit()
     await db.refresh(role)
+    await _sync_approvers_from_role(db, rfp_id, role.resource_email, role.resource_name)
     return role
 
 

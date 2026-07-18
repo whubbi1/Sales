@@ -4,6 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, or_, text, insert, delete as sa_delete
 from typing import List
 from uuid import UUID
+from datetime import datetime
 
 from app.database import get_db
 from app.models.lead import Lead, LeadActivityLog, LeadNote, LeadFile, lead_partner, lead_partner_contact
@@ -15,9 +16,10 @@ from app.schemas.schemas import (
     LeadActivityLogResponse,
     LeadNoteCreate, LeadNoteResponse,
     LeadFileCreate, LeadFileResponse,
+    LeadCloseWithOpportunity,
     PartnerSummary,
 )
-from app.services.ids import next_internal_id, compute_deal_name
+from app.services.ids import next_internal_id
 
 router = APIRouter()
 
@@ -91,49 +93,6 @@ async def _log_change(db: AsyncSession, lead_id, field_name: str, old_value, new
     ))
 
 
-async def _maybe_create_opportunity(db: AsyncSession, lead: Lead):
-    # Fires once per lead — the moment its status is (or becomes) "Create an Opportunity"
-    # — mirroring the Opportunity -> RFP/Project auto-create pattern elsewhere. Carries
-    # over the company and every known contact (company contact + partner contacts); the
-    # Opportunity otherwise starts fresh, same as a manually created one would.
-    if lead.status != 'Create an Opportunity':
-        return None
-    if lead.opportunity_id:
-        return None
-
-    company_name = None
-    if lead.company_id:
-        r = await db.execute(select(Company.name).where(Company.id == lead.company_id))
-        company_name = r.scalar_one_or_none()
-
-    r = await db.execute(select(lead_partner.c.partner_id).where(lead_partner.c.lead_id == lead.id))
-    partner_id = r.scalars().first()
-    partner_name = None
-    if partner_id:
-        r2 = await db.execute(text("SELECT name FROM partners WHERE id = CAST(:id AS UUID)"), {"id": str(partner_id)})
-        row = r2.fetchone()
-        partner_name = row.name if row else None
-
-    deal_id = await next_internal_id(db, 'opportunity_deal_id_seq', 'OPP')
-    deal_name = compute_deal_name(None, company_name, partner_name, lead.title)
-    opp = Opportunity(
-        deal_id=deal_id, deal_name=deal_name, project_name=lead.title,
-        company_id=lead.company_id, partner_id=partner_id,
-        assigned_to=lead.assigned_to, assigned_to_email=lead.assigned_to_email,
-    )
-
-    contact_ids = [lead.contact_id] if lead.contact_id else []
-    r3 = await db.execute(select(lead_partner_contact.c.contact_id).where(lead_partner_contact.c.lead_id == lead.id))
-    contact_ids += [row[0] for row in r3.all()]
-    if contact_ids:
-        r4 = await db.execute(select(Contact).where(Contact.id.in_(contact_ids)))
-        opp.contacts = r4.scalars().all()
-
-    db.add(opp)
-    await db.flush()
-    lead.opportunity_id = opp.id
-    await db.commit()
-    return opp.id
 
 
 @router.get("/", response_model=List[LeadResponse])
@@ -164,7 +123,6 @@ async def create_lead(data: LeadCreate, db: AsyncSession = Depends(get_db)):
     await _set_partners(db, lead.id, data.partner_ids)
     await _set_partner_contacts(db, lead.id, data.partner_contact_ids)
     await db.commit()
-    await _maybe_create_opportunity(db, lead)
     r = await db.execute(select(Lead).where(Lead.id == lead.id))
     row = r.scalar_one()
     await _attach_related(db, [row])
@@ -189,11 +147,19 @@ async def update_lead(lead_id: UUID, data: LeadUpdate, db: AsyncSession = Depend
         raise HTTPException(status_code=404, detail="Lead not found")
 
     update_data = data.model_dump(exclude={'changed_by_email', 'changed_by_name', 'partner_ids', 'partner_contact_ids'}, exclude_unset=True)
+
+    # A closed lead is terminal — it can never be moved to another status. Duplicate it
+    # instead if the work needs to continue under a new lead.
+    if lead.status == 'Closed' and 'status' in update_data and update_data['status'] != 'Closed':
+        raise HTTPException(status_code=400, detail="This lead is closed and cannot be reopened. Duplicate it to continue this work under a new lead.")
+
     for k, v in update_data.items():
         old_value = getattr(lead, k)
         if old_value != v:
             await _log_change(db, lead.id, k, old_value, v, data.changed_by_email, data.changed_by_name)
             setattr(lead, k, v)
+            if k == 'status' and v == 'Closed':
+                lead.closed_at = datetime.utcnow()
 
     if 'partner_ids' in data.model_fields_set:
         await _set_partners(db, lead.id, data.partner_ids)
@@ -201,7 +167,35 @@ async def update_lead(lead_id: UUID, data: LeadUpdate, db: AsyncSession = Depend
         await _set_partner_contacts(db, lead.id, data.partner_contact_ids)
 
     await db.commit()
-    await _maybe_create_opportunity(db, lead)
+    r2 = await db.execute(select(Lead).where(Lead.id == lead_id))
+    row = r2.scalar_one()
+    await _attach_related(db, [row])
+    return row
+
+
+@router.post("/{lead_id}/close-with-opportunity", response_model=LeadResponse)
+async def close_lead_with_opportunity(lead_id: UUID, data: LeadCloseWithOpportunity, db: AsyncSession = Depends(get_db)):
+    # Called once the user has actually reviewed and saved the Opportunity created from
+    # this lead — links the two records and closes the lead atomically. The "Create an
+    # Opportunity" status itself is just a stage; this is the real trigger.
+    r = await db.execute(select(Lead).where(Lead.id == lead_id))
+    lead = r.scalar_one_or_none()
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead not found")
+    if lead.status == 'Closed':
+        raise HTTPException(status_code=400, detail="This lead is already closed.")
+
+    ro = await db.execute(select(Opportunity.id).where(Opportunity.id == data.opportunity_id))
+    if not ro.scalar_one_or_none():
+        raise HTTPException(status_code=404, detail="Opportunity not found")
+
+    await _log_change(db, lead.id, 'status', lead.status, 'Closed', data.changed_by_email, data.changed_by_name)
+    await _log_change(db, lead.id, 'opportunity_id', lead.opportunity_id, str(data.opportunity_id), data.changed_by_email, data.changed_by_name)
+    lead.status = 'Closed'
+    lead.closed_at = datetime.utcnow()
+    lead.opportunity_id = data.opportunity_id
+    await db.commit()
+
     r2 = await db.execute(select(Lead).where(Lead.id == lead_id))
     row = r2.scalar_one()
     await _attach_related(db, [row])

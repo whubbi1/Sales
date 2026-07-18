@@ -6,6 +6,7 @@ import { getStoredUser } from '@/lib/auth'
 import { RecordLayout, PropertyRow, SidebarSection, SidebarCard, StatusBadge, TabNav } from '@/components/shared/RecordLayout'
 import { LeadModal } from '@/components/leads/LeadModal'
 import { TaskModal } from '@/components/tasks/TaskModal'
+import { OpportunityModal } from '@/components/opportunities/OpportunityModal'
 import { taskManagerAPI } from '@/lib/api'
 
 const TASK_DONE_STATUSES = ['resolved', 'closed']
@@ -20,6 +21,8 @@ export default function LeadDetailPage() {
   const [loading, setLoading] = useState(true)
   const [tab, setTab] = useState('Overview')
   const [showEdit, setShowEdit] = useState(false)
+  const [showDuplicate, setShowDuplicate] = useState(false)
+  const [showCreateOpportunity, setShowCreateOpportunity] = useState(false)
   const [showDelete, setShowDelete] = useState(false)
   const [deleteConfirm, setDeleteConfirm] = useState('')
   const [deleting, setDeleting] = useState(false)
@@ -146,11 +149,22 @@ export default function LeadDetailPage() {
             </div>
           </div>
           <div style={{ display: 'flex', gap: '8px' }}>
-            <button onClick={() => setShowEdit(true)} style={{ background: 'white', color: '#144766', padding: '7px 14px', borderRadius: '7px', fontSize: '12px', fontWeight: '600', border: '1.5px solid #CBD5E0', cursor: 'pointer' }}>Edit</button>
+            <button onClick={() => setShowEdit(true)} disabled={lead.status === 'Closed'} style={{ background: 'white', color: lead.status === 'Closed' ? '#CBD5E0' : '#144766', padding: '7px 14px', borderRadius: '7px', fontSize: '12px', fontWeight: '600', border: '1.5px solid #CBD5E0', cursor: lead.status === 'Closed' ? 'not-allowed' : 'pointer' }}>Edit</button>
+            <button onClick={() => setShowDuplicate(true)} style={{ background: 'white', color: '#144766', padding: '7px 14px', borderRadius: '7px', fontSize: '12px', fontWeight: '600', border: '1.5px solid #CBD5E0', cursor: 'pointer' }}>Duplicate</button>
             <button onClick={() => { setDeleteConfirm(''); setShowDelete(true) }} style={{ background: 'white', color: '#DC2626', padding: '7px 14px', borderRadius: '7px', fontSize: '12px', fontWeight: '600', border: '1.5px solid #FCA5A5', cursor: 'pointer' }}>Delete</button>
           </div>
         </div>
       </div>
+
+      {lead.status === 'Create an Opportunity' && !lead.opportunity_id && (
+        <div style={{ background: '#ECFDF5', border: '1px solid #A7F3D0', borderRadius: '10px', padding: '16px 20px', marginBottom: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div>
+            <div style={{ fontWeight: '700', color: '#059669', fontSize: '13px' }}>Ready to become an Opportunity</div>
+            <div style={{ fontSize: '12px', color: '#3F3F3F' }}>Review the details and create the linked Opportunity — this will close the lead.</div>
+          </div>
+          <button className="btn-primary" onClick={() => setShowCreateOpportunity(true)}>Create Opportunity →</button>
+        </div>
+      )}
 
       <div style={{ background: 'white', borderRadius: '10px', border: '1px solid #EDF2F7', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
         <div style={{ padding: '0 20px', background: '#FAFBFC', borderBottom: '2px solid #E2E8F0' }}>
@@ -167,6 +181,7 @@ export default function LeadDetailPage() {
               <PropertyRow label="Start Date" value={fmt(lead.start_date)} />
               <PropertyRow label="End Date" value={fmt(lead.end_date)} />
               <PropertyRow label="Origin" value={lead.origin} />
+              {lead.status === 'Closed' && <PropertyRow label="Closed On" value={fmt(lead.closed_at)} />}
 
               <p className="section-label" style={{ marginTop: '20px', marginBottom: '8px' }}>Change History</p>
               {activityLog.length === 0 ? <p style={{ color: '#9B9B9B', fontSize: '13px' }}>No changes logged yet.</p> : (
@@ -298,6 +313,8 @@ export default function LeadDetailPage() {
     <>
       <RecordLayout leftColumn={leftColumn} rightColumn={rightColumn} />
       {showEdit && <LeadModal lead={lead} onClose={() => setShowEdit(false)} onSave={() => { setShowEdit(false); load() }} />}
+      {showDuplicate && <LeadModal duplicateFrom={lead} onClose={() => setShowDuplicate(false)} onSave={(newLead: any) => { setShowDuplicate(false); router.push(`/leads/${newLead.id}`) }} />}
+      {showCreateOpportunity && <OpportunityModal fromLead={lead} onClose={() => setShowCreateOpportunity(false)} onSave={() => setShowCreateOpportunity(false)} />}
       {showTaskModal && (
         <TaskModal
           task={editingTask}

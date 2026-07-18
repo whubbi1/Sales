@@ -688,6 +688,7 @@ class LeadResponse(BaseModel):
     origin: Optional[str] = None
     status: str
     opportunity_id: Optional[UUID] = None
+    closed_at: Optional[datetime] = None
     assigned_to: Optional[str] = None
     assigned_to_email: Optional[str] = None
     created_at: datetime
@@ -735,6 +736,11 @@ class LeadFileResponse(LeadFileCreate):
     created_at: datetime
     class Config:
         from_attributes = True
+
+class LeadCloseWithOpportunity(BaseModel):
+    opportunity_id: UUID
+    changed_by_email: Optional[str] = None
+    changed_by_name: Optional[str] = None
 
 # ─── Reporting & Analytics ──────────────────────────────────────────────────────
 class ReportSpecFilter(BaseModel):

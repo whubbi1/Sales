@@ -14,7 +14,11 @@ function FormField({ label, children, full }: { label: string; children: React.R
   )
 }
 
-export function LeadModal({ lead, initialCompanyId, onClose, onSave }: any) {
+export function LeadModal({ lead, duplicateFrom, initialCompanyId, onClose, onSave }: any) {
+  // duplicateFrom prefills the same as an existing lead would, but `lead` itself stays
+  // undefined so handleSave below still creates a new record instead of updating one —
+  // status/closed_at are deliberately NOT copied, a duplicate always starts fresh at Open.
+  const src = lead || duplicateFrom
   const [companies, setCompanies] = useState<any[]>([])
   const [partners, setPartners] = useState<any[]>([])
   const [companyContacts, setCompanyContacts] = useState<any[]>([])
@@ -23,17 +27,18 @@ export function LeadModal({ lead, initialCompanyId, onClose, onSave }: any) {
   const [error, setError] = useState('')
 
   const toDateStr = (d?: string) => d ? new Date(d).toISOString().split('T')[0] : ''
+  const isClosed = lead?.status === 'Closed'
 
   const [form, setForm] = useState({
-    title: lead?.title || '',
-    company_id: lead?.company_id || (!lead ? initialCompanyId : '') || '',
-    contact_id: lead?.contact_id || '',
-    partner_ids: (lead?.partners || []).map((p: any) => p.id) as string[],
-    partner_contact_ids: (lead?.partner_contacts || []).map((c: any) => c.id) as string[],
-    start_date: toDateStr(lead?.start_date),
-    end_date: toDateStr(lead?.end_date),
-    origin: lead?.origin || '',
-    status: lead?.status || 'Open',
+    title: src?.title || '',
+    company_id: src?.company_id || (!lead ? initialCompanyId : '') || '',
+    contact_id: src?.contact_id || '',
+    partner_ids: (src?.partners || []).map((p: any) => p.id) as string[],
+    partner_contact_ids: (src?.partner_contacts || []).map((c: any) => c.id) as string[],
+    start_date: toDateStr(src?.start_date),
+    end_date: toDateStr(src?.end_date),
+    origin: src?.origin || '',
+    status: duplicateFrom ? 'Open' : (src?.status || 'Open'),
   })
 
   useEffect(() => {
@@ -83,9 +88,8 @@ export function LeadModal({ lead, initialCompanyId, onClose, onSave }: any) {
         origin: form.origin || null,
         status: form.status,
       }
-      if (lead) await leadsAPI.update(lead.id, payload)
-      else await leadsAPI.create(payload)
-      onSave()
+      const result = lead ? await leadsAPI.update(lead.id, payload) : await leadsAPI.create(payload)
+      onSave(result)
     } catch (e: any) { setError(e.message) }
     finally { setSaving(false) }
   }
@@ -94,7 +98,7 @@ export function LeadModal({ lead, initialCompanyId, onClose, onSave }: any) {
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '640px' }}>
         <div className="modal-header">
-          <h2 style={{ fontSize: '15px', fontWeight: '700', color: '#144766' }}>{lead ? 'Edit Lead' : 'New Lead'}</h2>
+          <h2 style={{ fontSize: '15px', fontWeight: '700', color: '#144766' }}>{lead ? 'Edit Lead' : duplicateFrom ? 'Duplicate Lead' : 'New Lead'}</h2>
           <button onClick={onClose} style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: '20px', color: '#9B9B9B', lineHeight: 1 }}>×</button>
         </div>
         <div className="modal-body" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
@@ -150,9 +154,10 @@ export function LeadModal({ lead, initialCompanyId, onClose, onSave }: any) {
             </select>
           </FormField>
           <FormField label="Lead Status">
-            <select className="form-input" value={form.status} onChange={e => setForm(p => ({ ...p, status: e.target.value }))}>
+            <select className="form-input" value={form.status} onChange={e => setForm(p => ({ ...p, status: e.target.value }))} disabled={isClosed}>
               {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
             </select>
+            {isClosed && <p style={{ fontSize: '11px', color: '#9B9B9B', margin: '4px 0 0' }}>Closed on {lead.closed_at ? new Date(lead.closed_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'} — a closed lead can't be reopened. Duplicate it to continue this work.</p>}
           </FormField>
 
           {error && <p style={{ color: '#DC2626', fontSize: '12px', gridColumn: '1/-1' }}>{error}</p>}

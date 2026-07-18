@@ -2,7 +2,8 @@
 // components/opportunities/OpportunityModal.tsx
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { opportunitiesAPI, companiesAPI, contactsAPI, partnersAPI } from '@/lib/api'
+import { opportunitiesAPI, companiesAPI, contactsAPI, partnersAPI, leadsAPI } from '@/lib/api'
+import { getStoredUser } from '@/lib/auth'
 
 const DEAL_STATUSES = ['Presentation To Be Scheduled','Presentation Done','Proposition Ongoing','Proposition Accepted','RFP Ongoing','Contract Ongoing','Contract Finalised','PO Received','Contract Lost']
 const PROJECT_STATUSES = ['Daily Invoicing','Project','Software Licenses']
@@ -30,8 +31,12 @@ function FormField({ label, children, full }: { label: string; children: React.R
   )
 }
 
-export function OpportunityModal({ opportunity, initialCompanyId, initialPartnerId, initialContactId, onClose, onSave }: any) {
+export function OpportunityModal({ opportunity, duplicateFrom, fromLead, initialCompanyId, initialPartnerId, initialContactId, onClose, onSave }: any) {
   const router = useRouter()
+  // duplicateFrom carries the exact same shape as a real fetched Opportunity, so it can
+  // prefill the form identically — the crucial difference is `opportunity` itself stays
+  // undefined, so handleSave below still creates a new record instead of updating one.
+  const src = opportunity || duplicateFrom
   const [companies, setCompanies] = useState<any[]>([])
   const [partners, setPartners] = useState<any[]>([])
   const [contacts, setContacts] = useState<any[]>([])
@@ -44,27 +49,27 @@ export function OpportunityModal({ opportunity, initialCompanyId, initialPartner
   const toDateStr = (d?: string) => d ? new Date(d).toISOString().split('T')[0] : ''
 
   const [form, setForm] = useState({
-    company_id: opportunity?.company_id || opportunity?.company?.id || (!opportunity ? initialCompanyId : '') || '',
-    partner_id: opportunity?.partner_id || opportunity?.partner?.id || (!opportunity ? initialPartnerId : '') || '',
+    company_id: src?.company_id || src?.company?.id || fromLead?.company_id || (!opportunity ? initialCompanyId : '') || '',
+    partner_id: src?.partner_id || src?.partner?.id || fromLead?.partners?.[0]?.id || (!opportunity ? initialPartnerId : '') || '',
     deal_id: opportunity?.deal_id || '',
-    project_name: opportunity?.project_name || '',
-    deal_amount: opportunity?.deal_amount || '',
-    invoice_days: opportunity?.invoice_days ?? '',
-    daily_rate: opportunity?.daily_rate ?? '',
-    closing_date: toDateStr(opportunity?.closing_date),
-    deal_status: opportunity?.deal_status || 'Presentation To Be Scheduled',
-    assigned_consultants: opportunity?.assigned_consultants || [],
-    contract_start_date: toDateStr(opportunity?.contract_start_date),
-    contract_end_date: toDateStr(opportunity?.contract_end_date),
-    project_status: opportunity?.project_status || '',
-    contracting_party_id: opportunity?.contracting_party_id || opportunity?.contracting_party_company?.id || '',
-    contracting_party_partner_id: opportunity?.contracting_party_partner_id || opportunity?.contracting_party_partner?.id || '',
-    contracting_party: opportunity?.contracting_party || '',
-    deal_type: opportunity?.deal_type || '',
-    notes: opportunity?.notes || '',
-    assigned_to: opportunity?.assigned_to || '',
-    assigned_to_email: opportunity?.assigned_to_email || '',
-    contact_ids: opportunity?.contacts?.map((c: any) => c.id) || (!opportunity && initialContactId ? [initialContactId] : []),
+    project_name: src?.project_name || fromLead?.title || '',
+    deal_amount: src?.deal_amount || '',
+    invoice_days: src?.invoice_days ?? '',
+    daily_rate: src?.daily_rate ?? '',
+    closing_date: toDateStr(src?.closing_date),
+    deal_status: src?.deal_status || 'Presentation To Be Scheduled',
+    assigned_consultants: src?.assigned_consultants || [],
+    contract_start_date: toDateStr(src?.contract_start_date || fromLead?.start_date),
+    contract_end_date: toDateStr(src?.contract_end_date || fromLead?.end_date),
+    project_status: src?.project_status || '',
+    contracting_party_id: src?.contracting_party_id || src?.contracting_party_company?.id || '',
+    contracting_party_partner_id: src?.contracting_party_partner_id || src?.contracting_party_partner?.id || '',
+    contracting_party: src?.contracting_party || '',
+    deal_type: src?.deal_type || '',
+    notes: src?.notes || '',
+    assigned_to: src?.assigned_to || '',
+    assigned_to_email: src?.assigned_to_email || '',
+    contact_ids: src?.contacts?.map((c: any) => c.id) || (fromLead ? [fromLead.contact_id, ...(fromLead.partner_contacts || []).map((c: any) => c.id)].filter(Boolean) : (!opportunity && initialContactId ? [initialContactId] : [])),
   })
 
   useEffect(() => {
@@ -128,6 +133,16 @@ export function OpportunityModal({ opportunity, initialCompanyId, initialPartner
       const result = opportunity
         ? await opportunitiesAPI.update(opportunity.id, payload)
         : await opportunitiesAPI.create(payload)
+
+      if (fromLead) {
+        // Links the lead to the just-created Opportunity and closes it — the lead's
+        // "Create an Opportunity" status was only a stage, this is the real trigger.
+        const user = getStoredUser()
+        await leadsAPI.closeWithOpportunity(fromLead.id, result.id, user?.email, user?.name)
+        router.push(`/opportunities/${result.id}`)
+        return
+      }
+      if (duplicateFrom && !opportunity) { router.push(`/opportunities/${result.id}`); return }
       // rfp_id is only present when this save just auto-created a new RFP (status flipped
       // to "RFP Ongoing" for the first time) — send the user straight there to finish setting
       // it up, instead of the normal reload-and-close.
@@ -141,7 +156,7 @@ export function OpportunityModal({ opportunity, initialCompanyId, initialPartner
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '680px' }}>
         <div className="modal-header">
-          <h2 style={{ fontSize: '15px', fontWeight: '700', color: '#144766' }}>{opportunity ? 'Edit Opportunity' : 'New Opportunity'}</h2>
+          <h2 style={{ fontSize: '15px', fontWeight: '700', color: '#144766' }}>{opportunity ? 'Edit Opportunity' : fromLead ? 'Create Opportunity from Lead' : duplicateFrom ? 'Duplicate Opportunity' : 'New Opportunity'}</h2>
           <button onClick={onClose} style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: '20px', color: '#9B9B9B', lineHeight: 1 }}>×</button>
         </div>
         <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
@@ -321,7 +336,7 @@ export function OpportunityModal({ opportunity, initialCompanyId, initialPartner
         </div>
         <div className="modal-footer">
           <button className="btn-secondary" onClick={onClose}>Cancel</button>
-          <button className="btn-primary" onClick={handleSave} disabled={saving}>{saving ? 'Saving...' : opportunity ? 'Save Changes' : 'Create Opportunity'}</button>
+          <button className="btn-primary" onClick={handleSave} disabled={saving}>{saving ? 'Saving...' : opportunity ? 'Save Changes' : fromLead ? 'Create Opportunity & Close Lead' : 'Create Opportunity'}</button>
         </div>
       </div>
     </div>

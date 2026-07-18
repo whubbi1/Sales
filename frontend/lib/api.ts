@@ -160,6 +160,8 @@ export const leadsAPI = {
   create: (d: any) => fetchAPI('/leads/', { method: 'POST', body: JSON.stringify(d) }),
   update: (id: string, d: any) => fetchAPI(`/leads/${id}`, { method: 'PUT', body: JSON.stringify(d) }),
   delete: (id: string) => fetchAPI(`/leads/${id}`, { method: 'DELETE' }),
+  closeWithOpportunity: (id: string, opportunityId: string, changedByEmail?: string, changedByName?: string) =>
+    fetchAPI(`/leads/${id}/close-with-opportunity`, { method: 'POST', body: JSON.stringify({ opportunity_id: opportunityId, changed_by_email: changedByEmail, changed_by_name: changedByName }) }),
 
   getActivityLog: (id: string) => fetchAPI(`/leads/${id}/activity-log`),
 
@@ -178,7 +180,6 @@ export const opportunitiesAPI = {
   create: (d: any) => fetchAPI('/opportunities/', { method: 'POST', body: JSON.stringify(d) }),
   update: (id: string, d: any) => fetchAPI(`/opportunities/${id}`, { method: 'PUT', body: JSON.stringify(d) }),
   delete: (id: string) => fetchAPI(`/opportunities/${id}`, { method: 'DELETE' }),
-  duplicate: (id: string) => fetchAPI(`/opportunities/${id}/duplicate`, { method: 'POST' }),
 
   getStaffing:    (id: string) => fetchAPI(`/opportunities/${id}/staffing/`),
   addStaffing:    (id: string, d: any) => fetchAPI(`/opportunities/${id}/staffing/`, { method: 'POST', body: JSON.stringify(d) }),

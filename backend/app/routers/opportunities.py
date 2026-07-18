@@ -5,6 +5,7 @@ from sqlalchemy import select, or_, text
 from sqlalchemy.orm import selectinload
 from typing import List
 from uuid import UUID, uuid4
+from datetime import datetime
 
 from app.database import get_db
 from app.models.opportunity import Opportunity
@@ -66,6 +67,53 @@ def _apply_daily_invoicing_amount(opp: Opportunity):
     # keeps it always equal to days x rate rather than letting the two drift apart.
     if opp.project_status == 'Daily Invoicing' and opp.invoice_days is not None and opp.daily_rate is not None:
         opp.deal_amount = opp.invoice_days * opp.daily_rate
+
+
+def _months_between(start, end):
+    if not start or not end:
+        return []
+    months = []
+    cur = datetime(start.year, start.month, 1)
+    last = datetime(end.year, end.month, 1)
+    while cur <= last:
+        months.append(cur)
+        cur = datetime(cur.year + 1, 1, 1) if cur.month == 12 else datetime(cur.year, cur.month + 1, 1)
+    return months
+
+
+async def _sync_staffing_from_consultants(db: AsyncSession, opp: Opportunity):
+    # Every assigned consultant gets a staffing row if they don't already have one —
+    # removing someone from the assigned list here does NOT delete their existing
+    # staffing entry, that stays a deliberate, separate action in the Staffing tab.
+    consultants = [c for c in (opp.assigned_consultants or []) if c.get('email')]
+    if not consultants:
+        return
+
+    r = await db.execute(select(OpportunityStaffing).where(OpportunityStaffing.opportunity_id == opp.id))
+    existing_emails = {s.user_email for s in r.scalars().all()}
+    for c in consultants:
+        if c['email'] not in existing_emails:
+            db.add(OpportunityStaffing(opportunity_id=opp.id, user_email=c['email'], user_name=c.get('name') or c['email']))
+    await db.flush()
+
+    # Daily Invoicing — the total invoiced days are split evenly across every assigned
+    # consultant and every month of the contract period, so the staffing plan always
+    # reflects what was actually quoted.
+    if opp.project_status == 'Daily Invoicing' and opp.invoice_days:
+        months = _months_between(opp.contract_start_date, opp.contract_end_date)
+        if months:
+            per_person_days = opp.invoice_days / len(consultants)
+            per_month_days = round(per_person_days / len(months), 2)
+            r2 = await db.execute(
+                select(OpportunityStaffing).options(selectinload(OpportunityStaffing.months))
+                .where(OpportunityStaffing.opportunity_id == opp.id)
+            )
+            by_email = {s.user_email: s for s in r2.scalars().all()}
+            for c in consultants:
+                row = by_email.get(c['email'])
+                if row:
+                    row.months = [OpportunityStaffingMonth(month=m, days=per_month_days) for m in months]
+    await db.commit()
 
 
 async def _lookup_names(db: AsyncSession, company_id, partner_id):
@@ -155,42 +203,9 @@ async def create_opportunity(opp: OpportunityCreate, db: AsyncSession = Depends(
     await db.commit()
     new_rfp_id = await _maybe_create_rfp(db, db_opp)
     await _maybe_create_project(db, db_opp)
+    await _sync_staffing_from_consultants(db, db_opp)
     r = await db.execute(select(Opportunity).options(selectinload(Opportunity.company), selectinload(Opportunity.contacts)).where(Opportunity.id == db_opp.id))
     row = r.scalar_one()
-    await _attach_partners(db, [row])
-    await _attach_contracting_party(db, [row])
-    row.rfp_id = new_rfp_id
-    return row
-
-@router.post("/{opportunity_id}/duplicate", response_model=OpportunityResponse, status_code=status.HTTP_201_CREATED)
-async def duplicate_opportunity(opportunity_id: UUID, db: AsyncSession = Depends(get_db)):
-    r = await db.execute(select(Opportunity).options(selectinload(Opportunity.contacts)).where(Opportunity.id == opportunity_id))
-    opp = r.scalar_one_or_none()
-    if not opp:
-        raise HTTPException(status_code=404, detail="Opportunity not found")
-
-    # Same data everywhere except identity columns — deal_id is freshly generated, the
-    # rest (including deal_status/project_status) is copied verbatim, so the usual
-    # RFP/Project auto-create rules apply exactly as they would on a freshly-entered
-    # Opportunity in the same state.
-    data = {c.name: getattr(opp, c.name) for c in Opportunity.__table__.columns if c.name not in ('id', 'deal_id', 'created_at', 'updated_at')}
-    data['deal_id'] = await next_internal_id(db, 'opportunity_deal_id_seq', 'OPP')
-    new_opp = Opportunity(**data)
-    new_opp.contacts = list(opp.contacts)
-    db.add(new_opp)
-    await db.commit()
-
-    r2 = await db.execute(select(OpportunityStaffing).options(selectinload(OpportunityStaffing.months)).where(OpportunityStaffing.opportunity_id == opportunity_id))
-    for s in r2.scalars().all():
-        new_staffing = OpportunityStaffing(opportunity_id=new_opp.id, user_email=s.user_email, user_name=s.user_name, role=s.role)
-        new_staffing.months = [OpportunityStaffingMonth(month=m.month, days=m.days) for m in s.months]
-        db.add(new_staffing)
-    await db.commit()
-
-    new_rfp_id = await _maybe_create_rfp(db, new_opp)
-    await _maybe_create_project(db, new_opp)
-    r3 = await db.execute(select(Opportunity).options(selectinload(Opportunity.company), selectinload(Opportunity.contacts)).where(Opportunity.id == new_opp.id))
-    row = r3.scalar_one()
     await _attach_partners(db, [row])
     await _attach_contracting_party(db, [row])
     row.rfp_id = new_rfp_id
@@ -233,6 +248,7 @@ async def update_opportunity(opportunity_id: UUID, data: OpportunityUpdate, db: 
     await db.commit()
     new_rfp_id = await _maybe_create_rfp(db, opp)
     await _maybe_create_project(db, opp)
+    await _sync_staffing_from_consultants(db, opp)
     r = await db.execute(select(Opportunity).options(selectinload(Opportunity.company), selectinload(Opportunity.contacts)).where(Opportunity.id == opportunity_id))
     row = r.scalar_one()
     await _attach_partners(db, [row])

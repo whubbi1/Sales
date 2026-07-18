@@ -71,7 +71,7 @@ export default function OpportunityDetailPage() {
   const [showDelete, setShowDelete] = useState(false)
   const [deleteConfirm, setDeleteConfirm] = useState('')
   const [deleting, setDeleting] = useState(false)
-  const [duplicating, setDuplicating] = useState(false)
+  const [showDuplicate, setShowDuplicate] = useState(false)
 
   const [users, setUsers] = useState<any[]>([])
   const [staffing, setStaffing] = useState<any[]>([])
@@ -154,17 +154,6 @@ export default function OpportunityDetailPage() {
     await opportunitiesAPI.update(opp.id, { [field]: value || null })
     setOpp((o: any) => ({ ...o, [field]: value || null }))
     setEditingDateField(null)
-  }
-
-  const duplicateOpportunity = async () => {
-    setDuplicating(true)
-    try {
-      const copy = await opportunitiesAPI.duplicate(opp.id)
-      router.push(`/opportunities/${copy.id}`)
-    } catch (e: any) {
-      alert(e.message)
-      setDuplicating(false)
-    }
   }
 
   const saveSharepointUrl = async () => {
@@ -268,7 +257,7 @@ export default function OpportunityDetailPage() {
           </div>
           <div style={{ display: 'flex', gap: '8px' }}>
             <button onClick={() => setShowEdit(true)} style={{ background: 'white', color: '#144766', padding: '7px 14px', borderRadius: '7px', fontSize: '12px', fontWeight: '600', border: '1.5px solid #CBD5E0', cursor: 'pointer' }}>Edit</button>
-            <button onClick={duplicateOpportunity} disabled={duplicating} style={{ background: 'white', color: '#144766', padding: '7px 14px', borderRadius: '7px', fontSize: '12px', fontWeight: '600', border: '1.5px solid #CBD5E0', cursor: duplicating ? 'default' : 'pointer', opacity: duplicating ? 0.6 : 1 }}>{duplicating ? 'Duplicating…' : 'Duplicate'}</button>
+            <button onClick={() => setShowDuplicate(true)} style={{ background: 'white', color: '#144766', padding: '7px 14px', borderRadius: '7px', fontSize: '12px', fontWeight: '600', border: '1.5px solid #CBD5E0', cursor: 'pointer' }}>Duplicate</button>
             <button onClick={() => { setDeleteConfirm(''); setShowDelete(true) }} style={{ background: 'white', color: '#DC2626', padding: '7px 14px', borderRadius: '7px', fontSize: '12px', fontWeight: '600', border: '1.5px solid #FCA5A5', cursor: 'pointer' }}>Delete</button>
           </div>
         </div>
@@ -553,6 +542,7 @@ export default function OpportunityDetailPage() {
     <>
       <RecordLayout leftColumn={leftColumn} rightColumn={rightColumn} />
       {showEdit && <OpportunityModal opportunity={opp} onClose={() => setShowEdit(false)} onSave={() => { setShowEdit(false); load() }} />}
+      {showDuplicate && <OpportunityModal duplicateFrom={opp} onClose={() => setShowDuplicate(false)} onSave={() => setShowDuplicate(false)} />}
       {showTaskModal && (
         <TaskModal
           task={editingTask}

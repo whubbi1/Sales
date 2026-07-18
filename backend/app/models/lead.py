@@ -48,8 +48,13 @@ class Lead(Base):
         name='lead_status_enum'
     ), default='Open')
 
-    # Set once the "Create an Opportunity" status has fired, so it never fires twice.
+    # Set once an Opportunity has actually been created from this lead (see
+    # POST /leads/{id}/close-with-opportunity) — a lead reaching the "Create an
+    # Opportunity" status is only a stage, not itself a trigger.
     opportunity_id = Column(UUID(as_uuid=True), ForeignKey("opportunities.id", ondelete="SET NULL"), nullable=True)
+    # Stamped the moment status becomes 'Closed'; a closed lead can never be reopened,
+    # so this is set exactly once.
+    closed_at      = Column(DateTime, nullable=True)
 
     assigned_to       = Column(String(255))
     assigned_to_email = Column(String(255))
