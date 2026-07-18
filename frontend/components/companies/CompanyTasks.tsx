@@ -8,7 +8,7 @@ const P_BG: Record<string,string> = { low:'#F0FDF4', medium:'#FFFBEB', high:'#FE
 const S_NEXT: Record<string,string> = { todo:'in_progress', in_progress:'done', done:'todo' }
 const S_LABEL: Record<string,string> = { todo:'To do', in_progress:'In progress', done:'Done' }
 
-export function CompanyTasks({ companyId }: { companyId: string }) {
+export function CompanyTasks({ companyId, onChange }: { companyId: string; onChange?: () => void }) {
   const [tasks, setTasks] = useState<any[]>([])
   const [showForm, setShowForm] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -18,7 +18,7 @@ export function CompanyTasks({ companyId }: { companyId: string }) {
   const handleAdd = async () => {
     if (!form.title) return
     setSaving(true)
-    try { await companiesAPI.createTask(companyId, form); setForm({ title: '', description: '', due_date: '', priority: 'medium', status: 'todo', assigned_to: '' }); setShowForm(false); load() }
+    try { await companiesAPI.createTask(companyId, form); setForm({ title: '', description: '', due_date: '', priority: 'medium', status: 'todo', assigned_to: '' }); setShowForm(false); load(); onChange?.() }
     finally { setSaving(false) }
   }
   const isOverdue = (d: string) => d && new Date(d) < new Date()
@@ -57,7 +57,7 @@ export function CompanyTasks({ companyId }: { companyId: string }) {
                     {task.assigned_to && <span>· {task.assigned_to}</span>}
                   </div>
                 </div>
-                <button onClick={() => companiesAPI.deleteTask(companyId, task.id).then(load)} style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#9B9B9B', fontSize: '16px', lineHeight: 1 }}>×</button>
+                <button onClick={() => companiesAPI.deleteTask(companyId, task.id).then(() => { load(); onChange?.() })} style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#9B9B9B', fontSize: '16px', lineHeight: 1 }}>×</button>
               </div>
             )
           })}

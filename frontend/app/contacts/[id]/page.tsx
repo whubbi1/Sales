@@ -107,7 +107,7 @@ export default function ContactDetailPage() {
               <ActivityFeed opportunities={opportunities} notes={notes} opportunityHref={o => `/opportunities/${o.id}`} />
             </div>
           )}
-          {tab === 'Notes' && <ContactNotes contactId={id as string} />}
+          {tab === 'Notes' && <ContactNotes contactId={id as string} onChange={() => contactsAPI.getNotes(id as string).then(setNotes)} />}
           {tab === 'Articles' && <ContactArticles contactId={id as string} />}
           {tab === 'Opportunities' && (
             <div>

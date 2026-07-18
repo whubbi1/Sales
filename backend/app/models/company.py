@@ -43,6 +43,7 @@ class Company(Base):
     services_provided       = Column(JSONB, default=dict)
     logo_url        = Column(Text)  # s3://bucket/key ref, resolved to a presigned URL on read
     linkedin_url    = Column(String(500))
+    employee_count  = Column(Integer)
     notes           = Column(Text)
     assigned_to     = Column(String(255))                   # display name of the assigned wcomply employee
     assigned_to_email = Column(String(255))

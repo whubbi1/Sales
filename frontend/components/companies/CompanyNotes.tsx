@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react'
 import { companiesAPI } from '@/lib/api'
 import { EmptyState } from '@/components/shared/RecordLayout'
 
-export function CompanyNotes({ companyId }: { companyId: string }) {
+export function CompanyNotes({ companyId, onChange }: { companyId: string; onChange?: () => void }) {
   const [notes, setNotes] = useState<any[]>([])
   const [newNote, setNewNote] = useState('')
   const [saving, setSaving] = useState(false)
@@ -12,7 +12,7 @@ export function CompanyNotes({ companyId }: { companyId: string }) {
   const handleAdd = async () => {
     if (!newNote.trim()) return
     setSaving(true)
-    try { await companiesAPI.createNote(companyId, { content: newNote }); setNewNote(''); load() }
+    try { await companiesAPI.createNote(companyId, { content: newNote }); setNewNote(''); load(); onChange?.() }
     finally { setSaving(false) }
   }
   return (
@@ -27,7 +27,7 @@ export function CompanyNotes({ companyId }: { companyId: string }) {
             <div key={note.id} style={{ background: '#FFFCF0', border: '1px solid #FDE68A', borderLeft: '4px solid #e97132', borderRadius: '8px', padding: '12px 14px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                 <p style={{ fontSize: '13px', color: '#3F3F3F', lineHeight: '1.7', flex: 1, whiteSpace: 'pre-wrap', margin: 0 }}>{note.content}</p>
-                <button onClick={() => companiesAPI.deleteNote(companyId, note.id).then(load)} style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#9B9B9B', fontSize: '16px', marginLeft: '10px', lineHeight: 1 }}>×</button>
+                <button onClick={() => companiesAPI.deleteNote(companyId, note.id).then(() => { load(); onChange?.() })} style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#9B9B9B', fontSize: '16px', marginLeft: '10px', lineHeight: 1 }}>×</button>
               </div>
               <p style={{ fontSize: '10px', color: '#9B9B9B', marginTop: '6px', margin: '6px 0 0' }}>{new Date(note.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })}{note.created_by && ` · ${note.created_by}`}</p>
             </div>

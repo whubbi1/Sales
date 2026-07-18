@@ -36,6 +36,7 @@ class CompanyBase(BaseModel):
     services_provided: Optional[Dict[str, List[str]]] = {}
     logo_url: Optional[str] = None
     linkedin_url: Optional[str] = None
+    employee_count: Optional[int] = None
     notes: Optional[str] = None
     assigned_to: Optional[str] = None
     assigned_to_email: Optional[str] = None

@@ -1,7 +1,7 @@
 'use client'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import { partnersAPI, contactsAPI, opportunitiesAPI } from '@/lib/api'
+import { partnersAPI, contactsAPI } from '@/lib/api'
 import { getStoredUser } from '@/lib/auth'
 import { RecordLayout, PropertyRow, SidebarSection, SidebarCard, StatusBadge, TabNav, EmptyState } from '@/components/shared/RecordLayout'
 import { PartnerActionItems } from '@/components/partners/PartnerActionItems'
@@ -61,36 +61,38 @@ export default function PartnerDetailPage() {
   const [leads, setLeads] = useState<any[]>([])
   const [comments, setComments] = useState<any[]>([])
   const [newComment, setNewComment] = useState('')
-  const [links, setLinks] = useState<any[]>([])
-  const [newLinkUrl, setNewLinkUrl] = useState('')
-  const [addingLink, setAddingLink] = useState(false)
   const [events, setEvents] = useState<any[]>([])
   const [actionItems, setActionItems] = useState<any[]>([])
   const [customers, setCustomers] = useState<any[]>([])
   const [allContacts, setAllContacts] = useState<any[]>([])
-  const [allOpportunities, setAllOpportunities] = useState<any[]>([])
-  const [linkContactId, setLinkContactId] = useState('')
-  const [linkOppId, setLinkOppId] = useState('')
   const [users, setUsers] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [tab, setTab] = useState('Overview')
   const [editing, setEditing] = useState<string | null>(null)
   const [chipEditing, setChipEditing] = useState<string | null>(null)
   const [showEdit, setShowEdit] = useState(false)
+  const [uploadingLogo, setUploadingLogo] = useState(false)
+  const logoInputRef = useRef<HTMLInputElement>(null)
+
+  const uploadLogo = async (file: File) => {
+    setUploadingLogo(true)
+    try {
+      const { logo_url } = await partnersAPI.uploadLogo(id as string, file)
+      setPartner((p: any) => ({ ...p, logo_url }))
+    } finally { setUploadingLogo(false) }
+  }
 
   const load = async () => {
     try {
-      const [p, ctcts, opps, leadsRes, cmts, lnks, evts, custs, allC, allO, usersResp, actItems] = await Promise.all([
+      const [p, ctcts, opps, leadsRes, cmts, evts, custs, allC, usersResp, actItems] = await Promise.all([
         partnersAPI.get(id as string),
         partnersAPI.getContacts(id as string),
         partnersAPI.getOpportunities(id as string),
         partnersAPI.getLeads(id as string),
         partnersAPI.getComments(id as string),
-        partnersAPI.getLinks(id as string),
         partnersAPI.getEvents(id as string),
         partnersAPI.getCustomers(id as string),
         contactsAPI.list({}),
-        opportunitiesAPI.list({}),
         fetch('https://api.whubbi.wcomply.com/settings/users').then(r => r.json()).catch(() => ({ users: [] })),
         partnersAPI.getActionItems(id as string),
       ])
@@ -99,11 +101,9 @@ export default function PartnerDetailPage() {
       setOpportunities(opps)
       setLeads(leadsRes)
       setComments(cmts)
-      setLinks(lnks)
       setEvents(evts)
       setCustomers(custs)
       setAllContacts(allC)
-      setAllOpportunities(allO)
       setUsers(usersResp.users || [])
       setActionItems(actItems)
     } catch {
@@ -149,50 +149,6 @@ export default function PartnerDetailPage() {
     setComments(await partnersAPI.getComments(id as string))
   }
 
-  const addLink = async () => {
-    if (!newLinkUrl.trim()) return
-    setAddingLink(true)
-    try {
-      const user = getStoredUser()
-      await partnersAPI.addLink(id as string, { url: newLinkUrl.trim(), added_by_email: user?.email || '' })
-      setNewLinkUrl('')
-      setLinks(await partnersAPI.getLinks(id as string))
-    } finally { setAddingLink(false) }
-  }
-  const removeLink = async (l: any) => {
-    await partnersAPI.deleteLink(id as string, l.id)
-    setLinks(await partnersAPI.getLinks(id as string))
-  }
-
-  const linkContact = async () => {
-    if (!linkContactId) return
-    await contactsAPI.update(linkContactId, { partner_id: id as string })
-    setLinkContactId('')
-    setContacts(await partnersAPI.getContacts(id as string))
-    setAllContacts(await contactsAPI.list({}))
-  }
-  const unlinkContact = async (c: any) => {
-    await contactsAPI.update(c.id, { partner_id: null })
-    setContacts(await partnersAPI.getContacts(id as string))
-    setAllContacts(await contactsAPI.list({}))
-  }
-
-  const linkOpportunity = async () => {
-    if (!linkOppId) return
-    const opp = allOpportunities.find((o: any) => o.id === linkOppId)
-    const contact_ids = (opp?.contacts || []).map((c: any) => c.id)
-    await opportunitiesAPI.update(linkOppId, { partner_id: id as string, contact_ids })
-    setLinkOppId('')
-    setOpportunities(await partnersAPI.getOpportunities(id as string))
-    setAllOpportunities(await opportunitiesAPI.list({}))
-  }
-  const unlinkOpportunity = async (o: any) => {
-    const contact_ids = (o.contacts || []).map((c: any) => c.id)
-    await opportunitiesAPI.update(o.id, { partner_id: null, contact_ids })
-    setOpportunities(await partnersAPI.getOpportunities(id as string))
-    setAllOpportunities(await opportunitiesAPI.list({}))
-  }
-
   if (loading) return (
     <RecordLayout
       leftColumn={<div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '200px', color: '#9B9B9B' }}>Loading...</div>}
@@ -203,8 +159,6 @@ export default function PartnerDetailPage() {
   if (!partner) return null
 
   const color = '#7C3AED'
-  const linkableContacts = allContacts.filter((c: any) => c.partner_id !== id)
-  const linkableOpportunities = allOpportunities.filter((o: any) => o.partner_id !== id)
   const mainContactLabel = partner.main_contact_first_name ? `${partner.main_contact_first_name} ${partner.main_contact_last_name}` : ''
 
   const leftColumn = (
@@ -217,8 +171,16 @@ export default function PartnerDetailPage() {
       <div style={{ background: 'white', borderRadius: '10px', border: '1px solid #EDF2F7', padding: '20px', marginBottom: '16px', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
           <div style={{ display: 'flex', gap: '14px', alignItems: 'flex-start', flex: 1 }}>
-            <div style={{ width: '48px', height: '48px', borderRadius: '10px', background: color, color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px', fontWeight: '800', flexShrink: 0 }}>
-              {partner.name[0]?.toUpperCase()}
+            <div onClick={() => logoInputRef.current?.click()} title="Click to change logo"
+              style={{ width: '48px', height: '48px', borderRadius: '10px', background: partner.logo_url ? 'white' : color, color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px', fontWeight: '800', flexShrink: 0, cursor: 'pointer', overflow: 'hidden', border: partner.logo_url ? '1px solid #EDF2F7' : 'none', position: 'relative' }}>
+              {uploadingLogo ? (
+                <span style={{ fontSize: '9px', color: partner.logo_url ? '#9B9B9B' : 'white' }}>...</span>
+              ) : partner.logo_url ? (
+                <img src={partner.logo_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+              ) : (
+                partner.name[0]?.toUpperCase()
+              )}
+              <input ref={logoInputRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={e => { const f = e.target.files?.[0]; if (f) uploadLogo(f); e.target.value = '' }} />
             </div>
             <div style={{ flex: 1 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginBottom: '4px' }}>
@@ -276,7 +238,7 @@ export default function PartnerDetailPage() {
 
       <div style={{ background: 'white', borderRadius: '10px', border: '1px solid #EDF2F7', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
         <div style={{ padding: '0 20px', background: '#FAFBFC', borderBottom: '2px solid #E2E8F0' }}>
-          <TabNav tabs={['Overview', 'Notes', 'Contacts', 'Opportunities', 'Action List', 'Events', 'Information', 'Articles', 'Customers']} active={tab} onChange={setTab} />
+          <TabNav tabs={['Overview', 'Notes', 'Action List', 'Events', 'Articles', 'Customers']} active={tab} onChange={setTab} />
         </div>
         <div style={{ padding: '20px' }}>
           {tab === 'Overview' && (
@@ -319,56 +281,6 @@ export default function PartnerDetailPage() {
             </div>
           )}
 
-          {tab === 'Contacts' && (
-            <div>
-              <div style={{ display: 'flex', gap: '8px', marginBottom: '14px' }}>
-                <select className="form-input" style={{ flex: 1 }} value={linkContactId} onChange={e => setLinkContactId(e.target.value)}>
-                  <option value="">Link an existing contact…</option>
-                  {linkableContacts.map((c: any) => <option key={c.id} value={c.id}>{c.first_name} {c.last_name}</option>)}
-                </select>
-                <button className="btn-primary" onClick={linkContact} disabled={!linkContactId}>Link</button>
-              </div>
-              {contacts.length === 0 ? <p style={{ fontSize: '12px', color: '#9B9B9B' }}>No contacts yet.</p> : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  {contacts.map((c: any) => (
-                    <div key={c.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 12px', border: '1px solid #EDF2F7', borderRadius: '8px' }}>
-                      <a href={`/contacts/${c.id}`} style={{ textDecoration: 'none', display: 'flex', flexDirection: 'column' }}>
-                        <span style={{ fontSize: '13px', fontWeight: '600', color: '#156082' }}>{c.first_name} {c.last_name}</span>
-                        <span style={{ fontSize: '11px', color: '#9B9B9B' }}>{c.job_type || c.email || ''}</span>
-                      </a>
-                      <button onClick={() => unlinkContact(c)} style={{ padding: '5px 10px', background: '#FEF2F2', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '11px', color: '#DC2626', fontWeight: '700' }}>Unlink</button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-
-          {tab === 'Opportunities' && (
-            <div>
-              <div style={{ display: 'flex', gap: '8px', marginBottom: '14px' }}>
-                <select className="form-input" style={{ flex: 1 }} value={linkOppId} onChange={e => setLinkOppId(e.target.value)}>
-                  <option value="">Link an existing opportunity…</option>
-                  {linkableOpportunities.map((o: any) => <option key={o.id} value={o.id}>{o.deal_name}</option>)}
-                </select>
-                <button className="btn-primary" onClick={linkOpportunity} disabled={!linkOppId}>Link</button>
-              </div>
-              {opportunities.length === 0 ? <p style={{ fontSize: '12px', color: '#9B9B9B' }}>No opportunities yet.</p> : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  {opportunities.map((o: any) => (
-                    <div key={o.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 12px', border: '1px solid #EDF2F7', borderRadius: '8px' }}>
-                      <a href={`/opportunities/${o.id}`} style={{ textDecoration: 'none', display: 'flex', flexDirection: 'column' }}>
-                        <span style={{ fontSize: '13px', fontWeight: '600', color: '#156082' }}>{o.deal_name}</span>
-                        <span style={{ fontSize: '11px', color: '#9B9B9B' }}>{o.deal_status}</span>
-                      </a>
-                      <button onClick={() => unlinkOpportunity(o)} style={{ padding: '5px 10px', background: '#FEF2F2', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '11px', color: '#DC2626', fontWeight: '700' }}>Unlink</button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-
           {tab === 'Action List' && <PartnerActionItems partnerId={id as string} />}
 
           {tab === 'Events' && (
@@ -385,29 +297,6 @@ export default function PartnerDetailPage() {
                 ))}
               </div>
             )
-          )}
-
-          {tab === 'Information' && (
-            <div>
-              <div style={{ display: 'flex', gap: '8px', marginBottom: '14px' }}>
-                <input className="form-input" style={{ flex: 1 }} placeholder="Paste a link to an article…" value={newLinkUrl} onChange={e => setNewLinkUrl(e.target.value)} onKeyDown={e => e.key === 'Enter' && addLink()} />
-                <button className="btn-primary" onClick={addLink} disabled={addingLink || !newLinkUrl.trim()}>{addingLink ? 'Fetching…' : 'Add'}</button>
-              </div>
-              {links.length === 0 ? <p style={{ fontSize: '12px', color: '#9B9B9B' }}>No links yet.</p> : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  {links.map((l: any) => (
-                    <div key={l.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '10px 12px', border: '1px solid #EDF2F7', borderRadius: '8px' }}>
-                      <a href={l.url} target="_blank" rel="noopener" style={{ textDecoration: 'none', flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: '13px', fontWeight: '600', color: '#156082' }}>{l.title || l.url}</div>
-                        {l.description && <div style={{ fontSize: '11px', color: '#6B6B6B', marginTop: '2px' }}>{l.description}</div>}
-                        <div style={{ fontSize: '10px', color: '#9B9B9B', marginTop: '2px' }}>{l.url}</div>
-                      </a>
-                      <button onClick={() => removeLink(l)} style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#9B9B9B', fontSize: '16px', lineHeight: 1, flexShrink: 0 }}>×</button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
           )}
 
           {tab === 'Articles' && <PartnerArticles partnerId={id as string} />}
@@ -435,6 +324,7 @@ export default function PartnerDetailPage() {
         <PropertyRow label="Status" value={<StatusBadge value={partner.status} />} />
         <PropertyRow label="Sector" value={partner.sector} />
         <PropertyRow label="Country" value={partner.country} />
+        <PropertyRow label="Employees" value={partner.employee_count?.toLocaleString('en-US')} />
         <PropertyRow label="Main contact" value={mainContactLabel} />
         <PropertyRow label="Assigned to" value={
           <EditableSelect display={partner.assigned_to || '—'} value={partner.assigned_to_email} editing={editing === 'assigned_to_email'}

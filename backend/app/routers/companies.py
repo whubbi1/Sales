@@ -158,9 +158,10 @@ async def research(data: dict):
 
 # Must also come before /{company_id} for the same reason as dashboard-stats above.
 @router.post("/linkedin-enrich")
-async def linkedin_enrich_company(data: dict):
+async def linkedin_enrich_company(data: dict, db: AsyncSession = Depends(get_db)):
     import json
     url = (data.get("linkedin_url") or "").strip()
+    company_id = (data.get("company_id") or "").strip() or None
     if not url:
         raise HTTPException(status_code=400, detail="linkedin_url is required")
     prompt = f"""Look up the public LinkedIn company page at this URL: {url}
@@ -169,15 +170,37 @@ Return ONLY a valid JSON object with this exact structure (use null for anything
   "name": "the company's name",
   "sector": "their industry",
   "country": "the country of their headquarters",
-  "domain_names": ["their main website domain, no protocol, e.g. acme.com"]
+  "domain_names": ["their main website domain, no protocol, e.g. acme.com"],
+  "employee_count": your best-guess total employee count as a single integer (not a range string),
+  "logo_image_url": "a direct URL to the company's logo image if you can identify one, else null"
 }}
 Return ONLY the JSON, no markdown, no explanation."""
     text = await claude_web_search(prompt)
     try:
         cleaned = text.strip().replace("```json", "").replace("```", "").strip()
-        return json.loads(cleaned)
+        result = json.loads(cleaned)
     except (json.JSONDecodeError, ValueError):
         raise HTTPException(status_code=502, detail="Could not read company data from that LinkedIn URL")
+
+    # Best-effort: only when editing an existing company (we need an id for the S3 key),
+    # and only if it doesn't break the rest of the enrichment when it fails.
+    logo_image_url = result.pop("logo_image_url", None)
+    if company_id and logo_image_url:
+        try:
+            async with httpx.AsyncClient(timeout=15, follow_redirects=True) as client:
+                img_resp = await client.get(logo_image_url)
+            content_type = img_resp.headers.get("content-type", "")
+            if img_resp.status_code == 200 and content_type.startswith("image/"):
+                r = await db.execute(select(Company).where(Company.id == company_id))
+                company = r.scalar_one_or_none()
+                if company:
+                    logo_ref = await upload_to_s3(f"companies/{company_id}/logo", img_resp.content, content_type)
+                    company.logo_url = logo_ref
+                    await db.commit()
+                    result["logo_url"] = await s3_ref_to_presigned(logo_ref)
+        except Exception:
+            pass
+    return result
 
 @router.get("/{company_id}", response_model=CompanyResponse)
 async def get_company(company_id: UUID, db: AsyncSession = Depends(get_db)):
@@ -200,6 +223,41 @@ async def upload_company_logo(company_id: UUID, file: UploadFile = File(...), db
     company.logo_url = logo_ref
     await db.commit()
     return {"status": "ok", "logo_url": await s3_ref_to_presigned(logo_ref)}
+
+# Best-effort AI web search for people at this company holding one of the given job
+# functions — results are returned for review only, never written to the DB directly;
+# the frontend lets the user pick which (if any) to actually create as Contacts.
+@router.post("/{company_id}/linkedin-people-search")
+async def linkedin_people_search(company_id: UUID, data: dict, db: AsyncSession = Depends(get_db)):
+    import json
+    job_functions = data.get("job_functions") or []
+    if not job_functions:
+        raise HTTPException(status_code=400, detail="job_functions is required")
+    r = await db.execute(select(Company).where(Company.id == company_id))
+    company = r.scalar_one_or_none()
+    if not company:
+        raise HTTPException(status_code=404, detail="Company not found")
+
+    domains = ", ".join(company.domain_names or []) or "unknown domain"
+    functions_list = ", ".join(job_functions)
+    prompt = f"""Search LinkedIn for people currently working at the company "{company.name}" (website domain(s): {domains}) who hold one of these roles or functions: {functions_list}.
+Return ONLY a JSON array (no markdown, no prose) of up to 15 distinct people, each shaped exactly like this:
+{{"first_name": "...", "last_name": "...", "job_title": "...", "location": "...", "linkedin_url": "https://www.linkedin.com/in/..."}}
+Only include people you're reasonably confident are real, current employees with a real LinkedIn profile URL. If you can't find anyone for a given role, just omit it. Return ONLY the JSON array, nothing else."""
+    text_result = await claude_web_search(prompt)
+    try:
+        cleaned = text_result.strip().replace("```json", "").replace("```", "").strip()
+        results = json.loads(cleaned)
+        if not isinstance(results, list):
+            raise ValueError("not a list")
+    except (json.JSONDecodeError, ValueError):
+        raise HTTPException(status_code=502, detail="Could not read LinkedIn search results")
+
+    cleaned_results = [
+        item for item in results
+        if isinstance(item, dict) and item.get("first_name") and item.get("last_name") and item.get("linkedin_url")
+    ][:15]
+    return {"results": cleaned_results}
 
 @router.put("/{company_id}", response_model=CompanyResponse)
 async def update_company(company_id: UUID, data: CompanyUpdate, db: AsyncSession = Depends(get_db)):

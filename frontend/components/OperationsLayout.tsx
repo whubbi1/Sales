@@ -7,6 +7,7 @@ const API = 'https://api.whubbi.wcomply.com'
 
 const NAV = [
   { href: '/operations/projects', icon: '📁', label: 'Projects' },
+  { href: '/operations/internal-projects', icon: '🏠', label: 'Internal Projects' },
   { href: '/operations/licenses', icon: '🔑', label: 'Licenses' },
   { href: '/operations/staffing', icon: '👥', label: 'Staffing' },
   { href: '/operations/timesheets', icon: '🕒', label: 'Timesheets' },

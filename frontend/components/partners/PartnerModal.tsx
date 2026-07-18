@@ -29,6 +29,7 @@ export function PartnerModal({ partner, onClose, onSave }: any) {
     cybersecurity_solutions: partner?.cybersecurity_solutions || [],
     sap_hosting_partner: partner?.sap_hosting_partner || [],
     linkedin_url: partner?.linkedin_url || '',
+    employee_count: partner?.employee_count ?? '',
     notes: partner?.notes || '',
     assigned_to: partner?.assigned_to || '',
     assigned_to_email: partner?.assigned_to_email || '',
@@ -38,11 +39,34 @@ export function PartnerModal({ partner, onClose, onSave }: any) {
   const [error, setError] = useState('')
   const [contacts, setContacts] = useState<any[]>([])
   const [users, setUsers] = useState<any[]>([])
+  const [enriching, setEnriching] = useState(false)
+  const [enrichNote, setEnrichNote] = useState('')
 
   useEffect(() => {
     contactsAPI.list({}).then(setContacts).catch(() => {})
     fetch('https://api.whubbi.wcomply.com/settings/users').then(r => r.json()).then(d => setUsers(d.users || [])).catch(() => {})
   }, [])
+
+  // Fills in only whatever's currently empty — never overwrites something the user
+  // already typed. Same pattern as CompanyModal's LinkedIn enrichment.
+  const fetchFromLinkedIn = async () => {
+    const url = form.linkedin_url.trim()
+    if (!url) return
+    setEnriching(true); setEnrichNote('')
+    try {
+      const data = await partnersAPI.linkedinEnrich(url, partner?.id)
+      setForm(p => ({
+        ...p,
+        name: p.name || data.name || p.name,
+        sector: p.sector || data.sector || p.sector,
+        country: p.country || data.country || p.country,
+        domain_names: p.domain_names.length ? p.domain_names : (data.domain_names || []),
+        employee_count: p.employee_count !== '' ? p.employee_count : (data.employee_count ?? ''),
+      }))
+      if (data.logo_url) setEnrichNote('✓ Logo fetched from LinkedIn and saved.')
+    } catch (e: any) { setEnrichNote(e.message) }
+    finally { setEnriching(false) }
+  }
 
   const toggle = (field: string, value: string) => {
     setForm(p => ({ ...p, [field]: (p as any)[field].includes(value) ? (p as any)[field].filter((v: string) => v !== value) : [...(p as any)[field], value] }))
@@ -60,7 +84,7 @@ export function PartnerModal({ partner, onClose, onSave }: any) {
     if (!form.name.trim()) { setError('Partner name is required'); return }
     setSaving(true); setError('')
     try {
-      const payload = { ...form, main_contact_id: form.main_contact_id || null }
+      const payload = { ...form, main_contact_id: form.main_contact_id || null, employee_count: form.employee_count === '' ? null : Number(form.employee_count) }
       if (partner) { await partnersAPI.update(partner.id, payload) }
       else { await partnersAPI.create(payload) }
       onSave()
@@ -101,6 +125,9 @@ export function PartnerModal({ partner, onClose, onSave }: any) {
               <FormField label="Country">
                 <input className="form-input" value={form.country} onChange={e => setForm(p => ({ ...p, country: e.target.value }))} placeholder="Belgium" />
               </FormField>
+              <FormField label="Employees">
+                <input className="form-input" type="number" min={0} value={form.employee_count} onChange={e => setForm(p => ({ ...p, employee_count: e.target.value }))} placeholder="e.g. 250" />
+              </FormField>
               <FormField label="Status">
                 <select className="form-input" value={form.status} onChange={e => setForm(p => ({ ...p, status: e.target.value }))}>
                   <option value="active">Active</option><option value="inactive">Inactive</option>
@@ -134,7 +161,13 @@ export function PartnerModal({ partner, onClose, onSave }: any) {
           </div>
 
           <FormField label="LinkedIn Company Page">
-            <input className="form-input" value={form.linkedin_url} onChange={e => setForm(p => ({ ...p, linkedin_url: e.target.value }))} placeholder="https://linkedin.com/company/..." />
+            <div style={{ display: 'flex', gap: '6px' }}>
+              <input className="form-input" style={{ flex: 1 }} value={form.linkedin_url} onChange={e => setForm(p => ({ ...p, linkedin_url: e.target.value }))} placeholder="https://linkedin.com/company/..." />
+              <button type="button" className="btn-secondary" onClick={fetchFromLinkedIn} disabled={!form.linkedin_url.trim() || enriching} style={{ whiteSpace: 'nowrap' }}>
+                {enriching ? 'Fetching…' : partner ? '↻ Update from LinkedIn' : '⬇ Fetch from LinkedIn'}
+              </button>
+            </div>
+            {enrichNote && <p style={{ fontSize: '11px', color: '#D97706', margin: '6px 0 0' }}>{enrichNote}</p>}
           </FormField>
 
           {[

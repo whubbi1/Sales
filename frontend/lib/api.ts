@@ -40,7 +40,9 @@ export const companiesAPI = {
   getOpportunities:(id: string) => fetchAPI(`/companies/${id}/opportunities`),
   dashboardStats:  () => fetchAPI(`/companies/dashboard-stats`),
   research:        (prompt: string) => fetchAPI(`/companies/research`, { method: 'POST', body: JSON.stringify({ prompt }) }),
-  linkedinEnrich:  (linkedin_url: string) => fetchAPI(`/companies/linkedin-enrich`, { method: 'POST', body: JSON.stringify({ linkedin_url }) }),
+  linkedinEnrich:  (linkedin_url: string, company_id?: string) => fetchAPI(`/companies/linkedin-enrich`, { method: 'POST', body: JSON.stringify({ linkedin_url, company_id }) }),
+
+  searchLinkedInPeople: (companyId: string, jobFunctions: string[]) => fetchAPI(`/companies/${companyId}/linkedin-people-search`, { method: 'POST', body: JSON.stringify({ job_functions: jobFunctions }) }),
 
   getNotes:    (id: string) => fetchAPI(`/companies/${id}/notes`),
   createNote:  (id: string, d: any) => fetchAPI(`/companies/${id}/notes`, { method: 'POST', body: JSON.stringify(d) }),
@@ -95,6 +97,15 @@ export const partnersAPI = {
 
   getEvents:    (id: string) => fetchAPI(`/partners/${id}/events`),
   getCustomers: (id: string) => fetchAPI(`/partners/${id}/customers`),
+
+  linkedinEnrich: (linkedin_url: string, partner_id?: string) => fetchAPI(`/partners/linkedin-enrich`, { method: 'POST', body: JSON.stringify({ linkedin_url, partner_id }) }),
+  uploadLogo: async (id: string, file: File) => {
+    const fd = new FormData()
+    fd.append('file', file)
+    const res = await fetch(`${API_URL}/partners/${id}/logo`, { method: 'POST', body: fd })
+    if (!res.ok) { const err = await res.json().catch(() => ({})); throw new Error(err.detail || 'Upload failed') }
+    return res.json()
+  },
 }
 
 // ─── Marketing ────────────────────────────────────────────────────────────────

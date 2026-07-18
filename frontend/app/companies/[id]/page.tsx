@@ -10,6 +10,7 @@ import { CompanyArticles } from '@/components/companies/CompanyArticles'
 import { CompanyTasks } from '@/components/companies/CompanyTasks'
 import { CompanyServices } from '@/components/companies/CompanyServices'
 import { ActivityFeed } from '@/components/shared/ActivityFeed'
+import { LinkedInContactSearchModal } from '@/components/companies/LinkedInContactSearchModal'
 
 const LEVEL_COLORS: Record<number, string> = { 1: '#144766', 2: '#1a5a84', 3: '#219BD6', 4: '#7DD3F0' }
 const LEVEL_LABELS: Record<number, string> = { 1: 'Group', 2: 'Parent', 3: 'Child', 4: 'Sub-Child' }
@@ -34,6 +35,7 @@ export default function CompanyDetailPage() {
   const [searchType, setSearchType] = useState('')
   const [uploadingLogo, setUploadingLogo] = useState(false)
   const logoInputRef = useRef<HTMLInputElement>(null)
+  const [showLinkedInSearch, setShowLinkedInSearch] = useState(false)
 
   const uploadLogo = async (file: File) => {
     setUploadingLogo(true)
@@ -148,6 +150,7 @@ export default function CompanyDetailPage() {
             </div>
           </div>
           <div style={{ display: 'flex', gap: '8px' }}>
+            <button onClick={() => setShowLinkedInSearch(true)} style={{ background: 'white', color: '#144766', padding: '7px 14px', borderRadius: '7px', fontSize: '12px', fontWeight: '600', border: '1.5px solid #CBD5E0', cursor: 'pointer' }}>🔍 Find Contacts on LinkedIn</button>
             <button onClick={() => setShowEdit(true)} style={{ background: 'white', color: '#144766', padding: '7px 14px', borderRadius: '7px', fontSize: '12px', fontWeight: '600', border: '1.5px solid #CBD5E0', cursor: 'pointer' }}>Edit</button>
             <button onClick={() => { setDeleteConfirm(''); setShowDelete(true) }} style={{ background: 'white', color: '#DC2626', padding: '7px 14px', borderRadius: '7px', fontSize: '12px', fontWeight: '600', border: '1.5px solid #FCA5A5', cursor: 'pointer' }}>Delete</button>
           </div>
@@ -231,9 +234,9 @@ export default function CompanyDetailPage() {
             </div>
           )}
           {tab === 'Services' && <CompanyServices companyId={id as string} />}
-          {tab === 'Notes' && <CompanyNotes companyId={id as string} />}
+          {tab === 'Notes' && <CompanyNotes companyId={id as string} onChange={() => companiesAPI.getNotes(id as string).then(setNotes)} />}
           {tab === 'Articles' && <CompanyArticles companyId={id as string} />}
-          {tab === 'Tasks' && <CompanyTasks companyId={id as string} />}
+          {tab === 'Tasks' && <CompanyTasks companyId={id as string} onChange={() => companiesAPI.getTasks(id as string).then(setTasks)} />}
         </div>
       </div>
     </div>
@@ -246,6 +249,7 @@ export default function CompanyDetailPage() {
         <PropertyRow label="Level" value={LEVEL_LABELS[company.level]} />
         <PropertyRow label="Sector" value={company.sector} />
         <PropertyRow label="Country" value={company.country} />
+        <PropertyRow label="Employees" value={company.employee_count?.toLocaleString('en-US')} />
         <PropertyRow label="Assigned to" value={company.assigned_to} />
         <PropertyRow label="Created" value={new Date(company.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} />
       </SidebarSection>
@@ -280,6 +284,7 @@ export default function CompanyDetailPage() {
     <>
       <RecordLayout leftColumn={leftColumn} rightColumn={rightColumn} />
       {showEdit && <CompanyModal company={company} companies={allCompanies} onClose={() => setShowEdit(false)} onSave={() => { setShowEdit(false); load() }} />}
+      {showLinkedInSearch && <LinkedInContactSearchModal companyId={id as string} onClose={() => setShowLinkedInSearch(false)} onCreated={() => { setShowLinkedInSearch(false); load() }} />}
       {showDelete && (
         <div className="modal-overlay" onClick={() => setShowDelete(false)}>
           <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '420px' }}>

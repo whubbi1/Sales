@@ -1,11 +1,13 @@
 # backend/app/routers/partners.py
 # Partners — same information as a Company, plus flat action items (each targeting a
 # company/contact with an owner; an internal wcomply owner auto-creates a Task Manager task).
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
 from app.database import get_db
 from app.services.ids import next_internal_id
+from app.routers.hr import upload_to_s3, s3_ref_to_presigned
+from app.routers.companies import claude_web_search
 import uuid, json, re, html
 import httpx
 
@@ -13,8 +15,8 @@ router = APIRouter()
 
 PARTNER_FIELDS = [
     "name", "contact_name", "main_contact_id", "domain_names", "phone", "sector", "country", "status",
-    "main_erp", "cybersecurity_solutions", "sap_hosting_partner", "linkedin_url", "notes",
-    "assigned_to", "assigned_to_email",
+    "main_erp", "cybersecurity_solutions", "sap_hosting_partner", "linkedin_url", "employee_count", "logo_url",
+    "notes", "assigned_to", "assigned_to_email",
 ]
 
 _PARTNER_SELECT = """
@@ -30,7 +32,18 @@ def _row(d: dict) -> dict:
     return d
 
 
+async def _attach_logo(partner: dict):
+    # Mirrors companies.py's _attach_logos — resolves the stored s3:// ref to a presigned
+    # URL for reading only, never re-persisted.
+    if partner.get("logo_url") and partner["logo_url"].startswith("s3://"):
+        partner["logo_url"] = await s3_ref_to_presigned(partner["logo_url"])
+    return partner
+
+
 async def _get_partner(db: AsyncSession, partner_id: str) -> dict | None:
+    # Raw (s3:// ref, not presigned) — used both to return read responses (after
+    # _attach_logo) and to seed update_partner's merge, where it must stay the durable
+    # ref rather than an expiring presigned URL that would otherwise get written back.
     r = await db.execute(text(f"{_PARTNER_SELECT} WHERE p.id = CAST(:id AS UUID)"), {"id": partner_id})
     row = r.fetchone()
     return _row(dict(row._mapping)) if row else None
@@ -45,7 +58,7 @@ async def list_partners(search: str = None, db: AsyncSession = Depends(get_db)):
         where = "WHERE p.name ILIKE :q OR p.contact_name ILIKE :q"
         params["q"] = f"%{search}%"
     r = await db.execute(text(f"{_PARTNER_SELECT} {where} ORDER BY p.name"), params)
-    return [_row(dict(row._mapping)) for row in r.fetchall()]
+    return [await _attach_logo(_row(dict(row._mapping))) for row in r.fetchall()]
 
 
 @router.post("/")
@@ -56,12 +69,12 @@ async def create_partner(data: dict, db: AsyncSession = Depends(get_db)):
     internal_id = await next_internal_id(db, 'partner_internal_id_seq', 'PTN')
     await db.execute(text("""
         INSERT INTO partners (id, internal_id, name, contact_name, main_contact_id, domain_names, phone, sector, country, status,
-                               main_erp, cybersecurity_solutions, sap_hosting_partner, linkedin_url, notes,
+                               main_erp, cybersecurity_solutions, sap_hosting_partner, linkedin_url, employee_count, logo_url, notes,
                                assigned_to, assigned_to_email, created_at, updated_at)
         VALUES (CAST(:id AS UUID), :internal_id, :name, :contact_name, CAST(NULLIF(:main_contact_id,'') AS UUID),
                 CAST(:domain_names AS JSONB), :phone, :sector, :country, :status,
                 CAST(:main_erp AS JSONB), CAST(:cybersecurity_solutions AS JSONB), CAST(:sap_hosting_partner AS JSONB),
-                :linkedin_url, :notes, :assigned_to, :assigned_to_email, NOW(), NOW())
+                :linkedin_url, :employee_count, :logo_url, :notes, :assigned_to, :assigned_to_email, NOW(), NOW())
     """), {
         "id": partner_id, "internal_id": internal_id,
         "name": data["name"], "contact_name": data.get("contact_name"),
@@ -72,11 +85,12 @@ async def create_partner(data: dict, db: AsyncSession = Depends(get_db)):
         "main_erp": json.dumps(data.get("main_erp") or []),
         "cybersecurity_solutions": json.dumps(data.get("cybersecurity_solutions") or []),
         "sap_hosting_partner": json.dumps(data.get("sap_hosting_partner") or []),
-        "linkedin_url": data.get("linkedin_url"), "notes": data.get("notes"),
+        "linkedin_url": data.get("linkedin_url"), "employee_count": data.get("employee_count"), "logo_url": data.get("logo_url"),
+        "notes": data.get("notes"),
         "assigned_to": data.get("assigned_to"), "assigned_to_email": data.get("assigned_to_email"),
     })
     await db.commit()
-    return await _get_partner(db, partner_id)
+    return await _attach_logo(await _get_partner(db, partner_id))
 
 
 @router.get("/{partner_id}")
@@ -84,7 +98,7 @@ async def get_partner(partner_id: str, db: AsyncSession = Depends(get_db)):
     partner = await _get_partner(db, partner_id)
     if not partner:
         raise HTTPException(status_code=404, detail="Partner not found")
-    return partner
+    return await _attach_logo(partner)
 
 
 @router.put("/{partner_id}")
@@ -99,6 +113,7 @@ async def update_partner(partner_id: str, data: dict, db: AsyncSession = Depends
             phone=:phone, sector=:sector, country=:country, status=:status,
             main_erp=CAST(:main_erp AS JSONB), cybersecurity_solutions=CAST(:cybersecurity_solutions AS JSONB),
             sap_hosting_partner=CAST(:sap_hosting_partner AS JSONB), linkedin_url=:linkedin_url,
+            employee_count=:employee_count, logo_url=:logo_url,
             notes=:notes, assigned_to=:assigned_to, assigned_to_email=:assigned_to_email, updated_at=NOW()
         WHERE id = CAST(:id AS UUID)
     """), {
@@ -110,11 +125,69 @@ async def update_partner(partner_id: str, data: dict, db: AsyncSession = Depends
         "main_erp": json.dumps(merged.get("main_erp") or []),
         "cybersecurity_solutions": json.dumps(merged.get("cybersecurity_solutions") or []),
         "sap_hosting_partner": json.dumps(merged.get("sap_hosting_partner") or []),
-        "linkedin_url": merged.get("linkedin_url"), "notes": merged.get("notes"),
+        "linkedin_url": merged.get("linkedin_url"), "employee_count": merged.get("employee_count"), "logo_url": merged.get("logo_url"),
+        "notes": merged.get("notes"),
         "assigned_to": merged.get("assigned_to"), "assigned_to_email": merged.get("assigned_to_email"),
     })
     await db.commit()
-    return await _get_partner(db, partner_id)
+    return await _attach_logo(await _get_partner(db, partner_id))
+
+
+@router.post("/{partner_id}/logo")
+async def upload_partner_logo(partner_id: str, file: UploadFile = File(...), db: AsyncSession = Depends(get_db)):
+    partner = await _get_partner(db, partner_id)
+    if not partner:
+        raise HTTPException(status_code=404, detail="Partner not found")
+    content = await file.read()
+    logo_ref = await upload_to_s3(f"partners/{partner_id}/logo", content, file.content_type or "application/octet-stream")
+    await db.execute(text("UPDATE partners SET logo_url = :logo_url, updated_at = NOW() WHERE id = CAST(:id AS UUID)"),
+                      {"logo_url": logo_ref, "id": partner_id})
+    await db.commit()
+    return {"status": "ok", "logo_url": await s3_ref_to_presigned(logo_ref)}
+
+
+# Must come before /{partner_id} for the same reason as companies.py's equivalent routes —
+# otherwise FastAPI tries (and fails) to parse "linkedin-enrich" as a partner_id.
+@router.post("/linkedin-enrich")
+async def linkedin_enrich_partner(data: dict, db: AsyncSession = Depends(get_db)):
+    import json
+    url = (data.get("linkedin_url") or "").strip()
+    partner_id = (data.get("partner_id") or "").strip() or None
+    if not url:
+        raise HTTPException(status_code=400, detail="linkedin_url is required")
+    prompt = f"""Look up the public LinkedIn company page at this URL: {url}
+Return ONLY a valid JSON object with this exact structure (use null for anything you can't find):
+{{
+  "name": "the company's name",
+  "sector": "their industry",
+  "country": "the country of their headquarters",
+  "domain_names": ["their main website domain, no protocol, e.g. acme.com"],
+  "employee_count": your best-guess total employee count as a single integer (not a range string),
+  "logo_image_url": "a direct URL to the company's logo image if you can identify one, else null"
+}}
+Return ONLY the JSON, no markdown, no explanation."""
+    text_result = await claude_web_search(prompt)
+    try:
+        cleaned = text_result.strip().replace("```json", "").replace("```", "").strip()
+        result = json.loads(cleaned)
+    except (json.JSONDecodeError, ValueError):
+        raise HTTPException(status_code=502, detail="Could not read company data from that LinkedIn URL")
+
+    logo_image_url = result.pop("logo_image_url", None)
+    if partner_id and logo_image_url:
+        try:
+            async with httpx.AsyncClient(timeout=15, follow_redirects=True) as client:
+                img_resp = await client.get(logo_image_url)
+            content_type = img_resp.headers.get("content-type", "")
+            if img_resp.status_code == 200 and content_type.startswith("image/"):
+                logo_ref = await upload_to_s3(f"partners/{partner_id}/logo", img_resp.content, content_type)
+                await db.execute(text("UPDATE partners SET logo_url = :logo_url, updated_at = NOW() WHERE id = CAST(:id AS UUID)"),
+                                  {"logo_url": logo_ref, "id": partner_id})
+                await db.commit()
+                result["logo_url"] = await s3_ref_to_presigned(logo_ref)
+        except Exception:
+            pass
+    return result
 
 
 @router.delete("/{partner_id}")

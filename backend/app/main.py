@@ -1192,6 +1192,9 @@ async def startup():
                 "ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS contracting_party_id UUID REFERENCES companies(id) ON DELETE SET NULL",
                 "ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS assigned_to_email VARCHAR(255)",
                 "ALTER TABLE rfps ADD COLUMN IF NOT EXISTS reference VARCHAR(20)",
+                "ALTER TABLE companies ADD COLUMN IF NOT EXISTS employee_count INTEGER",
+                "ALTER TABLE partners ADD COLUMN IF NOT EXISTS employee_count INTEGER",
+                "ALTER TABLE partners ADD COLUMN IF NOT EXISTS logo_url TEXT",
 
                 # Backfill existing rows (oldest first), then advance each sequence past the backfilled max
                 """UPDATE companies SET internal_id = 'CMP-' || LPAD(t.rn::text, 5, '0')

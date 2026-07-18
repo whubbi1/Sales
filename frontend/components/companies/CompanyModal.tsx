@@ -35,6 +35,7 @@ export function CompanyModal({ company, companies = [], onClose, onSave }: any) 
     grc_solutions: company?.grc_solutions || [],
     sap_hosting_partner: company?.sap_hosting_partner || [],
     linkedin_url: company?.linkedin_url || '',
+    employee_count: company?.employee_count ?? '',
     notes: company?.notes || '',
     assigned_to: company?.assigned_to || '',
     assigned_to_email: company?.assigned_to_email || '',
@@ -60,14 +61,16 @@ export function CompanyModal({ company, companies = [], onClose, onSave }: any) 
     if (!url) return
     setEnriching(true); setEnrichNote('')
     try {
-      const data = await companiesAPI.linkedinEnrich(url)
+      const data = await companiesAPI.linkedinEnrich(url, company?.id)
       setForm(p => ({
         ...p,
         name: p.name || data.name || p.name,
         sector: p.sector || data.sector || p.sector,
         country: p.country || data.country || p.country,
         domain_names: p.domain_names.length ? p.domain_names : (data.domain_names || []),
+        employee_count: p.employee_count !== '' ? p.employee_count : (data.employee_count ?? ''),
       }))
+      if (data.logo_url) setEnrichNote('✓ Logo fetched from LinkedIn and saved.')
     } catch (e: any) { setEnrichNote(e.message) }
     finally { setEnriching(false) }
   }
@@ -102,7 +105,7 @@ export function CompanyModal({ company, companies = [], onClose, onSave }: any) 
     if (!form.name.trim()) { setError('Company name is required'); return }
     setSaving(true); setError('')
     try {
-      const payload = { ...form, parent_id: form.parent_id || null, main_contact_id: form.main_contact_id || null }
+      const payload = { ...form, parent_id: form.parent_id || null, main_contact_id: form.main_contact_id || null, employee_count: form.employee_count === '' ? null : Number(form.employee_count) }
       if (company) { await companiesAPI.update(company.id, payload) }
       else { await companiesAPI.create(payload) }
       onSave()
@@ -144,6 +147,9 @@ export function CompanyModal({ company, companies = [], onClose, onSave }: any) 
               </FormField>
               <FormField label="Country">
                 <input className="form-input" value={form.country} onChange={e => setForm(p => ({ ...p, country: e.target.value }))} placeholder="Belgium" />
+              </FormField>
+              <FormField label="Employees">
+                <input className="form-input" type="number" min={0} value={form.employee_count} onChange={e => setForm(p => ({ ...p, employee_count: e.target.value }))} placeholder="e.g. 250" />
               </FormField>
               <FormField label="Status">
                 <select className="form-input" value={form.status} onChange={e => setForm(p => ({ ...p, status: e.target.value }))}>
