@@ -137,6 +137,19 @@ async def get_partner_opportunities(partner_id: str, db: AsyncSession = Depends(
     return [_row(dict(row._mapping)) for row in r.fetchall()]
 
 
+@router.get("/{partner_id}/leads")
+async def get_partner_leads(partner_id: str, db: AsyncSession = Depends(get_db)):
+    # A Lead can involve more than one Partner (lead_partners is many-to-many) — join
+    # rather than a plain partner_id column like Opportunity's.
+    r = await db.execute(text("""
+        SELECT l.* FROM leads l
+        JOIN lead_partners lp ON lp.lead_id = l.id
+        WHERE lp.partner_id = CAST(:id AS UUID)
+        ORDER BY l.created_at DESC
+    """), {"id": partner_id})
+    return [_row(dict(row._mapping)) for row in r.fetchall()]
+
+
 # ─── Action items — flat, each optionally auto-creates a Task Manager task ──────
 @router.get("/{partner_id}/action-items")
 async def list_action_items(partner_id: str, db: AsyncSession = Depends(get_db)):

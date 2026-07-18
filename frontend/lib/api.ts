@@ -74,6 +74,7 @@ export const partnersAPI = {
 
   getContacts:      (id: string) => fetchAPI(`/partners/${id}/contacts`),
   getOpportunities: (id: string) => fetchAPI(`/partners/${id}/opportunities`),
+  getLeads: (id: string) => fetchAPI(`/partners/${id}/leads`),
 
   getActionItems:   (id: string) => fetchAPI(`/partners/${id}/action-items`),
   createActionItem: (id: string, d: any) => fetchAPI(`/partners/${id}/action-items`, { method: 'POST', body: JSON.stringify(d) }),

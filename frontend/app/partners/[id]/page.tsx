@@ -58,6 +58,7 @@ export default function PartnerDetailPage() {
   const [partner, setPartner] = useState<any>(null)
   const [contacts, setContacts] = useState<any[]>([])
   const [opportunities, setOpportunities] = useState<any[]>([])
+  const [leads, setLeads] = useState<any[]>([])
   const [comments, setComments] = useState<any[]>([])
   const [newComment, setNewComment] = useState('')
   const [links, setLinks] = useState<any[]>([])
@@ -79,10 +80,11 @@ export default function PartnerDetailPage() {
 
   const load = async () => {
     try {
-      const [p, ctcts, opps, cmts, lnks, evts, custs, allC, allO, usersResp, actItems] = await Promise.all([
+      const [p, ctcts, opps, leadsRes, cmts, lnks, evts, custs, allC, allO, usersResp, actItems] = await Promise.all([
         partnersAPI.get(id as string),
         partnersAPI.getContacts(id as string),
         partnersAPI.getOpportunities(id as string),
+        partnersAPI.getLeads(id as string),
         partnersAPI.getComments(id as string),
         partnersAPI.getLinks(id as string),
         partnersAPI.getEvents(id as string),
@@ -95,6 +97,7 @@ export default function PartnerDetailPage() {
       setPartner(p)
       setContacts(ctcts)
       setOpportunities(opps)
+      setLeads(leadsRes)
       setComments(cmts)
       setLinks(lnks)
       setEvents(evts)
@@ -445,6 +448,9 @@ export default function PartnerDetailPage() {
       </SidebarSection>
       <SidebarSection title={`Opportunities (${opportunities.length})`} onAdd={() => router.push(`/opportunities?partner_id=${id}`)}>
         {opportunities.length === 0 ? <p style={{ fontSize: '12px', color: '#9B9B9B' }}>No opportunities.</p> : opportunities.map((o: any) => <SidebarCard key={o.id} title={o.deal_name} subtitle={o.deal_status} href={`/opportunities/${o.id}`} color="#219BD6" />)}
+      </SidebarSection>
+      <SidebarSection title={`Leads (${leads.length})`}>
+        {leads.length === 0 ? <p style={{ fontSize: '12px', color: '#9B9B9B' }}>No leads.</p> : leads.map((l: any) => <SidebarCard key={l.id} title={l.title} subtitle={l.status} href={`/leads/${l.id}`} color="#7C3AED" />)}
       </SidebarSection>
     </div>
   )
