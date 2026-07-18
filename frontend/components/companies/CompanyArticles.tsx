@@ -166,10 +166,13 @@ export function CompanyArticles({ companyId }: { companyId: string }) {
           {articles.map(a => (
             <div key={a.id}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 12px', border: '1px solid #E2E8F0', borderRadius: '8px', background: 'white' }}>
-                <p style={{
-                  flex: 1, minWidth: 0, fontSize: '12px', color: '#3F3F3F', margin: 0,
-                  display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as const, overflow: 'hidden',
-                }}>{a.description || a.title}</p>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <p style={{
+                    fontSize: '12px', color: '#3F3F3F', margin: 0,
+                    display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as const, overflow: 'hidden',
+                  }}>{a.description || a.title}</p>
+                  {(a.link_date || a.created_at) && <p style={{ fontSize: '10px', color: '#9B9B9B', margin: '3px 0 0' }}>{new Date(a.link_date || a.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</p>}
+                </div>
                 <button onClick={() => setManagingId(managingId === a.id ? null : a.id)} title="Manage links"
                   style={{ flexShrink: 0, border: 'none', background: 'none', cursor: 'pointer', color: '#94A3B8', fontSize: '13px' }}>🔗</button>
                 <button onClick={() => window.open(a.url, '_blank', 'noopener')}

@@ -429,12 +429,12 @@ async def delete_link(partner_id: str, link_id: str, db: AsyncSession = Depends(
 async def list_partner_articles(partner_id: str, db: AsyncSession = Depends(get_db)):
     r = await db.execute(text("""
         SELECT * FROM (
-            SELECT a.* FROM company_articles a WHERE a.partner_id = CAST(:pid AS UUID)
+            SELECT a.*, a.created_at AS link_date FROM company_articles a WHERE a.partner_id = CAST(:pid AS UUID)
             UNION
-            SELECT a.* FROM company_articles a
+            SELECT a.*, ap.linked_at AS link_date FROM company_articles a
             JOIN article_partners ap ON ap.article_id = a.id
             WHERE ap.partner_id = CAST(:pid AS UUID)
-        ) sub ORDER BY created_at DESC
+        ) sub ORDER BY link_date DESC
     """), {"pid": partner_id})
     return [_row(dict(row._mapping)) for row in r.fetchall()]
 

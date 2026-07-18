@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { rfpAPI, companiesAPI, partnersAPI, opportunitiesAPI } from '@/lib/api'
+import { getStoredUser } from '@/lib/auth'
 import { RecordLayout, PropertyRow, SidebarSection, SidebarCard, StatusBadge, TabNav } from '@/components/shared/RecordLayout'
 import { RFPModal } from '@/components/rfp/RFPModal'
 import { StaffingCostingSheet } from '@/components/rfp/StaffingCostingSheet'
@@ -36,6 +37,8 @@ export default function RFPDetailPage() {
   const [deleteConfirm, setDeleteConfirm] = useState('')
   const [deleting, setDeleting] = useState(false)
 
+  const [comments, setComments] = useState<any[]>([])
+  const [newComment, setNewComment] = useState('')
   const [actionItems, setActionItems] = useState<any[]>([])
   const [documentChecklist, setDocumentChecklist] = useState<any[]>([])
   const [users, setUsers] = useState<any[]>([])
@@ -58,12 +61,14 @@ export default function RFPDetailPage() {
       const r = await rfpAPI.get(id as string)
       setRfp(r)
       setDocumentsFolderUrl(r.documents_folder_url || '')
-      const [items, docs] = await Promise.all([
+      const [items, docs, cmts] = await Promise.all([
         rfpAPI.getActionItems(id as string),
         rfpAPI.getDocumentChecklist(id as string),
+        rfpAPI.getComments(id as string),
       ])
       setActionItems(items)
       setDocumentChecklist(docs)
+      setComments(cmts)
       if (r.company_id) setContacts(await companiesAPI.getContacts(r.company_id))
       else if (r.partner_id) setContacts(await partnersAPI.getContacts(r.partner_id))
       else setContacts([])
@@ -81,6 +86,19 @@ export default function RFPDetailPage() {
   }, [])
 
   const isEditing = (itemId: string, field: string) => editing?.id === itemId && editing.field === field
+
+  const addComment = async () => {
+    if (!newComment.trim()) return
+    const user = getStoredUser()
+    await rfpAPI.addComment(rfp.id, { author_email: user?.email || '', author_name: user?.name || user?.email || '', comment: newComment.trim() })
+    setNewComment('')
+    setComments(await rfpAPI.getComments(rfp.id))
+  }
+  const deleteComment = async (c: any) => {
+    if (!confirm('Delete this comment?')) return
+    await rfpAPI.deleteComment(rfp.id, c.id)
+    setComments(await rfpAPI.getComments(rfp.id))
+  }
 
   const saveFolderUrl = async () => {
     await rfpAPI.update(rfp.id, { documents_folder_url: documentsFolderUrl })
@@ -230,7 +248,7 @@ export default function RFPDetailPage() {
 
       <div style={{ background: 'white', borderRadius: '10px', border: '1px solid #EDF2F7', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
         <div style={{ padding: '0 20px', background: '#FAFBFC', borderBottom: '2px solid #E2E8F0' }}>
-          <TabNav tabs={['Overview', 'Action Plan', 'Documents Checklist', 'Answer', 'Staffing/Costing Sheet', 'Files']} active={tab} onChange={setTab} />
+          <TabNav tabs={['Overview', 'Notes', 'Action Plan', 'Documents Checklist', 'Answer', 'Staffing/Costing Sheet', 'Files']} active={tab} onChange={setTab} />
         </div>
         <div style={{ padding: '20px' }}>
           {tab === 'Overview' && (
@@ -251,6 +269,29 @@ export default function RFPDetailPage() {
                     <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 12px', border: '1px solid #EDF2F7', borderRadius: '8px', fontSize: '13px' }}>
                       <span style={{ fontWeight: '600', color: '#144766' }}>{kd.label}</span>
                       <span style={{ color: '#3F3F3F' }}>{fmt(kd.date)}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {tab === 'Notes' && (
+            <div>
+              <div style={{ display: 'flex', gap: '8px', marginBottom: '14px' }}>
+                <input className="form-input" style={{ flex: 1 }} placeholder="Add a note…" value={newComment} onChange={e => setNewComment(e.target.value)} onKeyDown={e => e.key === 'Enter' && addComment()} />
+                <button className="btn-primary" onClick={addComment}>+ Add</button>
+              </div>
+              {comments.length === 0 ? <p style={{ color: '#9B9B9B', fontSize: '13px' }}>No notes yet.</p> : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {comments.map((c: any) => (
+                    <div key={c.id} style={{ padding: '10px 14px', border: '1px solid #EDF2F7', borderRadius: '8px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <span style={{ fontWeight: '700', color: '#144766', fontSize: '12px' }}>{c.author_name || c.author_email}</span>
+                        <button onClick={() => deleteComment(c)} style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#DC2626', fontSize: '14px', padding: 0, lineHeight: 1 }}>×</button>
+                      </div>
+                      <p style={{ fontSize: '13px', color: '#3F3F3F', margin: '4px 0', whiteSpace: 'pre-wrap' }}>{c.comment}</p>
+                      <div style={{ fontSize: '10px', color: '#9B9B9B' }}>{new Date(c.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</div>
                     </div>
                   ))}
                 </div>

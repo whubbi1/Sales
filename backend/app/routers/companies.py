@@ -331,12 +331,12 @@ async def delete_note(company_id: UUID, note_id: UUID, db: AsyncSession = Depend
 async def list_articles(company_id: UUID, db: AsyncSession = Depends(get_db)):
     r = await db.execute(sql_text("""
         SELECT * FROM (
-            SELECT a.* FROM company_articles a WHERE a.company_id = :cid
+            SELECT a.*, a.created_at AS link_date FROM company_articles a WHERE a.company_id = :cid
             UNION
-            SELECT a.* FROM company_articles a
+            SELECT a.*, ac.linked_at AS link_date FROM company_articles a
             JOIN article_companies ac ON ac.article_id = a.id
             WHERE ac.company_id = :cid
-        ) sub ORDER BY created_at DESC
+        ) sub ORDER BY link_date DESC
     """), {"cid": str(company_id)})
     return [dict(row._mapping) for row in r.fetchall()]
 

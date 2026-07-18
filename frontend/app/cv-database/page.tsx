@@ -79,11 +79,117 @@ function ShortCvModal({ user, onClose }: any) {
   )
 }
 
+function FullCvModal({ user, onClose }: any) {
+  const [cv, setCv] = useState<any>(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    fetch(`${API}/cv/${encodeURIComponent(user.email)}`).then(r => r.json()).then(d => { setCv(d.cv); setLoading(false) }).catch(() => setLoading(false))
+  }, [])
+
+  const name = cv ? `${cv.first_name} ${cv.last_name}`.trim() || user.email : user.employee_name
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+      onClick={e => { if (e.target === e.currentTarget) onClose() }}>
+      <div style={{ background: 'white', borderRadius: '14px', width: '640px', maxHeight: '90vh', overflow: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
+        <div style={{ padding: '20px 24px', borderBottom: '1px solid #EDF2F7', display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'sticky', top: 0, background: 'white' }}>
+          <div>
+            <h2 style={{ fontSize: '16px', fontWeight: '800', color: '#156082', margin: 0 }}>{name}</h2>
+            {cv?.title && <p style={{ fontSize: '12px', color: '#64748B', margin: '2px 0 0' }}>{cv.title}</p>}
+          </div>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: '20px', cursor: 'pointer', color: '#94A3B8' }}>×</button>
+        </div>
+        <div style={{ padding: '20px 24px' }}>
+          {loading ? (
+            <div style={{ textAlign: 'center', padding: '24px', color: '#45B6E4' }}>Loading…</div>
+          ) : !cv ? (
+            <p style={{ fontSize: '12px', color: '#94A3B8' }}>Could not load this CV.</p>
+          ) : (
+            <>
+              {cv.short_description && (
+                <div style={{ marginBottom: '18px' }}>
+                  <p style={{ fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#9B9B9B', margin: '0 0 6px' }}>Summary</p>
+                  <p style={{ fontSize: '13px', color: '#3F3F3F', margin: 0, lineHeight: '1.6' }}>{cv.short_description}</p>
+                </div>
+              )}
+
+              {cv.skills?.length > 0 && (
+                <div style={{ marginBottom: '18px' }}>
+                  <p style={{ fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#9B9B9B', margin: '0 0 6px' }}>Skills</p>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px' }}>
+                    {cv.skills.map((s: string, i: number) => <span key={i} style={{ background: '#EFF6FF', color: '#2563EB', padding: '3px 9px', borderRadius: '12px', fontSize: '11px' }}>{s}</span>)}
+                  </div>
+                </div>
+              )}
+
+              {cv.languages?.length > 0 && (
+                <div style={{ marginBottom: '18px' }}>
+                  <p style={{ fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#9B9B9B', margin: '0 0 6px' }}>Languages</p>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px' }}>
+                    {cv.languages.map((l: string, i: number) => <span key={i} style={{ background: '#F5F3FF', color: '#7C3AED', padding: '3px 9px', borderRadius: '12px', fontSize: '11px' }}>{l}</span>)}
+                  </div>
+                </div>
+              )}
+
+              <div style={{ marginBottom: '18px' }}>
+                <p style={{ fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#9B9B9B', margin: '0 0 8px' }}>Experience</p>
+                {!cv.experiences?.length ? (
+                  <p style={{ fontSize: '12px', color: '#94A3B8' }}>No experiences recorded.</p>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                    {cv.experiences.map((exp: any) => (
+                      <div key={exp.id} style={{ paddingLeft: '12px', borderLeft: '2px solid #EDF2F7' }}>
+                        <div style={{ fontSize: '13px', fontWeight: '700', color: '#156082' }}>{exp.job_title}{exp.company && ` · ${exp.company}`}</div>
+                        <div style={{ fontSize: '11px', color: '#94A3B8', margin: '2px 0 4px' }}>
+                          {exp.start_date || '—'} → {exp.end_date || 'Present'}{exp.location && ` · ${exp.location}`}
+                        </div>
+                        {exp.description && <p style={{ fontSize: '12px', color: '#3F3F3F', margin: 0, whiteSpace: 'pre-wrap' }}>{exp.description}</p>}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {cv.trainings?.length > 0 && (
+                <div style={{ marginBottom: '18px' }}>
+                  <p style={{ fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#9B9B9B', margin: '0 0 8px' }}>Trainings</p>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    {cv.trainings.map((t: any) => (
+                      <div key={t.id} style={{ fontSize: '12px', color: '#3F3F3F' }}>
+                        <strong>{t.name}</strong>{t.training_date && <span style={{ color: '#94A3B8' }}> · {t.training_date}</span>}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {cv.certifications?.length > 0 && (
+                <div>
+                  <p style={{ fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#9B9B9B', margin: '0 0 8px' }}>Certifications</p>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    {cv.certifications.map((c: any) => (
+                      <div key={c.id} style={{ fontSize: '12px', color: '#3F3F3F' }}>
+                        <strong>{c.name}</strong>{c.cert_date && <span style={{ color: '#94A3B8' }}> · {c.cert_date}</span>}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function CvDatabaseContent() {
   const [users, setUsers] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [shortCvUser, setShortCvUser] = useState<any>(null)
+  const [fullCvUser, setFullCvUser] = useState<any>(null)
   const [userEmail, setUserEmail] = useState('')
 
   const rb = useReportBuilder('cv_database', COLUMNS, userEmail)
@@ -133,7 +239,7 @@ function CvDatabaseContent() {
               <tr><td colSpan={COLUMNS.length + 1} style={{ textAlign: 'center', padding: '32px', color: '#94A3B8' }}>No employees found.</td></tr>
             ) : pageRows.map(u => (
               <tr key={u.email} style={{ borderBottom: '1px solid #F1F5F9' }}>
-                {isVisible('employee_name') && <td style={{ padding: '10px 16px', fontWeight: '700', color: '#156082' }}>{u.employee_name}</td>}
+                {isVisible('employee_name') && <td style={{ padding: '10px 16px' }}><button onClick={() => setFullCvUser(u)} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontWeight: '700', color: '#156082', fontSize: '12px', fontFamily: 'Montserrat, sans-serif', textDecoration: 'underline' }}>{u.employee_name}</button></td>}
                 {isVisible('cv_title') && <td style={{ padding: '10px 16px', color: '#3F3F3F' }}>{u.cv_title || '—'}</td>}
                 {isVisible('department') && <td style={{ padding: '10px 16px', color: '#64748B' }}>{u.department || '—'}</td>}
                 {isVisible('cv_status') && (
@@ -159,6 +265,7 @@ function CvDatabaseContent() {
       </div>
 
       {shortCvUser && <ShortCvModal user={shortCvUser} onClose={() => setShortCvUser(null)} />}
+      {fullCvUser && <FullCvModal user={fullCvUser} onClose={() => setFullCvUser(null)} />}
     </div>
   )
 }

@@ -88,6 +88,7 @@ class ArticleCreate(BaseModel):
 class ArticleResponse(ArticleCreate):
     id: UUID
     created_at: datetime
+    link_date: Optional[datetime] = None
     class Config:
         from_attributes = True
 
@@ -367,6 +368,18 @@ class RFPSummary(BaseModel):
     id: UUID
     name: str
     status: Optional[str] = None
+    class Config:
+        from_attributes = True
+
+class RFPCommentCreate(BaseModel):
+    author_email: str
+    author_name: Optional[str] = None
+    comment: str
+
+class RFPCommentResponse(RFPCommentCreate):
+    id: UUID
+    rfp_id: UUID
+    created_at: datetime
     class Config:
         from_attributes = True
 

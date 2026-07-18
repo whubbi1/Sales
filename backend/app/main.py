@@ -1480,6 +1480,13 @@ async def startup():
                 # task tables.
                 "ALTER TABLE rfp_staffing_tasks ADD COLUMN IF NOT EXISTS role_id UUID REFERENCES rfp_staffing_roles(id) ON DELETE SET NULL",
                 "ALTER TABLE project_staffing_tasks ADD COLUMN IF NOT EXISTS role_id UUID REFERENCES project_staffing_roles(id) ON DELETE SET NULL",
+
+                # Article link dates — when an article gets additionally linked to another
+                # company/contact/partner (beyond the one it was created under), record when
+                # that link was made so the UI can show a date next to it.
+                "ALTER TABLE article_companies ADD COLUMN IF NOT EXISTS linked_at TIMESTAMP DEFAULT NOW()",
+                "ALTER TABLE article_contacts ADD COLUMN IF NOT EXISTS linked_at TIMESTAMP DEFAULT NOW()",
+                "ALTER TABLE article_partners ADD COLUMN IF NOT EXISTS linked_at TIMESTAMP DEFAULT NOW()",
             ]
             for sql in sqls:
                 try:

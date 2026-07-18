@@ -168,7 +168,7 @@ export default function LeadDetailPage() {
 
       <div style={{ background: 'white', borderRadius: '10px', border: '1px solid #EDF2F7', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
         <div style={{ padding: '0 20px', background: '#FAFBFC', borderBottom: '2px solid #E2E8F0' }}>
-          <TabNav tabs={['Overview', 'Notes', 'Contacts', 'Files', 'Tasks']} active={tab} onChange={setTab} />
+          <TabNav tabs={['Overview', 'Notes', 'Files', 'Tasks']} active={tab} onChange={setTab} />
         </div>
         <div style={{ padding: '20px' }}>
           {tab === 'Overview' && (
@@ -219,22 +219,6 @@ export default function LeadDetailPage() {
                       <div style={{ fontSize: '10px', color: '#9B9B9B' }}>{fmtDateTime(n.created_at)}</div>
                     </div>
                   ))}
-                </div>
-              )}
-            </div>
-          )}
-
-          {tab === 'Contacts' && (
-            <div>
-              <p className="section-label" style={{ marginBottom: '8px' }}>Company Contact</p>
-              {lead.contact ? (
-                <div style={{ marginBottom: '18px' }}><SidebarCard title={`${lead.contact.first_name} ${lead.contact.last_name}`} subtitle={lead.contact.job_type || lead.contact.email} href={`/contacts/${lead.contact.id}`} color="#e97132" /></div>
-              ) : <p style={{ color: '#9B9B9B', fontSize: '13px', marginBottom: '18px' }}>No company contact set.</p>}
-
-              <p className="section-label" style={{ marginBottom: '8px' }}>Partner Contacts</p>
-              {(!lead.partner_contacts || lead.partner_contacts.length === 0) ? <p style={{ color: '#9B9B9B', fontSize: '13px' }}>No partner contacts set.</p> : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                  {lead.partner_contacts.map((c: any) => <SidebarCard key={c.id} title={`${c.first_name} ${c.last_name}`} subtitle={c.job_type || c.email} href={`/contacts/${c.id}`} color="#7C3AED" />)}
                 </div>
               )}
             </div>
@@ -293,6 +277,11 @@ export default function LeadDetailPage() {
     <div>
       <SidebarSection title="Company">
         {lead.company ? <SidebarCard title={lead.company.name} subtitle={`Status: ${lead.company.status}`} href={`/companies/${lead.company.id}`} color="#144766" /> : <p style={{ fontSize: '12px', color: '#9B9B9B' }}>No company.</p>}
+      </SidebarSection>
+      <SidebarSection title="Contacts">
+        {lead.contact && <SidebarCard title={`${lead.contact.first_name} ${lead.contact.last_name}`} subtitle={lead.contact.job_type || lead.contact.email || 'Company Contact'} href={`/contacts/${lead.contact.id}`} color="#e97132" />}
+        {(lead.partner_contacts || []).map((c: any) => <SidebarCard key={c.id} title={`${c.first_name} ${c.last_name}`} subtitle={c.job_type || c.email || 'Partner Contact'} href={`/contacts/${c.id}`} color="#7C3AED" />)}
+        {!lead.contact && (!lead.partner_contacts || lead.partner_contacts.length === 0) && <p style={{ fontSize: '12px', color: '#9B9B9B' }}>No contacts set.</p>}
       </SidebarSection>
       <SidebarSection title={`Partners (${lead.partners?.length || 0})`}>
         {(!lead.partners || lead.partners.length === 0) ? <p style={{ fontSize: '12px', color: '#9B9B9B' }}>No partners.</p> : lead.partners.map((p: any) => <SidebarCard key={p.id} title={p.name} subtitle={`Status: ${p.status}`} href={`/partners/${p.id}`} color="#7C3AED" />)}

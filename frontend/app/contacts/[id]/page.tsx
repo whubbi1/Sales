@@ -6,6 +6,7 @@ import { RecordLayout, PropertyRow, SidebarSection, SidebarCard, StatusBadge, Ta
 import { ContactModal } from '@/components/contacts/ContactModal'
 import { ContactNotes } from '@/components/contacts/ContactNotes'
 import { ContactArticles } from '@/components/contacts/ContactArticles'
+import { ContactTasks } from '@/components/contacts/ContactTasks'
 import { ActivityFeed } from '@/components/shared/ActivityFeed'
 
 const SUB_LABELS: Record<string, string> = { 'Marketing Information': '📧', 'Customer Service Communication': '💬', 'One to One': '🤝' }
@@ -16,6 +17,7 @@ export default function ContactDetailPage() {
   const [contact, setContact] = useState<any>(null)
   const [opportunities, setOpportunities] = useState<any[]>([])
   const [notes, setNotes] = useState<any[]>([])
+  const [leads, setLeads] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [tab, setTab] = useState('Overview')
   const [showEdit, setShowEdit] = useState(false)
@@ -25,14 +27,16 @@ export default function ContactDetailPage() {
 
   const load = async () => {
     try {
-      const [c, opps, ntes] = await Promise.all([
+      const [c, opps, ntes, lds] = await Promise.all([
         contactsAPI.get(id as string),
         contactsAPI.getOpportunities(id as string),
         contactsAPI.getNotes(id as string),
+        contactsAPI.getLeads(id as string),
       ])
       setContact(c)
       setOpportunities(opps)
       setNotes(ntes)
+      setLeads(lds)
     } catch {
       router.push('/contacts')
     } finally {
@@ -97,7 +101,7 @@ export default function ContactDetailPage() {
 
       <div style={{ background: 'white', borderRadius: '10px', border: '1px solid #EDF2F7', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
         <div style={{ padding: '0 20px', background: '#FAFBFC', borderBottom: '2px solid #E2E8F0' }}>
-          <TabNav tabs={['Overview', 'Opportunities', 'Notes', 'Articles']} active={tab} onChange={setTab} />
+          <TabNav tabs={['Overview', 'Notes', 'Articles', 'Tasks']} active={tab} onChange={setTab} />
         </div>
         <div style={{ padding: '20px' }}>
           {tab === 'Overview' && (
@@ -109,23 +113,7 @@ export default function ContactDetailPage() {
           )}
           {tab === 'Notes' && <ContactNotes contactId={id as string} onChange={() => contactsAPI.getNotes(id as string).then(setNotes)} />}
           {tab === 'Articles' && <ContactArticles contactId={id as string} />}
-          {tab === 'Opportunities' && (
-            <div>
-              {opportunities.length === 0 ? <p style={{ color: '#9B9B9B', fontSize: '13px' }}>No opportunities linked.</p> : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  {opportunities.map((opp: any) => (
-                    <div key={opp.id} onClick={() => router.push(`/opportunities/${opp.id}`)} style={{ padding: '12px 14px', border: '1px solid #EDF2F7', borderRadius: '8px', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <div>
-                        <div style={{ fontSize: '13px', fontWeight: '700', color: '#144766' }}>{opp.deal_name}</div>
-                        <div style={{ fontSize: '11px', color: '#9B9B9B' }}>{opp.deal_status}</div>
-                      </div>
-                      {opp.deal_amount && <span style={{ fontWeight: '800', color: '#059669' }}>€{opp.deal_amount.toLocaleString()}</span>}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
+          {tab === 'Tasks' && <ContactTasks contactId={id as string} />}
         </div>
       </div>
     </div>
@@ -133,18 +121,6 @@ export default function ContactDetailPage() {
 
   const rightColumn = (
     <div>
-      <SidebarSection title="Contact Details">
-        <PropertyRow label="First Name" value={contact.first_name} />
-        <PropertyRow label="Last Name" value={contact.last_name} />
-        <PropertyRow label="Email" value={contact.email} />
-        <PropertyRow label="Mobile" value={contact.mobile_phone} />
-        <PropertyRow label="Office" value={contact.office_phone} />
-        <PropertyRow label="Job Title" value={contact.job_name} />
-        <PropertyRow label="Job Type" value={contact.job_type} />
-        <PropertyRow label="Lead Status" value={contact.lead_status ? <StatusBadge value={contact.lead_status} /> : null} />
-        <PropertyRow label="Language" value={contact.preferred_language} />
-        <PropertyRow label="Assigned To" value={contact.assigned_to} />
-      </SidebarSection>
       <SidebarSection title="Company / Partner">
         {contact.company ? (
           <SidebarCard title={contact.company.name} subtitle={`Status: ${contact.company.status}`} href={`/companies/${contact.company.id}`} color="#144766" />
@@ -157,6 +133,21 @@ export default function ContactDetailPage() {
         onAdd={() => router.push(`/opportunities?contact_id=${id}${contact.company_id ? `&company_id=${contact.company_id}` : ''}${contact.partner_id ? `&partner_id=${contact.partner_id}` : ''}`)}
       >
         {opportunities.length === 0 ? <p style={{ fontSize: '12px', color: '#9B9B9B' }}>No opportunities.</p> : opportunities.map((opp: any) => <SidebarCard key={opp.id} title={opp.deal_name} subtitle={opp.deal_status} href={`/opportunities/${opp.id}`} color="#219BD6" />)}
+      </SidebarSection>
+      <SidebarSection title={`Leads (${leads.length})`}>
+        {leads.length === 0 ? <p style={{ fontSize: '12px', color: '#9B9B9B' }}>No leads.</p> : leads.map((lead: any) => <SidebarCard key={lead.id} title={lead.title || lead.name} subtitle={lead.status} href={`/leads/${lead.id}`} color="#D97706" />)}
+      </SidebarSection>
+      <SidebarSection title="Contact Details">
+        <PropertyRow label="First Name" value={contact.first_name} />
+        <PropertyRow label="Last Name" value={contact.last_name} />
+        <PropertyRow label="Email" value={contact.email} />
+        <PropertyRow label="Mobile" value={contact.mobile_phone} />
+        <PropertyRow label="Office" value={contact.office_phone} />
+        <PropertyRow label="Job Title" value={contact.job_name} />
+        <PropertyRow label="Job Type" value={contact.job_type} />
+        <PropertyRow label="Lead Status" value={contact.lead_status ? <StatusBadge value={contact.lead_status} /> : null} />
+        <PropertyRow label="Language" value={contact.preferred_language} />
+        <PropertyRow label="Assigned To" value={contact.assigned_to} />
       </SidebarSection>
     </div>
   )

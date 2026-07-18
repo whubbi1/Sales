@@ -7,13 +7,15 @@ from typing import List
 from uuid import UUID
 
 from app.database import get_db
-from app.models.contact import Contact, ContactNote
+from app.models.contact import Contact, ContactNote, ContactTask
 from app.models.company import Company, CompanyArticle
 from app.models.opportunity import Opportunity
 from app.schemas.schemas import (
     ContactCreate, ContactUpdate, ContactResponse, ContactSummary, OpportunitySummary, PartnerSummary,
     NoteCreate, NoteResponse, ArticleCreate, ArticleResponse,
+    TaskCreate, TaskUpdate, TaskResponse,
 )
+import uuid as uuid_module
 from app.services.ids import next_internal_id
 from app.routers.companies import claude_web_search
 import json
@@ -143,6 +145,59 @@ async def get_contact_opportunities(contact_id: UUID, db: AsyncSession = Depends
         raise HTTPException(status_code=404, detail="Contact not found")
     return contact.opportunities
 
+# Leads where this contact is either the Company Contact or one of the Partner Contacts.
+@router.get("/{contact_id}/leads")
+async def get_contact_leads(contact_id: UUID, db: AsyncSession = Depends(get_db)):
+    r = await db.execute(text("""
+        SELECT DISTINCT l.* FROM leads l
+        LEFT JOIN lead_partner_contacts lpc ON lpc.lead_id = l.id
+        WHERE l.contact_id = CAST(:id AS UUID) OR lpc.contact_id = CAST(:id AS UUID)
+        ORDER BY l.created_at DESC
+    """), {"id": str(contact_id)})
+    rows = []
+    for row in r.fetchall():
+        d = dict(row._mapping)
+        for k, v in d.items():
+            if isinstance(v, uuid_module.UUID):
+                d[k] = str(v)
+        rows.append(d)
+    return rows
+
+# ─── Tasks ──────────────────────────────────────────────────────────────────────
+@router.get("/{contact_id}/tasks", response_model=List[TaskResponse])
+async def list_contact_tasks(contact_id: UUID, db: AsyncSession = Depends(get_db)):
+    r = await db.execute(select(ContactTask).where(ContactTask.contact_id == contact_id).order_by(ContactTask.due_date.asc()))
+    return r.scalars().all()
+
+@router.post("/{contact_id}/tasks", response_model=TaskResponse, status_code=status.HTTP_201_CREATED)
+async def create_contact_task(contact_id: UUID, task: TaskCreate, db: AsyncSession = Depends(get_db)):
+    db_task = ContactTask(contact_id=contact_id, **task.model_dump())
+    db.add(db_task)
+    await db.commit()
+    await db.refresh(db_task)
+    return db_task
+
+@router.put("/{contact_id}/tasks/{task_id}", response_model=TaskResponse)
+async def update_contact_task(contact_id: UUID, task_id: UUID, task_data: TaskUpdate, db: AsyncSession = Depends(get_db)):
+    r = await db.execute(select(ContactTask).where(ContactTask.id == task_id, ContactTask.contact_id == contact_id))
+    task = r.scalar_one_or_none()
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    for k, v in task_data.model_dump(exclude_unset=True).items():
+        setattr(task, k, v)
+    await db.commit()
+    await db.refresh(task)
+    return task
+
+@router.delete("/{contact_id}/tasks/{task_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_contact_task(contact_id: UUID, task_id: UUID, db: AsyncSession = Depends(get_db)):
+    r = await db.execute(select(ContactTask).where(ContactTask.id == task_id, ContactTask.contact_id == contact_id))
+    task = r.scalar_one_or_none()
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    await db.delete(task)
+    await db.commit()
+
 # ─── Notes ────────────────────────────────────────────────────────────────────
 @router.get("/{contact_id}/notes", response_model=List[NoteResponse])
 async def list_contact_notes(contact_id: UUID, db: AsyncSession = Depends(get_db)):
@@ -174,12 +229,12 @@ async def delete_contact_note(contact_id: UUID, note_id: UUID, db: AsyncSession 
 async def list_contact_articles(contact_id: UUID, db: AsyncSession = Depends(get_db)):
     r = await db.execute(text("""
         SELECT * FROM (
-            SELECT a.* FROM company_articles a WHERE a.contact_id = :cid
+            SELECT a.*, a.created_at AS link_date FROM company_articles a WHERE a.contact_id = :cid
             UNION
-            SELECT a.* FROM company_articles a
+            SELECT a.*, ac.linked_at AS link_date FROM company_articles a
             JOIN article_contacts ac ON ac.article_id = a.id
             WHERE ac.contact_id = :cid
-        ) sub ORDER BY created_at DESC
+        ) sub ORDER BY link_date DESC
     """), {"cid": str(contact_id)})
     return [dict(row._mapping) for row in r.fetchall()]
 

@@ -183,7 +183,7 @@ export default function CompanyDetailPage() {
 
       <div style={{ background: 'white', borderRadius: '10px', border: '1px solid #EDF2F7', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
         <div style={{ padding: '0 20px', background: '#FAFBFC', borderBottom: '2px solid #E2E8F0' }}>
-          <TabNav tabs={['Overview', 'Research', 'Services', 'Notes', 'Articles', 'Tasks']} active={tab} onChange={setTab} />
+          <TabNav tabs={['Overview', 'Notes', 'Articles', 'Tasks', 'Research', 'Services']} active={tab} onChange={setTab} />
         </div>
         <div style={{ padding: '20px' }}>
           {tab === 'Overview' && (

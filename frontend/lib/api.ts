@@ -151,6 +151,13 @@ export const contactsAPI = {
   getArticles:   (id: string) => fetchAPI(`/contacts/${id}/articles`),
   createArticle: (id: string, d: any) => fetchAPI(`/contacts/${id}/articles`, { method: 'POST', body: JSON.stringify(d) }),
   deleteArticle: (cid: string, aid: string) => fetchAPI(`/contacts/${cid}/articles/${aid}`, { method: 'DELETE' }),
+
+  getTasks:   (id: string) => fetchAPI(`/contacts/${id}/tasks`),
+  createTask: (id: string, d: any) => fetchAPI(`/contacts/${id}/tasks`, { method: 'POST', body: JSON.stringify(d) }),
+  updateTask: (cid: string, tid: string, d: any) => fetchAPI(`/contacts/${cid}/tasks/${tid}`, { method: 'PUT', body: JSON.stringify(d) }),
+  deleteTask: (cid: string, tid: string) => fetchAPI(`/contacts/${cid}/tasks/${tid}`, { method: 'DELETE' }),
+
+  getLeads: (id: string) => fetchAPI(`/contacts/${id}/leads`),
 }
 
 // ─── Opportunities ────────────────────────────────────────────────────────────
@@ -215,6 +222,10 @@ export const rfpAPI = {
 
   linkOpportunity:   (id: string, opportunityId: string) => fetchAPI(`/rfps/${id}/opportunities/${opportunityId}`, { method: 'POST' }),
   unlinkOpportunity: (id: string, opportunityId: string) => fetchAPI(`/rfps/${id}/opportunities/${opportunityId}`, { method: 'DELETE' }),
+
+  getComments:   (id: string) => fetchAPI(`/rfps/${id}/comments/`),
+  addComment:    (id: string, d: any) => fetchAPI(`/rfps/${id}/comments/`, { method: 'POST', body: JSON.stringify(d) }),
+  deleteComment: (id: string, cid: string) => fetchAPI(`/rfps/${id}/comments/${cid}/`, { method: 'DELETE' }),
 
   getActionItems:    (id: string) => fetchAPI(`/rfps/${id}/action-items`),
   addActionItem:     (id: string, d: any) => fetchAPI(`/rfps/${id}/action-items`, { method: 'POST', body: JSON.stringify(d) }),

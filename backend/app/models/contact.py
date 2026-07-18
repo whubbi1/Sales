@@ -60,3 +60,16 @@ class ContactNote(Base):
     created_by = Column(String(255))
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+class ContactTask(Base):
+    __tablename__ = "contact_tasks"
+    id          = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    contact_id  = Column(UUID(as_uuid=True), nullable=False)
+    title       = Column(String(500), nullable=False)
+    description = Column(Text)
+    due_date    = Column(DateTime)
+    priority    = Column(SAEnum('low', 'medium', 'high', name='contact_task_priority'), default='medium')
+    status      = Column(SAEnum('todo', 'in_progress', 'done', name='contact_task_status'), default='todo')
+    assigned_to = Column(String(255))
+    created_at  = Column(DateTime, default=datetime.utcnow)
+    updated_at  = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

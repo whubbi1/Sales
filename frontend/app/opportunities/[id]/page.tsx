@@ -265,7 +265,7 @@ export default function OpportunityDetailPage() {
 
       <div style={{ background: 'white', borderRadius: '10px', border: '1px solid #EDF2F7', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
         <div style={{ padding: '0 20px', background: '#FAFBFC', borderBottom: '2px solid #E2E8F0' }}>
-          <TabNav tabs={['Overview', 'Contacts', 'Staffing', 'Checklist', 'Comments', 'Tasks', 'Files']} active={tab} onChange={setTab} />
+          <TabNav tabs={['Overview', 'Notes', 'Staffing', 'Checklist', 'Files', 'Tasks']} active={tab} onChange={setTab} />
         </div>
         <div style={{ padding: '20px' }}>
           {tab === 'Overview' && (
@@ -277,24 +277,6 @@ export default function OpportunityDetailPage() {
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px' }}>
                     {opp.assigned_consultants.map((c: any) => <span key={c.email || c} style={{ background: '#EFF6FF', color: '#2563EB', padding: '3px 10px', borderRadius: '12px', fontSize: '11px', fontWeight: '600' }}>{c.name || c.email || c}</span>)}
                   </div>
-                </div>
-              )}
-            </div>
-          )}
-
-          {tab === 'Contacts' && (
-            <div>
-              {(!opp.contacts || opp.contacts.length === 0) ? <p style={{ color: '#9B9B9B', fontSize: '13px' }}>No contacts linked.</p> : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  {opp.contacts.map((c: any) => (
-                    <div key={c.id} onClick={() => router.push(`/contacts/${c.id}`)} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '10px 14px', border: '1px solid #EDF2F7', borderRadius: '8px', cursor: 'pointer' }}>
-                      <div style={{ width: '34px', height: '34px', borderRadius: '50%', background: '#e97132', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '13px', fontWeight: '800' }}>{c.first_name[0]?.toUpperCase()}</div>
-                      <div>
-                        <div style={{ fontWeight: '700', color: '#144766', fontSize: '13px' }}>{c.first_name} {c.last_name}</div>
-                        <div style={{ fontSize: '11px', color: '#9B9B9B' }}>{c.job_type || c.email}</div>
-                      </div>
-                    </div>
-                  ))}
                 </div>
               )}
             </div>
@@ -392,7 +374,7 @@ export default function OpportunityDetailPage() {
             </div>
           )}
 
-          {tab === 'Comments' && (
+          {tab === 'Notes' && (
             <div>
               <div style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
                 <textarea className="form-input" style={{ flex: 1, resize: 'vertical' }} rows={2} placeholder="Write a comment…" value={newComment} onChange={e => setNewComment(e.target.value)} />
@@ -490,6 +472,20 @@ export default function OpportunityDetailPage() {
 
   const rightColumn = (
     <div>
+      <SidebarSection title="Company">
+        {opp.company ? <SidebarCard title={opp.company.name} subtitle={`Status: ${opp.company.status}`} href={`/companies/${opp.company.id}`} color="#144766" /> : <p style={{ fontSize: '12px', color: '#9B9B9B' }}>No company.</p>}
+      </SidebarSection>
+      <SidebarSection title={`Contacts (${opp.contacts?.length || 0})`}>
+        {(!opp.contacts || opp.contacts.length === 0) ? <p style={{ fontSize: '12px', color: '#9B9B9B' }}>No contacts.</p> : opp.contacts.map((c: any) => <SidebarCard key={c.id} title={`${c.first_name} ${c.last_name}`} subtitle={c.job_type || c.email} href={`/contacts/${c.id}`} color="#e97132" />)}
+      </SidebarSection>
+      <SidebarSection title="Partner">
+        {opp.partner ? <SidebarCard title={opp.partner.name} subtitle={`Status: ${opp.partner.status}`} href={`/partners/${opp.partner.id}`} color="#7C3AED" /> : <p style={{ fontSize: '12px', color: '#9B9B9B' }}>No partner.</p>}
+      </SidebarSection>
+      {opp.company && (
+        <SidebarSection title={`Other ${opp.company.name} Opportunities (${companyDeals.length})`}>
+          {companyDeals.length === 0 ? <p style={{ fontSize: '12px', color: '#9B9B9B' }}>No other opportunities.</p> : companyDeals.map((d: any) => <SidebarCard key={d.id} title={d.deal_name} subtitle={d.deal_status} href={`/opportunities/${d.id}`} color="#219BD6" />)}
+        </SidebarSection>
+      )}
       <SidebarSection title="Opportunity Details">
         <PropertyRow label="Opportunity ID" value={opp.deal_id} />
         <PropertyRow label="Opportunity Type" value={opp.deal_type} />
@@ -507,23 +503,9 @@ export default function OpportunityDetailPage() {
         <PropertyRow label="Contracting Party" value={opp.contracting_party} />
         <PropertyRow label="Owner" value={opp.assigned_to} />
       </SidebarSection>
-      <SidebarSection title="Company">
-        {opp.company ? <SidebarCard title={opp.company.name} subtitle={`Status: ${opp.company.status}`} href={`/companies/${opp.company.id}`} color="#144766" /> : <p style={{ fontSize: '12px', color: '#9B9B9B' }}>No company.</p>}
-      </SidebarSection>
-      <SidebarSection title="Partner">
-        {opp.partner ? <SidebarCard title={opp.partner.name} subtitle={`Status: ${opp.partner.status}`} href={`/partners/${opp.partner.id}`} color="#7C3AED" /> : <p style={{ fontSize: '12px', color: '#9B9B9B' }}>No partner.</p>}
-      </SidebarSection>
-      <SidebarSection title={`Contacts (${opp.contacts?.length || 0})`}>
-        {(!opp.contacts || opp.contacts.length === 0) ? <p style={{ fontSize: '12px', color: '#9B9B9B' }}>No contacts.</p> : opp.contacts.map((c: any) => <SidebarCard key={c.id} title={`${c.first_name} ${c.last_name}`} subtitle={c.job_type || c.email} href={`/contacts/${c.id}`} color="#e97132" />)}
-      </SidebarSection>
       <SidebarSection title={`Staffing (${staffing.length})`}>
         {staffing.length === 0 ? <p style={{ fontSize: '12px', color: '#9B9B9B' }}>No one staffed yet.</p> : staffing.map((s: any) => <SidebarCard key={s.id} title={s.user_name || s.user_email} subtitle={s.role || 'Staffed'} href="/staffing" color="#059669" />)}
       </SidebarSection>
-      {opp.company && (
-        <SidebarSection title={`Other ${opp.company.name} Opportunities (${companyDeals.length})`}>
-          {companyDeals.length === 0 ? <p style={{ fontSize: '12px', color: '#9B9B9B' }}>No other opportunities.</p> : companyDeals.map((d: any) => <SidebarCard key={d.id} title={d.deal_name} subtitle={d.deal_status} href={`/opportunities/${d.id}`} color="#219BD6" />)}
-        </SidebarSection>
-      )}
     </div>
   )
 

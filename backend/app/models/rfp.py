@@ -51,6 +51,17 @@ class RFP(Base):
     document_checklist = relationship("RFPDocumentChecklist", back_populates="rfp", cascade="all, delete-orphan")
 
 
+class RFPComment(Base):
+    __tablename__ = "rfp_comments"
+
+    id           = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    rfp_id       = Column(UUID(as_uuid=True), ForeignKey("rfps.id", ondelete="CASCADE"), nullable=False)
+    author_email = Column(String(255), nullable=False)
+    author_name  = Column(String(255))
+    comment      = Column(Text, nullable=False)
+    created_at   = Column(DateTime, default=datetime.utcnow)
+
+
 class RFPActionItem(Base):
     __tablename__ = "rfp_action_items"
 

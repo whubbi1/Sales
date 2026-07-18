@@ -10,11 +10,12 @@ from uuid import UUID
 
 from app.database import get_db
 from app.services.ids import next_internal_id
-from app.models.rfp import RFP, RFPActionItem, RFPDocumentChecklist, RFPStaffingTask, RFPStaffingAllocation, RFPStaffingRate, RFPStaffingRole, rfp_opportunity
+from app.models.rfp import RFP, RFPComment, RFPActionItem, RFPDocumentChecklist, RFPStaffingTask, RFPStaffingAllocation, RFPStaffingRate, RFPStaffingRole, rfp_opportunity
 from app.models.opportunity import Opportunity
 from app.models.contact import Contact
 from app.schemas.schemas import (
     RFPCreate, RFPUpdate, RFPResponse, RFPSummary,
+    RFPCommentCreate, RFPCommentResponse,
     RFPActionItemCreate, RFPActionItemUpdate, RFPActionItemResponse,
     RFPDocumentChecklistCreate, RFPDocumentChecklistUpdate, RFPDocumentChecklistResponse,
     RFPStaffingTaskCreate, RFPStaffingTaskUpdate, RFPStaffingTaskResponse, RFPStaffingAllocationsSet,
@@ -206,6 +207,29 @@ async def _sync_internal_task(db: AsyncSession, item: RFPActionItem):
                 "source": "rfp", "due_date": due,
             }, db)
             item.task_id = uuid_module.UUID(result["id"])
+
+
+@router.get("/{rfp_id}/comments/", response_model=List[RFPCommentResponse])
+async def list_rfp_comments(rfp_id: UUID, db: AsyncSession = Depends(get_db)):
+    r = await db.execute(select(RFPComment).where(RFPComment.rfp_id == rfp_id).order_by(RFPComment.created_at.desc()))
+    return r.scalars().all()
+
+@router.post("/{rfp_id}/comments/", response_model=RFPCommentResponse, status_code=status.HTTP_201_CREATED)
+async def add_rfp_comment(rfp_id: UUID, data: RFPCommentCreate, db: AsyncSession = Depends(get_db)):
+    row = RFPComment(rfp_id=rfp_id, **data.model_dump())
+    db.add(row)
+    await db.commit()
+    await db.refresh(row)
+    return row
+
+@router.delete("/{rfp_id}/comments/{comment_id}/", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_rfp_comment(rfp_id: UUID, comment_id: UUID, db: AsyncSession = Depends(get_db)):
+    r = await db.execute(select(RFPComment).where(RFPComment.id == comment_id, RFPComment.rfp_id == rfp_id))
+    row = r.scalar_one_or_none()
+    if not row:
+        raise HTTPException(status_code=404, detail="Comment not found")
+    await db.delete(row)
+    await db.commit()
 
 
 @router.get("/{rfp_id}/action-items", response_model=List[RFPActionItemResponse])
