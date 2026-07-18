@@ -515,6 +515,23 @@ async def startup():
                     created_by VARCHAR(255),
                     created_at TIMESTAMP DEFAULT NOW()
                 )""",
+
+                # Org Entities — Sales Entities / Operational Teams / Purchasing Entities,
+                # grouped under Locations in the Legal sidebar. One shared table (category
+                # discriminator) with a single 4-digit code sequence across all three.
+                "CREATE SEQUENCE IF NOT EXISTS legal_org_entity_seq START 1",
+                """CREATE TABLE IF NOT EXISTS legal_org_entities (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    category VARCHAR(30) NOT NULL,
+                    code VARCHAR(4) UNIQUE NOT NULL,
+                    title VARCHAR(255) NOT NULL,
+                    description TEXT,
+                    created_by VARCHAR(255),
+                    updated_by VARCHAR(255),
+                    created_at TIMESTAMP DEFAULT NOW(),
+                    updated_at TIMESTAMP DEFAULT NOW()
+                )""",
+
                 """CREATE TABLE IF NOT EXISTS legal_doc_types (
                     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                     label VARCHAR(255) NOT NULL,
@@ -874,6 +891,38 @@ async def startup():
                     added_by_email VARCHAR(255),
                     created_at TIMESTAMP DEFAULT NOW()
                 )""",
+
+                # One-time, idempotent backfill of the old per-module Company/Contact task
+                # tables into the unified Task Manager, so every Sales task lives in one place.
+                # company_tasks/contact_tasks are left untouched as non-destructive historical
+                # copies (same pattern as the sales_tasks backfill above). Neither table ever
+                # captured an email for "assigned_to" (it was free text), so owner_email falls
+                # back to '' (unclaimed) when it isn't a usable value — task_manager.py treats
+                # a blank owner_email as claimable by whoever next edits/updates the task.
+                """INSERT INTO tasks (id, title, description, status, source, owner_email, owner_name,
+                                     assignee_email, assignee_name, due_date, entity_type, entity_id,
+                                     created_at, updated_at)
+                   SELECT id, title,
+                          CASE WHEN priority IS NOT NULL AND priority <> 'medium'
+                               THEN COALESCE(description, '') || CASE WHEN COALESCE(description,'') = '' THEN '' ELSE E'\\n' END || '[Priority: ' || priority || ']'
+                               ELSE description END,
+                          CASE status WHEN 'todo' THEN 'new' WHEN 'in_progress' THEN 'in_progress' WHEN 'done' THEN 'resolved' ELSE 'new' END,
+                          'sales', COALESCE(NULLIF(assigned_to,''), ''), assigned_to, COALESCE(NULLIF(assigned_to,''), ''), assigned_to,
+                          due_date, 'company', company_id, created_at, updated_at
+                   FROM company_tasks
+                   WHERE NOT EXISTS (SELECT 1 FROM tasks t WHERE t.id = company_tasks.id)""",
+                """INSERT INTO tasks (id, title, description, status, source, owner_email, owner_name,
+                                     assignee_email, assignee_name, due_date, entity_type, entity_id,
+                                     created_at, updated_at)
+                   SELECT id, title,
+                          CASE WHEN priority IS NOT NULL AND priority <> 'medium'
+                               THEN COALESCE(description, '') || CASE WHEN COALESCE(description,'') = '' THEN '' ELSE E'\\n' END || '[Priority: ' || priority || ']'
+                               ELSE description END,
+                          CASE status WHEN 'todo' THEN 'new' WHEN 'in_progress' THEN 'in_progress' WHEN 'done' THEN 'resolved' ELSE 'new' END,
+                          'sales', COALESCE(NULLIF(assigned_to,''), ''), assigned_to, COALESCE(NULLIF(assigned_to,''), ''), assigned_to,
+                          due_date, 'contact', contact_id, created_at, updated_at
+                   FROM contact_tasks
+                   WHERE NOT EXISTS (SELECT 1 FROM tasks t WHERE t.id = contact_tasks.id)""",
 
                 # GRC — Access Review cycles
                 """CREATE TABLE IF NOT EXISTS grc_access_review_cycles (

@@ -53,13 +53,17 @@ async def _log_comment(db: AsyncSession, task_id: str, content: str, author_emai
 
 
 # ─── Core status-transition logic — shared by the HTTP route and the Teams command parser ──
-async def set_task_status_internal(db: AsyncSession, task_id: str, acting_email: str, new_status: str) -> dict:
+async def set_task_status_internal(db: AsyncSession, task_id: str, acting_email: str, new_status: str, acting_name: str = "") -> dict:
     task = await _get_task(db, task_id)
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
 
     is_subtask = task["parent_task_id"] is not None
-    is_owner = acting_email == task["owner_email"]
+    # A blank owner_email means this task was migrated from a legacy per-module table that
+    # never captured an email (e.g. old Company/Contact tasks) — treat it as unclaimed and
+    # let whoever touches it first become the owner, rather than leaving it permanently stuck.
+    is_unclaimed = not task["owner_email"]
+    is_owner = acting_email == task["owner_email"] or is_unclaimed
     is_assignee = acting_email == task["assignee_email"]
     is_sub_owner = (not is_subtask) and await _is_subtask_owner_of(db, task_id, acting_email)
 
@@ -84,9 +88,11 @@ async def set_task_status_internal(db: AsyncSession, task_id: str, acting_email:
     elif new_status == "closed":
         stamps = ", closed_at = NOW()"
 
+    claim_clause = ", owner_email = COALESCE(NULLIF(:acting_email,''), owner_email), owner_name = COALESCE(NULLIF(:acting_name,''), owner_name)" if is_unclaimed and acting_email else ""
+
     await db.execute(text(f"""
-        UPDATE tasks SET status = :status, updated_at = NOW(){stamps} WHERE id = CAST(:id AS UUID)
-    """), {"status": new_status, "id": task_id})
+        UPDATE tasks SET status = :status, updated_at = NOW(){stamps}{claim_clause} WHERE id = CAST(:id AS UUID)
+    """), {"status": new_status, "id": task_id, "acting_email": acting_email, "acting_name": acting_name})
     await _log_comment(db, task_id, f"Status changed from {task['status']} to {new_status} by {acting_email}")
     await db.commit()
     return {"status": "ok"}
@@ -279,7 +285,9 @@ async def update_task(task_id: str, data: dict, db: AsyncSession = Depends(get_d
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
     acting_email = data.get("acting_email", "")
-    if acting_email not in (task["owner_email"], task["assignee_email"]):
+    # Blank owner_email = legacy-imported/unclaimed task (see set_task_status_internal) — let
+    # anyone edit it, and claim ownership for whoever does so it behaves normally afterward.
+    if task["owner_email"] and acting_email not in (task["owner_email"], task["assignee_email"]):
         raise HTTPException(status_code=403, detail="Only the task's owner or assignee can edit it")
 
     await db.execute(text("""
@@ -290,6 +298,8 @@ async def update_task(task_id: str, data: dict, db: AsyncSession = Depends(get_d
             subject = COALESCE(:subject, subject),
             entity_type = COALESCE(:entity_type, entity_type),
             entity_id = COALESCE(CAST(NULLIF(:entity_id,'') AS UUID), entity_id),
+            owner_email = CASE WHEN owner_email = '' THEN COALESCE(NULLIF(:acting_email,''), owner_email) ELSE owner_email END,
+            owner_name  = CASE WHEN owner_email = '' THEN COALESCE(NULLIF(:acting_name,''), owner_name)  ELSE owner_name  END,
             updated_at = NOW()
         WHERE id = CAST(:id AS UUID)
     """), {
@@ -297,6 +307,7 @@ async def update_task(task_id: str, data: dict, db: AsyncSession = Depends(get_d
         "due_date": data.get("due_date") or "", "subject": data.get("subject"),
         "entity_type": data.get("entity_type"),
         "entity_id": data.get("entity_id") or "", "id": task_id,
+        "acting_email": acting_email, "acting_name": data.get("acting_name", ""),
     })
     await db.commit()
     return {"status": "ok"}
@@ -304,7 +315,7 @@ async def update_task(task_id: str, data: dict, db: AsyncSession = Depends(get_d
 
 @router.put("/tasks/{task_id}/status")
 async def update_task_status(task_id: str, data: dict, db: AsyncSession = Depends(get_db)):
-    return await set_task_status_internal(db, task_id, data.get("acting_email", ""), data.get("status", ""))
+    return await set_task_status_internal(db, task_id, data.get("acting_email", ""), data.get("status", ""), data.get("acting_name", ""))
 
 
 @router.post("/tasks/{task_id}/reassign")
@@ -328,7 +339,7 @@ async def delete_task(task_id: str, acting_email: str = "", db: AsyncSession = D
     task = await _get_task(db, task_id)
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
-    if acting_email != task["owner_email"]:
+    if task["owner_email"] and acting_email != task["owner_email"]:
         raise HTTPException(status_code=403, detail="Only the task owner can delete it")
     await db.execute(text("DELETE FROM tasks WHERE id = CAST(:id AS UUID)"), {"id": task_id})
     await db.commit()

@@ -6,7 +6,7 @@ import { RecordLayout, PropertyRow, SidebarSection, SidebarCard, StatusBadge, Ta
 import { ContactModal } from '@/components/contacts/ContactModal'
 import { ContactNotes } from '@/components/contacts/ContactNotes'
 import { ContactArticles } from '@/components/contacts/ContactArticles'
-import { ContactTasks } from '@/components/contacts/ContactTasks'
+import { EntityTasks } from '@/components/tasks/EntityTasks'
 import { ActivityFeed } from '@/components/shared/ActivityFeed'
 
 const SUB_LABELS: Record<string, string> = { 'Marketing Information': '📧', 'Customer Service Communication': '💬', 'One to One': '🤝' }
@@ -113,7 +113,7 @@ export default function ContactDetailPage() {
           )}
           {tab === 'Notes' && <ContactNotes contactId={id as string} onChange={() => contactsAPI.getNotes(id as string).then(setNotes)} />}
           {tab === 'Articles' && <ContactArticles contactId={id as string} />}
-          {tab === 'Tasks' && <ContactTasks contactId={id as string} />}
+          {tab === 'Tasks' && <EntityTasks entityType="contact" entityId={id as string} entityLabel={`${contact.first_name} ${contact.last_name}`} />}
         </div>
       </div>
     </div>

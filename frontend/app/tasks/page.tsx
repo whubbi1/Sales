@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { Sidebar } from '@/components/Sidebar'
-import { taskManagerAPI, companiesAPI, contactsAPI, opportunitiesAPI } from '@/lib/api'
+import { taskManagerAPI, companiesAPI, contactsAPI, opportunitiesAPI, leadsAPI } from '@/lib/api'
 import { getStoredUser } from '@/lib/auth'
 import { PageHeader, EmptyState } from '@/components/shared/RecordLayout'
 import { TaskModal } from '@/components/tasks/TaskModal'
@@ -18,8 +18,8 @@ const STATUS_COLOR: Record<string, { bg: string; color: string }> = {
   closed: { bg: '#F1F5F9', color: '#64748B' },
 }
 const DONE_STATUSES = ['resolved', 'closed']
-const ENTITY_LABEL: Record<string, string> = { company: 'Customer', contact: 'Contact', opportunity: 'Opportunity' }
-const ENTITY_HREF: Record<string, string> = { company: '/companies', contact: '/contacts', opportunity: '/opportunities' }
+const ENTITY_LABEL: Record<string, string> = { company: 'Customer', contact: 'Contact', opportunity: 'Opportunity', lead: 'Lead' }
+const ENTITY_HREF: Record<string, string> = { company: '/companies', contact: '/contacts', opportunity: '/opportunities', lead: '/leads' }
 
 const COLUMNS: ReportColumn[] = [
   { key: 'title', label: 'Title', filterable: 'text' },
@@ -40,6 +40,7 @@ export default function TasksPage() {
   const [companies, setCompanies] = useState<any[]>([])
   const [contacts, setContacts] = useState<any[]>([])
   const [opportunities, setOpportunities] = useState<any[]>([])
+  const [leads, setLeads] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [statusFilter, setStatusFilter] = useState('')
   const [nameSearch, setNameSearch] = useState('')
@@ -51,11 +52,11 @@ export default function TasksPage() {
   const load = async () => {
     setLoading(true)
     try {
-      const [t, c, ct, o] = await Promise.all([
+      const [t, c, ct, o, l] = await Promise.all([
         taskManagerAPI.list({ source: 'sales', status_filter: statusFilter || undefined, email: actingEmail, scope: 'own' }),
-        companiesAPI.list({}), contactsAPI.list({}), opportunitiesAPI.list({}),
+        companiesAPI.list({}), contactsAPI.list({}), opportunitiesAPI.list({}), leadsAPI.list({}),
       ])
-      setTasks(t.tasks || []); setCompanies(c); setContacts(ct); setOpportunities(o)
+      setTasks(t.tasks || []); setCompanies(c); setContacts(ct); setOpportunities(o); setLeads(l)
     } catch (e) { console.error(e) }
     finally { setLoading(false) }
   }
@@ -63,10 +64,10 @@ export default function TasksPage() {
   useEffect(() => { load() }, [statusFilter])
 
   const entityInfo = (task: any) => {
-    const list = task.entity_type === 'company' ? companies : task.entity_type === 'contact' ? contacts : opportunities
+    const list = task.entity_type === 'company' ? companies : task.entity_type === 'contact' ? contacts : task.entity_type === 'lead' ? leads : opportunities
     const e = list.find((x: any) => x.id === task.entity_id)
     if (!e) return { name: '—', href: '' }
-    const name = task.entity_type === 'company' ? e.name : task.entity_type === 'contact' ? `${e.first_name} ${e.last_name}` : e.deal_name
+    const name = task.entity_type === 'company' ? e.name : task.entity_type === 'contact' ? `${e.first_name} ${e.last_name}` : task.entity_type === 'lead' ? e.title : e.deal_name
     return { name, href: `${ENTITY_HREF[task.entity_type]}/${e.id}` }
   }
 

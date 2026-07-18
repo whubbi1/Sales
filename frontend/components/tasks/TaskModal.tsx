@@ -1,7 +1,7 @@
 'use client'
 // components/tasks/TaskModal.tsx
 import { useState, useEffect } from 'react'
-import { taskManagerAPI, companiesAPI, contactsAPI, opportunitiesAPI } from '@/lib/api'
+import { taskManagerAPI, companiesAPI, contactsAPI, opportunitiesAPI, leadsAPI } from '@/lib/api'
 import { getStoredUser } from '@/lib/auth'
 import { createOutlookTask, isMsalConfigured } from '@/lib/msalTasks'
 
@@ -9,6 +9,7 @@ const ENTITY_TYPES = [
   { value: 'company', label: 'Customer (Company)' },
   { value: 'contact', label: 'Contact' },
   { value: 'opportunity', label: 'Opportunity' },
+  { value: 'lead', label: 'Lead' },
 ]
 
 const TOP_STATUSES = [
@@ -76,11 +77,11 @@ export function TaskModal({ task, entityType, entityId, entityLabel, source, par
 
   useEffect(() => {
     if (locked || !showEntity) return
-    const loader = form.entity_type === 'company' ? companiesAPI.list({}) : form.entity_type === 'contact' ? contactsAPI.list({}) : opportunitiesAPI.list({})
+    const loader = form.entity_type === 'company' ? companiesAPI.list({}) : form.entity_type === 'contact' ? contactsAPI.list({}) : form.entity_type === 'lead' ? leadsAPI.list({}) : opportunitiesAPI.list({})
     loader.then((rows: any[]) => setEntityOptions(rows)).catch(() => setEntityOptions([]))
   }, [form.entity_type, locked, showEntity])
 
-  const entityDisplayName = (e: any) => form.entity_type === 'company' ? e.name : form.entity_type === 'contact' ? `${e.first_name} ${e.last_name}` : e.deal_name
+  const entityDisplayName = (e: any) => form.entity_type === 'company' ? e.name : form.entity_type === 'contact' ? `${e.first_name} ${e.last_name}` : form.entity_type === 'lead' ? e.title : e.deal_name
 
   const handleOwnerChange = (email: string) => {
     const u = users.find((uu: any) => uu.email === email)
@@ -113,12 +114,13 @@ export function TaskModal({ task, entityType, entityId, entityLabel, source, par
         source: source || task?.source || 'manual',
         created_by_email: actingEmail,
         acting_email: actingEmail,
+        acting_name: currentUser?.name || actingEmail,
       }
       let saved
       if (task) {
         saved = await taskManagerAPI.update(task.id, payload)
         if (form.status !== task.status) {
-          try { await taskManagerAPI.setStatus(task.id, { acting_email: actingEmail, status: form.status }) }
+          try { await taskManagerAPI.setStatus(task.id, { acting_email: actingEmail, acting_name: currentUser?.name || actingEmail, status: form.status }) }
           catch (e: any) { setError(e.message); setSaving(false); return }
         }
         if (form.assignee_email !== task.assignee_email) {

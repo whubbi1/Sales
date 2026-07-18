@@ -2,12 +2,12 @@
 import { useState, useEffect, useRef } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { companiesAPI } from '@/lib/api'
+import { companiesAPI, taskManagerAPI } from '@/lib/api'
 import { RecordLayout, PropertyRow, SidebarSection, SidebarCard, StatusBadge, TabNav } from '@/components/shared/RecordLayout'
 import { CompanyModal } from '@/components/companies/CompanyModal'
 import { CompanyNotes } from '@/components/companies/CompanyNotes'
 import { CompanyArticles } from '@/components/companies/CompanyArticles'
-import { CompanyTasks } from '@/components/companies/CompanyTasks'
+import { EntityTasks } from '@/components/tasks/EntityTasks'
 import { CompanyServices } from '@/components/companies/CompanyServices'
 import { ActivityFeed } from '@/components/shared/ActivityFeed'
 import { LinkedInContactSearchModal } from '@/components/companies/LinkedInContactSearchModal'
@@ -75,7 +75,7 @@ export default function CompanyDetailPage() {
         companiesAPI.getContacts(id as string),
         companiesAPI.getOpportunities(id as string),
         companiesAPI.getNotes(id as string),
-        companiesAPI.getTasks(id as string),
+        taskManagerAPI.list({ entity_type: 'company', entity_id: id, source: 'sales' }).then((r: any) => r.tasks || []),
       ])
       setCompany(c)
       setAllCompanies(all)
@@ -236,7 +236,14 @@ export default function CompanyDetailPage() {
           {tab === 'Services' && <CompanyServices companyId={id as string} />}
           {tab === 'Notes' && <CompanyNotes companyId={id as string} onChange={() => companiesAPI.getNotes(id as string).then(setNotes)} />}
           {tab === 'Articles' && <CompanyArticles companyId={id as string} />}
-          {tab === 'Tasks' && <CompanyTasks companyId={id as string} onChange={() => companiesAPI.getTasks(id as string).then(setTasks)} />}
+          {tab === 'Tasks' && (
+            <EntityTasks
+              entityType="company"
+              entityId={id as string}
+              entityLabel={company.name}
+              onChange={() => taskManagerAPI.list({ entity_type: 'company', entity_id: id, source: 'sales' }).then((r: any) => setTasks(r.tasks || []))}
+            />
+          )}
         </div>
       </div>
     </div>

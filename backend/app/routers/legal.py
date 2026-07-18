@@ -1,10 +1,70 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
 from app.database import get_db
 import json
 
 router = APIRouter()
+
+
+# ─── Org Entities (Sales Entities / Operational Teams / Purchasing Entities) ─────
+# Simple code+title+description registries, grouped under Locations in the sidebar —
+# one shared table with a category discriminator instead of three near-identical tables.
+
+ORG_ENTITY_CATEGORIES = {"sales_entity", "operational_team", "purchasing_entity"}
+
+
+@router.get("/org-entities")
+async def list_org_entities(category: str = None, db: AsyncSession = Depends(get_db)):
+    where = "WHERE category = :category" if category else ""
+    params = {"category": category} if category else {}
+    r = await db.execute(text(f"""
+        SELECT id::text, category, code, title, description, created_by, updated_by, created_at, updated_at
+        FROM legal_org_entities {where} ORDER BY code
+    """), params)
+    return {"org_entities": [dict(row._mapping) for row in r.fetchall()]}
+
+
+@router.post("/org-entities")
+async def create_org_entity(data: dict, db: AsyncSession = Depends(get_db)):
+    category = data.get("category", "")
+    if category not in ORG_ENTITY_CATEGORIES:
+        raise HTTPException(status_code=400, detail=f"category must be one of {sorted(ORG_ENTITY_CATEGORIES)}")
+    if not data.get("title"):
+        raise HTTPException(status_code=400, detail="title is required")
+    seq = await db.execute(text("SELECT nextval('legal_org_entity_seq')"))
+    code = f"{seq.scalar():04d}"
+    r = await db.execute(text("""
+        INSERT INTO legal_org_entities (id, category, code, title, description, created_by, updated_by, created_at, updated_at)
+        VALUES (gen_random_uuid(), :category, :code, :title, :description, :by, :by, NOW(), NOW())
+        RETURNING id::text
+    """), {
+        "category": category, "code": code, "title": data["title"],
+        "description": data.get("description", ""), "by": data.get("created_by", ""),
+    })
+    await db.commit()
+    return {"id": r.fetchone()[0], "code": code, "status": "created"}
+
+
+@router.put("/org-entities/{entity_id}")
+async def update_org_entity(entity_id: str, data: dict, db: AsyncSession = Depends(get_db)):
+    await db.execute(text("""
+        UPDATE legal_org_entities SET
+            title = :title, description = :description, updated_by = :by, updated_at = NOW()
+        WHERE id = CAST(:id AS UUID)
+    """), {
+        "id": entity_id, "title": data.get("title", ""),
+        "description": data.get("description", ""), "by": data.get("updated_by", ""),
+    })
+    await db.commit()
+    return {"status": "updated"}
+
+
+@router.delete("/org-entities/{entity_id}")
+async def delete_org_entity(entity_id: str, db: AsyncSession = Depends(get_db)):
+    await db.execute(text("DELETE FROM legal_org_entities WHERE id = CAST(:id AS UUID)"), {"id": entity_id})
+    await db.commit()
+    return {"status": "deleted"}
 
 
 # ─── Doc Types (configurable) ────────────────────────────────────────────────

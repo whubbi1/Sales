@@ -59,11 +59,6 @@ export const companiesAPI = {
   unlinkArticleContact:(aid: string, cid: string) => fetchAPI(`/companies/articles/${aid}/contacts/${cid}`, { method: 'DELETE' }),
   linkArticlePartner:  (aid: string, pid: string) => fetchAPI(`/companies/articles/${aid}/partners/${pid}`, { method: 'POST' }),
   unlinkArticlePartner:(aid: string, pid: string) => fetchAPI(`/companies/articles/${aid}/partners/${pid}`, { method: 'DELETE' }),
-
-  getTasks:   (id: string) => fetchAPI(`/companies/${id}/tasks`),
-  createTask: (id: string, d: any) => fetchAPI(`/companies/${id}/tasks`, { method: 'POST', body: JSON.stringify(d) }),
-  updateTask: (cid: string, tid: string, d: any) => fetchAPI(`/companies/${cid}/tasks/${tid}`, { method: 'PUT', body: JSON.stringify(d) }),
-  deleteTask: (cid: string, tid: string) => fetchAPI(`/companies/${cid}/tasks/${tid}`, { method: 'DELETE' }),
 }
 
 // ─── Partners ─────────────────────────────────────────────────────────────────
@@ -151,11 +146,6 @@ export const contactsAPI = {
   getArticles:   (id: string) => fetchAPI(`/contacts/${id}/articles`),
   createArticle: (id: string, d: any) => fetchAPI(`/contacts/${id}/articles`, { method: 'POST', body: JSON.stringify(d) }),
   deleteArticle: (cid: string, aid: string) => fetchAPI(`/contacts/${cid}/articles/${aid}`, { method: 'DELETE' }),
-
-  getTasks:   (id: string) => fetchAPI(`/contacts/${id}/tasks`),
-  createTask: (id: string, d: any) => fetchAPI(`/contacts/${id}/tasks`, { method: 'POST', body: JSON.stringify(d) }),
-  updateTask: (cid: string, tid: string, d: any) => fetchAPI(`/contacts/${cid}/tasks/${tid}`, { method: 'PUT', body: JSON.stringify(d) }),
-  deleteTask: (cid: string, tid: string) => fetchAPI(`/contacts/${cid}/tasks/${tid}`, { method: 'DELETE' }),
 
   getLeads: (id: string) => fetchAPI(`/contacts/${id}/leads`),
 }
