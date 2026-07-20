@@ -8,14 +8,15 @@ import re
 router = APIRouter()
 
 
-# Shared 5-digit identifier used on Legal Entities, Locations, and Org Entities — each is
-# auto-generated from its own sequence on create, but the user can change it afterward as
-# long as it stays a unique 5-digit code within that table.
+# Shared 5-character identifier used on Legal Entities, Locations, and Org Entities — each is
+# auto-generated from its own sequence on create (but can be overridden with a custom value
+# at creation time), and the user can change it afterward as long as it stays a unique
+# 5-character alphanumeric code within that table. Normalized to uppercase.
 async def _check_unique_code(db: AsyncSession, table: str, code: str, exclude_id: str = None):
     if not code:
         return
-    if not re.fullmatch(r"\d{5}", code):
-        raise HTTPException(status_code=400, detail="Code must be exactly 5 digits")
+    if not re.fullmatch(r"[A-Z0-9]{5}", code):
+        raise HTTPException(status_code=400, detail="Code must be exactly 5 letters/digits")
     where = "code = :code" + (" AND id != CAST(:exclude_id AS UUID)" if exclude_id else "")
     params = {"code": code, **({"exclude_id": exclude_id} if exclude_id else {})}
     r = await db.execute(text(f"SELECT 1 FROM {table} WHERE {where}"), params)
@@ -31,12 +32,17 @@ ORG_ENTITY_CATEGORIES = {"sales_entity", "operational_team", "purchasing_entity"
 
 
 @router.get("/org-entities")
-async def list_org_entities(category: str = None, db: AsyncSession = Depends(get_db)):
-    where = "WHERE category = :category" if category else ""
-    params = {"category": category} if category else {}
+async def list_org_entities(category: str = None, active_only: bool = False, db: AsyncSession = Depends(get_db)):
+    where = ["1=1"]
+    params = {}
+    if category:
+        where.append("category = :category")
+        params["category"] = category
+    if active_only:
+        where.append("NOT is_archived")
     r = await db.execute(text(f"""
-        SELECT id::text, category, code, title, description, created_by, updated_by, created_at, updated_at
-        FROM legal_org_entities {where} ORDER BY code
+        SELECT id::text, category, code, title, description, is_archived, created_by, updated_by, created_at, updated_at
+        FROM legal_org_entities WHERE {' AND '.join(where)} ORDER BY code
     """), params)
     return {"org_entities": [dict(row._mapping) for row in r.fetchall()]}
 
@@ -48,8 +54,12 @@ async def create_org_entity(data: dict, db: AsyncSession = Depends(get_db)):
         raise HTTPException(status_code=400, detail=f"category must be one of {sorted(ORG_ENTITY_CATEGORIES)}")
     if not data.get("title"):
         raise HTTPException(status_code=400, detail="title is required")
-    seq = await db.execute(text("SELECT nextval('legal_org_entity_seq')"))
-    code = f"{seq.scalar():05d}"
+    code = (data.get("code") or "").strip().upper()
+    if code:
+        await _check_unique_code(db, "legal_org_entities", code)
+    else:
+        seq = await db.execute(text("SELECT nextval('legal_org_entity_seq')"))
+        code = f"{seq.scalar():05d}"
     r = await db.execute(text("""
         INSERT INTO legal_org_entities (id, category, code, title, description, created_by, updated_by, created_at, updated_at)
         VALUES (gen_random_uuid(), :category, :code, :title, :description, :by, :by, NOW(), NOW())
@@ -64,16 +74,20 @@ async def create_org_entity(data: dict, db: AsyncSession = Depends(get_db)):
 
 @router.put("/org-entities/{entity_id}")
 async def update_org_entity(entity_id: str, data: dict, db: AsyncSession = Depends(get_db)):
-    code = (data.get("code") or "").strip()
+    code = (data.get("code") or "").strip().upper()
     await _check_unique_code(db, "legal_org_entities", code, exclude_id=entity_id)
+    is_archived = data.get("is_archived") if "is_archived" in data else None
     await db.execute(text("""
         UPDATE legal_org_entities SET
             code = COALESCE(NULLIF(:code,''), code),
-            title = :title, description = :description, updated_by = :by, updated_at = NOW()
+            title = :title, description = :description,
+            is_archived = COALESCE(CAST(:is_archived AS BOOLEAN), is_archived),
+            updated_by = :by, updated_at = NOW()
         WHERE id = CAST(:id AS UUID)
     """), {
         "id": entity_id, "code": code, "title": data.get("title", ""),
-        "description": data.get("description", ""), "by": data.get("updated_by", ""),
+        "description": data.get("description", ""), "is_archived": is_archived,
+        "by": data.get("updated_by", ""),
     })
     await db.commit()
     return {"status": "updated"}
@@ -125,10 +139,11 @@ async def delete_doc_type(dt_id: str, db: AsyncSession = Depends(get_db)):
 # ─── Legal Entities ──────────────────────────────────────────────────────────
 
 @router.get("/entities")
-async def list_entities(db: AsyncSession = Depends(get_db)):
-    r = await db.execute(text("""
+async def list_entities(active_only: bool = False, db: AsyncSession = Depends(get_db)):
+    where = "WHERE NOT e.is_archived" if active_only else ""
+    r = await db.execute(text(f"""
         SELECT
-            e.id::text, e.code, e.legal_name, e.street, e.postal_code, e.city, e.country,
+            e.id::text, e.code, e.is_archived, e.legal_name, e.street, e.postal_code, e.city, e.country,
             e.phone, e.email, e.created_at, e.created_by, e.updated_at, e.updated_by,
             COALESCE(
                 (SELECT json_agg(json_build_object('id', r.id::text, 'reg_type', r.reg_type, 'reg_value', r.reg_value)
@@ -149,6 +164,7 @@ async def list_entities(db: AsyncSession = Depends(get_db)):
                 '[]'::json
             ) AS websites
         FROM legal_entities e
+        {where}
         ORDER BY e.country, e.legal_name
     """))
     return {"entities": [dict(row._mapping) for row in r.fetchall()]}
@@ -156,8 +172,12 @@ async def list_entities(db: AsyncSession = Depends(get_db)):
 
 @router.post("/entities")
 async def create_entity(data: dict, db: AsyncSession = Depends(get_db)):
-    seq = await db.execute(text("SELECT nextval('legal_entity_code_seq')"))
-    code = f"{seq.scalar():05d}"
+    code = (data.get("code") or "").strip().upper()
+    if code:
+        await _check_unique_code(db, "legal_entities", code)
+    else:
+        seq = await db.execute(text("SELECT nextval('legal_entity_code_seq')"))
+        code = f"{seq.scalar():05d}"
     r = await db.execute(text("""
         INSERT INTO legal_entities (id, code, legal_name, street, postal_code, city, country, created_by, created_at, updated_at)
         VALUES (gen_random_uuid(), :code, :legal_name, :street, :postal_code, :city, :country, :created_by, NOW(), NOW())
@@ -177,13 +197,15 @@ async def create_entity(data: dict, db: AsyncSession = Depends(get_db)):
 
 @router.put("/entities/{entity_id}")
 async def update_entity(entity_id: str, data: dict, db: AsyncSession = Depends(get_db)):
-    code = (data.get("code") or "").strip()
+    code = (data.get("code") or "").strip().upper()
     await _check_unique_code(db, "legal_entities", code, exclude_id=entity_id)
+    is_archived = data.get("is_archived") if "is_archived" in data else None
     await db.execute(text("""
         UPDATE legal_entities SET
             code = COALESCE(NULLIF(:code,''), code),
             legal_name = :legal_name, street = :street, postal_code = :postal_code,
             city = :city, country = :country, phone = :phone, email = :email,
+            is_archived = COALESCE(CAST(:is_archived AS BOOLEAN), is_archived),
             updated_by = :updated_by, updated_at = NOW()
         WHERE id = CAST(:id AS UUID)
     """), {
@@ -196,6 +218,7 @@ async def update_entity(entity_id: str, data: dict, db: AsyncSession = Depends(g
         "country":    data.get("country", ""),
         "phone":      data.get("phone", "") or "",
         "email":      data.get("email", "") or "",
+        "is_archived": is_archived,
         "updated_by": data.get("updated_by", ""),
     })
     await db.commit()
@@ -307,10 +330,11 @@ async def delete_entity_website(entity_id: str, web_id: str, db: AsyncSession = 
 # ─── Legal Locations ─────────────────────────────────────────────────────────
 
 @router.get("/locations")
-async def list_locations(db: AsyncSession = Depends(get_db)):
-    r = await db.execute(text("""
+async def list_locations(active_only: bool = False, db: AsyncSession = Depends(get_db)):
+    where = "WHERE NOT l.is_archived" if active_only else ""
+    r = await db.execute(text(f"""
         SELECT
-            l.id::text, l.code, l.location_name, l.street, l.postal_code, l.city, l.country,
+            l.id::text, l.code, l.is_archived, l.location_name, l.street, l.postal_code, l.city, l.country,
             l.phone, l.email, l.created_at, l.created_by, l.updated_at, l.updated_by,
             COALESCE(
                 (SELECT json_agg(json_build_object('id', r.id::text, 'reg_type', r.reg_type, 'reg_value', r.reg_value)
@@ -331,6 +355,7 @@ async def list_locations(db: AsyncSession = Depends(get_db)):
                 '[]'::json
             ) AS websites
         FROM legal_locations l
+        {where}
         ORDER BY l.country, l.location_name
     """))
     return {"locations": [dict(row._mapping) for row in r.fetchall()]}
@@ -338,8 +363,12 @@ async def list_locations(db: AsyncSession = Depends(get_db)):
 
 @router.post("/locations")
 async def create_location(data: dict, db: AsyncSession = Depends(get_db)):
-    seq = await db.execute(text("SELECT nextval('legal_location_code_seq')"))
-    code = f"{seq.scalar():05d}"
+    code = (data.get("code") or "").strip().upper()
+    if code:
+        await _check_unique_code(db, "legal_locations", code)
+    else:
+        seq = await db.execute(text("SELECT nextval('legal_location_code_seq')"))
+        code = f"{seq.scalar():05d}"
     r = await db.execute(text("""
         INSERT INTO legal_locations (id, code, location_name, street, postal_code, city, country, created_by, created_at, updated_at)
         VALUES (gen_random_uuid(), :code, :location_name, :street, :postal_code, :city, :country, :created_by, NOW(), NOW())
@@ -359,13 +388,15 @@ async def create_location(data: dict, db: AsyncSession = Depends(get_db)):
 
 @router.put("/locations/{loc_id}")
 async def update_location(loc_id: str, data: dict, db: AsyncSession = Depends(get_db)):
-    code = (data.get("code") or "").strip()
+    code = (data.get("code") or "").strip().upper()
     await _check_unique_code(db, "legal_locations", code, exclude_id=loc_id)
+    is_archived = data.get("is_archived") if "is_archived" in data else None
     await db.execute(text("""
         UPDATE legal_locations SET
             code = COALESCE(NULLIF(:code,''), code),
             location_name = :location_name, street = :street, postal_code = :postal_code,
             city = :city, country = :country, phone = :phone, email = :email,
+            is_archived = COALESCE(CAST(:is_archived AS BOOLEAN), is_archived),
             updated_by = :updated_by, updated_at = NOW()
         WHERE id = CAST(:id AS UUID)
     """), {
@@ -378,6 +409,7 @@ async def update_location(loc_id: str, data: dict, db: AsyncSession = Depends(ge
         "country":       data.get("country", ""),
         "phone":         data.get("phone", "") or "",
         "email":         data.get("email", "") or "",
+        "is_archived":   is_archived,
         "updated_by":    data.get("updated_by", ""),
     })
     await db.commit()

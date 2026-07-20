@@ -4,6 +4,7 @@ import { LegalLayout } from '@/components/LegalLayout'
 import { getStoredUser } from '@/lib/auth'
 
 const API = 'https://api.whubbi.wcomply.com'
+const CODE_RE = /^[A-Za-z0-9]{5}$/
 
 const COUNTRIES = [
   { value: 'france',         label: '🇫🇷 France' },
@@ -53,9 +54,9 @@ function InlineCode({ value, onSave }: { value: string; onSave: (v: string) => P
   useEffect(() => { setDraft(value) }, [value])
   useEffect(() => { if (editing && ref.current) { ref.current.focus(); ref.current.select() } }, [editing])
   const commit = async () => {
-    const v = draft.trim()
+    const v = draft.trim().toUpperCase()
     if (v === value) { setEditing(false); return }
-    if (!/^\d{5}$/.test(v)) { alert('Code must be exactly 5 digits'); setDraft(value); setEditing(false); return }
+    if (!CODE_RE.test(v)) { alert('Code must be exactly 5 letters/digits'); setDraft(value); setEditing(false); return }
     const ok = await onSave(v)
     if (!ok) setDraft(value)
     setEditing(false)
@@ -72,7 +73,7 @@ function InlineCode({ value, onSave }: { value: string; onSave: (v: string) => P
         background: editing ? 'white' : '#EFF6FF',
         border: editing ? '1.5px solid #156082' : '1.5px solid transparent',
         borderRadius: '10px', padding: '2px 8px', outline: 'none', cursor: editing ? 'text' : 'pointer',
-        width: '64px', boxSizing: 'border-box' as const, textAlign: 'center' as const,
+        width: '64px', boxSizing: 'border-box' as const, textAlign: 'center' as const, textTransform: 'uppercase' as const,
       }} />
   )
 }
@@ -98,6 +99,7 @@ export default function LegalLocationsPage() {
   const [showNew, setShowNew]   = useState(false)
   const [newName, setNewName]   = useState('')
   const [newCountry, setNewCountry] = useState('france')
+  const [newCode, setNewCode]   = useState('')
   const [creating, setCreating] = useState(false)
 
   useEffect(() => {
@@ -144,13 +146,21 @@ export default function LegalLocationsPage() {
 
   const createLocation = async () => {
     if (!newName.trim()) return
+    const code = newCode.trim().toUpperCase()
+    if (code && !CODE_RE.test(code)) { alert('Code must be exactly 5 letters/digits'); return }
     setCreating(true)
     const r = await fetch(`${API}/legal/locations`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ location_name: newName.trim(), country: newCountry, created_by: userEmail }),
+      body: JSON.stringify({ location_name: newName.trim(), country: newCountry, code, created_by: userEmail }),
     })
+    if (!r.ok) {
+      const err = await r.json().catch(() => ({}))
+      alert(err.detail || 'Could not create the location')
+      setCreating(false)
+      return
+    }
     const data = await r.json()
-    setNewName(''); setNewCountry('france'); setShowNew(false); setCreating(false)
+    setNewName(''); setNewCountry('france'); setNewCode(''); setShowNew(false); setCreating(false)
     load()
     if (data.id) setExpandedId(data.id)
   }
@@ -160,6 +170,17 @@ export default function LegalLocationsPage() {
     await fetch(`${API}/legal/locations/${id}`, { method: 'DELETE' })
     setLocations(prev => prev.filter(l => l.id !== id))
     if (expandedId === id) setExpandedId(null)
+  }
+
+  const toggleArchived = async (id: string) => {
+    const loc = locations.find(l => l.id === id)
+    if (!loc) return
+    const next = !loc.is_archived
+    setLocations(prev => prev.map(l => l.id === id ? { ...l, is_archived: next } : l))
+    await fetch(`${API}/legal/locations/${id}`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...loc, is_archived: next, updated_by: userEmail }),
+    })
   }
 
   const addReg = async (locId: string) => {
@@ -279,7 +300,14 @@ export default function LegalLocationsPage() {
         {showNew && (
           <div style={{ background: 'white', borderRadius: '12px', border: '1.5px solid #156082', padding: '20px', marginBottom: '20px', boxShadow: '0 2px 8px rgba(21,96,130,0.1)' }}>
             <div style={{ fontSize: '12px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#156082', marginBottom: '14px' }}>New Location</div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 220px auto auto', gap: '10px', alignItems: 'flex-end' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '100px 1fr 220px auto auto', gap: '10px', alignItems: 'flex-end' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', color: '#45B6E4', marginBottom: '4px' }}>Code</label>
+                <input value={newCode} onChange={e => setNewCode(e.target.value)} maxLength={5}
+                  onKeyDown={e => e.key === 'Enter' && createLocation()}
+                  placeholder="Auto"
+                  style={{ width: '100%', padding: '8px 10px', border: '1.5px solid #EDF2F7', borderRadius: '7px', fontFamily: 'monospace', fontSize: '13px', outline: 'none', boxSizing: 'border-box' as const, textAlign: 'center' as const, textTransform: 'uppercase' as const }} />
+              </div>
               <div>
                 <label style={{ display: 'block', fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', color: '#45B6E4', marginBottom: '4px' }}>Location Name *</label>
                 <input value={newName} onChange={e => setNewName(e.target.value)}
@@ -298,7 +326,7 @@ export default function LegalLocationsPage() {
                 style={{ padding: '9px 20px', background: newName.trim() ? '#156082' : '#F1F5F9', color: newName.trim() ? 'white' : '#94A3B8', border: 'none', borderRadius: '7px', fontSize: '13px', fontWeight: '700', cursor: newName.trim() ? 'pointer' : 'not-allowed', fontFamily: 'Montserrat, sans-serif', whiteSpace: 'nowrap' }}>
                 {creating ? 'Creating…' : 'Create'}
               </button>
-              <button onClick={() => { setShowNew(false); setNewName('') }}
+              <button onClick={() => { setShowNew(false); setNewName(''); setNewCode('') }}
                 style={{ padding: '9px 14px', background: '#F1F5F9', color: '#64748B', border: 'none', borderRadius: '7px', fontSize: '13px', cursor: 'pointer', fontFamily: 'Montserrat, sans-serif' }}>
                 Cancel
               </button>
@@ -319,7 +347,7 @@ export default function LegalLocationsPage() {
             const expanded = expandedId === loc.id
             const tab = getTab(loc.id)
             return (
-              <div key={loc.id} style={{ background: 'white', borderRadius: '12px', border: '1px solid #EDF2F7', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', overflow: 'hidden' }}>
+              <div key={loc.id} style={{ background: 'white', borderRadius: '12px', border: '1px solid #EDF2F7', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', overflow: 'hidden', opacity: loc.is_archived ? 0.6 : 1 }}>
                 <div style={{ padding: '14px 20px', display: 'flex', alignItems: 'center', gap: '16px', cursor: 'pointer', background: expanded ? '#F0F7FF' : 'white' }}
                   onClick={() => setExpandedId(expanded ? null : loc.id)}>
                   <span style={{ fontSize: '20px', flexShrink: 0 }}>{countryFlag(loc.country)}</span>
@@ -337,6 +365,10 @@ export default function LegalLocationsPage() {
                     {(loc.documents?.length > 0) && <span style={{ fontSize: '10px', background: '#F0FDF4', color: '#059669', padding: '2px 8px', borderRadius: '10px', fontWeight: '600' }}>{loc.documents.length} doc{loc.documents.length !== 1 ? 's' : ''}</span>}
                     {(loc.websites?.length > 0) && <span style={{ fontSize: '10px', background: '#FFF7ED', color: '#D97706', padding: '2px 8px', borderRadius: '10px', fontWeight: '600' }}>{loc.websites.length} site{loc.websites.length !== 1 ? 's' : ''}</span>}
                   </div>
+                  <button onClick={e => { e.stopPropagation(); toggleArchived(loc.id) }}
+                    style={{ background: loc.is_archived ? '#F1F5F9' : '#ECFDF5', color: loc.is_archived ? '#64748B' : '#059669', border: 'none', borderRadius: '10px', padding: '4px 10px', cursor: 'pointer', fontSize: '10px', fontWeight: '700', fontFamily: 'Montserrat, sans-serif', whiteSpace: 'nowrap', flexShrink: 0 }}>
+                    {loc.is_archived ? 'Archived' : 'Active'}
+                  </button>
                   <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="#94A3B8" strokeWidth={2}
                     style={{ flexShrink: 0, transform: expanded ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }}>
                     <polyline points="6 9 12 15 18 9" />

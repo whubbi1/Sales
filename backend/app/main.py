@@ -535,16 +535,19 @@ async def startup():
                 # afterward (see legal.py's _check_unique_code) — same identifier pattern now
                 # extended to Legal Entities and Locations below.
                 "ALTER TABLE legal_org_entities ALTER COLUMN code TYPE VARCHAR(5)",
+                "ALTER TABLE legal_org_entities ADD COLUMN IF NOT EXISTS is_archived BOOLEAN NOT NULL DEFAULT false",
 
                 "CREATE SEQUENCE IF NOT EXISTS legal_entity_code_seq START 1",
                 "ALTER TABLE legal_entities ADD COLUMN IF NOT EXISTS code VARCHAR(5)",
                 "UPDATE legal_entities SET code = LPAD(nextval('legal_entity_code_seq')::text, 5, '0') WHERE code IS NULL",
                 "ALTER TABLE legal_entities ADD CONSTRAINT legal_entities_code_key UNIQUE (code)",
+                "ALTER TABLE legal_entities ADD COLUMN IF NOT EXISTS is_archived BOOLEAN NOT NULL DEFAULT false",
 
                 "CREATE SEQUENCE IF NOT EXISTS legal_location_code_seq START 1",
                 "ALTER TABLE legal_locations ADD COLUMN IF NOT EXISTS code VARCHAR(5)",
                 "UPDATE legal_locations SET code = LPAD(nextval('legal_location_code_seq')::text, 5, '0') WHERE code IS NULL",
                 "ALTER TABLE legal_locations ADD CONSTRAINT legal_locations_code_key UNIQUE (code)",
+                "ALTER TABLE legal_locations ADD COLUMN IF NOT EXISTS is_archived BOOLEAN NOT NULL DEFAULT false",
 
                 """CREATE TABLE IF NOT EXISTS legal_doc_types (
                     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

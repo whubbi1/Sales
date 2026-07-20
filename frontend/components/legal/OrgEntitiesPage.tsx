@@ -4,6 +4,7 @@ import { LegalLayout } from '@/components/LegalLayout'
 import { getStoredUser } from '@/lib/auth'
 
 const API = 'https://api.whubbi.wcomply.com'
+const CODE_RE = /^[A-Za-z0-9]{5}$/
 
 function InlineText({ value, onSave, placeholder = '—', multiline }: {
   value: string; onSave: (v: string) => void; placeholder?: string; multiline?: boolean
@@ -51,9 +52,9 @@ function InlineCode({ value, onSave }: { value: string; onSave: (v: string) => P
   useEffect(() => { setDraft(value) }, [value])
   useEffect(() => { if (editing && ref.current) { ref.current.focus(); ref.current.select() } }, [editing])
   const commit = async () => {
-    const v = draft.trim()
+    const v = draft.trim().toUpperCase()
     if (v === value) { setEditing(false); return }
-    if (!/^\d{5}$/.test(v)) { alert('Code must be exactly 5 digits'); setDraft(value); setEditing(false); return }
+    if (!CODE_RE.test(v)) { alert('Code must be exactly 5 letters/digits'); setDraft(value); setEditing(false); return }
     const ok = await onSave(v)
     if (!ok) setDraft(value)
     setEditing(false)
@@ -71,6 +72,7 @@ function InlineCode({ value, onSave }: { value: string; onSave: (v: string) => P
         border: editing ? '1.5px solid #156082' : '1.5px solid transparent',
         borderRadius: '6px', padding: '3px 8px', outline: 'none', cursor: editing ? 'text' : 'pointer',
         width: '100%', boxSizing: 'border-box' as const, textAlign: 'center' as const,
+        textTransform: 'uppercase' as const,
       }} />
   )
 }
@@ -83,6 +85,7 @@ export function OrgEntitiesPage({ category, icon, title, subtitle }: {
   const [userEmail, setUserEmail] = useState('')
   const [newTitle, setNewTitle] = useState('')
   const [newDescription, setNewDescription] = useState('')
+  const [newCode, setNewCode] = useState('')
   const [adding, setAdding] = useState(false)
 
   useEffect(() => {
@@ -128,14 +131,33 @@ export function OrgEntitiesPage({ category, icon, title, subtitle }: {
     })
   }
 
+  const toggleArchived = async (id: string) => {
+    const e = entities.find(x => x.id === id); if (!e) return
+    const next = !e.is_archived
+    setEntities(prev => prev.map(x => x.id === id ? { ...x, is_archived: next } : x))
+    await fetch(`${API}/legal/org-entities/${id}`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title: e.title, description: e.description, is_archived: next, updated_by: userEmail }),
+    })
+  }
+
   const addEntity = async () => {
     if (!newTitle.trim()) return
+    const code = newCode.trim().toUpperCase()
+    if (code && !CODE_RE.test(code)) { alert('Code must be exactly 5 letters/digits'); return }
     setAdding(true)
-    await fetch(`${API}/legal/org-entities`, {
+    const res = await fetch(`${API}/legal/org-entities`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ category, title: newTitle.trim(), description: newDescription.trim(), created_by: userEmail }),
+      body: JSON.stringify({ category, title: newTitle.trim(), description: newDescription.trim(), code, created_by: userEmail }),
     })
-    setNewTitle(''); setNewDescription(''); setAdding(false); load()
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}))
+      alert(err.detail || 'Could not create the entity')
+      setAdding(false)
+      return
+    }
+    setNewTitle(''); setNewDescription(''); setNewCode(''); setAdding(false)
+    load()
   }
 
   const deleteEntity = async (id: string) => {
@@ -154,7 +176,14 @@ export function OrgEntitiesPage({ category, icon, title, subtitle }: {
 
         <div style={{ background: 'white', borderRadius: '12px', border: '1px solid #EDF2F7', padding: '18px 20px', marginBottom: '20px', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
           <div style={{ fontSize: '11px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#45B6E4', marginBottom: '12px' }}>Add {title.replace(/s$/, '')}</div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.4fr auto', gap: '10px', alignItems: 'flex-end' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '90px 1fr 1.4fr auto', gap: '10px', alignItems: 'flex-end' }}>
+            <div>
+              <label style={{ display: 'block', fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', color: '#45B6E4', marginBottom: '4px' }}>Code</label>
+              <input value={newCode} onChange={e => setNewCode(e.target.value)} maxLength={5}
+                onKeyDown={e => e.key === 'Enter' && addEntity()}
+                placeholder="Auto"
+                style={{ width: '100%', padding: '8px 10px', border: '1.5px solid #EDF2F7', borderRadius: '7px', fontFamily: 'monospace', fontSize: '12px', outline: 'none', boxSizing: 'border-box' as const, textAlign: 'center' as const, textTransform: 'uppercase' as const }} />
+            </div>
             <div>
               <label style={{ display: 'block', fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', color: '#45B6E4', marginBottom: '4px' }}>Title *</label>
               <input value={newTitle} onChange={e => setNewTitle(e.target.value)}
@@ -186,17 +215,22 @@ export function OrgEntitiesPage({ category, icon, title, subtitle }: {
 
         {!loading && entities.length > 0 && (
           <div style={{ background: 'white', borderRadius: '12px', border: '1px solid #EDF2F7', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
-            <div style={{ padding: '10px 20px', borderBottom: '1px solid #F1F5F9', background: '#FAFBFC', display: 'grid', gridTemplateColumns: '90px 1fr 1.4fr 36px', gap: '12px' }}>
+            <div style={{ padding: '10px 20px', borderBottom: '1px solid #F1F5F9', background: '#FAFBFC', display: 'grid', gridTemplateColumns: '90px 1fr 1.4fr 90px 36px', gap: '12px' }}>
               <span style={{ fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#94A3B8' }}>Code</span>
               <span style={{ fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#94A3B8' }}>Title</span>
               <span style={{ fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#94A3B8' }}>Description</span>
+              <span style={{ fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#94A3B8' }}>Status</span>
               <span></span>
             </div>
             {entities.map((e, i) => (
-              <div key={e.id} style={{ padding: '10px 20px', borderBottom: '1px solid #F9FAFB', background: i % 2 === 0 ? 'white' : '#FAFBFC', display: 'grid', gridTemplateColumns: '90px 1fr 1.4fr 36px', gap: '12px', alignItems: 'center' }}>
+              <div key={e.id} style={{ padding: '10px 20px', borderBottom: '1px solid #F9FAFB', background: i % 2 === 0 ? 'white' : '#FAFBFC', display: 'grid', gridTemplateColumns: '90px 1fr 1.4fr 90px 36px', gap: '12px', alignItems: 'center', opacity: e.is_archived ? 0.55 : 1 }}>
                 <InlineCode value={e.code || ''} onSave={v => saveCode(e.id, v)} />
                 <InlineText value={e.title || ''} placeholder="Title" onSave={v => saveTitle(e.id, v)} />
                 <InlineText value={e.description || ''} placeholder="Description" onSave={v => saveDescription(e.id, v)} multiline />
+                <button onClick={() => toggleArchived(e.id)}
+                  style={{ background: e.is_archived ? '#F1F5F9' : '#ECFDF5', color: e.is_archived ? '#64748B' : '#059669', border: 'none', borderRadius: '10px', padding: '4px 10px', cursor: 'pointer', fontSize: '10px', fontWeight: '700', fontFamily: 'Montserrat, sans-serif', whiteSpace: 'nowrap' }}>
+                  {e.is_archived ? 'Archived' : 'Active'}
+                </button>
                 <button onClick={() => deleteEntity(e.id)}
                   style={{ background: '#FEF2F2', color: '#DC2626', border: 'none', borderRadius: '6px', width: '28px', height: '28px', cursor: 'pointer', fontSize: '14px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>×</button>
               </div>
