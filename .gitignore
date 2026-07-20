@@ -47,3 +47,4 @@ Thumbs.db
 logs/
 task-def-clean.json
 task-def.json
+task-def-*.json
