@@ -518,12 +518,12 @@ async def startup():
 
                 # Org Entities — Sales Entities / Operational Teams / Purchasing Entities,
                 # grouped under Locations in the Legal sidebar. One shared table (category
-                # discriminator) with a single 4-digit code sequence across all three.
+                # discriminator) with a single 5-digit code sequence across all three.
                 "CREATE SEQUENCE IF NOT EXISTS legal_org_entity_seq START 1",
                 """CREATE TABLE IF NOT EXISTS legal_org_entities (
                     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                     category VARCHAR(30) NOT NULL,
-                    code VARCHAR(4) UNIQUE NOT NULL,
+                    code VARCHAR(5) UNIQUE NOT NULL,
                     title VARCHAR(255) NOT NULL,
                     description TEXT,
                     created_by VARCHAR(255),
@@ -531,6 +531,20 @@ async def startup():
                     created_at TIMESTAMP DEFAULT NOW(),
                     updated_at TIMESTAMP DEFAULT NOW()
                 )""",
+                # Widen from the original 4-digit code to 5 digits, and let the user edit it
+                # afterward (see legal.py's _check_unique_code) — same identifier pattern now
+                # extended to Legal Entities and Locations below.
+                "ALTER TABLE legal_org_entities ALTER COLUMN code TYPE VARCHAR(5)",
+
+                "CREATE SEQUENCE IF NOT EXISTS legal_entity_code_seq START 1",
+                "ALTER TABLE legal_entities ADD COLUMN IF NOT EXISTS code VARCHAR(5)",
+                "UPDATE legal_entities SET code = LPAD(nextval('legal_entity_code_seq')::text, 5, '0') WHERE code IS NULL",
+                "ALTER TABLE legal_entities ADD CONSTRAINT legal_entities_code_key UNIQUE (code)",
+
+                "CREATE SEQUENCE IF NOT EXISTS legal_location_code_seq START 1",
+                "ALTER TABLE legal_locations ADD COLUMN IF NOT EXISTS code VARCHAR(5)",
+                "UPDATE legal_locations SET code = LPAD(nextval('legal_location_code_seq')::text, 5, '0') WHERE code IS NULL",
+                "ALTER TABLE legal_locations ADD CONSTRAINT legal_locations_code_key UNIQUE (code)",
 
                 """CREATE TABLE IF NOT EXISTS legal_doc_types (
                     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

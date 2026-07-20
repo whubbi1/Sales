@@ -46,6 +46,37 @@ function InlineText({ value, onSave, placeholder = '—', style = {} }: {
   )
 }
 
+function InlineCode({ value, onSave }: { value: string; onSave: (v: string) => Promise<boolean> }) {
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState(value)
+  const ref = useRef<HTMLInputElement>(null)
+  useEffect(() => { setDraft(value) }, [value])
+  useEffect(() => { if (editing && ref.current) { ref.current.focus(); ref.current.select() } }, [editing])
+  const commit = async () => {
+    const v = draft.trim()
+    if (v === value) { setEditing(false); return }
+    if (!/^\d{5}$/.test(v)) { alert('Code must be exactly 5 digits'); setDraft(value); setEditing(false); return }
+    const ok = await onSave(v)
+    if (!ok) setDraft(value)
+    setEditing(false)
+  }
+  return (
+    <input ref={ref} value={editing ? draft : value} maxLength={5}
+      onClick={e => { e.stopPropagation(); setEditing(true) }}
+      readOnly={!editing}
+      onChange={e => setDraft(e.target.value)}
+      onBlur={commit}
+      onKeyDown={e => { if (e.key === 'Enter') commit(); if (e.key === 'Escape') { setDraft(value); setEditing(false) } }}
+      style={{
+        fontFamily: 'monospace', fontSize: '11px', fontWeight: '700', color: '#156082',
+        background: editing ? 'white' : '#EFF6FF',
+        border: editing ? '1.5px solid #156082' : '1.5px solid transparent',
+        borderRadius: '10px', padding: '2px 8px', outline: 'none', cursor: editing ? 'text' : 'pointer',
+        width: '64px', boxSizing: 'border-box' as const, textAlign: 'center' as const,
+      }} />
+  )
+}
+
 function InlineSelect({ value, options, onSave }: {
   value: string; options: { value: string; label: string }[]; onSave: (v: string) => void
 }) {
@@ -93,6 +124,22 @@ export default function LegalEntitiesPage() {
       method: 'PUT', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ ...entity, [field]: value, updated_by: userEmail }),
     })
+  }
+
+  const saveCode = async (id: string, value: string): Promise<boolean> => {
+    const entity = entities.find(e => e.id === id)
+    if (!entity) return false
+    const res = await fetch(`${API}/legal/entities/${id}`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...entity, code: value, updated_by: userEmail }),
+    })
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}))
+      alert(err.detail || 'Could not update the code')
+      return false
+    }
+    setEntities(prev => prev.map(e => e.id === id ? { ...e, code: value } : e))
+    return true
   }
 
   const createEntity = async () => {
@@ -276,6 +323,9 @@ export default function LegalEntitiesPage() {
                 <div style={{ padding: '14px 20px', display: 'flex', alignItems: 'center', gap: '16px', cursor: 'pointer', background: expanded ? '#F0F7FF' : 'white' }}
                   onClick={() => setExpandedId(expanded ? null : entity.id)}>
                   <span style={{ fontSize: '20px', flexShrink: 0 }}>{countryFlag(entity.country)}</span>
+                  <div onClick={e => e.stopPropagation()} style={{ flexShrink: 0 }}>
+                    <InlineCode value={entity.code || ''} onSave={v => saveCode(entity.id, v)} />
+                  </div>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: '14px', fontWeight: '700', color: '#1F2937' }}>{entity.legal_name || '—'}</div>
                     <div style={{ fontSize: '11px', color: '#94A3B8', marginTop: '2px' }}>

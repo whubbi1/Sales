@@ -3,8 +3,24 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
 from app.database import get_db
 import json
+import re
 
 router = APIRouter()
+
+
+# Shared 5-digit identifier used on Legal Entities, Locations, and Org Entities — each is
+# auto-generated from its own sequence on create, but the user can change it afterward as
+# long as it stays a unique 5-digit code within that table.
+async def _check_unique_code(db: AsyncSession, table: str, code: str, exclude_id: str = None):
+    if not code:
+        return
+    if not re.fullmatch(r"\d{5}", code):
+        raise HTTPException(status_code=400, detail="Code must be exactly 5 digits")
+    where = "code = :code" + (" AND id != CAST(:exclude_id AS UUID)" if exclude_id else "")
+    params = {"code": code, **({"exclude_id": exclude_id} if exclude_id else {})}
+    r = await db.execute(text(f"SELECT 1 FROM {table} WHERE {where}"), params)
+    if r.first():
+        raise HTTPException(status_code=400, detail=f"Code {code} is already in use")
 
 
 # ─── Org Entities (Sales Entities / Operational Teams / Purchasing Entities) ─────
@@ -33,7 +49,7 @@ async def create_org_entity(data: dict, db: AsyncSession = Depends(get_db)):
     if not data.get("title"):
         raise HTTPException(status_code=400, detail="title is required")
     seq = await db.execute(text("SELECT nextval('legal_org_entity_seq')"))
-    code = f"{seq.scalar():04d}"
+    code = f"{seq.scalar():05d}"
     r = await db.execute(text("""
         INSERT INTO legal_org_entities (id, category, code, title, description, created_by, updated_by, created_at, updated_at)
         VALUES (gen_random_uuid(), :category, :code, :title, :description, :by, :by, NOW(), NOW())
@@ -48,12 +64,15 @@ async def create_org_entity(data: dict, db: AsyncSession = Depends(get_db)):
 
 @router.put("/org-entities/{entity_id}")
 async def update_org_entity(entity_id: str, data: dict, db: AsyncSession = Depends(get_db)):
+    code = (data.get("code") or "").strip()
+    await _check_unique_code(db, "legal_org_entities", code, exclude_id=entity_id)
     await db.execute(text("""
         UPDATE legal_org_entities SET
+            code = COALESCE(NULLIF(:code,''), code),
             title = :title, description = :description, updated_by = :by, updated_at = NOW()
         WHERE id = CAST(:id AS UUID)
     """), {
-        "id": entity_id, "title": data.get("title", ""),
+        "id": entity_id, "code": code, "title": data.get("title", ""),
         "description": data.get("description", ""), "by": data.get("updated_by", ""),
     })
     await db.commit()
@@ -109,7 +128,7 @@ async def delete_doc_type(dt_id: str, db: AsyncSession = Depends(get_db)):
 async def list_entities(db: AsyncSession = Depends(get_db)):
     r = await db.execute(text("""
         SELECT
-            e.id::text, e.legal_name, e.street, e.postal_code, e.city, e.country,
+            e.id::text, e.code, e.legal_name, e.street, e.postal_code, e.city, e.country,
             e.phone, e.email, e.created_at, e.created_by, e.updated_at, e.updated_by,
             COALESCE(
                 (SELECT json_agg(json_build_object('id', r.id::text, 'reg_type', r.reg_type, 'reg_value', r.reg_value)
@@ -137,11 +156,14 @@ async def list_entities(db: AsyncSession = Depends(get_db)):
 
 @router.post("/entities")
 async def create_entity(data: dict, db: AsyncSession = Depends(get_db)):
+    seq = await db.execute(text("SELECT nextval('legal_entity_code_seq')"))
+    code = f"{seq.scalar():05d}"
     r = await db.execute(text("""
-        INSERT INTO legal_entities (id, legal_name, street, postal_code, city, country, created_by, created_at, updated_at)
-        VALUES (gen_random_uuid(), :legal_name, :street, :postal_code, :city, :country, :created_by, NOW(), NOW())
+        INSERT INTO legal_entities (id, code, legal_name, street, postal_code, city, country, created_by, created_at, updated_at)
+        VALUES (gen_random_uuid(), :code, :legal_name, :street, :postal_code, :city, :country, :created_by, NOW(), NOW())
         RETURNING id::text
     """), {
+        "code": code,
         "legal_name": data.get("legal_name", ""),
         "street":     data.get("street", ""),
         "postal_code": data.get("postal_code", ""),
@@ -150,19 +172,23 @@ async def create_entity(data: dict, db: AsyncSession = Depends(get_db)):
         "created_by": data.get("created_by", ""),
     })
     await db.commit()
-    return {"id": r.fetchone()[0], "status": "created"}
+    return {"id": r.fetchone()[0], "code": code, "status": "created"}
 
 
 @router.put("/entities/{entity_id}")
 async def update_entity(entity_id: str, data: dict, db: AsyncSession = Depends(get_db)):
+    code = (data.get("code") or "").strip()
+    await _check_unique_code(db, "legal_entities", code, exclude_id=entity_id)
     await db.execute(text("""
         UPDATE legal_entities SET
+            code = COALESCE(NULLIF(:code,''), code),
             legal_name = :legal_name, street = :street, postal_code = :postal_code,
             city = :city, country = :country, phone = :phone, email = :email,
             updated_by = :updated_by, updated_at = NOW()
         WHERE id = CAST(:id AS UUID)
     """), {
         "id":         entity_id,
+        "code":       code,
         "legal_name": data.get("legal_name", ""),
         "street":     data.get("street", ""),
         "postal_code": data.get("postal_code", ""),
@@ -284,7 +310,7 @@ async def delete_entity_website(entity_id: str, web_id: str, db: AsyncSession = 
 async def list_locations(db: AsyncSession = Depends(get_db)):
     r = await db.execute(text("""
         SELECT
-            l.id::text, l.location_name, l.street, l.postal_code, l.city, l.country,
+            l.id::text, l.code, l.location_name, l.street, l.postal_code, l.city, l.country,
             l.phone, l.email, l.created_at, l.created_by, l.updated_at, l.updated_by,
             COALESCE(
                 (SELECT json_agg(json_build_object('id', r.id::text, 'reg_type', r.reg_type, 'reg_value', r.reg_value)
@@ -312,11 +338,14 @@ async def list_locations(db: AsyncSession = Depends(get_db)):
 
 @router.post("/locations")
 async def create_location(data: dict, db: AsyncSession = Depends(get_db)):
+    seq = await db.execute(text("SELECT nextval('legal_location_code_seq')"))
+    code = f"{seq.scalar():05d}"
     r = await db.execute(text("""
-        INSERT INTO legal_locations (id, location_name, street, postal_code, city, country, created_by, created_at, updated_at)
-        VALUES (gen_random_uuid(), :location_name, :street, :postal_code, :city, :country, :created_by, NOW(), NOW())
+        INSERT INTO legal_locations (id, code, location_name, street, postal_code, city, country, created_by, created_at, updated_at)
+        VALUES (gen_random_uuid(), :code, :location_name, :street, :postal_code, :city, :country, :created_by, NOW(), NOW())
         RETURNING id::text
     """), {
+        "code": code,
         "location_name": data.get("location_name", ""),
         "street":        data.get("street", ""),
         "postal_code":   data.get("postal_code", ""),
@@ -325,19 +354,23 @@ async def create_location(data: dict, db: AsyncSession = Depends(get_db)):
         "created_by":    data.get("created_by", ""),
     })
     await db.commit()
-    return {"id": r.fetchone()[0], "status": "created"}
+    return {"id": r.fetchone()[0], "code": code, "status": "created"}
 
 
 @router.put("/locations/{loc_id}")
 async def update_location(loc_id: str, data: dict, db: AsyncSession = Depends(get_db)):
+    code = (data.get("code") or "").strip()
+    await _check_unique_code(db, "legal_locations", code, exclude_id=loc_id)
     await db.execute(text("""
         UPDATE legal_locations SET
+            code = COALESCE(NULLIF(:code,''), code),
             location_name = :location_name, street = :street, postal_code = :postal_code,
             city = :city, country = :country, phone = :phone, email = :email,
             updated_by = :updated_by, updated_at = NOW()
         WHERE id = CAST(:id AS UUID)
     """), {
         "id":            loc_id,
+        "code":          code,
         "location_name": data.get("location_name", ""),
         "street":        data.get("street", ""),
         "postal_code":   data.get("postal_code", ""),

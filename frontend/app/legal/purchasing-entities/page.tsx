@@ -7,7 +7,7 @@ export default function PurchasingEntitiesPage() {
       category="purchasing_entity"
       icon="🛒"
       title="Purchasing Entities"
-      subtitle="Entities used for purchasing, each with a 4-digit code"
+      subtitle="Entities used for purchasing, each with an editable 5-digit code"
     />
   )
 }

@@ -7,7 +7,7 @@ export default function OperationalTeamsPage() {
       category="operational_team"
       icon="🏭"
       title="Operational Teams"
-      subtitle="Internal teams delivering operations, each with a 4-digit code"
+      subtitle="Internal teams delivering operations, each with an editable 5-digit code"
     />
   )
 }
