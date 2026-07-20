@@ -497,6 +497,51 @@ async def delete_company_link(link_id: str, db: AsyncSession = Depends(get_db)):
     await db.commit()
     return {"status": "ok"}
 
+# ─── Organizational element assignments (Company / Location / Sales / Purchasing / Operational) ──
+# Scoped globally per user, shown on the WHUBBI Permissions page above module access.
+# Empty array for a category means unrestricted ("all"), same convention as main-location below.
+ORG_ASSIGNMENT_CATEGORIES = ["company_ids", "location_ids", "sales_org_ids", "purchasing_org_ids", "operational_org_ids"]
+
+
+@router.get("/org-assignments/{email}")
+async def get_org_assignments(email: str, db: AsyncSession = Depends(get_db)):
+    r = await db.execute(text("SELECT * FROM whubbi_org_assignments WHERE user_email = :email"), {"email": email})
+    row = r.fetchone()
+    if not row:
+        return {cat: [] for cat in ORG_ASSIGNMENT_CATEGORIES}
+    data = dict(row._mapping)
+    result = {}
+    for cat in ORG_ASSIGNMENT_CATEGORIES:
+        value = data.get(cat)
+        if isinstance(value, str):
+            try: value = json.loads(value)
+            except Exception: value = []
+        result[cat] = value or []
+    return result
+
+
+@router.put("/org-assignments/{email}")
+async def set_org_assignments(email: str, data: dict, db: AsyncSession = Depends(get_db)):
+    values = {cat: json.dumps(data.get(cat) or []) for cat in ORG_ASSIGNMENT_CATEGORIES}
+    await db.execute(text("""
+        INSERT INTO whubbi_org_assignments
+            (id, user_email, company_ids, location_ids, sales_org_ids, purchasing_org_ids, operational_org_ids, updated_by, updated_at)
+        VALUES
+            (gen_random_uuid(), :email, CAST(:company_ids AS JSONB), CAST(:location_ids AS JSONB), CAST(:sales_org_ids AS JSONB),
+             CAST(:purchasing_org_ids AS JSONB), CAST(:operational_org_ids AS JSONB), :updated_by, NOW())
+        ON CONFLICT (user_email) DO UPDATE SET
+            company_ids = EXCLUDED.company_ids,
+            location_ids = EXCLUDED.location_ids,
+            sales_org_ids = EXCLUDED.sales_org_ids,
+            purchasing_org_ids = EXCLUDED.purchasing_org_ids,
+            operational_org_ids = EXCLUDED.operational_org_ids,
+            updated_by = EXCLUDED.updated_by,
+            updated_at = NOW()
+    """), {"email": email, "updated_by": data.get("updated_by", ""), **values})
+    await db.commit()
+    return {"status": "ok"}
+
+
 # ─── Per-user main location (drives which company links appear on the home page) ─
 @router.get("/main-location/{email}")
 async def get_main_location(email: str, db: AsyncSession = Depends(get_db)):

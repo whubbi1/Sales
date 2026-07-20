@@ -531,8 +531,8 @@ async def startup():
                     created_at TIMESTAMP DEFAULT NOW(),
                     updated_at TIMESTAMP DEFAULT NOW()
                 )""",
-                # Widen from the original 4-digit code to 5 digits, and let the user edit it
-                # afterward (see legal.py's _check_unique_code) — same identifier pattern now
+                # Widen from the original 4-digit code to 5 digits. Code is set once at
+                # creation and immutable afterward (see legal.py) — same identifier pattern
                 # extended to Legal Entities and Locations below.
                 "ALTER TABLE legal_org_entities ALTER COLUMN code TYPE VARCHAR(5)",
                 "ALTER TABLE legal_org_entities ADD COLUMN IF NOT EXISTS is_archived BOOLEAN NOT NULL DEFAULT false",
@@ -548,6 +548,22 @@ async def startup():
                 "UPDATE legal_locations SET code = LPAD(nextval('legal_location_code_seq')::text, 5, '0') WHERE code IS NULL",
                 "ALTER TABLE legal_locations ADD CONSTRAINT legal_locations_code_key UNIQUE (code)",
                 "ALTER TABLE legal_locations ADD COLUMN IF NOT EXISTS is_archived BOOLEAN NOT NULL DEFAULT false",
+
+                # Per-user assignment of legal organizational elements (Company / Location /
+                # Sales Org / Purchasing Org / Operational Org). Scoped globally to the user,
+                # shown on the WHUBBI Permissions page above module access. Empty array means
+                # unrestricted ("all"), same convention as user_profiles.main_location_id.
+                """CREATE TABLE IF NOT EXISTS whubbi_org_assignments (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    user_email VARCHAR(255) UNIQUE NOT NULL,
+                    company_ids JSONB DEFAULT '[]',
+                    location_ids JSONB DEFAULT '[]',
+                    sales_org_ids JSONB DEFAULT '[]',
+                    purchasing_org_ids JSONB DEFAULT '[]',
+                    operational_org_ids JSONB DEFAULT '[]',
+                    updated_by VARCHAR(255),
+                    updated_at TIMESTAMP DEFAULT NOW()
+                )""",
 
                 """CREATE TABLE IF NOT EXISTS legal_doc_types (
                     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

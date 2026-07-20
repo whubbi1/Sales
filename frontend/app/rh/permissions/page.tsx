@@ -52,6 +52,19 @@ const ENTITY_LABEL: Record<string, string> = { all:'🌍 All', france:'🇫🇷 
 const SCOPE_COLOR:  Record<string, string> = { none:'#F1F5F9', own:'#EFF6FF', team:'#FFF7ED', company:'#ECFDF5' }
 const SCOPE_TEXT:   Record<string, string> = { none:'#848EA5', own:'#156082', team:'#D97706', company:'#059669' }
 
+// Real legal organizational elements a user can be scoped to, assigned once per user
+// before any module access is configured. Each maps to a whubbi_org_assignments column.
+const ORG_ELEMENT_TYPES: { key: string; label: string; icon: string }[] = [
+  { key: 'company_ids',            label: 'Company',            icon: '🏢' },
+  { key: 'location_ids',           label: 'Location',           icon: '📍' },
+  { key: 'sales_org_ids',          label: 'Sales Organization',  icon: '💼' },
+  { key: 'purchasing_org_ids',     label: 'Purchasing Organization', icon: '🛒' },
+  { key: 'operational_org_ids',    label: 'Operational Organization', icon: '⚙️' },
+]
+const EMPTY_ORG_ASSIGNMENTS: Record<string, string[]> = {
+  company_ids: [], location_ids: [], sales_org_ids: [], purchasing_org_ids: [], operational_org_ids: [],
+}
+
 export default function PermissionsPage() {
   const [users, setUsers] = useState<any[]>([])
   const [selectedUser, setSelectedUser] = useState('')
@@ -65,6 +78,13 @@ export default function PermissionsPage() {
   const [mainLocationId, setMainLocationId] = useState('')
   const [mainLocationSaving, setMainLocationSaving] = useState(false)
   const [isExcluded, setIsExcluded] = useState(false)
+  const [companies, setCompanies] = useState<any[]>([])
+  const [salesOrgs, setSalesOrgs] = useState<any[]>([])
+  const [purchasingOrgs, setPurchasingOrgs] = useState<any[]>([])
+  const [operationalOrgs, setOperationalOrgs] = useState<any[]>([])
+  const [orgAssignments, setOrgAssignments] = useState<Record<string, string[]>>(EMPTY_ORG_ASSIGNMENTS)
+  const [orgAssignmentsSaving, setOrgAssignmentsSaving] = useState(false)
+  const [expandedModules, setExpandedModules] = useState<Record<string, boolean>>({})
 
   const loadUsers = () => {
     fetch(`${API}/settings/users`).then(r=>r.json()).then(d=>setUsers(d.users||[])).catch(()=>{})
@@ -73,6 +93,10 @@ export default function PermissionsPage() {
   useEffect(() => {
     loadUsers()
     fetch(`${API}/legal/locations`).then(r=>r.json()).then(d=>setLocations(d.locations||[])).catch(()=>{})
+    fetch(`${API}/legal/entities`).then(r=>r.json()).then(d=>setCompanies(d.entities||[])).catch(()=>{})
+    fetch(`${API}/legal/org-entities?category=sales_entity`).then(r=>r.json()).then(d=>setSalesOrgs(d.org_entities||[])).catch(()=>{})
+    fetch(`${API}/legal/org-entities?category=purchasing_entity`).then(r=>r.json()).then(d=>setPurchasingOrgs(d.org_entities||[])).catch(()=>{})
+    fetch(`${API}/legal/org-entities?category=operational_team`).then(r=>r.json()).then(d=>setOperationalOrgs(d.org_entities||[])).catch(()=>{})
   }, [])
 
   useEffect(() => {
@@ -82,8 +106,41 @@ export default function PermissionsPage() {
         setMainLocationId(d.main_location_id || '')
         setIsExcluded(!!d.is_excluded)
       }).catch(()=>{ setMainLocationId(''); setIsExcluded(false) })
+      fetch(`${API}/settings/org-assignments/${encodeURIComponent(selectedUser)}`).then(r=>r.json()).then(d=>{
+        setOrgAssignments({ ...EMPTY_ORG_ASSIGNMENTS, ...d })
+      }).catch(()=>setOrgAssignments(EMPTY_ORG_ASSIGNMENTS))
     }
   }, [selectedUser])
+
+  const orgElementOptions = (key: string): { id: string; label: string }[] => {
+    if (key === 'company_ids') return companies.filter(c => !c.is_archived).map(c => ({ id: c.id, label: `${c.code} — ${c.legal_name}` }))
+    if (key === 'location_ids') return locations.filter((l:any) => !l.is_archived).map((l:any) => ({ id: l.id, label: `${l.code} — ${l.location_name}` }))
+    if (key === 'sales_org_ids') return salesOrgs.filter(o => !o.is_archived).map(o => ({ id: o.id, label: `${o.code} — ${o.title}` }))
+    if (key === 'purchasing_org_ids') return purchasingOrgs.filter(o => !o.is_archived).map(o => ({ id: o.id, label: `${o.code} — ${o.title}` }))
+    if (key === 'operational_org_ids') return operationalOrgs.filter(o => !o.is_archived).map(o => ({ id: o.id, label: `${o.code} — ${o.title}` }))
+    return []
+  }
+
+  const toggleOrgElement = (key: string, id: string) => {
+    setOrgAssignments(prev => {
+      const current = prev[key] || []
+      const next = current.includes(id) ? current.filter(x => x !== id) : [...current, id]
+      return { ...prev, [key]: next }
+    })
+  }
+
+  const saveOrgAssignments = async () => {
+    setOrgAssignmentsSaving(true)
+    try {
+      await fetch(`${API}/settings/org-assignments/${encodeURIComponent(selectedUser)}`, {
+        method: 'PUT', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ ...orgAssignments, updated_by: 'hr_manager' }),
+      })
+    } finally { setOrgAssignmentsSaving(false) }
+  }
+
+  const toggleModuleExpanded = (module: string) =>
+    setExpandedModules(prev => ({ ...prev, [module]: !prev[module] }))
 
   const saveMainLocationCard = async (patch: { locationId?: string; excluded?: boolean }) => {
     const locationId = patch.locationId !== undefined ? patch.locationId : mainLocationId
@@ -266,6 +323,47 @@ export default function PermissionsPage() {
                   </div>
                 </div>
 
+                {/* Organizational Element Assignment — set before granting any module access */}
+                <div style={{ background:'white', borderRadius:'12px', border:'1px solid #EDF2F7', padding:'14px 20px', marginBottom:'14px', boxShadow:'0 1px 3px rgba(0,0,0,0.06)' }}>
+                  <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:'12px' }}>
+                    <div>
+                      <div style={{ fontSize:'10px', fontWeight:'700', textTransform:'uppercase', letterSpacing:'0.07em', color:'#45B6E4', marginBottom:'4px' }}>🏛️ Organizational Elements</div>
+                      <div style={{ fontSize:'11px', color:'#94A3B8' }}>Assign the legal Company, Location, Sales/Purchasing/Operational Organization(s) this user belongs to. Leave a category empty to grant all.</div>
+                    </div>
+                    <button onClick={saveOrgAssignments} disabled={orgAssignmentsSaving}
+                      style={{ padding:'6px 14px', background: orgAssignmentsSaving ? '#F1F5F9' : '#156082', color: orgAssignmentsSaving ? '#45B6E4' : 'white', border:'none', borderRadius:'7px', fontSize:'11px', fontWeight:'700', cursor: orgAssignmentsSaving ? 'not-allowed' : 'pointer', fontFamily:'Montserrat, sans-serif', whiteSpace:'nowrap', flexShrink:0 }}>
+                      {orgAssignmentsSaving ? '⏳ Saving...' : '💾 Save'}
+                    </button>
+                  </div>
+                  <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(220px, 1fr))', gap:'12px' }}>
+                    {ORG_ELEMENT_TYPES.map(({ key, label, icon }) => {
+                      const options = orgElementOptions(key)
+                      const selected = orgAssignments[key] || []
+                      return (
+                        <div key={key} style={{ border:'1px solid #F1F5F9', borderRadius:'8px', padding:'10px 12px' }}>
+                          <div style={{ fontSize:'11px', fontWeight:'700', color:'#3F3F3F', marginBottom:'6px' }}>{icon} {label}</div>
+                          {options.length === 0 && <div style={{ fontSize:'10px', color:'#94A3B8' }}>None defined yet</div>}
+                          <div style={{ display:'flex', flexWrap:'wrap', gap:'4px', maxHeight:'110px', overflowY:'auto' }}>
+                            {options.map(opt => {
+                              const active = selected.includes(opt.id)
+                              return (
+                                <button key={opt.id} onClick={() => toggleOrgElement(key, opt.id)}
+                                  style={{ padding:'3px 8px', borderRadius:'6px', border:`1.5px solid ${active?'#156082':'#EDF2F7'}`, cursor:'pointer', fontSize:'10px', fontWeight:'700', fontFamily:'Montserrat, sans-serif',
+                                    background: active ? '#EFF6FF' : 'white', color: active ? '#156082' : '#94A3B8' }}>
+                                  {opt.label}
+                                </button>
+                              )
+                            })}
+                          </div>
+                          {selected.length === 0 && options.length > 0 && (
+                            <div style={{ fontSize:'9px', color:'#059669', fontWeight:'700', marginTop:'6px' }}>🌍 All (none selected)</div>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+
                 {/* Header */}
                 <div style={{ background:'white', borderRadius:'12px', border:'1px solid #EDF2F7', padding:'16px 20px', marginBottom:'14px', boxShadow:'0 1px 3px rgba(0,0,0,0.06)', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
                   <div>
@@ -293,13 +391,20 @@ export default function PermissionsPage() {
                 {Object.entries(permissions.permissions || {}).map(([module, submodules]: [string, any]) => {
                   const meta = MODULES_META[module] || { label:module, icon:'📦', color:'#45B6E4' }
                   const isHR = module === 'hr'
+                  const expanded = !!expandedModules[module]
                   return (
                     <div key={module} style={{ background:'white', borderRadius:'12px', border:'1px solid #EDF2F7', overflow:'hidden', boxShadow:'0 1px 3px rgba(0,0,0,0.06)', marginBottom:'12px' }}>
-                      <div style={{ padding:'12px 20px', background:meta.color+'18', borderBottom:'1px solid #EDF2F7', display:'flex', alignItems:'center', gap:'10px' }}>
+                      <div onClick={() => toggleModuleExpanded(module)}
+                        style={{ padding:'12px 20px', background:meta.color+'18', borderBottom: expanded ? '1px solid #EDF2F7' : 'none', display:'flex', alignItems:'center', gap:'10px', cursor:'pointer' }}>
                         <span style={{ fontSize:'18px' }}>{meta.icon}</span>
                         <span style={{ fontSize:'13px', fontWeight:'800', color:meta.color }}>{meta.label}</span>
                         <span style={{ fontSize:'11px', color:'#45B6E4' }}>({Object.keys(submodules).length} submodules)</span>
+                        <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke={meta.color} strokeWidth={2}
+                          style={{ marginLeft:'auto', flexShrink:0, transform: expanded ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }}>
+                          <polyline points="6 9 12 15 18 9" />
+                        </svg>
                       </div>
+                      {expanded && (
                       <table style={{ width:'100%', borderCollapse:'collapse' }}>
                         <thead>
                           <tr style={{ background:'#FAFBFC' }}>
@@ -371,6 +476,7 @@ export default function PermissionsPage() {
                           })}
                         </tbody>
                       </table>
+                      )}
                     </div>
                   )
                 })}

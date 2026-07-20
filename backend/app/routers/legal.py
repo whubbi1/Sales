@@ -10,8 +10,8 @@ router = APIRouter()
 
 # Shared 5-character identifier used on Legal Entities, Locations, and Org Entities — each is
 # auto-generated from its own sequence on create (but can be overridden with a custom value
-# at creation time), and the user can change it afterward as long as it stays a unique
-# 5-character alphanumeric code within that table. Normalized to uppercase.
+# at creation time). Immutable once created; update endpoints never touch it.
+# 5-character alphanumeric code, unique within its table. Normalized to uppercase.
 async def _check_unique_code(db: AsyncSession, table: str, code: str, exclude_id: str = None):
     if not code:
         return
@@ -74,18 +74,16 @@ async def create_org_entity(data: dict, db: AsyncSession = Depends(get_db)):
 
 @router.put("/org-entities/{entity_id}")
 async def update_org_entity(entity_id: str, data: dict, db: AsyncSession = Depends(get_db)):
-    code = (data.get("code") or "").strip().upper()
-    await _check_unique_code(db, "legal_org_entities", code, exclude_id=entity_id)
+    # code is immutable once the org entity is created — omit it here even if present in the payload
     is_archived = data.get("is_archived") if "is_archived" in data else None
     await db.execute(text("""
         UPDATE legal_org_entities SET
-            code = COALESCE(NULLIF(:code,''), code),
             title = :title, description = :description,
             is_archived = COALESCE(CAST(:is_archived AS BOOLEAN), is_archived),
             updated_by = :by, updated_at = NOW()
         WHERE id = CAST(:id AS UUID)
     """), {
-        "id": entity_id, "code": code, "title": data.get("title", ""),
+        "id": entity_id, "title": data.get("title", ""),
         "description": data.get("description", ""), "is_archived": is_archived,
         "by": data.get("updated_by", ""),
     })
@@ -95,9 +93,7 @@ async def update_org_entity(entity_id: str, data: dict, db: AsyncSession = Depen
 
 @router.delete("/org-entities/{entity_id}")
 async def delete_org_entity(entity_id: str, db: AsyncSession = Depends(get_db)):
-    await db.execute(text("DELETE FROM legal_org_entities WHERE id = CAST(:id AS UUID)"), {"id": entity_id})
-    await db.commit()
-    return {"status": "deleted"}
+    raise HTTPException(status_code=403, detail="Organizational elements cannot be deleted. Archive it instead.")
 
 
 # ─── Doc Types (configurable) ────────────────────────────────────────────────
@@ -197,12 +193,10 @@ async def create_entity(data: dict, db: AsyncSession = Depends(get_db)):
 
 @router.put("/entities/{entity_id}")
 async def update_entity(entity_id: str, data: dict, db: AsyncSession = Depends(get_db)):
-    code = (data.get("code") or "").strip().upper()
-    await _check_unique_code(db, "legal_entities", code, exclude_id=entity_id)
+    # code is immutable once the legal entity is created — omit it here even if present in the payload
     is_archived = data.get("is_archived") if "is_archived" in data else None
     await db.execute(text("""
         UPDATE legal_entities SET
-            code = COALESCE(NULLIF(:code,''), code),
             legal_name = :legal_name, street = :street, postal_code = :postal_code,
             city = :city, country = :country, phone = :phone, email = :email,
             is_archived = COALESCE(CAST(:is_archived AS BOOLEAN), is_archived),
@@ -210,7 +204,6 @@ async def update_entity(entity_id: str, data: dict, db: AsyncSession = Depends(g
         WHERE id = CAST(:id AS UUID)
     """), {
         "id":         entity_id,
-        "code":       code,
         "legal_name": data.get("legal_name", ""),
         "street":     data.get("street", ""),
         "postal_code": data.get("postal_code", ""),
@@ -227,13 +220,7 @@ async def update_entity(entity_id: str, data: dict, db: AsyncSession = Depends(g
 
 @router.delete("/entities/{entity_id}")
 async def delete_entity(entity_id: str, db: AsyncSession = Depends(get_db)):
-    for tbl, col in [("legal_entity_registrations", "entity_id"),
-                     ("legal_entity_websites", "entity_id"),
-                     ("legal_entity_documents", "legal_entity_id")]:
-        await db.execute(text(f"DELETE FROM {tbl} WHERE {col} = CAST(:id AS UUID)"), {"id": entity_id})
-    await db.execute(text("DELETE FROM legal_entities WHERE id = CAST(:id AS UUID)"), {"id": entity_id})
-    await db.commit()
-    return {"status": "deleted"}
+    raise HTTPException(status_code=403, detail="Organizational elements cannot be deleted. Archive it instead.")
 
 
 @router.post("/entities/{entity_id}/registrations")
@@ -388,12 +375,10 @@ async def create_location(data: dict, db: AsyncSession = Depends(get_db)):
 
 @router.put("/locations/{loc_id}")
 async def update_location(loc_id: str, data: dict, db: AsyncSession = Depends(get_db)):
-    code = (data.get("code") or "").strip().upper()
-    await _check_unique_code(db, "legal_locations", code, exclude_id=loc_id)
+    # code is immutable once the location is created — omit it here even if present in the payload
     is_archived = data.get("is_archived") if "is_archived" in data else None
     await db.execute(text("""
         UPDATE legal_locations SET
-            code = COALESCE(NULLIF(:code,''), code),
             location_name = :location_name, street = :street, postal_code = :postal_code,
             city = :city, country = :country, phone = :phone, email = :email,
             is_archived = COALESCE(CAST(:is_archived AS BOOLEAN), is_archived),
@@ -401,7 +386,6 @@ async def update_location(loc_id: str, data: dict, db: AsyncSession = Depends(ge
         WHERE id = CAST(:id AS UUID)
     """), {
         "id":            loc_id,
-        "code":          code,
         "location_name": data.get("location_name", ""),
         "street":        data.get("street", ""),
         "postal_code":   data.get("postal_code", ""),
@@ -418,13 +402,7 @@ async def update_location(loc_id: str, data: dict, db: AsyncSession = Depends(ge
 
 @router.delete("/locations/{loc_id}")
 async def delete_location(loc_id: str, db: AsyncSession = Depends(get_db)):
-    for tbl, col in [("legal_location_registrations", "location_id"),
-                     ("legal_location_websites", "location_id"),
-                     ("legal_location_documents", "location_id")]:
-        await db.execute(text(f"DELETE FROM {tbl} WHERE {col} = CAST(:id AS UUID)"), {"id": loc_id})
-    await db.execute(text("DELETE FROM legal_locations WHERE id = CAST(:id AS UUID)"), {"id": loc_id})
-    await db.commit()
-    return {"status": "deleted"}
+    raise HTTPException(status_code=403, detail="Organizational elements cannot be deleted. Archive it instead.")
 
 
 @router.post("/locations/{loc_id}/registrations")

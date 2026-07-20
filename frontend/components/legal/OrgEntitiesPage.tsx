@@ -45,35 +45,15 @@ function InlineText({ value, onSave, placeholder = '—', multiline }: {
   )
 }
 
-function InlineCode({ value, onSave }: { value: string; onSave: (v: string) => Promise<boolean> }) {
-  const [editing, setEditing] = useState(false)
-  const [draft, setDraft] = useState(value)
-  const ref = useRef<HTMLInputElement>(null)
-  useEffect(() => { setDraft(value) }, [value])
-  useEffect(() => { if (editing && ref.current) { ref.current.focus(); ref.current.select() } }, [editing])
-  const commit = async () => {
-    const v = draft.trim().toUpperCase()
-    if (v === value) { setEditing(false); return }
-    if (!CODE_RE.test(v)) { alert('Code must be exactly 5 letters/digits'); setDraft(value); setEditing(false); return }
-    const ok = await onSave(v)
-    if (!ok) setDraft(value)
-    setEditing(false)
-  }
+// Code is set once at creation and is immutable afterward — shown as a read-only badge.
+function CodeBadge({ value }: { value: string }) {
   return (
-    <input ref={ref} value={editing ? draft : value} maxLength={5}
-      readOnly={!editing}
-      onClick={() => setEditing(true)}
-      onChange={e => setDraft(e.target.value)}
-      onBlur={commit}
-      onKeyDown={e => { if (e.key === 'Enter') commit(); if (e.key === 'Escape') { setDraft(value); setEditing(false) } }}
-      style={{
-        fontFamily: 'monospace', fontSize: '12px', fontWeight: '700', color: '#156082',
-        background: editing ? 'white' : '#EFF6FF',
-        border: editing ? '1.5px solid #156082' : '1.5px solid transparent',
-        borderRadius: '6px', padding: '3px 8px', outline: 'none', cursor: editing ? 'text' : 'pointer',
-        width: '100%', boxSizing: 'border-box' as const, textAlign: 'center' as const,
-        textTransform: 'uppercase' as const,
-      }} />
+    <span title="Code is set at creation and cannot be changed afterward" style={{
+      fontFamily: 'monospace', fontSize: '12px', fontWeight: '700', color: '#156082',
+      background: '#EFF6FF', border: '1.5px solid transparent', borderRadius: '6px',
+      padding: '3px 8px', display: 'inline-block', width: '100%', boxSizing: 'border-box' as const,
+      textAlign: 'center' as const, textTransform: 'uppercase' as const,
+    }}>{value || '—'}</span>
   )
 }
 
@@ -105,21 +85,6 @@ export function OrgEntitiesPage({ category, icon, title, subtitle }: {
       method: 'PUT', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ title: value, description: e.description, updated_by: userEmail }),
     })
-  }
-
-  const saveCode = async (id: string, value: string): Promise<boolean> => {
-    const e = entities.find(x => x.id === id); if (!e) return false
-    const res = await fetch(`${API}/legal/org-entities/${id}`, {
-      method: 'PUT', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ title: e.title, description: e.description, code: value, updated_by: userEmail }),
-    })
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}))
-      alert(err.detail || 'Could not update the code')
-      return false
-    }
-    setEntities(prev => prev.map(x => x.id === id ? { ...x, code: value } : x))
-    return true
   }
 
   const saveDescription = async (id: string, value: string) => {
@@ -158,12 +123,6 @@ export function OrgEntitiesPage({ category, icon, title, subtitle }: {
     }
     setNewTitle(''); setNewDescription(''); setNewCode(''); setAdding(false)
     load()
-  }
-
-  const deleteEntity = async (id: string) => {
-    if (!confirm('Delete this entity?')) return
-    await fetch(`${API}/legal/org-entities/${id}`, { method: 'DELETE' })
-    setEntities(prev => prev.filter(e => e.id !== id))
   }
 
   return (
@@ -215,24 +174,21 @@ export function OrgEntitiesPage({ category, icon, title, subtitle }: {
 
         {!loading && entities.length > 0 && (
           <div style={{ background: 'white', borderRadius: '12px', border: '1px solid #EDF2F7', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
-            <div style={{ padding: '10px 20px', borderBottom: '1px solid #F1F5F9', background: '#FAFBFC', display: 'grid', gridTemplateColumns: '90px 1fr 1.4fr 90px 36px', gap: '12px' }}>
+            <div style={{ padding: '10px 20px', borderBottom: '1px solid #F1F5F9', background: '#FAFBFC', display: 'grid', gridTemplateColumns: '90px 1fr 1.4fr 90px', gap: '12px' }}>
               <span style={{ fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#94A3B8' }}>Code</span>
               <span style={{ fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#94A3B8' }}>Title</span>
               <span style={{ fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#94A3B8' }}>Description</span>
               <span style={{ fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#94A3B8' }}>Status</span>
-              <span></span>
             </div>
             {entities.map((e, i) => (
-              <div key={e.id} style={{ padding: '10px 20px', borderBottom: '1px solid #F9FAFB', background: i % 2 === 0 ? 'white' : '#FAFBFC', display: 'grid', gridTemplateColumns: '90px 1fr 1.4fr 90px 36px', gap: '12px', alignItems: 'center', opacity: e.is_archived ? 0.55 : 1 }}>
-                <InlineCode value={e.code || ''} onSave={v => saveCode(e.id, v)} />
+              <div key={e.id} style={{ padding: '10px 20px', borderBottom: '1px solid #F9FAFB', background: i % 2 === 0 ? 'white' : '#FAFBFC', display: 'grid', gridTemplateColumns: '90px 1fr 1.4fr 90px', gap: '12px', alignItems: 'center', opacity: e.is_archived ? 0.55 : 1 }}>
+                <CodeBadge value={e.code || ''} />
                 <InlineText value={e.title || ''} placeholder="Title" onSave={v => saveTitle(e.id, v)} />
                 <InlineText value={e.description || ''} placeholder="Description" onSave={v => saveDescription(e.id, v)} multiline />
                 <button onClick={() => toggleArchived(e.id)}
                   style={{ background: e.is_archived ? '#F1F5F9' : '#ECFDF5', color: e.is_archived ? '#64748B' : '#059669', border: 'none', borderRadius: '10px', padding: '4px 10px', cursor: 'pointer', fontSize: '10px', fontWeight: '700', fontFamily: 'Montserrat, sans-serif', whiteSpace: 'nowrap' }}>
                   {e.is_archived ? 'Archived' : 'Active'}
                 </button>
-                <button onClick={() => deleteEntity(e.id)}
-                  style={{ background: '#FEF2F2', color: '#DC2626', border: 'none', borderRadius: '6px', width: '28px', height: '28px', cursor: 'pointer', fontSize: '14px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>×</button>
               </div>
             ))}
           </div>

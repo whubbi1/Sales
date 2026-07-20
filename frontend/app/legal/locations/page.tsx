@@ -47,34 +47,15 @@ function InlineText({ value, onSave, placeholder = '—', style = {} }: {
   )
 }
 
-function InlineCode({ value, onSave }: { value: string; onSave: (v: string) => Promise<boolean> }) {
-  const [editing, setEditing] = useState(false)
-  const [draft, setDraft] = useState(value)
-  const ref = useRef<HTMLInputElement>(null)
-  useEffect(() => { setDraft(value) }, [value])
-  useEffect(() => { if (editing && ref.current) { ref.current.focus(); ref.current.select() } }, [editing])
-  const commit = async () => {
-    const v = draft.trim().toUpperCase()
-    if (v === value) { setEditing(false); return }
-    if (!CODE_RE.test(v)) { alert('Code must be exactly 5 letters/digits'); setDraft(value); setEditing(false); return }
-    const ok = await onSave(v)
-    if (!ok) setDraft(value)
-    setEditing(false)
-  }
+// Code is set once at creation and is immutable afterward — shown as a read-only badge.
+function CodeBadge({ value }: { value: string }) {
   return (
-    <input ref={ref} value={editing ? draft : value} maxLength={5}
-      onClick={e => { e.stopPropagation(); setEditing(true) }}
-      readOnly={!editing}
-      onChange={e => setDraft(e.target.value)}
-      onBlur={commit}
-      onKeyDown={e => { if (e.key === 'Enter') commit(); if (e.key === 'Escape') { setDraft(value); setEditing(false) } }}
-      style={{
-        fontFamily: 'monospace', fontSize: '11px', fontWeight: '700', color: '#156082',
-        background: editing ? 'white' : '#EFF6FF',
-        border: editing ? '1.5px solid #156082' : '1.5px solid transparent',
-        borderRadius: '10px', padding: '2px 8px', outline: 'none', cursor: editing ? 'text' : 'pointer',
-        width: '64px', boxSizing: 'border-box' as const, textAlign: 'center' as const, textTransform: 'uppercase' as const,
-      }} />
+    <span title="Code is set at creation and cannot be changed afterward" style={{
+      fontFamily: 'monospace', fontSize: '11px', fontWeight: '700', color: '#156082',
+      background: '#EFF6FF', border: '1.5px solid transparent', borderRadius: '10px',
+      padding: '2px 8px', display: 'inline-block', width: '64px', boxSizing: 'border-box' as const,
+      textAlign: 'center' as const, textTransform: 'uppercase' as const,
+    }}>{value || '—'}</span>
   )
 }
 
@@ -128,22 +109,6 @@ export default function LegalLocationsPage() {
     })
   }
 
-  const saveCode = async (id: string, value: string): Promise<boolean> => {
-    const loc = locations.find(l => l.id === id)
-    if (!loc) return false
-    const res = await fetch(`${API}/legal/locations/${id}`, {
-      method: 'PUT', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...loc, code: value, updated_by: userEmail }),
-    })
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}))
-      alert(err.detail || 'Could not update the code')
-      return false
-    }
-    setLocations(prev => prev.map(l => l.id === id ? { ...l, code: value } : l))
-    return true
-  }
-
   const createLocation = async () => {
     if (!newName.trim()) return
     const code = newCode.trim().toUpperCase()
@@ -163,13 +128,6 @@ export default function LegalLocationsPage() {
     setNewName(''); setNewCountry('france'); setNewCode(''); setShowNew(false); setCreating(false)
     load()
     if (data.id) setExpandedId(data.id)
-  }
-
-  const deleteLocation = async (id: string) => {
-    if (!confirm('Delete this location and all its data?')) return
-    await fetch(`${API}/legal/locations/${id}`, { method: 'DELETE' })
-    setLocations(prev => prev.filter(l => l.id !== id))
-    if (expandedId === id) setExpandedId(null)
   }
 
   const toggleArchived = async (id: string) => {
@@ -352,7 +310,7 @@ export default function LegalLocationsPage() {
                   onClick={() => setExpandedId(expanded ? null : loc.id)}>
                   <span style={{ fontSize: '20px', flexShrink: 0 }}>{countryFlag(loc.country)}</span>
                   <div onClick={e => e.stopPropagation()} style={{ flexShrink: 0 }}>
-                    <InlineCode value={loc.code || ''} onSave={v => saveCode(loc.id, v)} />
+                    <CodeBadge value={loc.code || ''} />
                   </div>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: '14px', fontWeight: '700', color: '#1F2937' }}>{loc.location_name || '—'}</div>
@@ -497,12 +455,6 @@ export default function LegalLocationsPage() {
                       )}
                     </div>
 
-                    <div style={{ marginTop: '16px', paddingTop: '12px', borderTop: '1px solid #F1F5F9', display: 'flex', justifyContent: 'flex-end' }}>
-                      <button onClick={() => deleteLocation(loc.id)}
-                        style={{ padding: '5px 14px', background: '#FEF2F2', color: '#DC2626', border: 'none', borderRadius: '6px', fontSize: '11px', fontWeight: '700', cursor: 'pointer', fontFamily: 'Montserrat, sans-serif' }}>
-                        Delete Location
-                      </button>
-                    </div>
                   </div>
                 )}
               </div>
