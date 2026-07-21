@@ -14,6 +14,7 @@ import httpx
 import os
 import asyncio
 import json
+from datetime import date
 
 router = APIRouter()
 
@@ -47,11 +48,17 @@ def _company_path(suffix: str) -> str:
     return f"/companies/{COMPANY_ID}{suffix}"
 
 
-def _extract_date(value) -> str | None:
-    """PayFit dates come back as {date, moment}, not a flat string."""
-    if isinstance(value, dict):
-        return value.get("date")
-    return value
+def _extract_date(value):
+    """PayFit dates come back as {date, moment}, not a flat string — and asyncpg needs
+    an actual date object for a DATE column, not the ISO string, or it fails with
+    "'str' object has no attribute 'toordinal'"."""
+    raw = value.get("date") if isinstance(value, dict) else value
+    if not raw:
+        return None
+    try:
+        return date.fromisoformat(raw)
+    except (TypeError, ValueError):
+        return None
 
 
 def _extract_email(collaborator: dict) -> str:
