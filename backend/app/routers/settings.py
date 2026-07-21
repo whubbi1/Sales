@@ -29,7 +29,7 @@ WHUBBI_GROUP_CACHE_TTL = 300  # seconds
 MODULES = {
     "sales":     ["companies", "contacts", "leads", "opportunities", "tasks", "cv_database", "partners"],
     "finance":   ["suppliers", "contracts", "purchasing", "invoices"],
-    "hr":        ["freelancers", "recrutement", "positions", "jobs", "permissions", "chat", "admin", "onboarding", "offboarding"],
+    "hr":        ["freelancers", "recrutement", "positions", "jobs", "permissions", "chat", "admin", "onboarding", "offboarding", "payfit"],
     "grc":       ["compliance", "risks", "audits", "certifications", "access_review", "tprm", "whistleblowing"],
     "it":        ["assets", "incidents", "access", "infrastructure"],
     "helpdesk":     ["tickets", "knowledge", "sla", "admin_cockpit"],
@@ -39,7 +39,7 @@ MODULES = {
     "training":     ["manager"],
     "tasks":        ["manager"],
     "marketing":    ["events", "company_website", "competitor_analysis", "social_marketing", "marketing_plan", "marketing_material"],
-    "operations":   ["projects", "internal_projects", "licenses", "staffing", "timesheets"],
+    "operations":   ["projects", "internal_projects", "licenses", "staffing", "timesheets", "payfit"],
     "reporting":    ["reports", "dashboards"],
 }
 

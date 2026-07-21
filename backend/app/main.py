@@ -565,6 +565,46 @@ async def startup():
                     updated_at TIMESTAMP DEFAULT NOW()
                 )""",
 
+                # PayFit integration — local mirror of PayFit collaborators/absences plus a
+                # sync audit trail. Collaborators/contracts only support create via the PayFit
+                # API (no update endpoint), so ongoing profile edits still flow one-way from
+                # PayFit into WHUBBI; absences are genuinely two-way (create + cancel).
+                """CREATE TABLE IF NOT EXISTS payfit_collaborators (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    payfit_id VARCHAR(100) UNIQUE NOT NULL,
+                    first_name VARCHAR(255),
+                    last_name VARCHAR(255),
+                    email VARCHAR(255),
+                    whubbi_user_email VARCHAR(255),
+                    raw_data JSONB,
+                    synced_at TIMESTAMP DEFAULT NOW()
+                )""",
+                """CREATE TABLE IF NOT EXISTS payfit_absences (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    payfit_id VARCHAR(100) UNIQUE,
+                    collaborator_payfit_id VARCHAR(100) NOT NULL,
+                    absence_type VARCHAR(100),
+                    start_date DATE,
+                    end_date DATE,
+                    status VARCHAR(30) NOT NULL DEFAULT 'synced',
+                    source VARCHAR(20) NOT NULL DEFAULT 'payfit',
+                    error_detail TEXT,
+                    raw_data JSONB,
+                    created_by VARCHAR(255),
+                    created_at TIMESTAMP DEFAULT NOW(),
+                    updated_at TIMESTAMP DEFAULT NOW()
+                )""",
+                """CREATE TABLE IF NOT EXISTS payfit_sync_log (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    sync_type VARCHAR(30) NOT NULL,
+                    status VARCHAR(20) NOT NULL,
+                    items_synced INTEGER DEFAULT 0,
+                    detail TEXT,
+                    triggered_by VARCHAR(255),
+                    started_at TIMESTAMP DEFAULT NOW(),
+                    finished_at TIMESTAMP
+                )""",
+
                 """CREATE TABLE IF NOT EXISTS legal_doc_types (
                     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                     label VARCHAR(255) NOT NULL,
@@ -1643,6 +1683,7 @@ _include("app.routers.helpdesk",       "/helpdesk",     "Helpdesk")
 _include("app.routers.helpdesk_teams", "/helpdesk",     "Teams")
 _include("app.routers.admin_audit",    "/admin",        "Audit")
 _include("app.routers.legal",          "/legal",        "Legal")
+_include("app.routers.payfit",         "/payfit",       "PayFit")
 _include("app.routers.development",    "/development",  "Development")
 _include("app.routers.testing",        "/development",  "Testing")
 _include("app.routers.it",             "/it",           "IT")
