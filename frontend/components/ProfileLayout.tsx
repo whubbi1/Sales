@@ -11,6 +11,7 @@ const NAV_ITEMS = [
   { href: '/settings/cv',           label: 'Curriculum Vitae',         icon: '📄' },
   { href: '/settings/training',     label: 'Training',                 icon: '🎓' },
   { href: '/settings/certifications', label: 'Certifications',         icon: '🏅' },
+  { href: '/settings/payfit',       label: 'PayFit',                   icon: '💰' },
   { href: '/settings/mcp',          label: 'Claude / MCP Access',      icon: '🔌' },
 ]
 

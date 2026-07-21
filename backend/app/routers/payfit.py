@@ -215,6 +215,30 @@ async def link_collaborator(collaborator_id: str, data: dict, db: AsyncSession =
     return {"status": "updated"}
 
 
+@router.get("/my/{email}")
+async def get_my_payfit(email: str, db: AsyncSession = Depends(get_db)):
+    """Used by the MyWhubbi personal profile PayFit tab. Matched by email — either the
+    collaborator's own email as synced from PayFit, or a manually-set whubbi_user_email
+    override (e.g. if the two systems use different addresses for the same person)."""
+    r = await db.execute(text("""
+        SELECT id::text, payfit_id, first_name, last_name, email, whubbi_user_email, synced_at
+        FROM payfit_collaborators
+        WHERE LOWER(whubbi_user_email) = LOWER(:email) OR LOWER(email) = LOWER(:email)
+        ORDER BY (whubbi_user_email IS NOT NULL) DESC LIMIT 1
+    """), {"email": email})
+    row = r.fetchone()
+    if not row:
+        return {"linked": False, "collaborator": None, "absences": []}
+
+    collaborator = dict(row._mapping)
+    r2 = await db.execute(text("""
+        SELECT id::text, payfit_id, absence_type, start_date, end_date, status, source, error_detail, created_at
+        FROM payfit_absences WHERE collaborator_payfit_id = :pid ORDER BY start_date DESC
+    """), {"pid": collaborator["payfit_id"]})
+    absences = [dict(r._mapping) for r in r2.fetchall()]
+    return {"linked": True, "collaborator": collaborator, "absences": absences}
+
+
 # ─── Absences — the genuinely two-way resource ────────────────────────────────
 
 @router.post("/sync/absences")
