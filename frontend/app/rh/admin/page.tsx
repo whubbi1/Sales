@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react'
 import { getStoredUser } from '@/lib/auth'
 import { HRLayout } from '@/components/HRLayout'
+import { PayfitTestPanel } from '@/components/payfit/PayfitTestPanel'
 
 const API = 'https://api.whubbi.wcomply.com'
 const COUNTRIES = [
@@ -20,7 +21,7 @@ const inputStyle: React.CSSProperties = {
 
 export default function AdminCockpit() {
   const [currentUserEmail, setCurrentUserEmail] = useState('')
-  const [tab, setTab] = useState<'skills'|'questions'>('skills')
+  const [tab, setTab] = useState<'skills'|'questions'|'payfit'>('skills')
   const [country, setCountry] = useState('global')
 
   const [skills, setSkills] = useState<any[]>([])
@@ -101,7 +102,7 @@ export default function AdminCockpit() {
 
         {/* Tabs */}
         <div style={{ display: 'flex', gap: 0, marginBottom: '20px', background: 'white', borderRadius: '10px', border: '1px solid #EDF2F7', overflow: 'hidden', width: 'fit-content' }}>
-          {[{ key: 'skills', label: `Skills (${skills.length})` }, { key: 'questions', label: `Questions (${questions.length})` }].map(t => (
+          {[{ key: 'skills', label: `Skills (${skills.length})` }, { key: 'questions', label: `Questions (${questions.length})` }, { key: 'payfit', label: 'PayFit Integration' }].map(t => (
             <button key={t.key} onClick={() => setTab(t.key as any)}
               style={{ padding: '9px 20px', border: 'none', cursor: 'pointer', fontSize: '12px', fontWeight: '700', fontFamily: 'Montserrat, sans-serif',
                 background: tab === t.key ? '#156082' : 'transparent', color: tab === t.key ? 'white' : '#45B6E4' }}>
@@ -213,6 +214,13 @@ export default function AdminCockpit() {
                 ))}
               </div>
             )}
+          </div>
+        )}
+
+        {/* PayFit Integration tab */}
+        {tab === 'payfit' && (
+          <div style={{ background: 'white', borderRadius: '12px', border: '1px solid #EDF2F7', padding: '16px 20px', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
+            <PayfitTestPanel />
           </div>
         )}
       </div>

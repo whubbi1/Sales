@@ -80,6 +80,68 @@ async def get_status(db: AsyncSession = Depends(get_db)):
     }
 
 
+# ─── Per-resource connectivity tests ──────────────────────────────────────────
+# Read-only, scope-by-scope checks used by the "PayFit Integration" test panel — unlike
+# the /sync endpoints these never write to our DB, so they're safe to click repeatedly
+# without side effects while verifying the API key's granted scopes.
+
+TEST_RESOURCES = {"company", "collaborators", "contracts", "absences", "payslips"}
+
+
+async def _test_call(method: str, path: str, label: str) -> dict:
+    started = asyncio.get_event_loop().time()
+    try:
+        resp = await _payfit_request(method, path)
+        elapsed_ms = round((asyncio.get_event_loop().time() - started) * 1000)
+        if resp.status_code >= 400:
+            return {"resource": label, "success": False, "status_code": resp.status_code,
+                    "elapsed_ms": elapsed_ms, "error": resp.text[:400], "sample": None}
+        body = resp.json()
+        items = body.get(list(body.keys())[0]) if isinstance(body, dict) and len(body) == 1 and isinstance(list(body.values())[0], list) else body
+        sample = items[:3] if isinstance(items, list) else items
+        count = len(items) if isinstance(items, list) else None
+        return {"resource": label, "success": True, "status_code": resp.status_code,
+                "elapsed_ms": elapsed_ms, "error": None, "count": count, "sample": sample}
+    except Exception as e:
+        elapsed_ms = round((asyncio.get_event_loop().time() - started) * 1000)
+        return {"resource": label, "success": False, "status_code": None,
+                "elapsed_ms": elapsed_ms, "error": str(e), "sample": None}
+
+
+@router.get("/test/{resource}")
+async def test_resource(resource: str, collaborator_id: str = None, db: AsyncSession = Depends(get_db)):
+    if resource not in TEST_RESOURCES:
+        raise HTTPException(status_code=400, detail=f"resource must be one of {sorted(TEST_RESOURCES)}")
+    if not API_KEY:
+        return {"resource": resource, "success": False, "status_code": None,
+                "elapsed_ms": 0, "error": "PAYFIT_API_KEY is not configured", "sample": None}
+
+    if resource == "company":
+        if not COMPANY_ID:
+            return {"resource": "company", "success": False, "status_code": None,
+                    "elapsed_ms": 0, "error": "PAYFIT_COMPANY_ID is not configured", "sample": None}
+        return await _test_call("GET", f"/companies/{COMPANY_ID}", "company")
+
+    if resource == "collaborators":
+        return await _test_call("GET", "/collaborators", "collaborators")
+
+    if resource == "contracts":
+        return await _test_call("GET", "/contracts", "contracts")
+
+    if resource == "absences":
+        return await _test_call("GET", "/absences", "absences")
+
+    if resource == "payslips":
+        if not collaborator_id:
+            r = await db.execute(text("SELECT payfit_id FROM payfit_collaborators ORDER BY synced_at DESC LIMIT 1"))
+            row = r.fetchone()
+            collaborator_id = row[0] if row else None
+        if not collaborator_id:
+            return {"resource": "payslips", "success": False, "status_code": None, "elapsed_ms": 0,
+                    "error": "No collaborator available to test with — sync collaborators first", "sample": None}
+        return await _test_call("GET", f"/collaborators/{collaborator_id}/payslips", "payslips")
+
+
 # ─── Collaborators (read + create only — no update endpoint on PayFit's side) ─────
 
 @router.post("/sync/collaborators")

@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react'
 import { HRLayout } from '@/components/HRLayout'
 import { getStoredUser } from '@/lib/auth'
+import { PayfitTestPanel } from '@/components/payfit/PayfitTestPanel'
 
 const API = 'https://api.whubbi.wcomply.com'
 
@@ -121,7 +122,7 @@ export default function PayfitSyncPage() {
     <HRLayout>
       <div style={{ padding: '28px 32px' }}>
         <div style={{ marginBottom: '20px' }}>
-          <h1 style={{ fontSize: '20px', fontWeight: '800', color: '#156082', marginBottom: '4px' }}>💰 PayFit Sync</h1>
+          <h1 style={{ fontSize: '20px', fontWeight: '800', color: '#156082', marginBottom: '4px' }}>💰 PayFit Integration</h1>
           <p style={{ fontSize: '12px', color: '#45B6E4' }}>Collaborators &amp; contracts sync one-way from PayFit; absences sync both ways.</p>
         </div>
 
@@ -154,6 +155,12 @@ export default function PayfitSyncPage() {
               </div>
             </div>
           )}
+        </div>
+
+        {/* Per-integration test panel */}
+        <div style={{ ...card, padding: '16px 20px', marginBottom: '16px' }}>
+          <div style={{ fontSize: '13px', fontWeight: '800', color: '#156082', marginBottom: '10px' }}>🧪 Test Integrations</div>
+          <PayfitTestPanel />
         </div>
 
         {/* Sync actions */}

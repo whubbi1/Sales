@@ -15,6 +15,7 @@ const NAV = [
   { href: '/rh/offboarding-checklist', icon: '📤', label: 'Offboarding' },
   { href: '/rh/permissions', icon: '🔐', label: 'WHUBBI Permissions' },
   { href: '/rh/chat',        icon: '💬', label: 'WHUBBI Chat' },
+  { href: '/rh/payfit',      icon: '💰', label: 'PayFit Integration' },
 ]
 const HR_MANAGER_NAV = [
   { href: '/rh/admin', icon: '⚙️', label: 'HR Admin Cockpit' },
