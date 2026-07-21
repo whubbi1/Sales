@@ -47,6 +47,23 @@ def _company_path(suffix: str) -> str:
     return f"/companies/{COMPANY_ID}{suffix}"
 
 
+def _extract_date(value) -> str | None:
+    """PayFit dates come back as {date, moment}, not a flat string."""
+    if isinstance(value, dict):
+        return value.get("date")
+    return value
+
+
+def _extract_email(collaborator: dict) -> str:
+    """PayFit nests email under emails: [{email, type}], not a flat `email` field —
+    prefer the professional address, falling back to whatever's first."""
+    emails = collaborator.get("emails") or []
+    if not emails:
+        return collaborator.get("email", "") or ""
+    professional = next((e.get("email", "") for e in emails if e.get("type") == "professional"), None)
+    return professional or emails[0].get("email", "") or ""
+
+
 async def _log_sync(db: AsyncSession, sync_type: str, status: str, items_synced: int, detail: str, triggered_by: str):
     await db.execute(text("""
         INSERT INTO payfit_sync_log (id, sync_type, status, items_synced, detail, triggered_by, started_at, finished_at)
@@ -180,7 +197,7 @@ async def sync_collaborators(triggered_by: str = "manual", db: AsyncSession = De
                 "payfit_id": payfit_id,
                 "first_name": c.get("firstName", ""),
                 "last_name": c.get("lastName", ""),
-                "email": c.get("email", ""),
+                "email": _extract_email(c),
                 "raw_data": json.dumps(c),
             })
             count += 1
@@ -259,20 +276,24 @@ async def sync_absences(triggered_by: str = "manual", db: AsyncSession = Depends
             payfit_id = a.get("id")
             if not payfit_id:
                 continue
+            # PayFit's absence objects only carry contractId, never a collaborator ID directly —
+            # resolving contract -> collaborator needs contracts:read, which this key doesn't have
+            # yet (see /payfit/test/contracts). collaborator_payfit_id stays NULL until that's added;
+            # storing contractId there would look like a match and silently misattribute absences.
             await db.execute(text("""
-                INSERT INTO payfit_absences (id, payfit_id, collaborator_payfit_id, absence_type,
+                INSERT INTO payfit_absences (id, payfit_id, contract_payfit_id, absence_type,
                                               start_date, end_date, status, source, raw_data, created_at, updated_at)
-                VALUES (gen_random_uuid(), :payfit_id, :collaborator_id, :absence_type,
+                VALUES (gen_random_uuid(), :payfit_id, :contract_id, :absence_type,
                         :start_date, :end_date, 'synced', 'payfit', CAST(:raw_data AS JSONB), NOW(), NOW())
                 ON CONFLICT (payfit_id) DO UPDATE SET
                     absence_type = EXCLUDED.absence_type, start_date = EXCLUDED.start_date,
                     end_date = EXCLUDED.end_date, status = 'synced', raw_data = EXCLUDED.raw_data, updated_at = NOW()
             """), {
                 "payfit_id": payfit_id,
-                "collaborator_id": a.get("collaboratorId", ""),
+                "contract_id": a.get("contractId", ""),
                 "absence_type": a.get("type", ""),
-                "start_date": a.get("startDate"),
-                "end_date": a.get("endDate"),
+                "start_date": _extract_date(a.get("startDate")),
+                "end_date": _extract_date(a.get("endDate")),
                 "raw_data": json.dumps(a),
             })
             count += 1

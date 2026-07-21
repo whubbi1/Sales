@@ -582,7 +582,7 @@ async def startup():
                 """CREATE TABLE IF NOT EXISTS payfit_absences (
                     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                     payfit_id VARCHAR(100) UNIQUE,
-                    collaborator_payfit_id VARCHAR(100) NOT NULL,
+                    collaborator_payfit_id VARCHAR(100),
                     absence_type VARCHAR(100),
                     start_date DATE,
                     end_date DATE,
@@ -594,6 +594,12 @@ async def startup():
                     created_at TIMESTAMP DEFAULT NOW(),
                     updated_at TIMESTAMP DEFAULT NOW()
                 )""",
+                # PayFit's absence objects only carry a contractId, never a collaborator ID
+                # directly — resolving contract -> collaborator needs contracts:read, which
+                # isn't granted yet. collaborator_payfit_id can no longer be NOT NULL since
+                # pulled absences don't know it; contract_payfit_id holds what we do get.
+                "ALTER TABLE payfit_absences ALTER COLUMN collaborator_payfit_id DROP NOT NULL",
+                "ALTER TABLE payfit_absences ADD COLUMN IF NOT EXISTS contract_payfit_id VARCHAR(100)",
                 """CREATE TABLE IF NOT EXISTS payfit_sync_log (
                     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                     sync_type VARCHAR(30) NOT NULL,
