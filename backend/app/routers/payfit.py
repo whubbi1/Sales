@@ -39,6 +39,14 @@ async def _payfit_request(method: str, path: str, **kwargs) -> httpx.Response:
         return resp
 
 
+def _company_path(suffix: str) -> str:
+    """Collaborators/contracts/absences all live under /companies/{companyId}/... —
+    confirmed against PayFit's actual reference pages, not just the summarized doc index."""
+    if not COMPANY_ID:
+        raise HTTPException(status_code=503, detail="PayFit is not configured (PAYFIT_COMPANY_ID missing)")
+    return f"/companies/{COMPANY_ID}{suffix}"
+
+
 async def _log_sync(db: AsyncSession, sync_type: str, status: str, items_synced: int, detail: str, triggered_by: str):
     await db.execute(text("""
         INSERT INTO payfit_sync_log (id, sync_type, status, items_synced, detail, triggered_by, started_at, finished_at)
@@ -123,13 +131,13 @@ async def test_resource(resource: str, collaborator_id: str = None, db: AsyncSes
         return await _test_call("GET", f"/companies/{COMPANY_ID}", "company")
 
     if resource == "collaborators":
-        return await _test_call("GET", "/collaborators", "collaborators")
+        return await _test_call("GET", _company_path("/collaborators"), "collaborators")
 
     if resource == "contracts":
-        return await _test_call("GET", "/contracts", "contracts")
+        return await _test_call("GET", _company_path("/contracts"), "contracts")
 
     if resource == "absences":
-        return await _test_call("GET", "/absences", "absences")
+        return await _test_call("GET", _company_path("/absences"), "absences")
 
     if resource == "payslips":
         if not collaborator_id:
@@ -139,7 +147,7 @@ async def test_resource(resource: str, collaborator_id: str = None, db: AsyncSes
         if not collaborator_id:
             return {"resource": "payslips", "success": False, "status_code": None, "elapsed_ms": 0,
                     "error": "No collaborator available to test with — sync collaborators first", "sample": None}
-        return await _test_call("GET", f"/collaborators/{collaborator_id}/payslips", "payslips")
+        return await _test_call("GET", _company_path(f"/collaborators/{collaborator_id}/payslips"), "payslips")
 
 
 # ─── Collaborators (read + create only — no update endpoint on PayFit's side) ─────
@@ -147,7 +155,7 @@ async def test_resource(resource: str, collaborator_id: str = None, db: AsyncSes
 @router.post("/sync/collaborators")
 async def sync_collaborators(triggered_by: str = "manual", db: AsyncSession = Depends(get_db)):
     try:
-        resp = await _payfit_request("GET", "/collaborators")
+        resp = await _payfit_request("GET", _company_path("/collaborators"))
         if resp.status_code != 200:
             detail = f"PayFit returned {resp.status_code}: {resp.text[:300]}"
             await _log_sync(db, "collaborators", "error", 0, detail, triggered_by)
@@ -212,7 +220,7 @@ async def link_collaborator(collaborator_id: str, data: dict, db: AsyncSession =
 @router.post("/sync/absences")
 async def sync_absences(triggered_by: str = "manual", db: AsyncSession = Depends(get_db)):
     try:
-        resp = await _payfit_request("GET", "/absences")
+        resp = await _payfit_request("GET", _company_path("/absences"))
         if resp.status_code != 200:
             detail = f"PayFit returned {resp.status_code}: {resp.text[:300]}"
             await _log_sync(db, "absences", "error", 0, detail, triggered_by)
@@ -289,7 +297,7 @@ async def create_absence(data: dict, db: AsyncSession = Depends(get_db)):
     await db.commit()
 
     try:
-        resp = await _payfit_request("POST", "/absences", json={
+        resp = await _payfit_request("POST", _company_path("/absences"), json={
             "collaboratorId": collaborator_id,
             "type": data.get("absence_type", ""),
             "startDate": data.get("start_date"),
@@ -327,7 +335,7 @@ async def cancel_absence(absence_id: str, db: AsyncSession = Depends(get_db)):
     payfit_id = row[0]
 
     if payfit_id:
-        resp = await _payfit_request("DELETE", f"/absences/{payfit_id}")
+        resp = await _payfit_request("DELETE", _company_path(f"/absences/{payfit_id}"))
         if resp.status_code not in (200, 204, 404):
             raise HTTPException(status_code=502, detail=f"PayFit returned {resp.status_code}: {resp.text[:300]}")
 
