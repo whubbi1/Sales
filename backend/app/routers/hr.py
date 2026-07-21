@@ -17,7 +17,7 @@ DOCUSIGN_ACCOUNT = os.getenv("DOCUSIGN_ACCOUNT_ID", "")
 DOCUSIGN_KEY = os.getenv("DOCUSIGN_INTEGRATION_KEY", "")
 WHUBBI_API_URL = os.getenv("WHUBBI_API_URL", "https://api.whubbi.wcomply.com")
 AWS_REGION    = os.getenv("AWS_REGION", "eu-west-1")
-S3_HR_BUCKET  = os.getenv("S3_HR_BUCKET", "whubbi-backups-dev")
+S3_HR_BUCKET  = os.getenv("S3_HR_BUCKET", "whubbi-backups-prod")
 
 # SharePoint folder sharing URLs for CV/document storage
 SHAREPOINT_RECRUITMENT_URL = "https://wcomply.sharepoint.com/:f:/s/wcomply-HR/IgDsWu6K4lhqSIBLpu5eKpX4AThfbi029iqbHgDb_IQhoVY?e=9Jd3KH"

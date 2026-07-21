@@ -10,7 +10,7 @@ from datetime import datetime, timedelta
 router = APIRouter()
 
 AWS_REGION  = os.getenv("AWS_REGION", "eu-west-1")
-BACKUP_BUCKET = os.getenv("BACKUP_BUCKET", "whubbi-backups-dev")
+BACKUP_BUCKET = os.getenv("BACKUP_BUCKET", "whubbi-backups-prod")
 ACCOUNT_ID  = "882321772619"
 
 APPLICATIONS = [
@@ -30,7 +30,7 @@ async def seed_jobs(db: AsyncSession):
             {"job_id": "JOB-001", "name": "WHUBBI DB Backup", "description": "Daily PostgreSQL RDS export to S3",
              "job_type": "ecs_scheduled", "schedule": "0 2 * * *",
              "script_url": "https://github.com/whubbi1/Sales/blob/master/scripts/backup_db.sh",
-             "script_content": "#!/bin/bash\n# WHUBBI Database Backup\npg_dump $DATABASE_URL | gzip | aws s3 cp - s3://whubbi-backups-dev/db/whubbi_$(date +%Y%m%d_%H%M%S).sql.gz",
+             "script_content": "#!/bin/bash\n# WHUBBI Database Backup\npg_dump $DATABASE_URL | gzip | aws s3 cp - s3://whubbi-backups-prod/db/whubbi_$(date +%Y%m%d_%H%M%S).sql.gz",
              "status": "active"},
             {"job_id": "JOB-002", "name": "URL Health Monitor", "description": "Hourly check of monitored URLs",
              "job_type": "ecs_scheduled", "schedule": "0 * * * *",

@@ -9,7 +9,7 @@ router = APIRouter()
 
 FRONTEND_URL = os.getenv("FRONTEND_URL", "https://dev.whubbi.wcomply.com")
 AWS_REGION   = os.getenv("AWS_REGION", "eu-west-1")
-S3_HR_BUCKET = os.getenv("S3_HR_BUCKET", "whubbi-backups-dev")
+S3_HR_BUCKET = os.getenv("S3_HR_BUCKET", "whubbi-backups-prod")
 
 # ─── S3 document storage (same pattern as backend/app/routers/hr.py) ──────────
 def _s3_put_sync(bucket: str, key: str, content: bytes, content_type: str) -> None:

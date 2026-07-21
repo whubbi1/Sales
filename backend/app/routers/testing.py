@@ -18,7 +18,7 @@ CAMPAIGN_STATUSES = {"planned", "in_execution", "in_review", "completed"}
 REMEDIATION_ACTION_STATUSES = {"new", "in_progress", "closed"}
 
 AWS_REGION   = os.getenv("AWS_REGION", "eu-west-1")
-S3_HR_BUCKET = os.getenv("S3_HR_BUCKET", "whubbi-backups-dev")
+S3_HR_BUCKET = os.getenv("S3_HR_BUCKET", "whubbi-backups-prod")
 
 
 # ─── S3 screenshot storage (same pattern as backend/app/routers/hr.py / training.py) ──
