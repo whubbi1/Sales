@@ -77,7 +77,7 @@ export default function DashboardPage() {
       setContacts(Array.isArray(ct) ? ct : [])
       setOpportunities(Array.isArray(o) ? o : [])
       setLeads(Array.isArray(l) ? l : [])
-      setEvents(Array.isArray(e) ? e : [])
+      setEvents(Array.isArray(e?.events) ? e.events : [])
     }).catch(() => {}).finally(() => setLoading(false))
   }, [])
 
