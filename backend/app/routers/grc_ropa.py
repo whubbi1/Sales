@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
 from app.database import get_db
 from app.routers.hr import upload_to_s3, s3_ref_to_presigned
+from datetime import datetime
 import uuid
 
 router = APIRouter()
@@ -184,12 +185,16 @@ async def list_revisions(ropa_id: str, db: AsyncSession = Depends(get_db)):
 async def add_revision(ropa_id: str, data: dict, db: AsyncSession = Depends(get_db)):
     if not data.get("content") or not data.get("revision_date"):
         raise HTTPException(status_code=400, detail="revision_date and content are required")
+    try:
+        revision_date = datetime.fromisoformat(data["revision_date"])
+    except ValueError:
+        raise HTTPException(status_code=400, detail="revision_date must be an ISO date/datetime string")
     revision_id = str(uuid.uuid4())
     await db.execute(text("""
         INSERT INTO ropa_revisions (id, ropa_id, revision_date, owner_email, owner_name, content, created_at)
-        VALUES (CAST(:id AS UUID), CAST(:rid AS UUID), CAST(:revision_date AS TIMESTAMP), :owner_email, :owner_name, :content, NOW())
+        VALUES (CAST(:id AS UUID), CAST(:rid AS UUID), :revision_date, :owner_email, :owner_name, :content, NOW())
     """), {
-        "id": revision_id, "rid": ropa_id, "revision_date": data["revision_date"],
+        "id": revision_id, "rid": ropa_id, "revision_date": revision_date,
         "owner_email": data.get("owner_email", ""), "owner_name": data.get("owner_name"), "content": data["content"],
     })
     await db.commit()
