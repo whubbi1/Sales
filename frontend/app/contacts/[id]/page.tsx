@@ -159,6 +159,23 @@ export default function ContactDetailPage() {
                 <h1 style={{ fontSize: '18px', fontWeight: '800', color: '#144766', margin: 0 }}>{contact.first_name} {contact.last_name}</h1>
                 {contact.internal_id && <span style={{ fontSize: '11px', fontWeight: '600', color: '#9B9B9B' }}>{contact.internal_id}</span>}
                 <StatusBadge value={contact.lead_status || 'New'} />
+                {editingDataSource ? (
+                  <select autoFocus className="form-input" style={{ fontSize: '10px', padding: '2px 4px' }} defaultValue={contact.data_source || 'LinkedIn'}
+                    onChange={e => saveDataSource(e.target.value)} onBlur={() => setEditingDataSource(false)}>
+                    {DATA_SOURCE_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
+                  </select>
+                ) : (
+                  <span onClick={() => setEditingDataSource(true)} title="Data Source — click to change"
+                    style={{ background: '#F1F5F9', color: '#45B6E4', padding: '2px 9px', borderRadius: '12px', fontSize: '10px', fontWeight: '700', cursor: 'pointer' }}>
+                    📍 {contact.data_source || 'LinkedIn'}
+                  </span>
+                )}
+                {contact.data_source && contact.data_source !== 'LinkedIn' && (
+                  <span onClick={() => setPickerType(contact.data_source)} title="Click to select the record"
+                    style={{ background: dataSourceRefName ? '#EFF6FF' : '#FEF2F2', color: dataSourceRefName ? '#156082' : '#DC2626', padding: '2px 9px', borderRadius: '12px', fontSize: '10px', fontWeight: '700', cursor: 'pointer' }}>
+                    {dataSourceRefName || 'select record…'}
+                  </span>
+                )}
                 {contact.job_type && <span style={{ background: '#EEF2FF', color: '#4F46E5', padding: '2px 9px', borderRadius: '12px', fontSize: '10px', fontWeight: '700' }}>{contact.job_type}</span>}
               </div>
               <p style={{ color: '#9B9B9B', fontSize: '12px', margin: 0 }}>
