@@ -2,7 +2,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { GRCLayout, useGRCPerm } from '@/components/GRCLayout'
-import { ropaAPI } from '@/lib/api'
+import { ropaAPI, itAPI } from '@/lib/api'
 import { getStoredUser } from '@/lib/auth'
 
 const inp: React.CSSProperties = {
@@ -18,11 +18,11 @@ const btn: React.CSSProperties = {
   fontSize: '12px', fontWeight: '700', fontFamily: 'Montserrat, sans-serif',
 }
 
-const CREATE_FIELDS: { key: string; label: string; textarea?: boolean }[] = [
+const CREATE_FIELDS: { key: string; label: string; textarea?: boolean; select?: boolean }[] = [
   { key: 'name', label: 'Name' },
   { key: 'objective', label: 'Objectif', textarea: true },
   { key: 'legal_base', label: 'Legal Base', textarea: true },
-  { key: 'application', label: 'Application' },
+  { key: 'application', label: 'Application', select: true },
   { key: 'data_subject_categories', label: 'Categories of Data Subjects', textarea: true },
   { key: 'data_categories', label: 'Categories of Data Processed', textarea: true },
   { key: 'data_source', label: 'Data Source', textarea: true },
@@ -37,7 +37,10 @@ function CreateModal({ onClose, onCreated }: { onClose: () => void; onCreated: (
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [extracting, setExtracting] = useState(false)
+  const [applications, setApplications] = useState<any[]>([])
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => { itAPI.listApplications().then(d => setApplications(d.applications || [])).catch(() => {}) }, [])
 
   const submit = async () => {
     if (!form.name?.trim()) { setError('Name is required'); return }
@@ -88,7 +91,16 @@ function CreateModal({ onClose, onCreated }: { onClose: () => void; onCreated: (
           {CREATE_FIELDS.map(f => (
             <div key={f.key}>
               <label style={lbl}>{f.label}{f.key === 'name' ? ' *' : ''}</label>
-              {f.textarea ? (
+              {f.select ? (
+                <select style={{ ...inp, width: '100%', boxSizing: 'border-box' as const }}
+                  value={form[f.key] || ''} onChange={e => setForm({ ...form, [f.key]: e.target.value })}>
+                  <option value="">Select an application…</option>
+                  {form[f.key] && !applications.some((a: any) => a.name === form[f.key]) && (
+                    <option value={form[f.key]}>{form[f.key]} (not in inventory)</option>
+                  )}
+                  {applications.map((a: any) => <option key={a.id} value={a.name}>{a.name}</option>)}
+                </select>
+              ) : f.textarea ? (
                 <textarea style={{ ...inp, width: '100%', boxSizing: 'border-box' as const, minHeight: '54px', resize: 'vertical' }}
                   value={form[f.key] || ''} onChange={e => setForm({ ...form, [f.key]: e.target.value })} />
               ) : (

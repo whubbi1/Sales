@@ -278,6 +278,7 @@ export default function ContactDetailPage() {
         } />
         <PropertyRow label="Language" value={contact.preferred_language} />
         <PropertyRow label="Assigned To" value={contact.assigned_to} />
+        <PropertyRow label="Created" value={contact.created_at ? new Date(contact.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : null} />
       </SidebarSection>
     </div>
   )

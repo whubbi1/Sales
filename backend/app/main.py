@@ -1682,6 +1682,11 @@ async def startup():
                 # remain valid at the DB level but the app no longer offers or accepts them.
                 "ALTER TYPE deal_status_enum ADD VALUE IF NOT EXISTS 'Contract Won'",
                 "UPDATE opportunities SET deal_status = 'Contract Won' WHERE deal_status IN ('Contract Ongoing', 'Contract Finalised', 'PO Received')",
+
+                # Contacts — creation date must always be set; backfill any pre-existing row
+                # that somehow ended up without one (e.g. a bulk import that bypassed the ORM
+                # default) with today's date.
+                "UPDATE contacts SET created_at = NOW() WHERE created_at IS NULL",
             ]
             for sql in sqls:
                 try:

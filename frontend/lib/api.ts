@@ -368,6 +368,11 @@ export const grcAccessReviewAPI = {
   overview: () => fetchAPI('/grc/overview'),
 }
 
+// ─── IT ─────────────────────────────────────────────────────────────────────────
+export const itAPI = {
+  listApplications: (search?: string) => fetchAPI(`/it/applications${qs({ search: search || undefined })}`),
+}
+
 // ─── GRC: Data & Privacy — ROPA ────────────────────────────────────────────────
 export const ropaAPI = {
   list:   () => fetchAPI('/grc/ropa'),

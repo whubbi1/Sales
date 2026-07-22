@@ -2,7 +2,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { GRCLayout, useGRCPerm } from '@/components/GRCLayout'
-import { ropaAPI, taskManagerAPI } from '@/lib/api'
+import { ropaAPI, taskManagerAPI, itAPI } from '@/lib/api'
 import { TaskModal } from '@/components/tasks/TaskModal'
 import { getStoredUser } from '@/lib/auth'
 
@@ -18,10 +18,10 @@ const TASK_STATUS_COLOR: Record<string, { bg: string; color: string }> = {
 }
 const TASK_DONE_STATUSES = ['resolved', 'closed']
 
-const CORE_FIELDS: { key: string; label: string; textarea?: boolean }[] = [
+const CORE_FIELDS: { key: string; label: string; textarea?: boolean; select?: boolean }[] = [
   { key: 'objective', label: 'Objectif', textarea: true },
   { key: 'legal_base', label: 'Legal Base', textarea: true },
-  { key: 'application', label: 'Application' },
+  { key: 'application', label: 'Application', select: true },
   { key: 'data_subject_categories', label: 'Categories of Data Subjects', textarea: true },
   { key: 'data_categories', label: 'Categories of Data Processed', textarea: true },
   { key: 'data_source', label: 'Data Source', textarea: true },
@@ -85,6 +85,8 @@ function ROPADetailContent() {
   const [deleteConfirm, setDeleteConfirm] = useState('')
   const [deleting, setDeleting] = useState(false)
 
+  const [applications, setApplications] = useState<any[]>([])
+
   const me = getStoredUser()
 
   const load = async () => {
@@ -102,6 +104,7 @@ function ROPADetailContent() {
   }
 
   useEffect(() => { load() }, [id])
+  useEffect(() => { itAPI.listApplications().then(d => setApplications(d.applications || [])).catch(() => {}) }, [])
 
   if (level === 'loading' || loading) return <div style={{ padding: '48px', textAlign: 'center', color: '#45B6E4' }}>Loading…</div>
   if (level === 'none') return (
@@ -196,7 +199,16 @@ function ROPADetailContent() {
             <div key={f.key}>
               <div style={lbl}>{f.label}</div>
               <EditableCell display={record[f.key]} editing={editingField === f.key} canEdit={canEdit} onStartEdit={() => setEditingField(f.key)}>
-                {f.textarea ? (
+                {f.select ? (
+                  <select autoFocus style={{ ...inp, width: '100%', boxSizing: 'border-box' as const }} defaultValue={record[f.key] || ''}
+                    onChange={e => updateField({ [f.key]: e.target.value })} onBlur={() => setEditingField(null)}>
+                    <option value="">Select an application…</option>
+                    {record[f.key] && !applications.some((a: any) => a.name === record[f.key]) && (
+                      <option value={record[f.key]}>{record[f.key]} (not in inventory)</option>
+                    )}
+                    {applications.map((a: any) => <option key={a.id} value={a.name}>{a.name}</option>)}
+                  </select>
+                ) : f.textarea ? (
                   <textarea autoFocus style={{ ...inp, width: '100%', boxSizing: 'border-box' as const, minHeight: '54px', resize: 'vertical' as const }} defaultValue={record[f.key] || ''}
                     onBlur={e => updateField({ [f.key]: e.target.value })} />
                 ) : (
