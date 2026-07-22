@@ -9,6 +9,10 @@ import { useReportBuilder, applyReport, ReportPanel, ReportColumn, ColumnResizeH
 import { getStoredUser } from '@/lib/auth'
 
 const STATUS_OPTIONS = ['Open', 'In Progress', 'Closed', 'Create an Opportunity']
+// Display-only relabeling — the underlying status value stays 'Create an Opportunity'
+// everywhere it's stored/compared (DB enum, backend trigger logic), only how it reads changes.
+const STATUS_LABELS: Record<string, string> = { 'Create an Opportunity': 'Converted to Opportunity' }
+const statusLabel = (s: string) => STATUS_LABELS[s] || s
 
 const BASE_COLUMNS: ReportColumn[] = [
   { key: 'lead_number', label: 'Lead ID', filterable: 'text' },
@@ -45,6 +49,9 @@ export default function LeadsPage() {
   const [search, setSearch] = useState('')
   const [operationalTeams, setOperationalTeams] = useState<any[]>([])
   const [salesTeams, setSalesTeams] = useState<any[]>([])
+  const [kpiPopup, setKpiPopup] = useState<string | null>(null)
+  const [popupOpTeam, setPopupOpTeam] = useState('')
+  const [popupSalesTeam, setPopupSalesTeam] = useState('')
 
   // Filter options need the full live team list, not just whatever appears in currently-loaded
   // leads, so an unused team still shows up as a selectable filter.
@@ -106,8 +113,9 @@ export default function LeadsPage() {
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px', marginBottom: '16px' }}>
             {STATUS_OPTIONS.map(s => (
-              <div key={s} style={{ background: 'white', borderRadius: '10px', border: '1px solid #EDF2F7', padding: '14px 16px', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
-                <div style={{ fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#9B9B9B', marginBottom: '4px' }}>{s}</div>
+              <div key={s} onClick={() => { setKpiPopup(s); setPopupOpTeam(''); setPopupSalesTeam('') }}
+                style={{ background: 'white', borderRadius: '10px', border: '1px solid #EDF2F7', padding: '14px 16px', boxShadow: '0 1px 3px rgba(0,0,0,0.06)', cursor: 'pointer' }}>
+                <div style={{ fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#9B9B9B', marginBottom: '4px' }}>{statusLabel(s)}</div>
                 <div style={{ fontSize: '20px', fontWeight: '800', color: statusColors(s).color }}>{leads.filter(l => l.status === s).length}</div>
               </div>
             ))}
@@ -141,7 +149,7 @@ export default function LeadsPage() {
                     {isVisible('origin') && <td style={{ padding: '11px 16px', borderBottom: '1px solid #F1F5F9', ...REPORT_CELL_STYLE }}>{l.origin || '—'}</td>}
                     {isVisible('status') && (
                       <td style={{ padding: '11px 16px', borderBottom: '1px solid #F1F5F9', ...REPORT_CELL_STYLE }}>
-                        <span style={{ background: statusColors(l.status).bg, color: statusColors(l.status).color, padding: '2px 9px', borderRadius: '10px', fontSize: '10px', fontWeight: '700' }}>{l.status}</span>
+                        <span style={{ background: statusColors(l.status).bg, color: statusColors(l.status).color, padding: '2px 9px', borderRadius: '10px', fontSize: '10px', fontWeight: '700' }}>{statusLabel(l.status)}</span>
                       </td>
                     )}
                     {isVisible('start_date') && <td style={{ padding: '11px 16px', borderBottom: '1px solid #F1F5F9', ...REPORT_CELL_STYLE }}>{fmt(l.start_date)}</td>}
@@ -156,6 +164,56 @@ export default function LeadsPage() {
           </div>
         </div>
         {showModal && <LeadModal onClose={() => setShowModal(false)} onSave={() => { setShowModal(false); load() }} />}
+
+        {kpiPopup && (() => {
+          const matches = withDisplay
+            .filter(l => l.status === kpiPopup)
+            .filter(l => !popupOpTeam || l.main_operational_team_name === popupOpTeam)
+            .filter(l => !popupSalesTeam || l.sales_team_name === popupSalesTeam)
+          return (
+            <div className="modal-overlay" onClick={() => setKpiPopup(null)}>
+              <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '480px' }}>
+                <div className="modal-header">
+                  <h2 style={{ fontSize: '15px', fontWeight: '700', color: '#144766' }}>{statusLabel(kpiPopup)} ({matches.length})</h2>
+                  <button onClick={() => setKpiPopup(null)} style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: '20px', color: '#9B9B9B', lineHeight: 1 }}>×</button>
+                </div>
+                <div className="modal-body">
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '14px' }}>
+                    <div>
+                      <label className="form-label">Operational Team</label>
+                      <select className="form-input" value={popupOpTeam} onChange={e => setPopupOpTeam(e.target.value)}>
+                        <option value="">All teams</option>
+                        {operationalTeams.map((t: any) => <option key={t.id} value={t.title}>{t.title}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="form-label">Sales Team</label>
+                      <select className="form-input" value={popupSalesTeam} onChange={e => setPopupSalesTeam(e.target.value)}>
+                        <option value="">All teams</option>
+                        {salesTeams.map((t: any) => <option key={t.id} value={t.title}>{t.title}</option>)}
+                      </select>
+                    </div>
+                  </div>
+
+                  {matches.length === 0 ? (
+                    <p style={{ fontSize: '12px', color: '#9B9B9B' }}>No leads match this filter.</p>
+                  ) : (
+                    <div style={{ maxHeight: '320px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      {matches.map(l => (
+                        <div key={l.id} onClick={() => router.push(`/leads/${l.id}`)}
+                          style={{ padding: '9px 12px', borderRadius: '7px', background: '#F8FAFC', border: '1px solid #EDF2F7', cursor: 'pointer', fontSize: '13px', color: '#144766', fontWeight: '600' }}
+                          onMouseEnter={e => (e.currentTarget.style.background = '#EFF6FF')}
+                          onMouseLeave={e => (e.currentTarget.style.background = '#F8FAFC')}>
+                          {l.title}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )
+        })()}
       </main>
     </div>
   )

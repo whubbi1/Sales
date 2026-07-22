@@ -4,6 +4,9 @@ import { leadsAPI, companiesAPI, partnersAPI, legalAPI } from '@/lib/api'
 
 const ORIGINS = ['Referral', 'Website', 'Cold Outreach', 'Event', 'Partner', 'Inbound', 'Other']
 const STATUSES = ['Open', 'In Progress', 'Closed', 'Create an Opportunity']
+// Display-only relabeling — the underlying status value stays 'Create an Opportunity'
+// everywhere it's stored/compared (DB enum, backend trigger logic), only how it reads changes.
+const STATUS_LABELS: Record<string, string> = { 'Create an Opportunity': 'Converted to Opportunity' }
 
 function FormField({ label, children, full }: { label: string; children: React.ReactNode; full?: boolean }) {
   return (
@@ -178,7 +181,7 @@ export function LeadModal({ lead, duplicateFrom, initialCompanyId, onClose, onSa
           </FormField>
           <FormField label="Lead Status">
             <select className="form-input" value={form.status} onChange={e => setForm(p => ({ ...p, status: e.target.value }))} disabled={isClosed}>
-              {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+              {STATUSES.map(s => <option key={s} value={s}>{STATUS_LABELS[s] || s}</option>)}
             </select>
             {isClosed && <p style={{ fontSize: '11px', color: '#9B9B9B', margin: '4px 0 0' }}>Closed on {lead.closed_at ? new Date(lead.closed_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'} — a closed lead can't be reopened. Duplicate it to continue this work.</p>}
           </FormField>

@@ -10,6 +10,10 @@ import { OpportunityModal } from '@/components/opportunities/OpportunityModal'
 import { taskManagerAPI } from '@/lib/api'
 
 const TASK_DONE_STATUSES = ['resolved', 'closed']
+// Display-only relabeling — the underlying status value stays 'Create an Opportunity'
+// everywhere it's stored/compared (DB enum, backend trigger logic), only how it reads changes.
+const STATUS_LABELS: Record<string, string> = { 'Create an Opportunity': 'Converted to Opportunity' }
+const statusLabel = (s: string) => STATUS_LABELS[s] || s
 
 const fmt = (d?: string) => d ? new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : undefined
 const fmtDateTime = (d?: string) => d ? new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : ''
@@ -140,7 +144,7 @@ export default function LeadDetailPage() {
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginBottom: '4px' }}>
                 <h1 style={{ fontSize: '18px', fontWeight: '800', color: '#144766', margin: 0 }}>{lead.title}</h1>
                 {lead.lead_number && <span style={{ background: '#F1F5F9', color: '#64748B', padding: '2px 9px', borderRadius: '10px', fontSize: '10px', fontWeight: '700' }}>{lead.lead_number}</span>}
-                <StatusBadge value={lead.status} />
+                <StatusBadge value={statusLabel(lead.status)} />
               </div>
               <p style={{ color: '#9B9B9B', fontSize: '12px', margin: 0 }}>
                 {lead.company?.name || 'No company'}
