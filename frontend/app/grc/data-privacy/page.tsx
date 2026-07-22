@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation'
 import { GRCLayout, useGRCPerm } from '@/components/GRCLayout'
 import { ropaAPI, itAPI } from '@/lib/api'
 import { getStoredUser } from '@/lib/auth'
+import { ROPAApplicationsPicker, ROPAApplicationEntry } from '@/components/grc/ROPAApplicationsPicker'
 
 const inp: React.CSSProperties = {
   fontSize: '12px', padding: '7px 11px', border: '1px solid #E2E8F0',
@@ -18,11 +19,10 @@ const btn: React.CSSProperties = {
   fontSize: '12px', fontWeight: '700', fontFamily: 'Montserrat, sans-serif',
 }
 
-const CREATE_FIELDS: { key: string; label: string; textarea?: boolean; select?: boolean }[] = [
+const CREATE_FIELDS: { key: string; label: string; textarea?: boolean }[] = [
   { key: 'name', label: 'Name' },
   { key: 'objective', label: 'Objectif', textarea: true },
   { key: 'legal_base', label: 'Legal Base', textarea: true },
-  { key: 'application', label: 'Application', select: true },
   { key: 'data_subject_categories', label: 'Categories of Data Subjects', textarea: true },
   { key: 'data_categories', label: 'Categories of Data Processed', textarea: true },
   { key: 'data_source', label: 'Data Source', textarea: true },
@@ -34,20 +34,21 @@ const CREATE_FIELDS: { key: string; label: string; textarea?: boolean; select?: 
 
 function CreateModal({ onClose, onCreated }: { onClose: () => void; onCreated: (id: string) => void }) {
   const [form, setForm] = useState<Record<string, string>>({})
+  const [applications, setApplications] = useState<ROPAApplicationEntry[]>([])
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [extracting, setExtracting] = useState(false)
-  const [applications, setApplications] = useState<any[]>([])
+  const [inventoryApps, setInventoryApps] = useState<any[]>([])
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  useEffect(() => { itAPI.listApplications().then(d => setApplications(d.applications || [])).catch(() => {}) }, [])
+  useEffect(() => { itAPI.listApplications().then(d => setInventoryApps(d.applications || [])).catch(() => {}) }, [])
 
   const submit = async () => {
     if (!form.name?.trim()) { setError('Name is required'); return }
     setSaving(true); setError('')
     try {
       const me = getStoredUser()
-      const r = await ropaAPI.create({ ...form, created_by: me?.email || '' })
+      const r = await ropaAPI.create({ ...form, applications, created_by: me?.email || '' })
       onCreated(r.id)
     } catch (e: any) { setError(e.message) }
     finally { setSaving(false) }
@@ -64,6 +65,13 @@ function CreateModal({ onClose, onCreated }: { onClose: () => void; onCreated: (
         const cleaned: Record<string, string> = {}
         for (const [k, v] of Object.entries(r.extracted || {})) { if (v) cleaned[k] = String(v) }
         setForm(prev => ({ ...prev, ...cleaned }))
+        // The extracted "application" is a plain guessed name — only use it if it matches
+        // a real entry in the IT inventory, so we can carry over a proper application_id.
+        const extractedApp = (r.extracted || {}).application
+        if (extractedApp) {
+          const match = inventoryApps.find((a: any) => a.name.toLowerCase() === String(extractedApp).toLowerCase())
+          if (match) setApplications(prev => prev.some(p => p.application_id === match.id) ? prev : [...prev, { application_id: match.id, application_name: match.name, submodule_id: null, submodule_name: null }])
+        }
       }
     } catch (e: any) { setError(e.message) }
     finally { setExtracting(false); if (fileInputRef.current) fileInputRef.current.value = '' }
@@ -91,21 +99,18 @@ function CreateModal({ onClose, onCreated }: { onClose: () => void; onCreated: (
           {CREATE_FIELDS.map(f => (
             <div key={f.key}>
               <label style={lbl}>{f.label}{f.key === 'name' ? ' *' : ''}</label>
-              {f.select ? (
-                <select style={{ ...inp, width: '100%', boxSizing: 'border-box' as const }}
-                  value={form[f.key] || ''} onChange={e => setForm({ ...form, [f.key]: e.target.value })}>
-                  <option value="">Select an application…</option>
-                  {form[f.key] && !applications.some((a: any) => a.name === form[f.key]) && (
-                    <option value={form[f.key]}>{form[f.key]} (not in inventory)</option>
-                  )}
-                  {applications.map((a: any) => <option key={a.id} value={a.name}>{a.name}</option>)}
-                </select>
-              ) : f.textarea ? (
+              {f.textarea ? (
                 <textarea style={{ ...inp, width: '100%', boxSizing: 'border-box' as const, minHeight: '54px', resize: 'vertical' }}
                   value={form[f.key] || ''} onChange={e => setForm({ ...form, [f.key]: e.target.value })} />
               ) : (
                 <input style={{ ...inp, width: '100%', boxSizing: 'border-box' as const }}
                   value={form[f.key] || ''} onChange={e => setForm({ ...form, [f.key]: e.target.value })} />
+              )}
+              {f.key === 'legal_base' && (
+                <div style={{ marginTop: '14px' }}>
+                  <label style={lbl}>Applications</label>
+                  <ROPAApplicationsPicker value={applications} onChange={setApplications} />
+                </div>
               )}
             </div>
           ))}
@@ -151,7 +156,8 @@ function ROPAList() {
     </div>
   )
 
-  const filtered = records.filter(r => !search || `${r.name} ${r.application || ''}`.toLowerCase().includes(search.toLowerCase()))
+  const appNames = (r: any) => (r.applications || []).map((a: any) => a.application_name).join(', ')
+  const filtered = records.filter(r => !search || `${r.name} ${appNames(r)}`.toLowerCase().includes(search.toLowerCase()))
 
   return (
     <div>
@@ -187,7 +193,7 @@ function ROPAList() {
               <tr key={r.id} onClick={() => router.push(`/grc/data-privacy/ropa/${r.id}`)} style={{ borderBottom: '1px solid #F1F5F9', cursor: 'pointer' }}
                 onMouseEnter={e => (e.currentTarget.style.background = '#FAFBFC')} onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
                 <td style={{ padding: '10px 12px', fontWeight: '700', color: '#156082' }}>{r.name}</td>
-                <td style={{ padding: '10px 12px', color: '#3F3F3F' }}>{r.application || '—'}</td>
+                <td style={{ padding: '10px 12px', color: '#3F3F3F' }}>{appNames(r) || '—'}</td>
                 <td style={{ padding: '10px 12px', color: '#64748B', maxWidth: '220px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.legal_base || '—'}</td>
                 <td style={{ padding: '10px 12px', color: '#64748B' }}>{r.data_source || '—'}</td>
                 <td style={{ padding: '10px 12px', color: '#64748B' }}>{r.retention_period || '—'}</td>

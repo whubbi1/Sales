@@ -2,9 +2,10 @@
 import { useState, useEffect, useRef } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { GRCLayout, useGRCPerm } from '@/components/GRCLayout'
-import { ropaAPI, taskManagerAPI, itAPI } from '@/lib/api'
+import { ropaAPI, taskManagerAPI } from '@/lib/api'
 import { TaskModal } from '@/components/tasks/TaskModal'
 import { getStoredUser } from '@/lib/auth'
+import { ROPAApplicationsPicker } from '@/components/grc/ROPAApplicationsPicker'
 
 const card: React.CSSProperties = { background: 'white', borderRadius: '12px', border: '1px solid #EDF2F7', padding: '18px 22px', marginBottom: '14px', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }
 const lbl: React.CSSProperties = { fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#45B6E4', marginBottom: '6px' }
@@ -18,10 +19,9 @@ const TASK_STATUS_COLOR: Record<string, { bg: string; color: string }> = {
 }
 const TASK_DONE_STATUSES = ['resolved', 'closed']
 
-const CORE_FIELDS: { key: string; label: string; textarea?: boolean; select?: boolean }[] = [
+const CORE_FIELDS: { key: string; label: string; textarea?: boolean }[] = [
   { key: 'objective', label: 'Objectif', textarea: true },
   { key: 'legal_base', label: 'Legal Base', textarea: true },
-  { key: 'application', label: 'Application', select: true },
   { key: 'data_subject_categories', label: 'Categories of Data Subjects', textarea: true },
   { key: 'data_categories', label: 'Categories of Data Processed', textarea: true },
   { key: 'data_source', label: 'Data Source', textarea: true },
@@ -85,8 +85,6 @@ function ROPADetailContent() {
   const [deleteConfirm, setDeleteConfirm] = useState('')
   const [deleting, setDeleting] = useState(false)
 
-  const [applications, setApplications] = useState<any[]>([])
-
   const me = getStoredUser()
 
   const load = async () => {
@@ -104,7 +102,6 @@ function ROPADetailContent() {
   }
 
   useEffect(() => { load() }, [id])
-  useEffect(() => { itAPI.listApplications().then(d => setApplications(d.applications || [])).catch(() => {}) }, [])
 
   if (level === 'loading' || loading) return <div style={{ padding: '48px', textAlign: 'center', color: '#45B6E4' }}>Loading…</div>
   if (level === 'none') return (
@@ -199,16 +196,7 @@ function ROPADetailContent() {
             <div key={f.key}>
               <div style={lbl}>{f.label}</div>
               <EditableCell display={record[f.key]} editing={editingField === f.key} canEdit={canEdit} onStartEdit={() => setEditingField(f.key)}>
-                {f.select ? (
-                  <select autoFocus style={{ ...inp, width: '100%', boxSizing: 'border-box' as const }} defaultValue={record[f.key] || ''}
-                    onChange={e => updateField({ [f.key]: e.target.value })} onBlur={() => setEditingField(null)}>
-                    <option value="">Select an application…</option>
-                    {record[f.key] && !applications.some((a: any) => a.name === record[f.key]) && (
-                      <option value={record[f.key]}>{record[f.key]} (not in inventory)</option>
-                    )}
-                    {applications.map((a: any) => <option key={a.id} value={a.name}>{a.name}</option>)}
-                  </select>
-                ) : f.textarea ? (
+                {f.textarea ? (
                   <textarea autoFocus style={{ ...inp, width: '100%', boxSizing: 'border-box' as const, minHeight: '54px', resize: 'vertical' as const }} defaultValue={record[f.key] || ''}
                     onBlur={e => updateField({ [f.key]: e.target.value })} />
                 ) : (
@@ -219,6 +207,12 @@ function ROPADetailContent() {
             </div>
           ))}
         </div>
+
+        <div style={{ marginTop: '16px', paddingTop: '16px', borderTop: '1px solid #F1F5F9' }}>
+          <div style={lbl}>Applications</div>
+          <ROPAApplicationsPicker value={record.applications || []} onChange={v => updateField({ applications: v })} canEdit={canEdit} />
+        </div>
+
         {error && <div style={{ marginTop: '12px', background: '#FEF2F2', color: '#DC2626', padding: '10px 14px', borderRadius: '8px', fontSize: '12px' }}>{error}</div>}
       </div>
 

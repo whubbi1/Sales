@@ -1728,6 +1728,13 @@ async def startup():
                     contact_id UUID NOT NULL REFERENCES contacts(id) ON DELETE CASCADE,
                     PRIMARY KEY (project_id, contact_id)
                 )""",
+
+                # ROPA — multiple Applications per record, each optionally scoped to one of
+                # that application's submodules. Replaces the old single-text `application`
+                # column (kept, unused, for any pre-existing value) — backfill it forward.
+                "ALTER TABLE ropa_records ADD COLUMN IF NOT EXISTS applications JSONB DEFAULT '[]'",
+                """UPDATE ropa_records SET applications = jsonb_build_array(jsonb_build_object('application_name', application))
+                   WHERE (application IS NOT NULL AND application != '') AND (applications IS NULL OR applications = '[]'::jsonb)""",
             ]
             for sql in sqls:
                 try:

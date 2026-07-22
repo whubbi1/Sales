@@ -379,6 +379,7 @@ export const grcAccessReviewAPI = {
 // ─── IT ─────────────────────────────────────────────────────────────────────────
 export const itAPI = {
   listApplications: (search?: string) => fetchAPI(`/it/applications${qs({ search: search || undefined })}`),
+  listSubmodules: (applicationId: string) => fetchAPI(`/it/applications/${applicationId}/submodules`),
 }
 
 // ─── GRC: Data & Privacy — ROPA ────────────────────────────────────────────────

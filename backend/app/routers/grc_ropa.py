@@ -15,13 +15,15 @@ router = APIRouter()
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 
 RECORD_FIELDS = [
-    "name", "objective", "legal_base", "application",
+    "name", "objective", "legal_base", "application", "applications",
     "data_subject_categories", "data_categories", "data_source",
     "internal_recipients", "external_recipients",
     "transfers_outside_eu", "retention_period",
     "security_measures", "data_subject_rights",
     "legitimate_interest_test", "prospecting_disclosure_notice",
 ]
+# JSONB columns need CAST(... AS JSONB) + a JSON-encoded string, not a plain :param.
+JSONB_FIELDS = {"applications"}
 
 
 def _row(d: dict) -> dict:
@@ -124,12 +126,12 @@ async def create_record(data: dict, db: AsyncSession = Depends(get_db)):
     record_id = str(uuid.uuid4())
     await db.execute(text("""
         INSERT INTO ropa_records (
-            id, name, objective, legal_base, application,
+            id, name, objective, legal_base, application, applications,
             data_subject_categories, data_categories, data_source,
             internal_recipients, external_recipients,
             transfers_outside_eu, retention_period, created_by, created_at, updated_at
         ) VALUES (
-            CAST(:id AS UUID), :name, :objective, :legal_base, :application,
+            CAST(:id AS UUID), :name, :objective, :legal_base, :application, CAST(:applications AS JSONB),
             :data_subject_categories, :data_categories, :data_source,
             :internal_recipients, :external_recipients,
             :transfers_outside_eu, :retention_period, :created_by, NOW(), NOW()
@@ -139,6 +141,7 @@ async def create_record(data: dict, db: AsyncSession = Depends(get_db)):
         "name": data["name"],
         "objective": data.get("objective"), "legal_base": data.get("legal_base"),
         "application": data.get("application"),
+        "applications": json.dumps(data.get("applications") or []),
         "data_subject_categories": data.get("data_subject_categories"),
         "data_categories": data.get("data_categories"),
         "data_source": data.get("data_source"),
@@ -170,8 +173,9 @@ async def update_record(ropa_id: str, data: dict, db: AsyncSession = Depends(get
     fields = {k: data.get(k) for k in RECORD_FIELDS if k in data}
     if not fields:
         return {"status": "ok"}
-    set_clause = ", ".join(f"{k} = :{k}" for k in fields)
-    await db.execute(text(f"UPDATE ropa_records SET {set_clause}, updated_at = NOW() WHERE id = CAST(:id AS UUID)"), {**fields, "id": ropa_id})
+    params = {k: (json.dumps(v or []) if k in JSONB_FIELDS else v) for k, v in fields.items()}
+    set_clause = ", ".join(f"{k} = CAST(:{k} AS JSONB)" if k in JSONB_FIELDS else f"{k} = :{k}" for k in fields)
+    await db.execute(text(f"UPDATE ropa_records SET {set_clause}, updated_at = NOW() WHERE id = CAST(:id AS UUID)"), {**params, "id": ropa_id})
     await db.commit()
     return {"status": "ok"}
 
