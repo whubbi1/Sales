@@ -5,7 +5,7 @@ import { Sidebar } from '@/components/Sidebar'
 import { BackendCheck } from '@/components/BackendCheck'
 import { companiesAPI, contactsAPI, opportunitiesAPI, leadsAPI, marketingAPI } from '@/lib/api'
 
-const WON_STATUSES = ['PO Received', 'Contract Finalised', 'Contract Ongoing']
+const WON_STATUSES = ['Contract Won']
 const CURRENT_YEAR = new Date().getFullYear().toString()
 
 const COMPANY_STATUS_STYLE: Record<string, { bg: string; color: string }> = {
@@ -20,9 +20,7 @@ const OPP_STATUS_STYLE: Record<string, { bg: string; color: string; short: strin
   'Presentation Done':            { bg: '#FFF7ED', color: '#D97706', short: 'Presented' },
   'Proposition Ongoing':          { bg: '#FFF7ED', color: '#EA580C', short: 'Prop. Ongoing' },
   'Proposition Accepted':         { bg: '#ECFDF5', color: '#059669', short: 'Prop. Accepted' },
-  'Contract Ongoing':             { bg: '#ECFDF5', color: '#059669', short: 'Contract Ongoing' },
-  'Contract Finalised':           { bg: '#D1FAE5', color: '#047857', short: 'Finalised' },
-  'PO Received':                  { bg: '#D1FAE5', color: '#047857', short: 'PO Received' },
+  'Contract Won':                 { bg: '#D1FAE5', color: '#047857', short: 'Won' },
   'Contract Lost':                { bg: '#FEF2F2', color: '#DC2626', short: 'Lost' },
 }
 

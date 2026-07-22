@@ -34,9 +34,7 @@ const STATUS_COLORS: Record<string, { bg: string; color: string }> = {
   'Presentation Done':            { bg: '#FFF7ED', color: '#D97706' },
   'Proposition Ongoing':          { bg: '#FFF7ED', color: '#EA580C' },
   'Proposition Accepted':         { bg: '#ECFDF5', color: '#059669' },
-  'Contract Ongoing':             { bg: '#ECFDF5', color: '#059669' },
-  'Contract Finalised':           { bg: '#D1FAE5', color: '#047857' },
-  'PO Received':                  { bg: '#D1FAE5', color: '#047857' },
+  'Contract Won':                 { bg: '#D1FAE5', color: '#047857' },
   'Contract Lost':                { bg: '#FEF2F2', color: '#DC2626' },
 }
 const STATUS_LABEL: Record<string, string> = { new: 'New', open: 'Open', in_progress: 'In Progress', resolved: 'Resolved', closed: 'Closed' }

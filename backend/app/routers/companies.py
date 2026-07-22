@@ -19,8 +19,8 @@ from app.models.opportunity import Opportunity
 # Same open/won classification the Opportunities page already uses client-side
 # (frontend/app/opportunities/page.tsx) — kept as literal status lists here rather
 # than a shared constant, to avoid touching that page's already-working stat cards.
-_LOST_OR_WON_STATUSES = ('Contract Lost', 'PO Received', 'Contract Finalised')
-_WON_STATUSES = ('PO Received', 'Contract Finalised')
+_LOST_OR_WON_STATUSES = ('Contract Lost', 'Contract Won')
+_WON_STATUSES = ('Contract Won',)
 from app.schemas.schemas import (
     CompanyCreate, CompanyUpdate, CompanyResponse, CompanySummary,
     NoteCreate, NoteResponse, ArticleCreate, ArticleResponse,

@@ -40,7 +40,7 @@ export function CompanyServices({ companyId }: { companyId: string }) {
           <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
             {PROJECT_STATUSES.map(projectStatus => {
               const selected = (company.services_provided?.[dealType] || []).includes(projectStatus)
-              const finalised = opportunities.filter((o: any) => o.deal_type === dealType && o.project_status === projectStatus && o.deal_status === 'Contract Finalised')
+              const finalised = opportunities.filter((o: any) => o.deal_type === dealType && o.project_status === projectStatus && o.deal_status === 'Contract Won')
               return (
                 <div key={projectStatus}>
                   <span

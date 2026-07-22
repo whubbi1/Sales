@@ -24,6 +24,10 @@ from app.routers.projects import _maybe_create_project
 
 router = APIRouter()
 
+# Retired in favor of a single 'Contract Won' status — still valid at the DB enum level
+# (Postgres can't drop enum values) but no longer offered or accepted anywhere in the app.
+RETIRED_DEAL_STATUSES = {'Contract Ongoing', 'Contract Finalised', 'PO Received'}
+
 
 async def _attach_partners(db: AsyncSession, objs: list):
     # Partner isn't an ORM relationship (raw-SQL entity) — attach it as a plain instance
@@ -201,6 +205,8 @@ async def list_opportunities(
 
 @router.post("/", response_model=OpportunityResponse, status_code=status.HTTP_201_CREATED)
 async def create_opportunity(opp: OpportunityCreate, db: AsyncSession = Depends(get_db)):
+    if opp.deal_status in RETIRED_DEAL_STATUSES:
+        raise HTTPException(status_code=400, detail=f"'{opp.deal_status}' is retired — use 'Contract Won' instead")
     contact_ids = opp.contact_ids or []
     data = opp.model_dump(exclude={'contact_ids'})
 
@@ -245,6 +251,14 @@ async def update_opportunity(opportunity_id: UUID, data: OpportunityUpdate, db: 
     opp = r.scalar_one_or_none()
     if not opp:
         raise HTTPException(status_code=404, detail="Opportunity not found")
+
+    # Contract Won is terminal — the whole opportunity is frozen from here on. Anything left
+    # to do (staffing, invoicing, delivery) happens on its linked Project instead.
+    if opp.deal_status == 'Contract Won':
+        raise HTTPException(status_code=400, detail="This opportunity is Contract Won and can no longer be edited. Continue this work on its linked Project.")
+
+    if data.deal_status in RETIRED_DEAL_STATUSES:
+        raise HTTPException(status_code=400, detail=f"'{data.deal_status}' is retired — use 'Contract Won' instead")
 
     update_data = data.model_dump(exclude={'contact_ids'}, exclude_unset=True)
     update_data.pop('deal_id', None)     # immutable after creation

@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { opportunitiesAPI, companiesAPI, contactsAPI, partnersAPI, leadsAPI, legalAPI } from '@/lib/api'
 import { getStoredUser } from '@/lib/auth'
 
-const DEAL_STATUSES = ['Presentation To Be Scheduled','Presentation Done','Proposition Ongoing','Proposition Accepted','RFP Ongoing','Contract Ongoing','Contract Finalised','PO Received','Contract Lost']
+const DEAL_STATUSES = ['Presentation To Be Scheduled','Presentation Done','Proposition Ongoing','Proposition Accepted','RFP Ongoing','Contract Won','Contract Lost']
 const PROJECT_STATUSES = ['Daily Invoicing','Project','Software Licenses']
 const DEAL_TYPES = ['SAP','GRC','Smart Global Governance','SecurityBridge','Onapsis','BowBridge','IBM OpenPages']
 
@@ -37,6 +37,9 @@ export function OpportunityModal({ opportunity, duplicateFrom, fromLead, initial
   // prefill the form identically — the crucial difference is `opportunity` itself stays
   // undefined, so handleSave below still creates a new record instead of updating one.
   const src = opportunity || duplicateFrom
+  // Contract Won is terminal — the whole opportunity is frozen (server-enforced too).
+  // Duplicating one always starts fresh, same as Lead's duplicate flow never copying status.
+  const isWon = opportunity?.deal_status === 'Contract Won'
   const [companies, setCompanies] = useState<any[]>([])
   const [partners, setPartners] = useState<any[]>([])
   const [contacts, setContacts] = useState<any[]>([])
@@ -59,7 +62,7 @@ export function OpportunityModal({ opportunity, duplicateFrom, fromLead, initial
     invoice_days: src?.invoice_days ?? '',
     daily_rate: src?.daily_rate ?? '',
     closing_date: toDateStr(src?.closing_date),
-    deal_status: src?.deal_status || 'Presentation To Be Scheduled',
+    deal_status: duplicateFrom ? 'Presentation To Be Scheduled' : (src?.deal_status || 'Presentation To Be Scheduled'),
     assigned_consultants: src?.assigned_consultants || [],
     contract_start_date: toDateStr(src?.contract_start_date || fromLead?.start_date),
     contract_end_date: toDateStr(src?.contract_end_date || fromLead?.end_date),
@@ -168,6 +171,12 @@ export function OpportunityModal({ opportunity, duplicateFrom, fromLead, initial
           <button onClick={onClose} style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: '20px', color: '#9B9B9B', lineHeight: 1 }}>×</button>
         </div>
         <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
+          {isWon && (
+            <div style={{ background: '#ECFDF5', color: '#059669', padding: '10px 14px', borderRadius: '8px', fontSize: '12px', fontWeight: '600' }}>
+              This opportunity is Contract Won and can no longer be edited. Continue this work on its linked Project.
+            </div>
+          )}
+          <fieldset disabled={isWon} style={{ border: 'none', margin: 0, padding: 0, display: 'contents' }}>
 
           <div>
             <p className="section-label">Opportunity Information</p>
@@ -351,12 +360,13 @@ export function OpportunityModal({ opportunity, duplicateFrom, fromLead, initial
           <FormField label="Notes" full>
             <textarea className="form-input" value={form.notes} onChange={e => setForm(p => ({ ...p, notes: e.target.value }))} placeholder="Additional notes..." rows={3} style={{ resize: 'vertical' }} />
           </FormField>
+          </fieldset>
 
           {error && <div style={{ background: '#FEF2F2', color: '#DC2626', padding: '10px 14px', borderRadius: '8px', fontSize: '12px' }}>{error}</div>}
         </div>
         <div className="modal-footer">
           <button className="btn-secondary" onClick={onClose}>Cancel</button>
-          <button className="btn-primary" onClick={handleSave} disabled={saving}>{saving ? 'Saving...' : opportunity ? 'Save Changes' : fromLead ? 'Create Opportunity & Close Lead' : 'Create Opportunity'}</button>
+          <button className="btn-primary" onClick={handleSave} disabled={saving || isWon}>{saving ? 'Saving...' : opportunity ? 'Save Changes' : fromLead ? 'Create Opportunity & Close Lead' : 'Create Opportunity'}</button>
         </div>
       </div>
     </div>

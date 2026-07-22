@@ -107,8 +107,8 @@ export default function CompanyDetailPage() {
   const color = LEVEL_COLORS[company.level] || '#144766'
 
   // Same open/won classification the Opportunities list page already uses.
-  const openOpportunities = opportunities.filter((o: any) => !['Contract Lost', 'PO Received', 'Contract Finalised'].includes(o.deal_status))
-  const wonOpportunities = opportunities.filter((o: any) => ['PO Received', 'Contract Finalised'].includes(o.deal_status))
+  const openOpportunities = opportunities.filter((o: any) => !['Contract Lost', 'Contract Won'].includes(o.deal_status))
+  const wonOpportunities = opportunities.filter((o: any) => o.deal_status === 'Contract Won')
   const openAmount = openOpportunities.filter((o: any) => o.deal_amount).reduce((sum: number, o: any) => sum + o.deal_amount, 0)
   const wonAmount = wonOpportunities.filter((o: any) => o.deal_amount).reduce((sum: number, o: any) => sum + o.deal_amount, 0)
 

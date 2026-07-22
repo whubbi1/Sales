@@ -60,8 +60,7 @@ export function StatusBadge({ value }: { value: string }) {
     New: { bg: '#F1F5F9', color: '#45B6E4' }, Open: { bg: '#FFF7ED', color: '#D97706' },
     Connected: { bg: '#ECFDF5', color: '#059669' },
     'Contract Lost': { bg: '#FEF2F2', color: '#DC2626' },
-    'PO Received': { bg: '#ECFDF5', color: '#059669' },
-    'Contract Finalised': { bg: '#ECFDF5', color: '#059669' },
+    'Contract Won': { bg: '#ECFDF5', color: '#059669' },
   }
   const c = colors[value] || { bg: '#F1F5F9', color: '#45B6E4' }
   return <span style={{ background: c.bg, color: c.color, padding: '3px 9px', borderRadius: '20px', fontSize: '11px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.04em', display: 'inline-block' }}>{value}</span>

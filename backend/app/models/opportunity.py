@@ -33,10 +33,13 @@ class Opportunity(Base):
     project_name        = Column(String(500))
     deal_amount         = Column(Float)
     closing_date        = Column(DateTime)
+    # Contract Ongoing/Finalised/PO Received are retired in favor of a single Contract Won
+    # status (see RETIRED_DEAL_STATUSES in opportunities.py) — kept in the enum only because
+    # Postgres can't drop enum values; the app no longer offers or accepts them.
     deal_status         = Column(SAEnum(
         'Presentation To Be Scheduled', 'Presentation Done', 'Proposition Ongoing',
         'Proposition Accepted', 'RFP Ongoing', 'Contract Ongoing', 'Contract Finalised',
-        'PO Received', 'Contract Lost',
+        'PO Received', 'Contract Lost', 'Contract Won',
         name='deal_status_enum'
     ), default='Presentation To Be Scheduled')
     assigned_consultants = Column(JSONB, default=list)

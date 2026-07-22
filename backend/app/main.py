@@ -1676,6 +1676,12 @@ async def startup():
                     contact_id UUID NOT NULL REFERENCES contacts(id) ON DELETE CASCADE,
                     PRIMARY KEY (event_id, contact_id)
                 )""",
+
+                # Opportunity — retire Contract Ongoing/Finalised/PO Received in favor of a
+                # single Contract Won status. Postgres can't drop enum values, so the old three
+                # remain valid at the DB level but the app no longer offers or accepts them.
+                "ALTER TYPE deal_status_enum ADD VALUE IF NOT EXISTS 'Contract Won'",
+                "UPDATE opportunities SET deal_status = 'Contract Won' WHERE deal_status IN ('Contract Ongoing', 'Contract Finalised', 'PO Received')",
             ]
             for sql in sqls:
                 try:
@@ -1696,6 +1702,26 @@ async def startup():
                 for item in [("WHUBBI Frontend","https://dev.whubbi.wcomply.com"),("WCOMPLY Website","https://wcomply.com"),("SharePoint","https://wcomply.sharepoint.com")]:
                     await session.execute(text("INSERT INTO monitored_urls (id,name,url,active,created_at) VALUES (gen_random_uuid(),:name,:url,true,NOW())"),{"name":item[0],"url":item[1]})
                 await session.commit()
+
+            # Backfill: every Opportunity just migrated to Contract Won (above) gets its
+            # linked Project created now, same as newly-transitioning ones going forward.
+            # _maybe_create_project no-ops for Software Licenses deals and for opportunities
+            # that already have a Project, so this is safe to run on every startup.
+            try:
+                from app.models.opportunity import Opportunity
+                from app.routers.projects import _maybe_create_project
+                r = await session.execute(text("SELECT id FROM opportunities WHERE deal_status = 'Contract Won'"))
+                won_ids = [row[0] for row in r.fetchall()]
+                created = 0
+                for oid in won_ids:
+                    opp = await session.get(Opportunity, oid)
+                    if opp:
+                        proj = await _maybe_create_project(session, opp)
+                        if proj:
+                            created += 1
+                print(f"Contract Won project backfill: {created} project(s) created out of {len(won_ids)} opportunity(ies)")
+            except Exception as e:
+                print(f"Contract Won project backfill skipped: {e}")
 
         print("Database ready!")
     except Exception as e:

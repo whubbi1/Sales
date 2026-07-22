@@ -9,7 +9,7 @@ import { OpportunityModal } from '@/components/opportunities/OpportunityModal'
 import { useReportBuilder, applyReport, ReportPanel, ReportColumn, ColumnResizeHandle, REPORT_CELL_STYLE, SortArrow, Pagination } from '@/components/it/ReportBuilder'
 import { getStoredUser } from '@/lib/auth'
 
-const STATUS_OPTIONS = ['Presentation To Be Scheduled','Presentation Done','Proposition Ongoing','Proposition Accepted','RFP Ongoing','Contract Ongoing','Contract Finalised','PO Received','Contract Lost']
+const STATUS_OPTIONS = ['Presentation To Be Scheduled','Presentation Done','Proposition Ongoing','Proposition Accepted','RFP Ongoing','Contract Won','Contract Lost']
 
 const BASE_COLUMNS: ReportColumn[] = [
   { key: 'deal_name', label: 'Opportunity', filterable: 'text' },
@@ -83,8 +83,8 @@ function OpportunitiesContent() {
 
   const totalValue = opportunities.filter(o => o.deal_amount).reduce((sum, o) => sum + o.deal_amount, 0)
   const KPI_FILTERS: Record<string, (o: any) => boolean> = {
-    open: (o: any) => !['Contract Lost', 'PO Received', 'Contract Finalised'].includes(o.deal_status),
-    won: (o: any) => ['PO Received', 'Contract Finalised'].includes(o.deal_status),
+    open: (o: any) => !['Contract Lost', 'Contract Won'].includes(o.deal_status),
+    won: (o: any) => o.deal_status === 'Contract Won',
     lost: (o: any) => o.deal_status === 'Contract Lost',
   }
   const KPI_LABELS: Record<string, string> = { open: 'Open Opportunities', won: 'Won', lost: 'Lost' }

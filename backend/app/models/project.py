@@ -1,8 +1,8 @@
 # backend/app/models/project.py
 # Operations module — a Project is either auto-created from an Opportunity once it reaches
-# Contract Ongoing/Finalised with project type Daily Invoicing/Project (is_internal=False,
-# opportunity_id set), or created directly as an Internal Project (is_internal=True, no
-# opportunity, its own name/description/dates/partner).
+# Contract Won with project type Daily Invoicing/Project (is_internal=False, opportunity_id
+# set), or created directly as an Internal Project (is_internal=True, no opportunity, its
+# own name/description/dates/partner). Software Licenses opportunities never get a Project.
 import uuid
 from datetime import datetime
 from sqlalchemy import Column, String, Text, DateTime, Float, Boolean, Integer, ForeignKey

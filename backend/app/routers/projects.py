@@ -73,11 +73,13 @@ async def _log_change(db: AsyncSession, project_id, field_name: str, old_value, 
 
 
 async def _maybe_create_project(db: AsyncSession, opp: Opportunity):
-    # Fires once per opportunity — the moment its status is (or becomes) Contract Ongoing/
-    # Finalised for a Daily Invoicing/Project engagement, mirroring _maybe_create_rfp in
-    # opportunities.py. Seeds the staffing plan (Initial + Current) from the RFP Staffing/
-    # Costing Sheet if one exists, since that's the closest thing to a quotation baseline.
-    if opp.deal_status not in ('Contract Ongoing', 'Contract Finalised'):
+    # Fires once per opportunity — the moment its status is (or becomes) Contract Won for a
+    # Daily Invoicing/Project engagement, mirroring _maybe_create_rfp in opportunities.py.
+    # Software Licenses deals never get a Project — they're tracked entirely as Opportunities,
+    # surfaced in Operations > Licenses (a filtered Opportunity view, not a separate entity).
+    # Seeds the staffing plan (Initial + Current) from the RFP Staffing/Costing Sheet if one
+    # exists, since that's the closest thing to a quotation baseline.
+    if opp.deal_status != 'Contract Won':
         return None
     if opp.project_status not in ('Daily Invoicing', 'Project'):
         return None

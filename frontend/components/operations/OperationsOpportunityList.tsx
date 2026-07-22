@@ -6,7 +6,7 @@ import { getStoredUser } from '@/lib/auth'
 import { useReportBuilder, applyReport, ReportPanel, ReportColumn, ColumnResizeHandle, REPORT_CELL_STYLE, SortArrow, Pagination } from '@/components/it/ReportBuilder'
 import { PageHeader } from '@/components/shared/RecordLayout'
 
-const STATUSES = ['Contract Ongoing', 'Contract Finalised']
+const STATUSES = ['Contract Won']
 
 const COLUMNS: ReportColumn[] = [
   { key: 'deal_name', label: 'Opportunity', filterable: 'text' },
@@ -92,7 +92,7 @@ export function OperationsOpportunityList({ module, title, icon, projectTypes }:
                 {isVisible('deal_name') && <td style={{ padding: '11px 16px', borderBottom: '1px solid #F1F5F9', ...REPORT_CELL_STYLE, fontWeight: 600, color: '#144766' }}>{o.deal_name}</td>}
                 {isVisible('company_name') && <td style={{ padding: '11px 16px', borderBottom: '1px solid #F1F5F9', ...REPORT_CELL_STYLE }}>{o.company_name || '—'}</td>}
                 {isVisible('deal_amount') && <td style={{ padding: '11px 16px', borderBottom: '1px solid #F1F5F9', ...REPORT_CELL_STYLE }}>{o.deal_amount ? `€${o.deal_amount.toLocaleString('en-US')}` : '—'}</td>}
-                {isVisible('deal_status') && <td style={{ padding: '11px 16px', borderBottom: '1px solid #F1F5F9', ...REPORT_CELL_STYLE }}><span style={{ background: o.deal_status === 'Contract Finalised' ? '#D1FAE5' : '#ECFDF5', color: '#059669', padding: '2px 9px', borderRadius: '10px', fontSize: '10px', fontWeight: '700' }}>{o.deal_status}</span></td>}
+                {isVisible('deal_status') && <td style={{ padding: '11px 16px', borderBottom: '1px solid #F1F5F9', ...REPORT_CELL_STYLE }}><span style={{ background: '#D1FAE5', color: '#059669', padding: '2px 9px', borderRadius: '10px', fontSize: '10px', fontWeight: '700' }}>{o.deal_status}</span></td>}
                 {isVisible('contract_start_date') && <td style={{ padding: '11px 16px', borderBottom: '1px solid #F1F5F9', ...REPORT_CELL_STYLE }}>{fmt(o.contract_start_date)}</td>}
                 {isVisible('contract_end_date') && <td style={{ padding: '11px 16px', borderBottom: '1px solid #F1F5F9', ...REPORT_CELL_STYLE }}>{fmt(o.contract_end_date)}</td>}
                 {isVisible('assigned_to') && <td style={{ padding: '11px 16px', borderBottom: '1px solid #F1F5F9', ...REPORT_CELL_STYLE }}>{o.assigned_to || '—'}</td>}

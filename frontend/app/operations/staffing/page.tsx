@@ -8,7 +8,7 @@ import { useReportBuilder, applyReport, ReportPanel, ReportColumn, SortArrow } f
 import { StaffingDrilldownModal } from '@/components/shared/StaffingDrilldownModal'
 
 const API = 'https://api.whubbi.wcomply.com'
-const CLOSED_STATUSES = ['Contract Ongoing', 'Contract Finalised', 'Contract Lost']
+const CLOSED_STATUSES = ['Contract Won', 'Contract Lost']
 
 function weekdaysInMonth(year: number, monthIndex0: number) {
   const days = new Date(year, monthIndex0 + 1, 0).getDate()
@@ -83,7 +83,7 @@ function StaffingContent() {
   const daysFor = (email: string, calKey: string, bucket: 'ongoing' | 'open') => {
     return staffing
       .filter((s: any) => s.user_email === email)
-      .filter((s: any) => bucket === 'ongoing' ? s.deal_status === 'Contract Ongoing' : !CLOSED_STATUSES.includes(s.deal_status))
+      .filter((s: any) => bucket === 'ongoing' ? s.deal_status === 'Contract Won' : !CLOSED_STATUSES.includes(s.deal_status))
       .reduce((sum: number, s: any) => sum + (s.months || []).filter((m: any) => m.month.slice(0, 10) === calKey).reduce((a: number, m: any) => a + m.days, 0), 0)
   }
 
@@ -92,9 +92,9 @@ function StaffingContent() {
     return staffing
       .filter((s: any) => s.user_email === email)
       .filter((s: any) => {
-        if (label === 'Ongoing') return s.deal_status === 'Contract Ongoing'
+        if (label === 'Ongoing') return s.deal_status === 'Contract Won'
         if (label === 'Open') return !CLOSED_STATUSES.includes(s.deal_status)
-        return s.deal_status === 'Contract Ongoing' || !CLOSED_STATUSES.includes(s.deal_status)
+        return s.deal_status === 'Contract Won' || !CLOSED_STATUSES.includes(s.deal_status)
       })
       .map((s: any) => ({
         label: s.opportunity_name,
