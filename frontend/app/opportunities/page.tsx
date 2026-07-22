@@ -1,9 +1,9 @@
 'use client'
 // app/opportunities/page.tsx
-import { useState, useEffect, Suspense, Fragment } from 'react'
+import { useState, useEffect, useMemo, Suspense, Fragment } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Sidebar } from '@/components/Sidebar'
-import { opportunitiesAPI } from '@/lib/api'
+import { opportunitiesAPI, legalAPI } from '@/lib/api'
 import { PageHeader, EmptyState } from '@/components/shared/RecordLayout'
 import { OpportunityModal } from '@/components/opportunities/OpportunityModal'
 import { useReportBuilder, applyReport, ReportPanel, ReportColumn, ColumnResizeHandle, REPORT_CELL_STYLE, SortArrow, Pagination } from '@/components/it/ReportBuilder'
@@ -11,7 +11,7 @@ import { getStoredUser } from '@/lib/auth'
 
 const STATUS_OPTIONS = ['Presentation To Be Scheduled','Presentation Done','Proposition Ongoing','Proposition Accepted','RFP Ongoing','Contract Ongoing','Contract Finalised','PO Received','Contract Lost']
 
-const COLUMNS: ReportColumn[] = [
+const BASE_COLUMNS: ReportColumn[] = [
   { key: 'deal_name', label: 'Opportunity', filterable: 'text' },
   { key: 'company_name', label: 'Company', filterable: 'text' },
   { key: 'deal_type', label: 'Type', filterable: 'text' },
@@ -28,6 +28,7 @@ const COLUMNS: ReportColumn[] = [
 const DEFAULT_COLUMN_WIDTHS: Record<string, number> = {
   deal_name: 240, company_name: 170, deal_type: 140, deal_amount: 130,
   deal_status: 170, closing_date: 130, project_status: 140, contacts_count: 100,
+  main_operational_team_name: 170, sales_team_name: 170,
 }
 
 function OpportunitiesContent() {
@@ -40,10 +41,20 @@ function OpportunitiesContent() {
   const [expandedStatus, setExpandedStatus] = useState<string | null>(null)
   const [userEmail, setUserEmail] = useState('')
   const [nameSearch, setNameSearch] = useState('')
+  const [operationalTeams, setOperationalTeams] = useState<any[]>([])
+  const [salesTeams, setSalesTeams] = useState<any[]>([])
 
   const prefillCompanyId = searchParams.get('company_id') || ''
   const prefillPartnerId = searchParams.get('partner_id') || ''
   const prefillContactId = searchParams.get('contact_id') || ''
+
+  // Filter options need the full live team list, not just whatever appears in currently-loaded
+  // opportunities, so an unused team still shows up as a selectable filter.
+  const COLUMNS: ReportColumn[] = useMemo(() => [
+    ...BASE_COLUMNS,
+    { key: 'main_operational_team_name', label: 'Operational Team', filterable: 'select', options: operationalTeams.map((t: any) => t.title) },
+    { key: 'sales_team_name', label: 'Sales Team', filterable: 'select', options: salesTeams.map((t: any) => t.title) },
+  ], [operationalTeams, salesTeams])
 
   const rb = useReportBuilder('opportunity', COLUMNS, userEmail)
 
@@ -63,6 +74,8 @@ function OpportunitiesContent() {
     // Company/Contact detail pages link here with these params to open the create
     // modal pre-filled instead of dumping the user on an unrelated list page.
     if (prefillCompanyId || prefillPartnerId || prefillContactId) setShowModal(true)
+    legalAPI.getOrgEntities('operational_team').then(d => setOperationalTeams(d.org_entities || [])).catch(() => {})
+    legalAPI.getOrgEntities('sales_entity').then(d => setSalesTeams(d.org_entities || [])).catch(() => {})
   }, [])
 
   const totalValue = opportunities.filter(o => o.deal_amount).reduce((sum, o) => sum + o.deal_amount, 0)
@@ -75,6 +88,8 @@ function OpportunitiesContent() {
     ...o,
     company_name: o.company?.name || '',
     contacts_count: o.contacts?.length || 0,
+    main_operational_team_name: o.main_operational_team?.title || '',
+    sales_team_name: o.sales_team?.title || '',
   }))
   const searched = withDisplay.filter(o => !nameSearch.trim() || o.deal_name.toLowerCase().includes(nameSearch.trim().toLowerCase()))
   const reported = applyReport(searched, COLUMNS, rb.filters, rb.sortField, rb.sortDir)
@@ -238,6 +253,12 @@ function OpportunitiesContent() {
                       <td style={{ padding: '11px 16px', borderBottom: '1px solid #F1F5F9', ...REPORT_CELL_STYLE }}>
                         {opp.contacts?.length || 0} contact{(opp.contacts?.length || 0) !== 1 ? 's' : ''}
                       </td>
+                    )}
+                    {isVisible('main_operational_team_name') && (
+                      <td style={{ padding: '11px 16px', borderBottom: '1px solid #F1F5F9', ...REPORT_CELL_STYLE }}>{opp.main_operational_team?.title || '—'}</td>
+                    )}
+                    {isVisible('sales_team_name') && (
+                      <td style={{ padding: '11px 16px', borderBottom: '1px solid #F1F5F9', ...REPORT_CELL_STYLE }}>{opp.sales_team?.title || '—'}</td>
                     )}
                     <td style={{ padding: '11px 16px', borderBottom: '1px solid #F1F5F9' }}>
                       <button onClick={e => { e.stopPropagation(); router.push(`/opportunities/${opp.id}`) }}

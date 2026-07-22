@@ -1,8 +1,8 @@
 'use client'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { Sidebar } from '@/components/Sidebar'
-import { leadsAPI } from '@/lib/api'
+import { leadsAPI, legalAPI } from '@/lib/api'
 import { PageHeader, EmptyState } from '@/components/shared/RecordLayout'
 import { LeadModal } from '@/components/leads/LeadModal'
 import { useReportBuilder, applyReport, ReportPanel, ReportColumn, ColumnResizeHandle, REPORT_CELL_STYLE, SortArrow, Pagination } from '@/components/it/ReportBuilder'
@@ -10,7 +10,7 @@ import { getStoredUser } from '@/lib/auth'
 
 const STATUS_OPTIONS = ['Open', 'In Progress', 'Closed', 'Create an Opportunity']
 
-const COLUMNS: ReportColumn[] = [
+const BASE_COLUMNS: ReportColumn[] = [
   { key: 'lead_number', label: 'Lead ID', filterable: 'text' },
   { key: 'title', label: 'Title', filterable: 'text' },
   { key: 'company_name', label: 'Company', filterable: 'text' },
@@ -24,6 +24,7 @@ const COLUMNS: ReportColumn[] = [
 const DEFAULT_COLUMN_WIDTHS: Record<string, number> = {
   lead_number: 110, title: 240, company_name: 170, partners_names: 170,
   origin: 130, status: 160, start_date: 120, end_date: 120,
+  main_operational_team_name: 170, sales_team_name: 170,
 }
 
 const fmt = (d?: string) => d ? new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'
@@ -42,6 +43,16 @@ export default function LeadsPage() {
   const [showModal, setShowModal] = useState(false)
   const [userEmail, setUserEmail] = useState('')
   const [search, setSearch] = useState('')
+  const [operationalTeams, setOperationalTeams] = useState<any[]>([])
+  const [salesTeams, setSalesTeams] = useState<any[]>([])
+
+  // Filter options need the full live team list, not just whatever appears in currently-loaded
+  // leads, so an unused team still shows up as a selectable filter.
+  const COLUMNS: ReportColumn[] = useMemo(() => [
+    ...BASE_COLUMNS,
+    { key: 'main_operational_team_name', label: 'Operational Team', filterable: 'select', options: operationalTeams.map((t: any) => t.title) },
+    { key: 'sales_team_name', label: 'Sales Team', filterable: 'select', options: salesTeams.map((t: any) => t.title) },
+  ], [operationalTeams, salesTeams])
 
   const rb = useReportBuilder('leads', COLUMNS, userEmail)
 
@@ -57,12 +68,16 @@ export default function LeadsPage() {
     load()
     const u = getStoredUser()
     if (u?.email) setUserEmail(u.email)
+    legalAPI.getOrgEntities('operational_team').then(d => setOperationalTeams(d.org_entities || [])).catch(() => {})
+    legalAPI.getOrgEntities('sales_entity').then(d => setSalesTeams(d.org_entities || [])).catch(() => {})
   }, [])
 
   const withDisplay = leads.map(l => ({
     ...l,
     company_name: l.company?.name || '',
     partners_names: (l.partners || []).map((p: any) => p.name).join(', '),
+    main_operational_team_name: l.main_operational_team?.title || '',
+    sales_team_name: l.sales_team?.title || '',
   }))
   const searched = withDisplay.filter(l => !search.trim() || l.title.toLowerCase().includes(search.trim().toLowerCase()) || (l.lead_number || '').toLowerCase().includes(search.trim().toLowerCase()))
   const reported = applyReport(searched, COLUMNS, rb.filters, rb.sortField, rb.sortDir)
@@ -131,6 +146,8 @@ export default function LeadsPage() {
                     )}
                     {isVisible('start_date') && <td style={{ padding: '11px 16px', borderBottom: '1px solid #F1F5F9', ...REPORT_CELL_STYLE }}>{fmt(l.start_date)}</td>}
                     {isVisible('end_date') && <td style={{ padding: '11px 16px', borderBottom: '1px solid #F1F5F9', ...REPORT_CELL_STYLE }}>{fmt(l.end_date)}</td>}
+                    {isVisible('main_operational_team_name') && <td style={{ padding: '11px 16px', borderBottom: '1px solid #F1F5F9', ...REPORT_CELL_STYLE }}>{l.main_operational_team_name || '—'}</td>}
+                    {isVisible('sales_team_name') && <td style={{ padding: '11px 16px', borderBottom: '1px solid #F1F5F9', ...REPORT_CELL_STYLE }}>{l.sales_team_name || '—'}</td>}
                   </tr>
                 ))}
               </tbody>
