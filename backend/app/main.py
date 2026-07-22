@@ -1819,6 +1819,7 @@ async def startup():
                 won_ids = [row[0] for row in r.fetchall()]
                 created_projects = 0
                 created_contracts = 0
+                synced_teams = 0
                 for oid in won_ids:
                     opp = await session.get(Opportunity, oid)
                     if not opp:
@@ -1829,11 +1830,17 @@ async def startup():
                     else:
                         r2 = await session.execute(_select(Project).where(Project.opportunity_id == opp.id))
                         proj = r2.scalar_one_or_none()
+                    # _maybe_create_project only sets main_operational_team_id at creation time —
+                    # projects that already existed before that field was added never got it.
+                    if proj and opp.main_operational_team_id and not proj.main_operational_team_id:
+                        proj.main_operational_team_id = opp.main_operational_team_id
+                        await session.commit()
+                        synced_teams += 1
                     if proj:
                         contract_id = await _maybe_create_customer_contract(session, opp, proj)
                         if contract_id:
                             created_contracts += 1
-                print(f"Contract Won backfill: {created_projects} project(s) created, {created_contracts} customer contract(s) created, out of {len(won_ids)} opportunity(ies)")
+                print(f"Contract Won backfill: {created_projects} project(s) created, {created_contracts} customer contract(s) created, {synced_teams} operational team(s) synced, out of {len(won_ids)} opportunity(ies)")
             except Exception as e:
                 print(f"Contract Won backfill skipped: {e}")
 
