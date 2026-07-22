@@ -1,6 +1,6 @@
 'use client'
 import { useState, useEffect } from 'react'
-import { leadsAPI, companiesAPI, partnersAPI } from '@/lib/api'
+import { leadsAPI, companiesAPI, partnersAPI, legalAPI } from '@/lib/api'
 
 const ORIGINS = ['Referral', 'Website', 'Cold Outreach', 'Event', 'Partner', 'Inbound', 'Other']
 const STATUSES = ['Open', 'In Progress', 'Closed', 'Create an Opportunity']
@@ -23,6 +23,8 @@ export function LeadModal({ lead, duplicateFrom, initialCompanyId, onClose, onSa
   const [partners, setPartners] = useState<any[]>([])
   const [companyContacts, setCompanyContacts] = useState<any[]>([])
   const [partnerContacts, setPartnerContacts] = useState<any[]>([])
+  const [operationalTeams, setOperationalTeams] = useState<any[]>([])
+  const [salesTeams, setSalesTeams] = useState<any[]>([])
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
@@ -35,6 +37,8 @@ export function LeadModal({ lead, duplicateFrom, initialCompanyId, onClose, onSa
     contact_id: src?.contact_id || '',
     partner_ids: (src?.partners || []).map((p: any) => p.id) as string[],
     partner_contact_ids: (src?.partner_contacts || []).map((c: any) => c.id) as string[],
+    main_operational_team_id: src?.main_operational_team_id || '',
+    sales_team_id: src?.sales_team_id || '',
     start_date: toDateStr(src?.start_date),
     end_date: toDateStr(src?.end_date),
     origin: src?.origin || '',
@@ -44,6 +48,8 @@ export function LeadModal({ lead, duplicateFrom, initialCompanyId, onClose, onSa
   useEffect(() => {
     companiesAPI.list({}).then(setCompanies).catch(() => {})
     partnersAPI.list({}).then(setPartners).catch(() => {})
+    legalAPI.getOrgEntities('operational_team').then(d => setOperationalTeams(d.org_entities || [])).catch(() => {})
+    legalAPI.getOrgEntities('sales_entity').then(d => setSalesTeams(d.org_entities || [])).catch(() => {})
   }, [])
 
   useEffect(() => {
@@ -65,6 +71,8 @@ export function LeadModal({ lead, duplicateFrom, initialCompanyId, onClose, onSa
 
   const sortedCompanies = [...companies].sort((a, b) => a.name.localeCompare(b.name))
   const sortedPartners = [...partners].sort((a, b) => a.name.localeCompare(b.name))
+  const sortedOperationalTeams = [...operationalTeams].sort((a, b) => a.title.localeCompare(b.title))
+  const sortedSalesTeams = [...salesTeams].sort((a, b) => a.title.localeCompare(b.title))
 
   const togglePartner = (id: string) => {
     setForm(p => ({ ...p, partner_ids: p.partner_ids.includes(id) ? p.partner_ids.filter(x => x !== id) : [...p.partner_ids, id] }))
@@ -83,6 +91,8 @@ export function LeadModal({ lead, duplicateFrom, initialCompanyId, onClose, onSa
         contact_id: form.contact_id || null,
         partner_ids: form.partner_ids,
         partner_contact_ids: form.partner_contact_ids,
+        main_operational_team_id: form.main_operational_team_id || null,
+        sales_team_id: form.sales_team_id || null,
         start_date: form.start_date || null,
         end_date: form.end_date || null,
         origin: form.origin || null,
@@ -138,6 +148,19 @@ export function LeadModal({ lead, duplicateFrom, initialCompanyId, onClose, onSa
                 </label>
               ))}
             </div>
+          </FormField>
+
+          <FormField label="Main Operational Team">
+            <select className="form-input" value={form.main_operational_team_id} onChange={e => setForm(p => ({ ...p, main_operational_team_id: e.target.value }))}>
+              <option value="">Select team…</option>
+              {sortedOperationalTeams.map((t: any) => <option key={t.id} value={t.id}>{t.code} — {t.title}</option>)}
+            </select>
+          </FormField>
+          <FormField label="Sales Team">
+            <select className="form-input" value={form.sales_team_id} onChange={e => setForm(p => ({ ...p, sales_team_id: e.target.value }))}>
+              <option value="">Select team…</option>
+              {sortedSalesTeams.map((t: any) => <option key={t.id} value={t.id}>{t.code} — {t.title}</option>)}
+            </select>
           </FormField>
 
           <FormField label="Start Date">

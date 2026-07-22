@@ -1601,6 +1601,15 @@ async def startup():
                 "ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS invoice_days FLOAT",
                 "ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS daily_rate FLOAT",
 
+                # Main Operational Team / Sales Team — link a Lead/Opportunity to the Legal
+                # module's Operational Teams / Sales Entities (legal_org_entities, category
+                # discriminator). Plain columns, no relationship() declared, same reasoning
+                # as opportunities.partner_id above (legal_org_entities isn't an ORM model).
+                "ALTER TABLE leads ADD COLUMN IF NOT EXISTS main_operational_team_id UUID REFERENCES legal_org_entities(id) ON DELETE SET NULL",
+                "ALTER TABLE leads ADD COLUMN IF NOT EXISTS sales_team_id UUID REFERENCES legal_org_entities(id) ON DELETE SET NULL",
+                "ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS main_operational_team_id UUID REFERENCES legal_org_entities(id) ON DELETE SET NULL",
+                "ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS sales_team_id UUID REFERENCES legal_org_entities(id) ON DELETE SET NULL",
+
                 # Projects (Operations module) — lets the generic Task Manager tasks table
                 # be filtered to a project's own tasks tab via entity_type='project'.
                 "ALTER TYPE sales_task_entity_type ADD VALUE IF NOT EXISTS 'project'",

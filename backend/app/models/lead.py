@@ -59,6 +59,12 @@ class Lead(Base):
     assigned_to       = Column(String(255))
     assigned_to_email = Column(String(255))
 
+    # legal_org_entities isn't an ORM model (raw-SQL table, see legal.py) — plain columns,
+    # no FK object, same trick used for Opportunity.partner_id. FK enforced at the DB level
+    # by the ALTER TABLE migration in main.py.
+    main_operational_team_id = Column(UUID(as_uuid=True), nullable=True)
+    sales_team_id            = Column(UUID(as_uuid=True), nullable=True)
+
     created_at     = Column(DateTime, default=datetime.utcnow)
     updated_at     = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 

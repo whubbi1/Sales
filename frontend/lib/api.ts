@@ -150,6 +150,11 @@ export const contactsAPI = {
   getLeads: (id: string) => fetchAPI(`/contacts/${id}/leads`),
 }
 
+// ─── Legal module org entities (Operational Teams / Sales Entities) ───────────
+export const legalAPI = {
+  getOrgEntities: (category: 'operational_team' | 'sales_entity') => fetchAPI(`/legal/org-entities?category=${category}&active_only=true`),
+}
+
 // ─── Opportunities ────────────────────────────────────────────────────────────
 export const leadsAPI = {
   list:   (p?: any) => fetchAPI(`/leads/${qs(p)}`),

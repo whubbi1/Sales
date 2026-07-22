@@ -2,7 +2,7 @@
 // components/opportunities/OpportunityModal.tsx
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { opportunitiesAPI, companiesAPI, contactsAPI, partnersAPI, leadsAPI } from '@/lib/api'
+import { opportunitiesAPI, companiesAPI, contactsAPI, partnersAPI, leadsAPI, legalAPI } from '@/lib/api'
 import { getStoredUser } from '@/lib/auth'
 
 const DEAL_STATUSES = ['Presentation To Be Scheduled','Presentation Done','Proposition Ongoing','Proposition Accepted','RFP Ongoing','Contract Ongoing','Contract Finalised','PO Received','Contract Lost']
@@ -41,6 +41,8 @@ export function OpportunityModal({ opportunity, duplicateFrom, fromLead, initial
   const [partners, setPartners] = useState<any[]>([])
   const [contacts, setContacts] = useState<any[]>([])
   const [users, setUsers] = useState<any[]>([])
+  const [operationalTeams, setOperationalTeams] = useState<any[]>([])
+  const [salesTeams, setSalesTeams] = useState<any[]>([])
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [contactSearch, setContactSearch] = useState('')
@@ -65,6 +67,8 @@ export function OpportunityModal({ opportunity, duplicateFrom, fromLead, initial
     contracting_party_id: src?.contracting_party_id || src?.contracting_party_company?.id || '',
     contracting_party_partner_id: src?.contracting_party_partner_id || src?.contracting_party_partner?.id || '',
     contracting_party: src?.contracting_party || '',
+    main_operational_team_id: src?.main_operational_team_id || src?.main_operational_team?.id || '',
+    sales_team_id: src?.sales_team_id || src?.sales_team?.id || '',
     deal_type: src?.deal_type || '',
     notes: src?.notes || '',
     assigned_to: src?.assigned_to || '',
@@ -77,6 +81,8 @@ export function OpportunityModal({ opportunity, duplicateFrom, fromLead, initial
       setCompanies(c); setContacts(ct); setPartners(p)
     }).catch(() => {})
     fetch('https://api.whubbi.wcomply.com/settings/users').then(r => r.json()).then(d => setUsers(d.users || [])).catch(() => {})
+    legalAPI.getOrgEntities('operational_team').then(d => setOperationalTeams(d.org_entities || [])).catch(() => {})
+    legalAPI.getOrgEntities('sales_entity').then(d => setSalesTeams(d.org_entities || [])).catch(() => {})
   }, [])
 
   const selectedCompany = companies.find((c: any) => c.id === form.company_id)
@@ -121,6 +127,8 @@ export function OpportunityModal({ opportunity, duplicateFrom, fromLead, initial
         partner_id: form.partner_id && form.partner_id.trim() !== '' ? form.partner_id : null,
         contracting_party_id: form.contracting_party_id && form.contracting_party_id.trim() !== '' ? form.contracting_party_id : null,
         contracting_party_partner_id: form.contracting_party_partner_id && form.contracting_party_partner_id.trim() !== '' ? form.contracting_party_partner_id : null,
+        main_operational_team_id: form.main_operational_team_id || null,
+        sales_team_id: form.sales_team_id || null,
         deal_amount: form.deal_amount ? Number(form.deal_amount) : null,
         invoice_days: form.invoice_days !== '' ? Number(form.invoice_days) : null,
         daily_rate: form.daily_rate !== '' ? Number(form.daily_rate) : null,
@@ -269,6 +277,18 @@ export function OpportunityModal({ opportunity, duplicateFrom, fromLead, initial
                 }}>
                   <option value="">Select employee...</option>
                   {users.map((u: any) => <option key={u.email} value={u.email}>{u.display_name || `${u.first_name} ${u.last_name}`}</option>)}
+                </select>
+              </FormField>
+              <FormField label="Main Operational Team">
+                <select className="form-input" value={form.main_operational_team_id} onChange={e => setForm(p => ({ ...p, main_operational_team_id: e.target.value }))}>
+                  <option value="">Select team…</option>
+                  {operationalTeams.slice().sort((a: any, b: any) => a.title.localeCompare(b.title)).map((t: any) => <option key={t.id} value={t.id}>{t.code} — {t.title}</option>)}
+                </select>
+              </FormField>
+              <FormField label="Sales Team">
+                <select className="form-input" value={form.sales_team_id} onChange={e => setForm(p => ({ ...p, sales_team_id: e.target.value }))}>
+                  <option value="">Select team…</option>
+                  {salesTeams.slice().sort((a: any, b: any) => a.title.localeCompare(b.title)).map((t: any) => <option key={t.id} value={t.id}>{t.code} — {t.title}</option>)}
                 </select>
               </FormField>
             </div>

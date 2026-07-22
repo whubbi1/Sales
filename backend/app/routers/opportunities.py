@@ -17,7 +17,7 @@ from app.schemas.schemas import (
     OpportunityCreate, OpportunityUpdate, OpportunityResponse, OpportunitySummary,
     StaffingCreate, StaffingResponse, StaffingMonthsUpdate,
     ChecklistItemCreate, ChecklistItemUpdate, ChecklistItemResponse,
-    CommentCreate, CommentResponse, PartnerSummary,
+    CommentCreate, CommentResponse, PartnerSummary, OrgEntitySummary,
 )
 from app.services.ids import next_internal_id, compute_deal_name
 from app.routers.projects import _maybe_create_project
@@ -60,6 +60,21 @@ async def _attach_contracting_party(db: AsyncSession, objs: list):
             partners[pid] = PartnerSummary(id=row.id, internal_id=row.internal_id, name=row.name, status=row.status)
     for o in objs:
         o.contracting_party_partner = partners.get(str(o.contracting_party_partner_id)) if getattr(o, "contracting_party_partner_id", None) else None
+
+
+async def _attach_org_teams(db: AsyncSession, objs: list):
+    # legal_org_entities isn't an ORM model — same raw-SQL resolution trick as partners above.
+    ids = {str(o.main_operational_team_id) for o in objs if getattr(o, "main_operational_team_id", None)} \
+        | {str(o.sales_team_id) for o in objs if getattr(o, "sales_team_id", None)}
+    org_entities = {}
+    for oid in ids:
+        r = await db.execute(text("SELECT id, code, title FROM legal_org_entities WHERE id = CAST(:id AS UUID)"), {"id": oid})
+        row = r.fetchone()
+        if row:
+            org_entities[oid] = OrgEntitySummary(id=row.id, code=row.code, title=row.title)
+    for o in objs:
+        o.main_operational_team = org_entities.get(str(o.main_operational_team_id)) if getattr(o, "main_operational_team_id", None) else None
+        o.sales_team = org_entities.get(str(o.sales_team_id)) if getattr(o, "sales_team_id", None) else None
 
 
 def _apply_daily_invoicing_amount(opp: Opportunity):
@@ -181,6 +196,7 @@ async def list_opportunities(
     opps = result.scalars().all()
     await _attach_partners(db, opps)
     await _attach_contracting_party(db, opps)
+    await _attach_org_teams(db, opps)
     return opps
 
 @router.post("/", response_model=OpportunityResponse, status_code=status.HTTP_201_CREATED)
@@ -208,6 +224,7 @@ async def create_opportunity(opp: OpportunityCreate, db: AsyncSession = Depends(
     row = r.scalar_one()
     await _attach_partners(db, [row])
     await _attach_contracting_party(db, [row])
+    await _attach_org_teams(db, [row])
     row.rfp_id = new_rfp_id
     return row
 
@@ -219,6 +236,7 @@ async def get_opportunity(opportunity_id: UUID, db: AsyncSession = Depends(get_d
         raise HTTPException(status_code=404, detail="Opportunity not found")
     await _attach_partners(db, [opp])
     await _attach_contracting_party(db, [opp])
+    await _attach_org_teams(db, [opp])
     return opp
 
 @router.put("/{opportunity_id}", response_model=OpportunityResponse)
@@ -253,6 +271,7 @@ async def update_opportunity(opportunity_id: UUID, data: OpportunityUpdate, db: 
     row = r.scalar_one()
     await _attach_partners(db, [row])
     await _attach_contracting_party(db, [row])
+    await _attach_org_teams(db, [row])
     row.rfp_id = new_rfp_id
     return row
 

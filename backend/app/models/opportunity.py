@@ -23,6 +23,10 @@ class Opportunity(Base):
     # The contracting party can also be a Partner — separate plain column (no FK, same reasoning
     # as partner_id above) rather than loosening contracting_party_id's existing FK.
     contracting_party_partner_id = Column(UUID(as_uuid=True), nullable=True)
+    # Legal module's Operational Teams / Sales Entities (legal_org_entities, category
+    # discriminator) — plain columns, no FK object, same trick as partner_id above.
+    main_operational_team_id = Column(UUID(as_uuid=True), nullable=True)
+    sales_team_id            = Column(UUID(as_uuid=True), nullable=True)
 
     deal_id             = Column(String(100))
     deal_name           = Column(String(500), nullable=False)

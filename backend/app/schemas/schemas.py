@@ -119,6 +119,15 @@ class PartnerSummary(BaseModel):
     class Config:
         from_attributes = True
 
+# Legal module's Operational Teams / Sales Entities (legal_org_entities, category
+# discriminator) — attached to Lead/Opportunity responses the same way PartnerSummary is.
+class OrgEntitySummary(BaseModel):
+    id: UUID
+    code: str
+    title: str
+    class Config:
+        from_attributes = True
+
 # ─── Contact ──────────────────────────────────────────────────────────────────
 class ContactBase(BaseModel):
     first_name: str
@@ -176,6 +185,8 @@ class OpportunityBase(BaseModel):
     partner_id: Optional[UUID] = None
     contracting_party_id: Optional[UUID] = None
     contracting_party_partner_id: Optional[UUID] = None
+    main_operational_team_id: Optional[UUID] = None
+    sales_team_id: Optional[UUID] = None
     # deal_id is server-generated on create (see next_internal_id) and never changes after —
     # kept here as Optional/ignored-on-write so responses can still round-trip it.
     deal_id: Optional[str] = None
@@ -220,6 +231,8 @@ class OpportunityResponse(OpportunityBase):
     partner: Optional[PartnerSummary] = None
     contracting_party_company: Optional[CompanySummary] = None
     contracting_party_partner: Optional[PartnerSummary] = None
+    main_operational_team: Optional[OrgEntitySummary] = None
+    sales_team: Optional[OrgEntitySummary] = None
     contacts: Optional[List[ContactSummary]] = []
     created_at: datetime
     updated_at: datetime
@@ -667,6 +680,8 @@ class LeadCreate(BaseModel):
     contact_id: Optional[UUID] = None
     partner_ids: Optional[List[UUID]] = []
     partner_contact_ids: Optional[List[UUID]] = []
+    main_operational_team_id: Optional[UUID] = None
+    sales_team_id: Optional[UUID] = None
     start_date: Optional[datetime] = None
     end_date: Optional[datetime] = None
     origin: Optional[str] = None
@@ -680,6 +695,8 @@ class LeadUpdate(BaseModel):
     contact_id: Optional[UUID] = None
     partner_ids: Optional[List[UUID]] = None
     partner_contact_ids: Optional[List[UUID]] = None
+    main_operational_team_id: Optional[UUID] = None
+    sales_team_id: Optional[UUID] = None
     start_date: Optional[datetime] = None
     end_date: Optional[datetime] = None
     origin: Optional[str] = None
@@ -696,6 +713,8 @@ class LeadResponse(BaseModel):
     title: str
     company_id: Optional[UUID] = None
     contact_id: Optional[UUID] = None
+    main_operational_team_id: Optional[UUID] = None
+    sales_team_id: Optional[UUID] = None
     start_date: Optional[datetime] = None
     end_date: Optional[datetime] = None
     origin: Optional[str] = None
@@ -710,6 +729,8 @@ class LeadResponse(BaseModel):
     contact: Optional[ContactSummary] = None
     partners: Optional[List[PartnerSummary]] = []
     partner_contacts: Optional[List[ContactSummary]] = []
+    main_operational_team: Optional[OrgEntitySummary] = None
+    sales_team: Optional[OrgEntitySummary] = None
     class Config:
         from_attributes = True
 

@@ -502,6 +502,8 @@ export default function OpportunityDetailPage() {
         <EditableDateRow label="Contract End" value={opp.contract_end_date} editing={editingDateField === 'contract_end_date'} onStartEdit={() => setEditingDateField('contract_end_date')} onSave={v => saveDateField('contract_end_date', v)} />
         <PropertyRow label="Contracting Party" value={opp.contracting_party} />
         <PropertyRow label="Owner" value={opp.assigned_to} />
+        <PropertyRow label="Main Operational Team" value={opp.main_operational_team ? `${opp.main_operational_team.code} — ${opp.main_operational_team.title}` : null} />
+        <PropertyRow label="Sales Team" value={opp.sales_team ? `${opp.sales_team.code} — ${opp.sales_team.title}` : null} />
       </SidebarSection>
       <SidebarSection title={`Staffing (${staffing.length})`}>
         {staffing.length === 0 ? <p style={{ fontSize: '12px', color: '#9B9B9B' }}>No one staffed yet.</p> : staffing.map((s: any) => <SidebarCard key={s.id} title={s.user_name || s.user_email} subtitle={s.role || 'Staffed'} href="/staffing" color="#059669" />)}

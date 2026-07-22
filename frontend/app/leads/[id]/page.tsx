@@ -286,6 +286,10 @@ export default function LeadDetailPage() {
       <SidebarSection title={`Partners (${lead.partners?.length || 0})`}>
         {(!lead.partners || lead.partners.length === 0) ? <p style={{ fontSize: '12px', color: '#9B9B9B' }}>No partners.</p> : lead.partners.map((p: any) => <SidebarCard key={p.id} title={p.name} subtitle={`Status: ${p.status}`} href={`/partners/${p.id}`} color="#7C3AED" />)}
       </SidebarSection>
+      <SidebarSection title="Teams">
+        <PropertyRow label="Main Operational Team" value={lead.main_operational_team ? `${lead.main_operational_team.code} — ${lead.main_operational_team.title}` : null} />
+        <PropertyRow label="Sales Team" value={lead.sales_team ? `${lead.sales_team.code} — ${lead.sales_team.title}` : null} />
+      </SidebarSection>
       <SidebarSection title="Timeline">
         <PropertyRow label="Start" value={fmt(lead.start_date)} />
         <PropertyRow label="End" value={fmt(lead.end_date)} />
