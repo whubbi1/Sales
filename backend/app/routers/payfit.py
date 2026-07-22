@@ -48,6 +48,26 @@ def _company_path(suffix: str) -> str:
     return f"/companies/{COMPANY_ID}{suffix}"
 
 
+async def _fetch_all_pages(path: str, items_key: str, max_pages: int = 50) -> list:
+    """PayFit paginates list endpoints (10/page observed) via meta.nextPageToken — follow
+    it until exhausted so sync isn't silently limited to the first page. max_pages is a
+    backstop against an unexpected infinite loop, not an expected real limit."""
+    items = []
+    page_token = None
+    for _ in range(max_pages):
+        params = {"pageToken": page_token} if page_token else None
+        resp = await _payfit_request("GET", path, params=params)
+        if resp.status_code != 200:
+            raise HTTPException(status_code=502, detail=f"PayFit returned {resp.status_code}: {resp.text[:300]}")
+        body = resp.json()
+        page_items = body.get(items_key, []) if isinstance(body, dict) else body
+        items.extend(page_items)
+        page_token = (body.get("meta") or {}).get("nextPageToken") if isinstance(body, dict) else None
+        if not page_token:
+            break
+    return items
+
+
 def _extract_date(value):
     """PayFit dates come back as {date, moment}, not a flat string — and asyncpg needs
     an actual date object for a DATE column, not the ISO string, or it fails with
@@ -179,16 +199,7 @@ async def test_resource(resource: str, collaborator_id: str = None, db: AsyncSes
 @router.post("/sync/collaborators")
 async def sync_collaborators(triggered_by: str = "manual", db: AsyncSession = Depends(get_db)):
     try:
-        resp = await _payfit_request("GET", _company_path("/collaborators"))
-        if resp.status_code != 200:
-            detail = f"PayFit returned {resp.status_code}: {resp.text[:300]}"
-            await _log_sync(db, "collaborators", "error", 0, detail, triggered_by)
-            raise HTTPException(status_code=502, detail=detail)
-
-        collaborators = resp.json().get("collaborators", resp.json()) if isinstance(resp.json(), dict) else resp.json()
-        if isinstance(collaborators, dict):
-            collaborators = collaborators.get("items", [])
-
+        collaborators = await _fetch_all_pages(_company_path("/collaborators"), "collaborators")
         count = 0
         for c in collaborators:
             payfit_id = c.get("id")
@@ -221,7 +232,8 @@ async def sync_collaborators(triggered_by: str = "manual", db: AsyncSession = De
         await db.commit()
         await _log_sync(db, "collaborators", "success", count, f"{count} collaborators synced", triggered_by)
         return {"status": "ok", "synced": count}
-    except HTTPException:
+    except HTTPException as e:
+        await _log_sync(db, "collaborators", "error", 0, str(e.detail), triggered_by)
         raise
     except Exception as e:
         await _log_sync(db, "collaborators", "error", 0, str(e), triggered_by)
@@ -288,16 +300,7 @@ async def get_my_payfit(email: str, db: AsyncSession = Depends(get_db)):
 @router.post("/sync/absences")
 async def sync_absences(triggered_by: str = "manual", db: AsyncSession = Depends(get_db)):
     try:
-        resp = await _payfit_request("GET", _company_path("/absences"))
-        if resp.status_code != 200:
-            detail = f"PayFit returned {resp.status_code}: {resp.text[:300]}"
-            await _log_sync(db, "absences", "error", 0, detail, triggered_by)
-            raise HTTPException(status_code=502, detail=detail)
-
-        absences = resp.json().get("absences", resp.json()) if isinstance(resp.json(), dict) else resp.json()
-        if isinstance(absences, dict):
-            absences = absences.get("items", [])
-
+        absences = await _fetch_all_pages(_company_path("/absences"), "absences")
         count = 0
         for a in absences:
             payfit_id = a.get("id")
@@ -327,7 +330,8 @@ async def sync_absences(triggered_by: str = "manual", db: AsyncSession = Depends
         await db.commit()
         await _log_sync(db, "absences", "success", count, f"{count} absences synced", triggered_by)
         return {"status": "ok", "synced": count}
-    except HTTPException:
+    except HTTPException as e:
+        await _log_sync(db, "absences", "error", 0, str(e.detail), triggered_by)
         raise
     except Exception as e:
         await _log_sync(db, "absences", "error", 0, str(e), triggered_by)
