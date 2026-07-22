@@ -30,7 +30,7 @@ MODULES = {
     "sales":     ["companies", "contacts", "leads", "opportunities", "tasks", "cv_database", "partners"],
     "finance":   ["suppliers", "contracts", "purchasing", "invoices"],
     "hr":        ["freelancers", "recrutement", "positions", "jobs", "permissions", "chat", "admin", "onboarding", "offboarding", "payfit"],
-    "grc":       ["compliance", "risks", "audits", "certifications", "access_review", "tprm", "whistleblowing"],
+    "grc":       ["compliance", "risks", "audits", "certifications", "access_review", "tprm", "whistleblowing", "ropa", "incident_management"],
     "it":        ["assets", "incidents", "access", "infrastructure"],
     "helpdesk":     ["tickets", "knowledge", "sla", "admin_cockpit"],
     "admin":        ["users", "permissions", "monitoring", "costs"],

@@ -14,6 +14,7 @@ const NAV = [
   { href: '/grc/access-review', icon: '🔑', label: 'Access Review' },
   { href: '/grc/tprm',            icon: '🏢', label: 'TPRM' },
   { href: '/grc/whistleblowing',  icon: '📢', label: 'Whistleblowing & Ethics' },
+  { href: '/grc/data-privacy',    icon: '🔒', label: 'Data & Privacy' },
 ]
 
 type PermLevel = 'loading' | 'none' | 'view' | 'edit'

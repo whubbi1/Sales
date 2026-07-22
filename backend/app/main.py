@@ -1628,6 +1628,39 @@ async def startup():
                 "ALTER TABLE article_companies ADD COLUMN IF NOT EXISTS linked_at TIMESTAMP DEFAULT NOW()",
                 "ALTER TABLE article_contacts ADD COLUMN IF NOT EXISTS linked_at TIMESTAMP DEFAULT NOW()",
                 "ALTER TABLE article_partners ADD COLUMN IF NOT EXISTS linked_at TIMESTAMP DEFAULT NOW()",
+
+                # GRC — Data & Privacy — Record of Processing Activities (ROPA)
+                """CREATE TABLE IF NOT EXISTS ropa_records (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    name VARCHAR(500) NOT NULL,
+                    objective TEXT, legal_base TEXT, application TEXT,
+                    data_subject_categories TEXT, data_categories TEXT, data_source TEXT,
+                    internal_recipients TEXT, external_recipients TEXT,
+                    transfers_outside_eu TEXT, retention_period TEXT,
+                    security_measures TEXT, data_subject_rights TEXT,
+                    legitimate_interest_test TEXT, prospecting_disclosure_notice TEXT,
+                    created_by VARCHAR(255),
+                    created_at TIMESTAMP DEFAULT NOW(), updated_at TIMESTAMP DEFAULT NOW()
+                )""",
+                """CREATE TABLE IF NOT EXISTS ropa_comments (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    ropa_id UUID NOT NULL REFERENCES ropa_records(id) ON DELETE CASCADE,
+                    author_email VARCHAR(255) NOT NULL, author_name VARCHAR(255),
+                    comment TEXT NOT NULL, created_at TIMESTAMP DEFAULT NOW()
+                )""",
+                """CREATE TABLE IF NOT EXISTS ropa_files (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    ropa_id UUID NOT NULL REFERENCES ropa_records(id) ON DELETE CASCADE,
+                    filename VARCHAR(500) NOT NULL, file_url TEXT NOT NULL,
+                    uploaded_by_email VARCHAR(255), uploaded_at TIMESTAMP DEFAULT NOW()
+                )""",
+                """CREATE TABLE IF NOT EXISTS ropa_revisions (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    ropa_id UUID NOT NULL REFERENCES ropa_records(id) ON DELETE CASCADE,
+                    revision_date TIMESTAMP NOT NULL,
+                    owner_email VARCHAR(255), owner_name VARCHAR(255),
+                    content TEXT NOT NULL, created_at TIMESTAMP DEFAULT NOW()
+                )""",
             ]
             for sql in sqls:
                 try:
@@ -1698,6 +1731,7 @@ _include("app.routers.hr_checklists",  "/hr",           "HRChecklists")
 _include("app.routers.grc",            "/grc",          "GRC")
 _include("app.routers.grc_extended",   "/grc",          "GRCExt")
 _include("app.routers.grc_access_review", "/grc",       "GRCAccessReview")
+_include("app.routers.grc_ropa",       "/grc",          "GRCROPA")
 _include("app.routers.helpdesk",       "/helpdesk",     "Helpdesk")
 _include("app.routers.helpdesk_teams", "/helpdesk",     "Teams")
 _include("app.routers.admin_audit",    "/admin",        "Audit")

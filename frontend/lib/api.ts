@@ -365,6 +365,34 @@ export const grcAccessReviewAPI = {
   overview: () => fetchAPI('/grc/overview'),
 }
 
+// ─── GRC: Data & Privacy — ROPA ────────────────────────────────────────────────
+export const ropaAPI = {
+  list:   () => fetchAPI('/grc/ropa'),
+  get:    (id: string) => fetchAPI(`/grc/ropa/${id}`),
+  create: (d: any) => fetchAPI('/grc/ropa', { method: 'POST', body: JSON.stringify(d) }),
+  update: (id: string, d: any) => fetchAPI(`/grc/ropa/${id}`, { method: 'PUT', body: JSON.stringify(d) }),
+  delete: (id: string) => fetchAPI(`/grc/ropa/${id}`, { method: 'DELETE' }),
+
+  getComments:  (id: string) => fetchAPI(`/grc/ropa/${id}/comments/`),
+  addComment:   (id: string, d: any) => fetchAPI(`/grc/ropa/${id}/comments/`, { method: 'POST', body: JSON.stringify(d) }),
+  deleteComment:(id: string, commentId: string) => fetchAPI(`/grc/ropa/${id}/comments/${commentId}`, { method: 'DELETE' }),
+
+  getFiles: (id: string) => fetchAPI(`/grc/ropa/${id}/files`),
+  uploadFile: async (id: string, file: File, uploadedByEmail: string) => {
+    const fd = new FormData()
+    fd.append('file', file)
+    fd.append('uploaded_by_email', uploadedByEmail)
+    const res = await fetch(`${API_URL}/grc/ropa/${id}/files`, { method: 'POST', body: fd })
+    if (!res.ok) { const err = await res.json().catch(() => ({})); throw new Error(err.detail || 'Upload failed') }
+    return res.json()
+  },
+  deleteFile: (id: string, fileId: string) => fetchAPI(`/grc/ropa/${id}/files/${fileId}`, { method: 'DELETE' }),
+
+  getRevisions:  (id: string) => fetchAPI(`/grc/ropa/${id}/revisions/`),
+  addRevision:   (id: string, d: any) => fetchAPI(`/grc/ropa/${id}/revisions/`, { method: 'POST', body: JSON.stringify(d) }),
+  deleteRevision:(id: string, revisionId: string) => fetchAPI(`/grc/ropa/${id}/revisions/${revisionId}`, { method: 'DELETE' }),
+}
+
 // ─── MCP personal access tokens (connect Claude Code/Desktop to WHUBBI) ────────
 export const mcpTokensAPI = {
   list:   (email: string) => fetchAPI(`/settings/mcp-tokens/${encodeURIComponent(email)}`),
