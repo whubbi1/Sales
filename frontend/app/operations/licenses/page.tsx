@@ -1,6 +1,6 @@
 'use client'
 import { OperationsLayout, useOperationsPerm } from '@/components/OperationsLayout'
-import { OperationsOpportunityList } from '@/components/operations/OperationsOpportunityList'
+import { OperationsProjectList } from '@/components/operations/OperationsProjectList'
 
 function LicensesContent() {
   const { level } = useOperationsPerm('licenses')
@@ -11,7 +11,7 @@ function LicensesContent() {
       <h2 style={{ color: '#156082', fontSize: '18px', fontWeight: '800', margin: '0 0 8px' }}>Access Denied</h2>
     </div>
   )
-  return <OperationsOpportunityList module="operations_licenses" title="Licenses" icon="🔑" projectTypes={['Software Licenses']} />
+  return <OperationsProjectList mode="license" />
 }
 
 export default function OperationsLicensesPage() {

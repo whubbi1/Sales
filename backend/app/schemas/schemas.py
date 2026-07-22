@@ -545,6 +545,9 @@ class ProjectUpdate(BaseModel):
     project_name: Optional[str] = None
     partner_id: Optional[UUID] = None
     description: Optional[str] = None
+    status: Optional[str] = None
+    status_color: Optional[str] = None
+    progress: Optional[int] = None
     start_date: Optional[datetime] = None
     end_date: Optional[datetime] = None
     revised_start_date: Optional[datetime] = None
@@ -566,7 +569,7 @@ class ProjectUpdate(BaseModel):
     changed_by_email: Optional[str] = None
     changed_by_name: Optional[str] = None
 
-    @field_validator("invoicing_frequency", "invoicing_start", mode="before")
+    @field_validator("invoicing_frequency", "invoicing_start", "status", "status_color", mode="before")
     @classmethod
     def _blank_enum_to_none(cls, v):
         # These map to Postgres enum columns that reject '' — the frontend sends '' for
@@ -581,6 +584,9 @@ class ProjectResponse(BaseModel):
     partner_id: Optional[UUID] = None
     project_name: str
     description: Optional[str] = None
+    status: Optional[str] = None
+    status_color: Optional[str] = None
+    progress: Optional[int] = None
     start_date: Optional[datetime] = None
     end_date: Optional[datetime] = None
     revised_start_date: Optional[datetime] = None

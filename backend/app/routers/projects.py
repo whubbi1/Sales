@@ -5,6 +5,7 @@ from sqlalchemy import select, or_, text
 from sqlalchemy.orm import selectinload
 from typing import List
 from uuid import UUID
+from datetime import datetime
 
 from app.database import get_db
 from app.models.project import (
@@ -199,6 +200,18 @@ async def update_project(project_id: UUID, data: ProjectUpdate, db: AsyncSession
         raise HTTPException(status_code=404, detail="Project not found")
 
     update_data = data.model_dump(exclude={'changed_by_email', 'changed_by_name'}, exclude_unset=True)
+
+    # Finishing a project stamps its actual end date automatically, if not already set —
+    # the license-flavored field for a Software Licenses deal, otherwise the regular one.
+    if update_data.get('status') == 'Finished' and proj.status != 'Finished':
+        is_license = False
+        if proj.opportunity_id:
+            r_opp = await db.execute(select(Opportunity.project_status).where(Opportunity.id == proj.opportunity_id))
+            is_license = r_opp.scalar_one_or_none() == 'Software Licenses'
+        end_field = 'actual_license_end_date' if is_license else 'actual_end_date'
+        if not getattr(proj, end_field):
+            update_data.setdefault(end_field, datetime.utcnow())
+
     for k, v in update_data.items():
         old_value = getattr(proj, k)
         if old_value != v:
@@ -274,6 +287,30 @@ async def delete_project_expense(project_id: UUID, expense_id: UUID, db: AsyncSe
         raise HTTPException(status_code=404, detail="Expense not found")
     await db.delete(row)
     await db.commit()
+
+
+# ─── Contacts (many-to-many) — mirrors marketing_event_contacts ────────────────
+@router.get("/{project_id}/contacts")
+async def list_project_contacts(project_id: UUID, db: AsyncSession = Depends(get_db)):
+    r = await db.execute(text("""
+        SELECT c.id, c.first_name, c.last_name, c.email FROM project_contacts pc
+        JOIN contacts c ON c.id = pc.contact_id WHERE pc.project_id = :pid ORDER BY c.first_name, c.last_name
+    """), {"pid": str(project_id)})
+    return [dict(row._mapping) for row in r.fetchall()]
+
+@router.post("/{project_id}/contacts/{contact_id}")
+async def link_project_contact(project_id: UUID, contact_id: UUID, db: AsyncSession = Depends(get_db)):
+    await db.execute(text("""
+        INSERT INTO project_contacts (project_id, contact_id) VALUES (:pid, :cid) ON CONFLICT DO NOTHING
+    """), {"pid": str(project_id), "cid": str(contact_id)})
+    await db.commit()
+    return {"status": "ok"}
+
+@router.delete("/{project_id}/contacts/{contact_id}")
+async def unlink_project_contact(project_id: UUID, contact_id: UUID, db: AsyncSession = Depends(get_db)):
+    await db.execute(text("DELETE FROM project_contacts WHERE project_id = :pid AND contact_id = :cid"), {"pid": str(project_id), "cid": str(contact_id)})
+    await db.commit()
+    return {"status": "ok"}
 
 
 # ─── Documents (sales vs project) ───────────────────────────────────────────────

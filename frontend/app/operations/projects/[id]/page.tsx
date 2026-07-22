@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { OperationsLayout, useOperationsPerm } from '@/components/OperationsLayout'
-import { projectsAPI, taskManagerAPI } from '@/lib/api'
+import { projectsAPI, taskManagerAPI, contactsAPI } from '@/lib/api'
 import { getStoredUser } from '@/lib/auth'
 import { PropertyRow, SidebarSection, SidebarCard, TabNav } from '@/components/shared/RecordLayout'
 import { TaskModal } from '@/components/tasks/TaskModal'
@@ -10,6 +10,13 @@ import { ProjectStaffingSheet } from '@/components/projects/ProjectStaffingSheet
 
 const API = 'https://api.whubbi.wcomply.com'
 const TASK_DONE_STATUSES = ['resolved', 'closed']
+const STATUS_OPTIONS = ['New', 'Planned', 'In Progress', 'Finished']
+const STATUS_COLOR: Record<string, { bg: string; color: string }> = {
+  New: { bg: '#F1F5F9', color: '#475569' }, Planned: { bg: '#EFF6FF', color: '#156082' },
+  'In Progress': { bg: '#FFF7ED', color: '#D97706' }, Finished: { bg: '#ECFDF5', color: '#059669' },
+}
+const HEALTH_COLORS = ['red', 'orange', 'green']
+const HEALTH_HEX: Record<string, string> = { red: '#DC2626', orange: '#D97706', green: '#059669' }
 
 const fmt = (d?: string) => d ? new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : undefined
 const fmtDateTime = (d?: string) => d ? new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : ''
@@ -57,17 +64,22 @@ function ProjectDetailContent() {
   const [expenseAmount, setExpenseAmount] = useState('')
   const [expenseDescription, setExpenseDescription] = useState('')
 
+  const [contacts, setContacts] = useState<any[]>([])
+  const [allContacts, setAllContacts] = useState<any[]>([])
+  const [addContactId, setAddContactId] = useState('')
+
   const load = async () => {
     try {
       const p = await projectsAPI.get(id as string)
       setProject(p)
-      const [log, cmts, sales, proj, tks, exps] = await Promise.all([
+      const [log, cmts, sales, proj, tks, exps, cts] = await Promise.all([
         projectsAPI.getActivityLog(id as string),
         projectsAPI.getComments(id as string),
         projectsAPI.getDocuments(id as string, 'sales'),
         projectsAPI.getDocuments(id as string, 'project'),
         taskManagerAPI.list({ entity_type: 'project', entity_id: id, source: 'operations' }),
         projectsAPI.getExpenses(id as string),
+        projectsAPI.getContacts(id as string),
       ])
       setActivityLog(log)
       setComments(cmts)
@@ -75,6 +87,7 @@ function ProjectDetailContent() {
       setProjectDocs(proj)
       setTasks(tks.tasks || tks || [])
       setExpenses(exps)
+      setContacts(cts)
     } catch {
       router.push('/operations/projects')
     } finally {
@@ -85,6 +98,7 @@ function ProjectDetailContent() {
   useEffect(() => { load() }, [id])
   useEffect(() => {
     fetch(`${API}/settings/users`).then(r => r.json()).then(d => setUsers(d.users || [])).catch(() => {})
+    contactsAPI.list({}).then(setAllContacts).catch(() => {})
     const u = getStoredUser()
     if (u) { setUserEmail(u.email); setUserName(u.name) }
   }, [])
@@ -138,6 +152,17 @@ function ProjectDetailContent() {
     setExpenses(await projectsAPI.getExpenses(project.id))
   }
 
+  const linkContact = async () => {
+    if (!addContactId) return
+    await projectsAPI.linkContact(project.id, addContactId)
+    setAddContactId('')
+    setContacts(await projectsAPI.getContacts(project.id))
+  }
+  const unlinkContact = async (c: any) => {
+    await projectsAPI.unlinkContact(project.id, c.id)
+    setContacts(await projectsAPI.getContacts(project.id))
+  }
+
   const reloadTasks = async () => setTasks((await taskManagerAPI.list({ entity_type: 'project', entity_id: id, source: 'operations' })).tasks || [])
   const toggleTaskDone = async (task: any) => {
     const done = TASK_DONE_STATUSES.includes(task.status)
@@ -164,16 +189,23 @@ function ProjectDetailContent() {
   const endDate = project.is_internal ? project.end_date : project.opportunity?.contract_end_date
   const clientName = project.company?.name
   const isLicenseProject = project.opportunity?.project_status === 'Software Licenses'
+  const revisedStartField = isLicenseProject ? 'revised_license_start_date' : 'revised_start_date'
+  const revisedEndField = isLicenseProject ? 'revised_license_end_date' : 'revised_end_date'
+  const actualStartField = isLicenseProject ? 'actual_license_start_date' : 'actual_start_date'
+  const actualEndField = isLicenseProject ? 'actual_license_end_date' : 'actual_end_date'
   const toDateInput = (d?: string) => d ? d.slice(0, 10) : ''
 
-  const dateRow = (label: string, field: string) => (
-    <PropertyRow label={label} value={
-      <EditableCell display={fmt(project[field])} editing={editingField === field} onStartEdit={() => setEditingField(field)}>
-        <input autoFocus type="date" className="form-input" style={{ fontSize: '13px', padding: '4px 6px' }} defaultValue={toDateInput(project[field])}
-          onBlur={e => { setEditingField(null); patchProject({ [field]: e.target.value || null }) }} />
-      </EditableCell>
-    } />
+  const dateTableCell = (field: string | null, fixedValue?: string) => (
+    <td style={{ padding: '8px 12px', borderBottom: '1px solid #F1F5F9', textAlign: 'center' }}>
+      {field ? (
+        <EditableCell display={fmt(project[field])} editing={editingField === field} onStartEdit={() => setEditingField(field)}>
+          <input autoFocus type="date" className="form-input" style={{ fontSize: '13px', padding: '4px 6px', textAlign: 'center' }} defaultValue={toDateInput(project[field])}
+            onBlur={e => { setEditingField(null); patchProject({ [field]: e.target.value || null }) }} />
+        </EditableCell>
+      ) : (fmt(fixedValue) || '—')}
+    </td>
   )
+
   const textRow = (label: string, field: string, placeholder?: string) => (
     <PropertyRow label={label} value={
       <EditableCell display={project[field]} editing={editingField === field} onStartEdit={() => setEditingField(field)}>
@@ -267,6 +299,8 @@ function ProjectDetailContent() {
                   )}
                   <span style={{ background: '#F1F5F9', color: '#64748B', padding: '2px 9px', borderRadius: '10px', fontSize: '10px', fontWeight: '700' }}>{project.project_number}</span>
                   {project.is_internal && <span style={{ background: '#F5F3FF', color: '#7C3AED', padding: '2px 9px', borderRadius: '10px', fontSize: '10px', fontWeight: '700' }}>INTERNAL</span>}
+                  {project.status && <span style={{ background: STATUS_COLOR[project.status]?.bg, color: STATUS_COLOR[project.status]?.color, padding: '2px 9px', borderRadius: '10px', fontSize: '10px', fontWeight: '700' }}>{project.status}</span>}
+                  {project.status_color && <span style={{ display: 'inline-block', width: '10px', height: '10px', borderRadius: '50%', background: HEALTH_HEX[project.status_color] }} title={project.status_color} />}
                 </div>
                 <p style={{ color: '#9B9B9B', fontSize: '12px', margin: 0 }}>
                   {clientName ? `Client: ${clientName}` : project.is_internal ? 'Internal project' : 'No client'}
@@ -278,7 +312,7 @@ function ProjectDetailContent() {
 
           <div style={{ background: 'white', borderRadius: '10px', border: '1px solid #EDF2F7', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
             <div style={{ padding: '0 20px', background: '#FAFBFC', borderBottom: '2px solid #E2E8F0' }}>
-              <TabNav tabs={['Overview', 'Tasks', 'Sales Documentation', 'Project Documentation', 'Notes', 'Expenses', 'Staffing']} active={tab} onChange={setTab} />
+              <TabNav tabs={['Overview', 'Notes', 'Tasks', 'Sales Documentation', 'Project Documentation', 'Staffing', 'Expenses']} active={tab} onChange={setTab} />
             </div>
             <div style={{ padding: '20px' }}>
               {tab === 'Overview' && (
@@ -289,30 +323,67 @@ function ProjectDetailContent() {
                     </div>
                   )}
                   {project.is_internal && <PropertyRow label="Description" value={project.description} />}
-                  <PropertyRow label="Project Start" value={fmt(startDate)} />
-                  <PropertyRow label="Project End" value={fmt(endDate)} />
 
-                  {isLicenseProject ? (
+                  <p className="section-label" style={{ marginTop: '10px', marginBottom: '8px' }}>{isLicenseProject ? 'License Dates' : 'Dates'}</p>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '18px' }}>
+                    <thead>
+                      <tr>
+                        <th style={{ padding: '8px 12px', textAlign: 'left', fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#9B9B9B', borderBottom: '1px solid #E2E8F0' }}></th>
+                        {['Initial', 'Revised', 'Actual'].map(h => (
+                          <th key={h} style={{ padding: '8px 12px', textAlign: 'center', fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#9B9B9B', borderBottom: '1px solid #E2E8F0' }}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td style={{ padding: '8px 12px', borderBottom: '1px solid #F1F5F9', fontSize: '13px', fontWeight: '700', color: '#144766' }}>Start Date</td>
+                        {dateTableCell(null, startDate)}
+                        {dateTableCell(revisedStartField)}
+                        {dateTableCell(actualStartField)}
+                      </tr>
+                      <tr>
+                        <td style={{ padding: '8px 12px', borderBottom: '1px solid #F1F5F9', fontSize: '13px', fontWeight: '700', color: '#144766' }}>End Date</td>
+                        {dateTableCell(null, endDate)}
+                        {dateTableCell(revisedEndField)}
+                        {dateTableCell(actualEndField)}
+                      </tr>
+                    </tbody>
+                  </table>
+
+                  {isLicenseProject && (
                     <>
-                      <p className="section-label" style={{ marginTop: '18px', marginBottom: '8px' }}>License</p>
-                      {dateRow('Revised License Start', 'revised_license_start_date')}
-                      {dateRow('Revised License End', 'revised_license_end_date')}
-                      {dateRow('Actual License Start', 'actual_license_start_date')}
-                      {dateRow('Actual License End', 'actual_license_end_date')}
+                      <p className="section-label" style={{ marginTop: '18px', marginBottom: '8px' }}>Invoicing</p>
                       {selectRow('Invoicing Frequency', 'invoicing_frequency', ['Monthly', 'Yearly'])}
                       {numberRow('Total Contract Value', 'total_contract_value')}
                       {selectRow('Invoicing Start', 'invoicing_start', ['Upfront', 'Other'])}
                       {numberRow('Invoicing Amount per Unit', 'invoicing_amount_per_unit')}
                     </>
-                  ) : (
-                    <>
-                      <p className="section-label" style={{ marginTop: '18px', marginBottom: '8px' }}>Planning</p>
-                      {dateRow('Revised Project Start', 'revised_start_date')}
-                      {dateRow('Revised Project End', 'revised_end_date')}
-                      {dateRow('Actual Project Start', 'actual_start_date')}
-                      {dateRow('Actual Project End', 'actual_end_date')}
-                    </>
                   )}
+
+                  <p className="section-label" style={{ marginTop: '18px', marginBottom: '8px' }}>Status</p>
+                  {selectRow('Status', 'status', STATUS_OPTIONS)}
+                  <PropertyRow label="Health" value={
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                      {HEALTH_COLORS.map(c => (
+                        <div key={c} onClick={() => patchProject({ status_color: c })} title={c}
+                          style={{ width: '18px', height: '18px', borderRadius: '50%', background: HEALTH_HEX[c], cursor: 'pointer', border: project.status_color === c ? '2px solid #144766' : '2px solid transparent', boxSizing: 'border-box' as const }} />
+                      ))}
+                    </div>
+                  } />
+                  <PropertyRow label="Progress" value={
+                    <div>
+                      <EditableCell display={project.progress != null ? `${project.progress}%` : null} editing={editingField === 'progress'} onStartEdit={() => setEditingField('progress')}>
+                        <input autoFocus type="number" min={0} max={100} className="form-input" style={{ fontSize: '13px', width: '80px' }} defaultValue={project.progress ?? ''}
+                          onBlur={e => { setEditingField(null); const v = e.target.value ? Math.max(0, Math.min(100, parseInt(e.target.value, 10))) : null; patchProject({ progress: v }) }}
+                          onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }} />
+                      </EditableCell>
+                      {project.progress != null && (
+                        <div style={{ marginTop: '4px', width: '160px', height: '6px', borderRadius: '4px', background: '#F1F5F9', overflow: 'hidden' }}>
+                          <div style={{ width: `${project.progress}%`, height: '100%', background: '#156082' }} />
+                        </div>
+                      )}
+                    </div>
+                  } />
 
                   <p className="section-label" style={{ marginTop: '18px', marginBottom: '8px' }}>Management</p>
                   {projectManagerRow}
@@ -431,6 +502,29 @@ function ProjectDetailContent() {
             {project.company ? (
               <SidebarCard title={project.company.name} subtitle="Client" href={`/companies/${project.company.id}`} color="#144766" />
             ) : <p style={{ fontSize: '12px', color: '#9B9B9B' }}>{project.is_internal ? 'Internal project — no client.' : 'No client.'}</p>}
+          </SidebarSection>
+          <SidebarSection title={`Contacts (${contacts.length})`}>
+            {allContacts.filter((c: any) => !contacts.some((lc: any) => lc.id === c.id)).length > 0 && (
+              <div style={{ display: 'flex', gap: '6px', marginBottom: '10px' }}>
+                <select className="form-input" style={{ flex: 1, fontSize: '12px' }} value={addContactId} onChange={e => setAddContactId(e.target.value)}>
+                  <option value="">Select a contact…</option>
+                  {allContacts.filter((c: any) => !contacts.some((lc: any) => lc.id === c.id)).map((c: any) => (
+                    <option key={c.id} value={c.id}>{c.first_name} {c.last_name}</option>
+                  ))}
+                </select>
+                <button className="btn-primary" style={{ fontSize: '12px', padding: '6px 10px' }} onClick={linkContact} disabled={!addContactId}>+ Link</button>
+              </div>
+            )}
+            {contacts.length === 0 ? <p style={{ fontSize: '12px', color: '#9B9B9B' }}>No contacts linked.</p> : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                {contacts.map((c: any) => (
+                  <div key={c.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 10px', border: '1px solid #EDF2F7', borderRadius: '7px' }}>
+                    <a href={`/contacts/${c.id}`} style={{ fontSize: '12px', fontWeight: '600', color: '#144766', textDecoration: 'none' }}>{c.first_name} {c.last_name}</a>
+                    <button onClick={() => unlinkContact(c)} style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#DC2626', fontSize: '14px', padding: 0, lineHeight: 1 }}>×</button>
+                  </div>
+                ))}
+              </div>
+            )}
           </SidebarSection>
           {project.partner && (
             <SidebarSection title="Partner">

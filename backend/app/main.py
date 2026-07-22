@@ -1718,6 +1718,16 @@ async def startup():
                 # Software Licenses opportunities now also get a Project (previously
                 # excluded) — backfill any Contract Won license deal that doesn't have one
                 # yet. Handled in Python right after this sqls loop (needs next_internal_id).
+
+                # Projects — delivery status, manual health color/progress, Contacts.
+                "ALTER TABLE projects ADD COLUMN IF NOT EXISTS status VARCHAR(20) DEFAULT 'New'",
+                "ALTER TABLE projects ADD COLUMN IF NOT EXISTS status_color VARCHAR(10)",
+                "ALTER TABLE projects ADD COLUMN IF NOT EXISTS progress INTEGER",
+                """CREATE TABLE IF NOT EXISTS project_contacts (
+                    project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+                    contact_id UUID NOT NULL REFERENCES contacts(id) ON DELETE CASCADE,
+                    PRIMARY KEY (project_id, contact_id)
+                )""",
             ]
             for sql in sqls:
                 try:

@@ -28,6 +28,14 @@ class Project(Base):
     project_name   = Column(String(500), nullable=False)
     description    = Column(Text)  # mainly used by internal projects
 
+    # Delivery status — 'Finished' auto-stamps the relevant actual end date (see
+    # update_project in projects.py) if it isn't already set.
+    status         = Column(String(20), default='New')  # 'New' | 'Planned' | 'In Progress' | 'Finished'
+    # Manually-set visual health indicator + completion percentage, shown on the detail
+    # page and addable as report columns — independent of `status` above.
+    status_color   = Column(String(10))  # 'red' | 'orange' | 'green'
+    progress       = Column(Integer)  # 0-100
+
     # Internal projects only — an Opportunity-linked project's baseline dates are read live
     # from Opportunity.contract_start_date/contract_end_date instead of duplicated here.
     start_date     = Column(DateTime)
