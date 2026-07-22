@@ -11,10 +11,10 @@ const TYPE_COLOR: Record<string, { bg: string; color: string }> = {
   webinar: { bg: '#EFF6FF', color: '#156082' }, physical: { bg: '#ECFDF5', color: '#059669' },
   mailing: { bg: '#FFF7ED', color: '#D97706' }, other: { bg: '#F1F5F9', color: '#475569' },
 }
-const EVENT_STATUSES = ['To be planned', 'Planned', 'Under preparation', 'Closed']
+const EVENT_STATUSES = ['To be planned', 'Planned', 'Under preparation', 'Finished']
 const STATUS_COLOR: Record<string, { bg: string; color: string }> = {
   'To be planned': { bg: '#F1F5F9', color: '#475569' }, 'Planned': { bg: '#EFF6FF', color: '#156082' },
-  'Under preparation': { bg: '#FFF7ED', color: '#D97706' }, 'Closed': { bg: '#F1F5F9', color: '#64748B' },
+  'Under preparation': { bg: '#FFF7ED', color: '#D97706' }, 'Finished': { bg: '#F1F5F9', color: '#64748B' },
 }
 
 const inp: React.CSSProperties = {

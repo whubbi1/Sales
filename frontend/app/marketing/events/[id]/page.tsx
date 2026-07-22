@@ -8,10 +8,10 @@ import { getStoredUser } from '@/lib/auth'
 const API = 'https://api.whubbi.wcomply.com'
 
 const TYPE_LABEL: Record<string, string> = { webinar: 'Webinar', physical: 'Physical Event', mailing: 'Mailing', other: 'Other' }
-const EVENT_STATUSES = ['To be planned', 'Planned', 'Under preparation', 'Closed']
+const EVENT_STATUSES = ['To be planned', 'Planned', 'Under preparation', 'Finished']
 const STATUS_COLOR: Record<string, { bg: string; color: string }> = {
   'To be planned': { bg: '#F1F5F9', color: '#475569' }, 'Planned': { bg: '#EFF6FF', color: '#156082' },
-  'Under preparation': { bg: '#FFF7ED', color: '#D97706' }, 'Closed': { bg: '#F1F5F9', color: '#64748B' },
+  'Under preparation': { bg: '#FFF7ED', color: '#D97706' }, 'Finished': { bg: '#F1F5F9', color: '#64748B' },
 }
 
 const card: React.CSSProperties = { background: 'white', borderRadius: '12px', border: '1px solid #EDF2F7', padding: '18px 22px', marginBottom: '14px', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }

@@ -12,7 +12,7 @@ import uuid
 router = APIRouter()
 
 EVENT_TYPES = {"webinar", "physical", "mailing", "other"}
-EVENT_STATUSES = {"To be planned", "Planned", "Under preparation", "Closed"}
+EVENT_STATUSES = {"To be planned", "Planned", "Under preparation", "Finished"}
 
 
 def _row(d: dict) -> dict:
