@@ -137,7 +137,7 @@ async def get_status(db: AsyncSession = Depends(get_db)):
 # the /sync endpoints these never write to our DB, so they're safe to click repeatedly
 # without side effects while verifying the API key's granted scopes.
 
-TEST_RESOURCES = {"company", "collaborators", "contracts", "absences", "payslips"}
+TEST_RESOURCES = {"company", "collaborators", "collaborator_detail", "contracts", "absences", "payslips"}
 
 
 async def _test_call(method: str, path: str, label: str) -> dict:
@@ -176,6 +176,16 @@ async def test_resource(resource: str, collaborator_id: str = None, db: AsyncSes
 
     if resource == "collaborators":
         return await _test_call("GET", _company_path("/collaborators"), "collaborators")
+
+    if resource == "collaborator_detail":
+        if not collaborator_id:
+            r = await db.execute(text("SELECT payfit_id FROM payfit_collaborators WHERE matricule IS NOT NULL ORDER BY synced_at DESC LIMIT 1"))
+            row = r.fetchone()
+            collaborator_id = row[0] if row else None
+        if not collaborator_id:
+            return {"resource": "collaborator_detail", "success": False, "status_code": None, "elapsed_ms": 0,
+                    "error": "No collaborator available to test with — sync collaborators first", "sample": None}
+        return await _test_call("GET", _company_path(f"/collaborators/{collaborator_id}"), "collaborator_detail")
 
     if resource == "contracts":
         return await _test_call("GET", _company_path("/contracts"), "contracts")

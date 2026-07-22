@@ -6,6 +6,7 @@ const API = 'https://api.whubbi.wcomply.com'
 const RESOURCES = [
   { key: 'company',       label: 'Company',       icon: '🏢', desc: 'Confirms the API key + company_id resolve to a real PayFit company.' },
   { key: 'collaborators', label: 'Collaborators',  icon: '👥', desc: 'Requires the collaborators:read scope.' },
+  { key: 'collaborator_detail', label: 'Collaborator Detail', icon: '🔎', desc: 'Single collaborator by ID — includes embedded contracts, gated by collaborators:contracts:read.' },
   { key: 'contracts',     label: 'Contracts',      icon: '📄', desc: 'Requires the contracts:read scope.' },
   { key: 'absences',      label: 'Absences',       icon: '🗓️', desc: 'Requires the time:read scope.' },
   { key: 'payslips',      label: 'Payslips',       icon: '💵', desc: 'Requires contracts:payslips:read — uses the most recently synced collaborator.' },
