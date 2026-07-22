@@ -271,12 +271,13 @@ async def _maybe_create_customer_contract(db: AsyncSession, opp, project):
     # they have no Opportunity equivalent.
     if opp.deal_status != 'Contract Won' or not project:
         return None
-    existing = await db.execute(text("SELECT id FROM finance_customer_contracts WHERE opportunity_id = :oid"), {"oid": str(opp.id)})
-    if existing.first():
-        return None
+    # A unique index on opportunity_id (see main.py migrations) makes this the actual guard —
+    # two ECS tasks racing the startup backfill concurrently can both pass a plain SELECT-based
+    # check before either commits, which is exactly what produced duplicate contracts once.
+    # ON CONFLICT DO NOTHING + RETURNING makes the insert itself atomic against that race.
     contract_id = str(uuid.uuid4())
     internal_id = await next_internal_id(db, "finance_customer_contract_id_seq", "CCT")
-    await db.execute(text("""
+    result = await db.execute(text("""
         INSERT INTO finance_customer_contracts (
             id, internal_id, company_id, opportunity_id, project_id, contract_name,
             contract_start_date, contract_end_date, contract_value, created_at, updated_at
@@ -284,6 +285,8 @@ async def _maybe_create_customer_contract(db: AsyncSession, opp, project):
             CAST(:id AS UUID), :internal_id, CAST(:company_id AS UUID), CAST(:oid AS UUID), CAST(:pid AS UUID),
             :contract_name, CAST(:start_date AS DATE), CAST(:end_date AS DATE), :value, NOW(), NOW()
         )
+        ON CONFLICT (opportunity_id) DO NOTHING
+        RETURNING id
     """), {
         "id": contract_id, "internal_id": internal_id,
         "company_id": str(opp.company_id) if opp.company_id else None,
@@ -294,4 +297,5 @@ async def _maybe_create_customer_contract(db: AsyncSession, opp, project):
         "value": _num(opp.deal_amount),
     })
     await db.commit()
-    return contract_id
+    row = result.first()
+    return str(row[0]) if row else None

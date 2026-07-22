@@ -1780,6 +1780,10 @@ async def startup():
                     url TEXT NOT NULL,
                     created_at TIMESTAMP DEFAULT NOW()
                 )""",
+                # One auto-created contract per opportunity. Postgres unique indexes treat
+                # NULL as distinct, so manually-created contracts with no opportunity_id are
+                # unaffected. Backs the ON CONFLICT (opportunity_id) in _maybe_create_customer_contract.
+                "CREATE UNIQUE INDEX IF NOT EXISTS ux_finance_customer_contracts_opportunity_id ON finance_customer_contracts (opportunity_id)",
             ]
             for sql in sqls:
                 try:
