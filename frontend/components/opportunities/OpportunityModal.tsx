@@ -77,6 +77,11 @@ export function OpportunityModal({ opportunity, duplicateFrom, fromLead, initial
     assigned_to: src?.assigned_to || '',
     assigned_to_email: src?.assigned_to_email || '',
     contact_ids: src?.contacts?.map((c: any) => c.id) || (fromLead ? [fromLead.contact_id, ...(fromLead.partner_contacts || []).map((c: any) => c.id)].filter(Boolean) : (!opportunity && initialContactId ? [initialContactId] : [])),
+    // A duplicate isn't itself the result of converting fromLead, so lead_id deliberately
+    // isn't carried over from duplicateFrom — only from an actual Lead conversion or when
+    // editing an opportunity that already has one.
+    lead_id: fromLead?.id || opportunity?.lead_id || '',
+    referral_contact_id: src?.referral_contact_id || (fromLead?.origin === 'Referral' ? fromLead?.referral_contact_id : '') || '',
   })
 
   useEffect(() => {
@@ -140,6 +145,8 @@ export function OpportunityModal({ opportunity, duplicateFrom, fromLead, initial
         contract_end_date: form.contract_end_date || null,
         project_status: form.project_status || null,
         deal_type: form.deal_type || null,
+        lead_id: form.lead_id || null,
+        referral_contact_id: form.referral_contact_id || null,
       }
       const result = opportunity
         ? await opportunitiesAPI.update(opportunity.id, payload)
@@ -356,6 +363,18 @@ export function OpportunityModal({ opportunity, duplicateFrom, fromLead, initial
               </>
             )}
           </div>
+
+          {(form.lead_id || fromLead) && (
+            <p style={{ fontSize: '11px', color: '#9B9B9B', margin: 0 }}>
+              Sourced from Lead {fromLead ? (fromLead.lead_number || fromLead.title) : (opportunity?.lead?.lead_number || opportunity?.lead?.title)} — the referral contact below was carried over automatically and can still be changed.
+            </p>
+          )}
+          <FormField label="Referral Contact" full>
+            <select className="form-input" value={form.referral_contact_id} onChange={e => setForm(p => ({ ...p, referral_contact_id: e.target.value }))}>
+              <option value="">None</option>
+              {[...contacts].sort((a: any, b: any) => `${a.first_name} ${a.last_name}`.localeCompare(`${b.first_name} ${b.last_name}`)).map((c: any) => <option key={c.id} value={c.id}>{c.first_name} {c.last_name}</option>)}
+            </select>
+          </FormField>
 
           <FormField label="Notes" full>
             <textarea className="form-input" value={form.notes} onChange={e => setForm(p => ({ ...p, notes: e.target.value }))} placeholder="Additional notes..." rows={3} style={{ resize: 'vertical' }} />

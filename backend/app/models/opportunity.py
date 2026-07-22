@@ -27,6 +27,14 @@ class Opportunity(Base):
     # discriminator) — plain columns, no FK object, same trick as partner_id above.
     main_operational_team_id = Column(UUID(as_uuid=True), nullable=True)
     sales_team_id            = Column(UUID(as_uuid=True), nullable=True)
+    # Points back to the Lead this Opportunity was converted from, if any — plain column,
+    # resolved manually in the router (same trick as partner_id above), purely a provenance
+    # pointer so a new cross-model relationship isn't needed just for this.
+    lead_id             = Column(UUID(as_uuid=True), nullable=True)
+    # Referral information — carried over automatically from the source Lead's
+    # referral_contact_id when converting (see close_lead_with_opportunity), or set directly
+    # here otherwise. Plain column, same reasoning as lead_id above.
+    referral_contact_id = Column(UUID(as_uuid=True), nullable=True)
 
     deal_id             = Column(String(100))
     deal_name           = Column(String(500), nullable=False)

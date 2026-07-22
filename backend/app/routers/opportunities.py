@@ -11,13 +11,14 @@ from app.database import get_db
 from app.models.opportunity import Opportunity
 from app.models.contact import Contact
 from app.models.company import Company
+from app.models.lead import Lead
 from app.models.rfp import RFP, rfp_opportunity
 from app.models.opportunity_extra import OpportunityStaffing, OpportunityStaffingMonth, OpportunityChecklistItem, OpportunityComment
 from app.schemas.schemas import (
     OpportunityCreate, OpportunityUpdate, OpportunityResponse, OpportunitySummary,
     StaffingCreate, StaffingResponse, StaffingMonthsUpdate,
     ChecklistItemCreate, ChecklistItemUpdate, ChecklistItemResponse,
-    CommentCreate, CommentResponse, PartnerSummary, OrgEntitySummary,
+    CommentCreate, CommentResponse, PartnerSummary, OrgEntitySummary, LeadSummary, ContactSummary,
 )
 from app.services.ids import next_internal_id, compute_deal_name
 from app.routers.projects import _maybe_create_project
@@ -80,6 +81,26 @@ async def _attach_org_teams(db: AsyncSession, objs: list):
     for o in objs:
         o.main_operational_team = org_entities.get(str(o.main_operational_team_id)) if getattr(o, "main_operational_team_id", None) else None
         o.sales_team = org_entities.get(str(o.sales_team_id)) if getattr(o, "sales_team_id", None) else None
+
+
+async def _attach_lead_and_referral(db: AsyncSession, objs: list):
+    # lead_id/referral_contact_id are plain columns (see opportunity.py) — attach both as plain
+    # instance attributes, same trick as _attach_partners above.
+    lead_ids = {o.lead_id for o in objs if getattr(o, "lead_id", None)}
+    leads = {}
+    if lead_ids:
+        r = await db.execute(select(Lead.id, Lead.lead_number, Lead.title, Lead.origin).where(Lead.id.in_(lead_ids)))
+        leads = {row.id: LeadSummary(id=row.id, lead_number=row.lead_number, title=row.title, origin=row.origin) for row in r.all()}
+
+    contact_ids = {o.referral_contact_id for o in objs if getattr(o, "referral_contact_id", None)}
+    contacts = {}
+    if contact_ids:
+        r = await db.execute(select(Contact).where(Contact.id.in_(contact_ids)))
+        contacts = {c.id: ContactSummary.model_validate(c) for c in r.scalars().all()}
+
+    for o in objs:
+        o.lead = leads.get(o.lead_id) if getattr(o, "lead_id", None) else None
+        o.referral_contact = contacts.get(o.referral_contact_id) if getattr(o, "referral_contact_id", None) else None
 
 
 def _apply_daily_invoicing_amount(opp: Opportunity):
@@ -202,6 +223,7 @@ async def list_opportunities(
     await _attach_partners(db, opps)
     await _attach_contracting_party(db, opps)
     await _attach_org_teams(db, opps)
+    await _attach_lead_and_referral(db, opps)
     return opps
 
 @router.post("/", response_model=OpportunityResponse, status_code=status.HTTP_201_CREATED)
@@ -234,6 +256,7 @@ async def create_opportunity(opp: OpportunityCreate, db: AsyncSession = Depends(
     await _attach_partners(db, [row])
     await _attach_contracting_party(db, [row])
     await _attach_org_teams(db, [row])
+    await _attach_lead_and_referral(db, [row])
     row.rfp_id = new_rfp_id
     return row
 
@@ -246,6 +269,7 @@ async def get_opportunity(opportunity_id: UUID, db: AsyncSession = Depends(get_d
     await _attach_partners(db, [opp])
     await _attach_contracting_party(db, [opp])
     await _attach_org_teams(db, [opp])
+    await _attach_lead_and_referral(db, [opp])
     return opp
 
 @router.put("/{opportunity_id}", response_model=OpportunityResponse)
@@ -291,6 +315,7 @@ async def update_opportunity(opportunity_id: UUID, data: OpportunityUpdate, db: 
     await _attach_partners(db, [row])
     await _attach_contracting_party(db, [row])
     await _attach_org_teams(db, [row])
+    await _attach_lead_and_referral(db, [row])
     row.rfp_id = new_rfp_id
     return row
 

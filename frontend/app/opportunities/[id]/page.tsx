@@ -502,6 +502,10 @@ export default function OpportunityDetailPage() {
         <PropertyRow label="Owner" value={opp.assigned_to} />
         <PropertyRow label="Main Operational Team" value={opp.main_operational_team ? `${opp.main_operational_team.code} — ${opp.main_operational_team.title}` : null} />
         <PropertyRow label="Sales Team" value={opp.sales_team ? `${opp.sales_team.code} — ${opp.sales_team.title}` : null} />
+        <PropertyRow label="Referral Contact" value={opp.referral_contact ? `${opp.referral_contact.first_name} ${opp.referral_contact.last_name}` : null} />
+        {opp.lead && (
+          <PropertyRow label="Source Lead" value={<a href={`/leads/${opp.lead.id}`} style={{ color: '#219BD6', fontWeight: '600' }}>{opp.lead.lead_number || opp.lead.title} ↗</a>} />
+        )}
       </SidebarSection>
       <SidebarSection title={`Staffing (${staffing.length})`}>
         {staffing.length === 0 ? <p style={{ fontSize: '12px', color: '#9B9B9B' }}>No one staffed yet.</p> : staffing.map((s: any) => <SidebarCard key={s.id} title={s.user_name || s.user_email} subtitle={s.role || 'Staffed'} href="/staffing" color="#059669" />)}

@@ -185,6 +185,15 @@ export default function LeadDetailPage() {
               <PropertyRow label="Start Date" value={fmt(lead.start_date)} />
               <PropertyRow label="End Date" value={fmt(lead.end_date)} />
               <PropertyRow label="Origin" value={lead.origin} />
+              {lead.origin === 'Event' && (
+                <PropertyRow label="Event" value={lead.event ? <a href={`/marketing/events/${lead.event.id}`} style={{ color: '#219BD6', fontWeight: '600' }}>{lead.event.title} ↗</a> : '—'} />
+              )}
+              {lead.origin === 'Referral' && (
+                <PropertyRow label="Referral Contact" value={lead.referral_contact ? `${lead.referral_contact.first_name} ${lead.referral_contact.last_name}` : '—'} />
+              )}
+              {lead.origin === 'Partner' && lead.partners?.length > 0 && (
+                <PropertyRow label="Partner(s)" value={lead.partners.map((p: any) => p.name).join(', ')} />
+              )}
               {lead.status === 'Closed' && <PropertyRow label="Closed On" value={fmt(lead.closed_at)} />}
 
               <p className="section-label" style={{ marginTop: '20px', marginBottom: '8px' }}>Change History</p>

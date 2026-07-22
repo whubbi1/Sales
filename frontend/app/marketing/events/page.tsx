@@ -106,10 +106,20 @@ function NewEventModal({ onClose, onCreated }: { onClose: () => void; onCreated:
   )
 }
 
+function KPICard({ label, value, color }: { label: string; value: number | string; color: string }) {
+  return (
+    <div style={{ background: 'white', borderRadius: '12px', border: '1px solid #EDF2F7', boxShadow: '0 1px 3px rgba(0,0,0,0.06)', padding: '14px 18px', flex: 1, minWidth: '150px' }}>
+      <div style={{ fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#94A3B8', marginBottom: '4px' }}>{label}</div>
+      <div style={{ fontSize: '24px', fontWeight: '800', color }}>{value}</div>
+    </div>
+  )
+}
+
 function EventsContent() {
   const router = useRouter()
   const { level, canEdit } = useMarketingPerm('events')
   const [events, setEvents] = useState<any[]>([])
+  const [kpis, setKpis] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [showNew, setShowNew] = useState(false)
@@ -128,6 +138,7 @@ function EventsContent() {
 
   useEffect(() => {
     load()
+    marketingAPI.getEventKPIs().then(setKpis).catch(() => {})
     const u = getStoredUser()
     if (u?.email) setUserEmail(u.email)
   }, [])
@@ -167,6 +178,16 @@ function EventsContent() {
           )}
         </div>
       </div>
+
+      {kpis && (
+        <div style={{ display: 'flex', gap: '12px', marginBottom: '18px', flexWrap: 'wrap' }}>
+          <KPICard label="Ongoing Events" value={kpis.ongoing_events} color="#156082" />
+          <KPICard label="Closed Events (Last Year)" value={kpis.closed_events_last_year} color="#64748B" />
+          <KPICard label="Leads from Events" value={kpis.leads_from_events} color="#219BD6" />
+          <KPICard label="Opportunities from Events" value={kpis.opportunities_from_events} color="#D97706" />
+          <KPICard label="Won Deals from Events" value={kpis.won_deals_from_events} color="#059669" />
+        </div>
+      )}
 
       <div style={{ marginBottom: '14px' }}>
         <input style={{ ...inp, width: '260px' }} placeholder="Search event title…" value={search} onChange={e => setSearch(e.target.value)} />

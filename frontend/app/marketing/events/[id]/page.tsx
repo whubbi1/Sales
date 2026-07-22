@@ -251,6 +251,24 @@ function EventDetailContent() {
       </div>
 
       <div style={card}>
+        <div style={lbl}>Leads &amp; Deals from this Event</div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '14px' }}>
+          <div>
+            <div style={{ fontSize: '22px', fontWeight: '800', color: '#219BD6' }}>{event.leads_count || 0}</div>
+            <div style={{ fontSize: '11px', color: '#94A3B8' }}>Leads ({event.leads_to_opportunity_count || 0} linked to a deal/opportunity)</div>
+          </div>
+          <div>
+            <div style={{ fontSize: '22px', fontWeight: '800', color: '#D97706' }}>{event.opportunities_count || 0}</div>
+            <div style={{ fontSize: '11px', color: '#94A3B8' }}>Opportunities</div>
+          </div>
+          <div>
+            <div style={{ fontSize: '22px', fontWeight: '800', color: '#059669' }}>{event.won_deals_count || 0}</div>
+            <div style={{ fontSize: '11px', color: '#94A3B8' }}>Won Deals</div>
+          </div>
+        </div>
+      </div>
+
+      <div style={card}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
           <div style={lbl}>Contributors ({(event.contributors || []).length})</div>
         </div>

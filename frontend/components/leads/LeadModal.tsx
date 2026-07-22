@@ -1,8 +1,8 @@
 'use client'
 import { useState, useEffect } from 'react'
-import { leadsAPI, companiesAPI, partnersAPI, legalAPI } from '@/lib/api'
+import { leadsAPI, companiesAPI, partnersAPI, legalAPI, marketingAPI, contactsAPI } from '@/lib/api'
 
-const ORIGINS = ['Referral', 'Website', 'Cold Outreach', 'Event', 'Partner', 'Inbound', 'Other']
+const ORIGINS = ['Referral', 'Website', 'Cold Outreach', 'Event', 'Partner', 'LinkedIn', 'Other']
 const STATUSES = ['Open', 'In Progress', 'Closed', 'Create an Opportunity']
 // Display-only relabeling — the underlying status value stays 'Create an Opportunity'
 // everywhere it's stored/compared (DB enum, backend trigger logic), only how it reads changes.
@@ -28,6 +28,8 @@ export function LeadModal({ lead, duplicateFrom, initialCompanyId, initialContac
   const [partnerContacts, setPartnerContacts] = useState<any[]>([])
   const [operationalTeams, setOperationalTeams] = useState<any[]>([])
   const [salesTeams, setSalesTeams] = useState<any[]>([])
+  const [events, setEvents] = useState<any[]>([])
+  const [allContacts, setAllContacts] = useState<any[]>([])
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
@@ -45,6 +47,8 @@ export function LeadModal({ lead, duplicateFrom, initialCompanyId, initialContac
     start_date: toDateStr(src?.start_date),
     end_date: toDateStr(src?.end_date),
     origin: src?.origin || '',
+    event_id: src?.event_id || '',
+    referral_contact_id: src?.referral_contact_id || '',
     status: duplicateFrom ? 'Open' : (src?.status || 'Open'),
   })
 
@@ -53,6 +57,8 @@ export function LeadModal({ lead, duplicateFrom, initialCompanyId, initialContac
     partnersAPI.list({}).then(setPartners).catch(() => {})
     legalAPI.getOrgEntities('operational_team').then(d => setOperationalTeams(d.org_entities || [])).catch(() => {})
     legalAPI.getOrgEntities('sales_entity').then(d => setSalesTeams(d.org_entities || [])).catch(() => {})
+    marketingAPI.listEvents().then(d => setEvents(d.events || [])).catch(() => {})
+    contactsAPI.list({}).then(setAllContacts).catch(() => {})
   }, [])
 
   useEffect(() => {
@@ -99,6 +105,8 @@ export function LeadModal({ lead, duplicateFrom, initialCompanyId, initialContac
         start_date: form.start_date || null,
         end_date: form.end_date || null,
         origin: form.origin || null,
+        event_id: form.origin === 'Event' ? (form.event_id || null) : null,
+        referral_contact_id: form.origin === 'Referral' ? (form.referral_contact_id || null) : null,
         status: form.status,
       }
       const result = lead ? await leadsAPI.update(lead.id, payload) : await leadsAPI.create(payload)
@@ -179,6 +187,22 @@ export function LeadModal({ lead, duplicateFrom, initialCompanyId, initialContac
               {ORIGINS.map(o => <option key={o} value={o}>{o}</option>)}
             </select>
           </FormField>
+          {form.origin === 'Event' && (
+            <FormField label="Event">
+              <select className="form-input" value={form.event_id} onChange={e => setForm(p => ({ ...p, event_id: e.target.value }))}>
+                <option value="">Select event…</option>
+                {[...events].sort((a: any, b: any) => a.title.localeCompare(b.title)).map((ev: any) => <option key={ev.id} value={ev.id}>{ev.title}</option>)}
+              </select>
+            </FormField>
+          )}
+          {form.origin === 'Referral' && (
+            <FormField label="Referral Contact">
+              <select className="form-input" value={form.referral_contact_id} onChange={e => setForm(p => ({ ...p, referral_contact_id: e.target.value }))}>
+                <option value="">Select contact…</option>
+                {[...allContacts].sort((a: any, b: any) => `${a.first_name} ${a.last_name}`.localeCompare(`${b.first_name} ${b.last_name}`)).map((c: any) => <option key={c.id} value={c.id}>{c.first_name} {c.last_name}</option>)}
+              </select>
+            </FormField>
+          )}
           <FormField label="Lead Status">
             <select className="form-input" value={form.status} onChange={e => setForm(p => ({ ...p, status: e.target.value }))} disabled={isClosed}>
               {STATUSES.map(s => <option key={s} value={s}>{STATUS_LABELS[s] || s}</option>)}

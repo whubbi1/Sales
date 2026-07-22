@@ -43,6 +43,13 @@ class Lead(Base):
     start_date     = Column(DateTime)
     end_date       = Column(DateTime)
     origin         = Column(String(255))
+    # marketing_events isn't an ORM model (raw-SQL table, see marketing.py) — plain column, no
+    # FK object, same trick used for main_operational_team_id below. Relevant when origin='Event'.
+    event_id       = Column(UUID(as_uuid=True), nullable=True)
+    # The person who made the introduction — relevant when origin='Referral'. Distinct from the
+    # Company Contact above and from the partner-side contacts list, since a referral can come
+    # from anyone, not just this lead's own company or partner contacts.
+    referral_contact_id = Column(UUID(as_uuid=True), ForeignKey("contacts.id", ondelete="SET NULL"), nullable=True)
     status         = Column(SAEnum(
         'Open', 'In Progress', 'Closed', 'Create an Opportunity',
         name='lead_status_enum'
@@ -70,6 +77,7 @@ class Lead(Base):
 
     company = relationship("Company", foreign_keys=[company_id])
     contact = relationship("Contact", foreign_keys=[contact_id])
+    referral_contact = relationship("Contact", foreign_keys=[referral_contact_id])
 
 
 class LeadActivityLog(Base):

@@ -128,6 +128,24 @@ class OrgEntitySummary(BaseModel):
     class Config:
         from_attributes = True
 
+# ─── Marketing Event (summary only — Event itself is a raw-SQL entity, see routers/marketing.py) ──
+class EventSummary(BaseModel):
+    id: UUID
+    title: str
+    event_date: Optional[datetime] = None
+    status: Optional[str] = None
+    class Config:
+        from_attributes = True
+
+# ─── Lead (summary only — full LeadResponse defined further down) ─────────────
+class LeadSummary(BaseModel):
+    id: UUID
+    lead_number: Optional[str] = None
+    title: str
+    origin: Optional[str] = None
+    class Config:
+        from_attributes = True
+
 # ─── Contact ──────────────────────────────────────────────────────────────────
 class ContactBase(BaseModel):
     first_name: str
@@ -190,6 +208,12 @@ class OpportunityBase(BaseModel):
     contracting_party_partner_id: Optional[UUID] = None
     main_operational_team_id: Optional[UUID] = None
     sales_team_id: Optional[UUID] = None
+    # Set automatically when converted from a Lead (see close_lead_with_opportunity), or left
+    # unset for an Opportunity created directly.
+    lead_id: Optional[UUID] = None
+    # Carried over from the source Lead's referral_contact_id when converting, or set directly
+    # here when there's no source Lead.
+    referral_contact_id: Optional[UUID] = None
     # deal_id is server-generated on create (see next_internal_id) and never changes after —
     # kept here as Optional/ignored-on-write so responses can still round-trip it.
     deal_id: Optional[str] = None
@@ -243,6 +267,8 @@ class OpportunityResponse(OpportunityBase):
     contracting_party_partner: Optional[PartnerSummary] = None
     main_operational_team: Optional[OrgEntitySummary] = None
     sales_team: Optional[OrgEntitySummary] = None
+    lead: Optional[LeadSummary] = None
+    referral_contact: Optional[ContactSummary] = None
     contacts: Optional[List[ContactSummary]] = []
     created_at: datetime
     updated_at: datetime
@@ -754,6 +780,8 @@ class LeadCreate(BaseModel):
     start_date: Optional[datetime] = None
     end_date: Optional[datetime] = None
     origin: Optional[str] = None
+    event_id: Optional[UUID] = None
+    referral_contact_id: Optional[UUID] = None
     status: Optional[str] = 'Open'
     assigned_to: Optional[str] = None
     assigned_to_email: Optional[str] = None
@@ -769,6 +797,8 @@ class LeadUpdate(BaseModel):
     start_date: Optional[datetime] = None
     end_date: Optional[datetime] = None
     origin: Optional[str] = None
+    event_id: Optional[UUID] = None
+    referral_contact_id: Optional[UUID] = None
     status: Optional[str] = None
     assigned_to: Optional[str] = None
     assigned_to_email: Optional[str] = None
@@ -787,6 +817,8 @@ class LeadResponse(BaseModel):
     start_date: Optional[datetime] = None
     end_date: Optional[datetime] = None
     origin: Optional[str] = None
+    event_id: Optional[UUID] = None
+    referral_contact_id: Optional[UUID] = None
     status: str
     opportunity_id: Optional[UUID] = None
     closed_at: Optional[datetime] = None
@@ -800,6 +832,8 @@ class LeadResponse(BaseModel):
     partner_contacts: Optional[List[ContactSummary]] = []
     main_operational_team: Optional[OrgEntitySummary] = None
     sales_team: Optional[OrgEntitySummary] = None
+    event: Optional[EventSummary] = None
+    referral_contact: Optional[ContactSummary] = None
     class Config:
         from_attributes = True
 

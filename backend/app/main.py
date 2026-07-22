@@ -1784,6 +1784,20 @@ async def startup():
                 # NULL as distinct, so manually-created contracts with no opportunity_id are
                 # unaffected. Backs the ON CONFLICT (opportunity_id) in _maybe_create_customer_contract.
                 "CREATE UNIQUE INDEX IF NOT EXISTS ux_finance_customer_contracts_opportunity_id ON finance_customer_contracts (opportunity_id)",
+
+                # Lead origin -> Event/Partner/Referral linking, and Opportunity referral info +
+                # a back-pointer to the source Lead (see leads.py/opportunities.py _attach_* helpers).
+                "ALTER TABLE leads ADD COLUMN IF NOT EXISTS event_id UUID REFERENCES marketing_events(id) ON DELETE SET NULL",
+                "ALTER TABLE leads ADD COLUMN IF NOT EXISTS referral_contact_id UUID REFERENCES contacts(id) ON DELETE SET NULL",
+                "ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS lead_id UUID REFERENCES leads(id) ON DELETE SET NULL",
+                "ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS referral_contact_id UUID REFERENCES contacts(id) ON DELETE SET NULL",
+
+                # "Inbound" renamed to "LinkedIn" in the Lead Origin dropdown — origin is a plain
+                # string (no DB enum), so relabel existing rows too, not just the dropdown options.
+                "UPDATE leads SET origin = 'LinkedIn' WHERE origin = 'Inbound'",
+                # Backfill lead_id on Opportunities created before this field existed, using the
+                # existing reverse pointer (Lead.opportunity_id) — idempotent, safe every startup.
+                "UPDATE opportunities o SET lead_id = l.id FROM leads l WHERE l.opportunity_id = o.id AND o.lead_id IS NULL",
             ]
             for sql in sqls:
                 try:

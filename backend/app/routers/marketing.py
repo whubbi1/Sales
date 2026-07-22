@@ -70,6 +70,38 @@ async def create_event(data: dict, db: AsyncSession = Depends(get_db)):
     return await _get_event(db, event_id)
 
 
+# Registered before /events/{event_id} — otherwise that path param route would swallow this.
+@router.get("/events/kpis")
+async def get_event_kpis(db: AsyncSession = Depends(get_db)):
+    r = await db.execute(text("""
+        SELECT
+            COUNT(*) FILTER (WHERE status != 'Finished') AS ongoing_events,
+            COUNT(*) FILTER (WHERE status = 'Finished' AND COALESCE(end_date, event_date) >= NOW() - INTERVAL '1 year') AS closed_events_last_year
+        FROM marketing_events
+    """))
+    row = r.fetchone()
+    r2 = await db.execute(text("""
+        SELECT
+            COUNT(*) AS leads_from_events,
+            COUNT(DISTINCT opportunity_id) FILTER (WHERE opportunity_id IS NOT NULL) AS opportunities_from_events
+        FROM leads WHERE event_id IS NOT NULL
+    """))
+    row2 = r2.fetchone()
+    r3 = await db.execute(text("""
+        SELECT COUNT(DISTINCT o.id) AS won_deals_from_events
+        FROM opportunities o JOIN leads l ON l.opportunity_id = o.id
+        WHERE l.event_id IS NOT NULL AND o.deal_status = 'Contract Won'
+    """))
+    row3 = r3.fetchone()
+    return {
+        "ongoing_events": row.ongoing_events,
+        "closed_events_last_year": row.closed_events_last_year,
+        "leads_from_events": row2.leads_from_events,
+        "opportunities_from_events": row2.opportunities_from_events,
+        "won_deals_from_events": row3.won_deals_from_events,
+    }
+
+
 @router.get("/events/{event_id}")
 async def get_event(event_id: str, db: AsyncSession = Depends(get_db)):
     event = await _get_event(db, event_id)
@@ -89,6 +121,26 @@ async def get_event(event_id: str, db: AsyncSession = Depends(get_db)):
     event["urls"] = [_row(dict(r._mapping)) for r in urls.fetchall()]
     event["partners"] = [_row(dict(r._mapping)) for r in partners.fetchall()]
     event["contacts"] = [_row(dict(r._mapping)) for r in contacts.fetchall()]
+
+    # Leads sourced from this event, and how many of those progressed to an Opportunity/deal.
+    stats = await db.execute(text("""
+        SELECT
+            COUNT(*) AS leads_count,
+            COUNT(*) FILTER (WHERE opportunity_id IS NOT NULL) AS leads_to_opportunity_count,
+            COUNT(DISTINCT opportunity_id) FILTER (WHERE opportunity_id IS NOT NULL) AS opportunities_count
+        FROM leads WHERE event_id = CAST(:id AS UUID)
+    """), {"id": event_id})
+    srow = stats.fetchone()
+    won = await db.execute(text("""
+        SELECT COUNT(DISTINCT o.id) AS won_deals_count
+        FROM opportunities o JOIN leads l ON l.opportunity_id = o.id
+        WHERE l.event_id = CAST(:id AS UUID) AND o.deal_status = 'Contract Won'
+    """), {"id": event_id})
+    wrow = won.fetchone()
+    event["leads_count"] = srow.leads_count
+    event["leads_to_opportunity_count"] = srow.leads_to_opportunity_count
+    event["opportunities_count"] = srow.opportunities_count
+    event["won_deals_count"] = wrow.won_deals_count
     return event
 
 

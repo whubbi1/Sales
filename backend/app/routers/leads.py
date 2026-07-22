@@ -17,7 +17,7 @@ from app.schemas.schemas import (
     LeadNoteCreate, LeadNoteResponse,
     LeadFileCreate, LeadFileResponse,
     LeadCloseWithOpportunity,
-    PartnerSummary, OrgEntitySummary,
+    PartnerSummary, OrgEntitySummary, EventSummary,
 )
 from app.services.ids import next_internal_id
 
@@ -31,11 +31,20 @@ async def _attach_related(db: AsyncSession, leads: list):
         r = await db.execute(select(Company).where(Company.id.in_(company_ids)))
         companies = {c.id: c for c in r.scalars().all()}
 
-    contact_ids = {l.contact_id for l in leads if l.contact_id}
+    contact_ids = {l.contact_id for l in leads if l.contact_id} | {l.referral_contact_id for l in leads if l.referral_contact_id}
     contacts = {}
     if contact_ids:
         r = await db.execute(select(Contact).where(Contact.id.in_(contact_ids)))
         contacts = {c.id: c for c in r.scalars().all()}
+
+    # marketing_events isn't an ORM model — same raw-SQL resolution trick as partners below.
+    event_ids = {str(l.event_id) for l in leads if l.event_id}
+    events = {}
+    for eid in event_ids:
+        r = await db.execute(text("SELECT id, title, event_date, status FROM marketing_events WHERE id = CAST(:id AS UUID)"), {"id": eid})
+        row = r.fetchone()
+        if row:
+            events[eid] = EventSummary(id=row.id, title=row.title, event_date=row.event_date, status=row.status)
 
     lead_ids = [l.id for l in leads]
     partner_map = {}
@@ -76,10 +85,12 @@ async def _attach_related(db: AsyncSession, leads: list):
     for l in leads:
         l.company = companies.get(l.company_id) if l.company_id else None
         l.contact = contacts.get(l.contact_id) if l.contact_id else None
+        l.referral_contact = contacts.get(l.referral_contact_id) if l.referral_contact_id else None
         l.partners = [partners[pid] for pid in partner_map.get(l.id, []) if pid in partners]
         l.partner_contacts = [pc_contacts[cid] for cid in pc_map.get(l.id, []) if cid in pc_contacts]
         l.main_operational_team = org_entities.get(l.main_operational_team_id) if l.main_operational_team_id else None
         l.sales_team = org_entities.get(l.sales_team_id) if l.sales_team_id else None
+        l.event = events.get(str(l.event_id)) if l.event_id else None
 
 
 async def _set_partners(db: AsyncSession, lead_id, partner_ids):
