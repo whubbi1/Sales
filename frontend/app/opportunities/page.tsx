@@ -331,10 +331,11 @@ function OpportunitiesContent() {
                     <div style={{ maxHeight: '320px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '4px' }}>
                       {matches.map(o => (
                         <div key={o.id} onClick={() => router.push(`/opportunities/${o.id}`)}
-                          style={{ padding: '9px 12px', borderRadius: '7px', background: '#F8FAFC', border: '1px solid #EDF2F7', cursor: 'pointer', fontSize: '13px', color: '#144766', fontWeight: '600' }}
+                          style={{ padding: '9px 12px', borderRadius: '7px', background: '#F8FAFC', border: '1px solid #EDF2F7', cursor: 'pointer', fontSize: '13px', color: '#144766', fontWeight: '600', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px' }}
                           onMouseEnter={e => (e.currentTarget.style.background = '#EFF6FF')}
                           onMouseLeave={e => (e.currentTarget.style.background = '#F8FAFC')}>
-                          {o.deal_name}
+                          <span>{o.deal_name}</span>
+                          <span style={{ color: '#3F3F3F', fontWeight: '600', flexShrink: 0 }}>{o.deal_amount ? `€${o.deal_amount.toLocaleString('en-US', { minimumFractionDigits: 0 })}` : '—'}</span>
                         </div>
                       ))}
                     </div>
