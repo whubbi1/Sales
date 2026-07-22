@@ -9,7 +9,7 @@ import { ContactArticles } from '@/components/contacts/ContactArticles'
 import { EntityTasks } from '@/components/tasks/EntityTasks'
 import { ActivityFeed } from '@/components/shared/ActivityFeed'
 
-const SUB_LABELS: Record<string, string> = { 'Marketing Information': '📧', 'Customer Service Communication': '💬', 'One to One': '🤝' }
+const SUB_LABELS: Record<string, string> = { 'Marketing Information': '📧', 'Customer Service Communication': '💬', 'One to One': '🤝', 'Opted Out': '🚫' }
 
 const DATA_SOURCE_OPTIONS = ['LinkedIn', 'Event', 'Project', 'Partner']
 
@@ -190,7 +190,11 @@ export default function ContactDetailPage() {
               </div>
               {contact.subscriptions?.length > 0 && (
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px', marginTop: '10px' }}>
-                  {contact.subscriptions.map((sub: string) => <span key={sub} style={{ background: '#ECFDF5', color: '#059669', padding: '2px 9px', borderRadius: '12px', fontSize: '10px', fontWeight: '600' }}>{SUB_LABELS[sub] || '✓'} {sub}</span>)}
+                  {contact.subscriptions.map((sub: string) => (
+                    <span key={sub} style={{ background: sub === 'Opted Out' ? '#FEF2F2' : '#ECFDF5', color: sub === 'Opted Out' ? '#DC2626' : '#059669', padding: '2px 9px', borderRadius: '12px', fontSize: '10px', fontWeight: '600' }}>
+                      {SUB_LABELS[sub] || '✓'} {sub}
+                    </span>
+                  ))}
                 </div>
               )}
             </div>
@@ -237,7 +241,10 @@ export default function ContactDetailPage() {
       >
         {opportunities.length === 0 ? <p style={{ fontSize: '12px', color: '#9B9B9B' }}>No opportunities.</p> : opportunities.map((opp: any) => <SidebarCard key={opp.id} title={opp.deal_name} subtitle={opp.deal_status} href={`/opportunities/${opp.id}`} color="#219BD6" />)}
       </SidebarSection>
-      <SidebarSection title={`Leads (${leads.length})`}>
+      <SidebarSection
+        title={`Leads (${leads.length})`}
+        onAdd={() => router.push(`/leads?contact_id=${id}${contact.company_id ? `&company_id=${contact.company_id}` : ''}${contact.partner_id ? `&partner_id=${contact.partner_id}` : ''}`)}
+      >
         {leads.length === 0 ? <p style={{ fontSize: '12px', color: '#9B9B9B' }}>No leads.</p> : leads.map((lead: any) => <SidebarCard key={lead.id} title={lead.title || lead.name} subtitle={lead.status} href={`/leads/${lead.id}`} color="#D97706" />)}
       </SidebarSection>
       <SidebarSection title="Contact Details">

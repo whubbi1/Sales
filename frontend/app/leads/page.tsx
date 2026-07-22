@@ -1,6 +1,6 @@
 'use client'
-import { useState, useEffect, useMemo } from 'react'
-import { useRouter } from 'next/navigation'
+import { useState, useEffect, useMemo, Suspense } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { Sidebar } from '@/components/Sidebar'
 import { leadsAPI, legalAPI } from '@/lib/api'
 import { PageHeader, EmptyState } from '@/components/shared/RecordLayout'
@@ -40,8 +40,9 @@ function statusColors(status: string) {
   return { bg: '#EFF6FF', color: '#219BD6' }
 }
 
-export default function LeadsPage() {
+function LeadsContent() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const [leads, setLeads] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
@@ -52,6 +53,10 @@ export default function LeadsPage() {
   const [kpiPopup, setKpiPopup] = useState<string | null>(null)
   const [popupOpTeam, setPopupOpTeam] = useState('')
   const [popupSalesTeam, setPopupSalesTeam] = useState('')
+
+  const prefillCompanyId = searchParams.get('company_id') || ''
+  const prefillPartnerId = searchParams.get('partner_id') || ''
+  const prefillContactId = searchParams.get('contact_id') || ''
 
   // Filter options need the full live team list, not just whatever appears in currently-loaded
   // leads, so an unused team still shows up as a selectable filter.
@@ -75,6 +80,9 @@ export default function LeadsPage() {
     load()
     const u = getStoredUser()
     if (u?.email) setUserEmail(u.email)
+    // Company/Contact/Partner detail pages link here with these params to open the create
+    // modal pre-filled instead of dumping the user on an unrelated list page.
+    if (prefillCompanyId || prefillPartnerId || prefillContactId) setShowModal(true)
     legalAPI.getOrgEntities('operational_team').then(d => setOperationalTeams(d.org_entities || [])).catch(() => {})
     legalAPI.getOrgEntities('sales_entity').then(d => setSalesTeams(d.org_entities || [])).catch(() => {})
   }, [])
@@ -163,7 +171,15 @@ export default function LeadsPage() {
             <Pagination page={rb.page} setPage={rb.setPage} total={reported.length} />
           </div>
         </div>
-        {showModal && <LeadModal onClose={() => setShowModal(false)} onSave={() => { setShowModal(false); load() }} />}
+        {showModal && (
+          <LeadModal
+            initialCompanyId={prefillCompanyId}
+            initialPartnerId={prefillPartnerId}
+            initialContactId={prefillContactId}
+            onClose={() => setShowModal(false)}
+            onSave={() => { setShowModal(false); load() }}
+          />
+        )}
 
         {kpiPopup && (() => {
           const matches = withDisplay
@@ -216,5 +232,13 @@ export default function LeadsPage() {
         })()}
       </main>
     </div>
+  )
+}
+
+export default function LeadsPage() {
+  return (
+    <Suspense fallback={<div style={{ display: 'flex' }}><Sidebar /><main style={{ marginLeft: '220px', minHeight: '100vh', width: 'calc(100vw - 220px)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#9B9B9B' }}>Loading...</main></div>}>
+      <LeadsContent />
+    </Suspense>
   )
 }

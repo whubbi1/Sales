@@ -320,6 +320,15 @@ export default function PartnerDetailPage() {
 
   const rightColumn = (
     <div>
+      <SidebarSection title={`Contacts (${contacts.length})`} onAdd={() => router.push(`/contacts?partner_id=${id}`)}>
+        {contacts.length === 0 ? <p style={{ fontSize: '12px', color: '#9B9B9B' }}>No contacts.</p> : contacts.map((c: any) => <SidebarCard key={c.id} title={`${c.first_name} ${c.last_name}`} subtitle={c.job_type || c.email} href={`/contacts/${c.id}`} color="#e97132" />)}
+      </SidebarSection>
+      <SidebarSection title={`Opportunities (${opportunities.length})`} onAdd={() => router.push(`/opportunities?partner_id=${id}`)}>
+        {opportunities.length === 0 ? <p style={{ fontSize: '12px', color: '#9B9B9B' }}>No opportunities.</p> : opportunities.map((o: any) => <SidebarCard key={o.id} title={o.deal_name} subtitle={o.deal_status} href={`/opportunities/${o.id}`} color="#219BD6" />)}
+      </SidebarSection>
+      <SidebarSection title={`Leads (${leads.length})`} onAdd={() => router.push(`/leads?partner_id=${id}`)}>
+        {leads.length === 0 ? <p style={{ fontSize: '12px', color: '#9B9B9B' }}>No leads.</p> : leads.map((l: any) => <SidebarCard key={l.id} title={l.title} subtitle={l.status} href={`/leads/${l.id}`} color="#7C3AED" />)}
+      </SidebarSection>
       <SidebarSection title="About this partner">
         <PropertyRow label="Status" value={<StatusBadge value={partner.status} />} />
         <PropertyRow label="Sector" value={partner.sector} />
@@ -332,15 +341,6 @@ export default function PartnerDetailPage() {
             options={[{ value: '', label: 'Unassigned' }, ...users.map((u: any) => ({ value: u.email, label: u.display_name || `${u.first_name} ${u.last_name}` }))]} />
         } />
         <PropertyRow label="Created" value={new Date(partner.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} />
-      </SidebarSection>
-      <SidebarSection title={`Contacts (${contacts.length})`} onAdd={() => router.push(`/contacts?partner_id=${id}`)}>
-        {contacts.length === 0 ? <p style={{ fontSize: '12px', color: '#9B9B9B' }}>No contacts.</p> : contacts.map((c: any) => <SidebarCard key={c.id} title={`${c.first_name} ${c.last_name}`} subtitle={c.job_type || c.email} href={`/contacts/${c.id}`} color="#e97132" />)}
-      </SidebarSection>
-      <SidebarSection title={`Opportunities (${opportunities.length})`} onAdd={() => router.push(`/opportunities?partner_id=${id}`)}>
-        {opportunities.length === 0 ? <p style={{ fontSize: '12px', color: '#9B9B9B' }}>No opportunities.</p> : opportunities.map((o: any) => <SidebarCard key={o.id} title={o.deal_name} subtitle={o.deal_status} href={`/opportunities/${o.id}`} color="#219BD6" />)}
-      </SidebarSection>
-      <SidebarSection title={`Leads (${leads.length})`}>
-        {leads.length === 0 ? <p style={{ fontSize: '12px', color: '#9B9B9B' }}>No leads.</p> : leads.map((l: any) => <SidebarCard key={l.id} title={l.title} subtitle={l.status} href={`/leads/${l.id}`} color="#7C3AED" />)}
       </SidebarSection>
     </div>
   )

@@ -17,7 +17,7 @@ function FormField({ label, children, full }: { label: string; children: React.R
   )
 }
 
-export function LeadModal({ lead, duplicateFrom, initialCompanyId, onClose, onSave }: any) {
+export function LeadModal({ lead, duplicateFrom, initialCompanyId, initialContactId, initialPartnerId, onClose, onSave }: any) {
   // duplicateFrom prefills the same as an existing lead would, but `lead` itself stays
   // undefined so handleSave below still creates a new record instead of updating one —
   // status/closed_at are deliberately NOT copied, a duplicate always starts fresh at Open.
@@ -37,8 +37,8 @@ export function LeadModal({ lead, duplicateFrom, initialCompanyId, onClose, onSa
   const [form, setForm] = useState({
     title: src?.title || '',
     company_id: src?.company_id || (!lead ? initialCompanyId : '') || '',
-    contact_id: src?.contact_id || '',
-    partner_ids: (src?.partners || []).map((p: any) => p.id) as string[],
+    contact_id: src?.contact_id || (!lead ? initialContactId : '') || '',
+    partner_ids: src ? (src.partners || []).map((p: any) => p.id) as string[] : (initialPartnerId ? [initialPartnerId] : []),
     partner_contact_ids: (src?.partner_contacts || []).map((c: any) => c.id) as string[],
     main_operational_team_id: src?.main_operational_team_id || '',
     sales_team_id: src?.sales_team_id || '',

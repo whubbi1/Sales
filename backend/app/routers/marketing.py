@@ -12,6 +12,7 @@ import uuid
 router = APIRouter()
 
 EVENT_TYPES = {"webinar", "physical", "mailing", "other"}
+EVENT_STATUSES = {"To be planned", "Planned", "Under preparation", "Closed"}
 
 
 def _row(d: dict) -> dict:
@@ -80,9 +81,14 @@ async def get_event(event_id: str, db: AsyncSession = Depends(get_db)):
         SELECT p.id, p.name, p.status FROM marketing_event_partners ep
         JOIN partners p ON p.id = ep.partner_id WHERE ep.event_id = CAST(:id AS UUID) ORDER BY p.name
     """), {"id": event_id})
+    contacts = await db.execute(text("""
+        SELECT c.id, c.first_name, c.last_name, c.email FROM marketing_event_contacts ec
+        JOIN contacts c ON c.id = ec.contact_id WHERE ec.event_id = CAST(:id AS UUID) ORDER BY c.first_name, c.last_name
+    """), {"id": event_id})
     event["contributors"] = [_row(dict(r._mapping)) for r in contributors.fetchall()]
     event["urls"] = [_row(dict(r._mapping)) for r in urls.fetchall()]
     event["partners"] = [_row(dict(r._mapping)) for r in partners.fetchall()]
+    event["contacts"] = [_row(dict(r._mapping)) for r in contacts.fetchall()]
     return event
 
 
@@ -94,6 +100,9 @@ async def update_event(event_id: str, data: dict, db: AsyncSession = Depends(get
     event_type = data.get("event_type", "")
     if event_type and event_type not in EVENT_TYPES:
         raise HTTPException(status_code=400, detail=f"event_type must be one of {sorted(EVENT_TYPES)}")
+    status = data.get("status", "")
+    if status and status not in EVENT_STATUSES:
+        raise HTTPException(status_code=400, detail=f"status must be one of {sorted(EVENT_STATUSES)}")
     await db.execute(text("""
         UPDATE marketing_events SET
             title = COALESCE(NULLIF(:title,''), title),
@@ -101,6 +110,7 @@ async def update_event(event_id: str, data: dict, db: AsyncSession = Depends(get
             end_date = COALESCE(CAST(NULLIF(:end_date,'') AS DATE), end_date),
             description = COALESCE(:description, description),
             event_type = COALESCE(NULLIF(:event_type,''), event_type),
+            status = COALESCE(NULLIF(:status,''), status),
             location = COALESCE(:location, location),
             owner_email = COALESCE(:owner_email, owner_email),
             owner_name = COALESCE(:owner_name, owner_name),
@@ -109,7 +119,7 @@ async def update_event(event_id: str, data: dict, db: AsyncSession = Depends(get
     """), {
         "id": event_id, "title": data.get("title", ""), "event_date": data.get("event_date", ""),
         "end_date": data.get("end_date", ""),
-        "description": data.get("description"), "event_type": event_type, "location": data.get("location"),
+        "description": data.get("description"), "event_type": event_type, "status": status, "location": data.get("location"),
         "owner_email": data.get("owner_email"), "owner_name": data.get("owner_name"),
     })
     await db.commit()
@@ -196,5 +206,25 @@ async def link_partner(event_id: str, partner_id: str, db: AsyncSession = Depend
 async def unlink_partner(event_id: str, partner_id: str, db: AsyncSession = Depends(get_db)):
     await db.execute(text("DELETE FROM marketing_event_partners WHERE event_id = CAST(:eid AS UUID) AND partner_id = CAST(:pid AS UUID)"),
                       {"eid": event_id, "pid": partner_id})
+    await db.commit()
+    return {"status": "ok"}
+
+
+# ─── Linked Contacts (many-to-many) ──────────────────────────────────────────────
+@router.post("/events/{event_id}/contacts/{contact_id}")
+async def link_contact(event_id: str, contact_id: str, db: AsyncSession = Depends(get_db)):
+    await db.execute(text("""
+        INSERT INTO marketing_event_contacts (event_id, contact_id)
+        VALUES (CAST(:eid AS UUID), CAST(:cid AS UUID))
+        ON CONFLICT DO NOTHING
+    """), {"eid": event_id, "cid": contact_id})
+    await db.commit()
+    return {"status": "ok"}
+
+
+@router.delete("/events/{event_id}/contacts/{contact_id}")
+async def unlink_contact(event_id: str, contact_id: str, db: AsyncSession = Depends(get_db)):
+    await db.execute(text("DELETE FROM marketing_event_contacts WHERE event_id = CAST(:eid AS UUID) AND contact_id = CAST(:cid AS UUID)"),
+                      {"eid": event_id, "cid": contact_id})
     await db.commit()
     return {"status": "ok"}

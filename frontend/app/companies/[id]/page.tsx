@@ -22,6 +22,7 @@ export default function CompanyDetailPage() {
   const [allCompanies, setAllCompanies] = useState<any[]>([])
   const [contacts, setContacts] = useState<any[]>([])
   const [opportunities, setOpportunities] = useState<any[]>([])
+  const [leads, setLeads] = useState<any[]>([])
   const [notes, setNotes] = useState<any[]>([])
   const [tasks, setTasks] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
@@ -69,11 +70,12 @@ export default function CompanyDetailPage() {
 
   const load = async () => {
     try {
-      const [c, all, ctcts, opps, ntes, tsks] = await Promise.all([
+      const [c, all, ctcts, opps, lds, ntes, tsks] = await Promise.all([
         companiesAPI.get(id as string),
         companiesAPI.list({}),
         companiesAPI.getContacts(id as string),
         companiesAPI.getOpportunities(id as string),
+        companiesAPI.getLeads(id as string),
         companiesAPI.getNotes(id as string),
         taskManagerAPI.list({ entity_type: 'company', entity_id: id, source: 'sales' }).then((r: any) => r.tasks || []),
       ])
@@ -81,6 +83,7 @@ export default function CompanyDetailPage() {
       setAllCompanies(all)
       setContacts(ctcts)
       setOpportunities(opps)
+      setLeads(lds)
       setNotes(ntes)
       setTasks(tsks)
     } catch {
@@ -251,6 +254,15 @@ export default function CompanyDetailPage() {
 
   const rightColumn = (
     <div>
+      <SidebarSection title={`Contacts (${contacts.length})`} onAdd={() => router.push(`/contacts?company_id=${id}`)}>
+        {contacts.length === 0 ? <p style={{ fontSize: '12px', color: '#9B9B9B' }}>No contacts.</p> : contacts.map((c: any) => <SidebarCard key={c.id} title={`${c.first_name} ${c.last_name}`} subtitle={c.job_type || c.email} href={`/contacts/${c.id}`} color="#e97132" />)}
+      </SidebarSection>
+      <SidebarSection title={`Opportunities (${opportunities.length})`} onAdd={() => router.push(`/opportunities?company_id=${id}`)}>
+        {opportunities.length === 0 ? <p style={{ fontSize: '12px', color: '#9B9B9B' }}>No opportunities.</p> : opportunities.map((o: any) => <SidebarCard key={o.id} title={o.deal_name} subtitle={o.deal_status} href={`/opportunities/${o.id}`} color="#219BD6" />)}
+      </SidebarSection>
+      <SidebarSection title={`Leads (${leads.length})`} onAdd={() => router.push(`/leads?company_id=${id}`)}>
+        {leads.length === 0 ? <p style={{ fontSize: '12px', color: '#9B9B9B' }}>No leads.</p> : leads.map((l: any) => <SidebarCard key={l.id} title={l.title || l.name} subtitle={l.status} href={`/leads/${l.id}`} color="#D97706" />)}
+      </SidebarSection>
       <SidebarSection title="About this company">
         <PropertyRow label="Status" value={<StatusBadge value={company.status} />} />
         <PropertyRow label="Level" value={LEVEL_LABELS[company.level]} />
@@ -267,12 +279,6 @@ export default function CompanyDetailPage() {
           {company.children?.map((child: any) => <SidebarCard key={child.id} title={child.name} subtitle="Child company" href={`/companies/${child.id}`} color="#219BD6" />)}
         </SidebarSection>
       )}
-      <SidebarSection title={`Contacts (${contacts.length})`} onAdd={() => router.push(`/contacts?company_id=${id}`)}>
-        {contacts.length === 0 ? <p style={{ fontSize: '12px', color: '#9B9B9B' }}>No contacts.</p> : contacts.map((c: any) => <SidebarCard key={c.id} title={`${c.first_name} ${c.last_name}`} subtitle={c.job_type || c.email} href={`/contacts/${c.id}`} color="#e97132" />)}
-      </SidebarSection>
-      <SidebarSection title={`Opportunities (${opportunities.length})`} onAdd={() => router.push(`/opportunities?company_id=${id}`)}>
-        {opportunities.length === 0 ? <p style={{ fontSize: '12px', color: '#9B9B9B' }}>No opportunities.</p> : opportunities.map((o: any) => <SidebarCard key={o.id} title={o.deal_name} subtitle={o.deal_status} href={`/opportunities/${o.id}`} color="#219BD6" />)}
-      </SidebarSection>
     </div>
   )
 

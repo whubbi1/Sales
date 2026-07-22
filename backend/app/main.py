@@ -1668,6 +1668,14 @@ async def startup():
                 "ALTER TABLE contacts ADD COLUMN IF NOT EXISTS data_source VARCHAR(20) DEFAULT 'LinkedIn'",
                 "ALTER TABLE contacts ADD COLUMN IF NOT EXISTS data_source_ref_type VARCHAR(20)",
                 "ALTER TABLE contacts ADD COLUMN IF NOT EXISTS data_source_ref_id UUID",
+
+                # Marketing Events — status and Contact linking (mirrors marketing_event_partners).
+                "ALTER TABLE marketing_events ADD COLUMN IF NOT EXISTS status VARCHAR(30) DEFAULT 'To be planned'",
+                """CREATE TABLE IF NOT EXISTS marketing_event_contacts (
+                    event_id UUID NOT NULL REFERENCES marketing_events(id) ON DELETE CASCADE,
+                    contact_id UUID NOT NULL REFERENCES contacts(id) ON DELETE CASCADE,
+                    PRIMARY KEY (event_id, contact_id)
+                )""",
             ]
             for sql in sqls:
                 try:

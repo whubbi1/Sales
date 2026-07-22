@@ -38,6 +38,7 @@ export const companiesAPI = {
 
   getContacts:     (id: string) => fetchAPI(`/companies/${id}/contacts`),
   getOpportunities:(id: string) => fetchAPI(`/companies/${id}/opportunities`),
+  getLeads:        (id: string) => fetchAPI(`/companies/${id}/leads`),
   dashboardStats:  () => fetchAPI(`/companies/dashboard-stats`),
   research:        (prompt: string) => fetchAPI(`/companies/research`, { method: 'POST', body: JSON.stringify({ prompt }) }),
   linkedinEnrich:  (linkedin_url: string, company_id?: string) => fetchAPI(`/companies/linkedin-enrich`, { method: 'POST', body: JSON.stringify({ linkedin_url, company_id }) }),
@@ -127,6 +128,8 @@ export const marketingAPI = {
 
   linkPartner:   (id: string, partnerId: string) => fetchAPI(`/marketing/events/${id}/partners/${partnerId}`, { method: 'POST' }),
   unlinkPartner: (id: string, partnerId: string) => fetchAPI(`/marketing/events/${id}/partners/${partnerId}`, { method: 'DELETE' }),
+  linkContact:   (id: string, contactId: string) => fetchAPI(`/marketing/events/${id}/contacts/${contactId}`, { method: 'POST' }),
+  unlinkContact: (id: string, contactId: string) => fetchAPI(`/marketing/events/${id}/contacts/${contactId}`, { method: 'DELETE' }),
 }
 
 // ─── Contacts ─────────────────────────────────────────────────────────────────

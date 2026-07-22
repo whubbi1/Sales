@@ -300,6 +300,18 @@ async def get_company_opportunities(company_id: UUID, db: AsyncSession = Depends
     r = await db.execute(select(Opportunity).where(Opportunity.company_id == company_id))
     return r.scalars().all()
 
+@router.get("/{company_id}/leads")
+async def get_company_leads(company_id: UUID, db: AsyncSession = Depends(get_db)):
+    r = await db.execute(sql_text("SELECT * FROM leads WHERE company_id = CAST(:id AS UUID) ORDER BY created_at DESC"), {"id": str(company_id)})
+    rows = []
+    for row in r.fetchall():
+        d = dict(row._mapping)
+        for k, v in d.items():
+            if isinstance(v, UUID):
+                d[k] = str(v)
+        rows.append(d)
+    return rows
+
 # ─── Notes ────────────────────────────────────────────────────────────────────
 @router.get("/{company_id}/notes", response_model=List[NoteResponse])
 async def list_notes(company_id: UUID, db: AsyncSession = Depends(get_db)):

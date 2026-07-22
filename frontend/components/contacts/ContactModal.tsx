@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { contactsAPI, companiesAPI, partnersAPI } from '@/lib/api'
 
 const JOB_TYPES = ['CIO','CTO','CISO','SAP Manager','SAP Architect','SAP GRC','SAP Security Manager','SAP Technical Manager','Cybersecurity Architect','SOC Manager','Internal Audit','CFO','Partner','Buyer','Other']
-const SUBSCRIPTIONS = ['Marketing Information','Customer Service Communication','One to One']
+const SUBSCRIPTIONS = ['Marketing Information','Customer Service Communication','One to One','Opted Out']
 const LANGUAGES = ['Afrikaans','Albanian','Amharic','Arabic','Armenian','Azerbaijani','Basque','Belarusian','Bengali','Bosnian','Bulgarian','Catalan','Chinese (Simplified)','Chinese (Traditional)','Croatian','Czech','Danish','Dutch','English','Estonian','Finnish','French','Georgian','German','Greek','Gujarati','Hebrew','Hindi','Hungarian','Icelandic','Indonesian','Irish','Italian','Japanese','Kazakh','Korean','Latvian','Lithuanian','Macedonian','Malay','Maltese','Mongolian','Nepali','Norwegian','Persian','Polish','Portuguese','Romanian','Russian','Serbian','Slovak','Slovenian','Spanish','Swahili','Swedish','Tamil','Telugu','Thai','Turkish','Ukrainian','Urdu','Vietnamese','Welsh']
 
 // FormField MUST be outside modal to avoid focus loss on re-render
@@ -43,6 +43,8 @@ export function ContactModal({ contact, onClose, onSave }: any) {
   const [error, setError] = useState('')
   const [enriching, setEnriching] = useState(false)
   const [enrichNote, setEnrichNote] = useState('')
+  const [optOutReason, setOptOutReason] = useState('')
+  const wasOptedOut = (contact?.subscriptions || []).includes('Opted Out')
 
   useEffect(() => {
     companiesAPI.list({}).then(setCompanies).catch(() => {})
@@ -89,21 +91,30 @@ export function ContactModal({ contact, onClose, onSave }: any) {
   }
 
   const toggleSub = (sub: string) => {
-    setForm(p => ({
-      ...p,
-      subscriptions: p.subscriptions.includes(sub)
-        ? p.subscriptions.filter((s: string) => s !== sub)
-        : [...p.subscriptions, sub]
-    }))
+    setForm(p => {
+      const isOn = p.subscriptions.includes(sub)
+      let subscriptions = isOn ? p.subscriptions.filter((s: string) => s !== sub) : [...p.subscriptions, sub]
+      // Opted Out and Marketing Information are mutually exclusive — activating one
+      // clears the other, since an opted-out contact can never receive marketing.
+      if (sub === 'Opted Out' && !isOn) subscriptions = subscriptions.filter((s: string) => s !== 'Marketing Information')
+      if (sub === 'Marketing Information' && !isOn) subscriptions = subscriptions.filter((s: string) => s !== 'Opted Out')
+      return { ...p, subscriptions }
+    })
   }
+
+  const isOptedOut = form.subscriptions.includes('Opted Out')
+  const optOutJustActivated = isOptedOut && !wasOptedOut
 
   const handleSave = async () => {
     if (!form.first_name.trim() || !form.last_name.trim()) { setError('First and last name are required'); return }
+    if (optOutJustActivated && !optOutReason.trim()) { setError('Please explain why this contact is being opted out'); return }
     setSaving(true); setError('')
     try {
       const payload = { ...form, company_id: form.company_id || null, partner_id: form.partner_id || null }
+      let contactId = contact?.id
       if (contact) { await contactsAPI.update(contact.id, payload) }
-      else { await contactsAPI.create(payload) }
+      else { const created = await contactsAPI.create(payload); contactId = created.id }
+      if (optOutJustActivated && contactId) await contactsAPI.createNote(contactId, { content: `Opted out: ${optOutReason.trim()}` })
       onSave()
     } catch (e: any) { setError(e.message) }
     finally { setSaving(false) }
@@ -203,13 +214,22 @@ export function ContactModal({ contact, onClose, onSave }: any) {
           <div>
             <p className="section-label">Subscriptions</p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              {SUBSCRIPTIONS.map(sub => (
-                <label key={sub} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '9px 12px', border: `1.5px solid ${form.subscriptions.includes(sub) ? '#219BD6' : '#E2E8F0'}`, borderRadius: '8px', cursor: 'pointer', background: form.subscriptions.includes(sub) ? '#EFF8FD' : 'white' }}>
-                  <input type="checkbox" checked={form.subscriptions.includes(sub)} onChange={() => toggleSub(sub)} style={{ accentColor: '#219BD6', width: '14px', height: '14px' }} />
-                  <span style={{ fontSize: '12px', fontWeight: '600', color: form.subscriptions.includes(sub) ? '#144766' : '#6B6B6B' }}>{sub}</span>
-                </label>
-              ))}
+              {SUBSCRIPTIONS.map(sub => {
+                const disabled = sub === 'Marketing Information' && isOptedOut
+                return (
+                  <label key={sub} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '9px 12px', border: `1.5px solid ${form.subscriptions.includes(sub) ? (sub === 'Opted Out' ? '#DC2626' : '#219BD6') : '#E2E8F0'}`, borderRadius: '8px', cursor: disabled ? 'not-allowed' : 'pointer', background: disabled ? '#F8FAFC' : form.subscriptions.includes(sub) ? (sub === 'Opted Out' ? '#FEF2F2' : '#EFF8FD') : 'white' }}>
+                    <input type="checkbox" checked={form.subscriptions.includes(sub)} disabled={disabled} onChange={() => toggleSub(sub)} style={{ accentColor: sub === 'Opted Out' ? '#DC2626' : '#219BD6', width: '14px', height: '14px' }} />
+                    <span style={{ fontSize: '12px', fontWeight: '600', color: disabled ? '#9B9B9B' : form.subscriptions.includes(sub) ? '#144766' : '#6B6B6B' }}>{sub}</span>
+                    {disabled && <span style={{ fontSize: '11px', color: '#9B9B9B' }}>— blocked while Opted Out is active</span>}
+                  </label>
+                )
+              })}
             </div>
+            {optOutJustActivated && (
+              <FormField label="Reason for opting out *" full>
+                <textarea className="form-input" value={optOutReason} onChange={e => setOptOutReason(e.target.value)} placeholder="Explain why this contact is being opted out…" rows={2} style={{ resize: 'vertical', marginTop: '8px' }} />
+              </FormField>
+            )}
           </div>
 
           <FormField label="Notes" full>

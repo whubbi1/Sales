@@ -2,12 +2,17 @@
 import { useState, useEffect, useRef } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { MarketingLayout, useMarketingPerm } from '@/components/MarketingLayout'
-import { marketingAPI, partnersAPI } from '@/lib/api'
+import { marketingAPI, partnersAPI, contactsAPI } from '@/lib/api'
 import { getStoredUser } from '@/lib/auth'
 
 const API = 'https://api.whubbi.wcomply.com'
 
 const TYPE_LABEL: Record<string, string> = { webinar: 'Webinar', physical: 'Physical Event', mailing: 'Mailing', other: 'Other' }
+const EVENT_STATUSES = ['To be planned', 'Planned', 'Under preparation', 'Closed']
+const STATUS_COLOR: Record<string, { bg: string; color: string }> = {
+  'To be planned': { bg: '#F1F5F9', color: '#475569' }, 'Planned': { bg: '#EFF6FF', color: '#156082' },
+  'Under preparation': { bg: '#FFF7ED', color: '#D97706' }, 'Closed': { bg: '#F1F5F9', color: '#64748B' },
+}
 
 const card: React.CSSProperties = { background: 'white', borderRadius: '12px', border: '1px solid #EDF2F7', padding: '18px 22px', marginBottom: '14px', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }
 const lbl: React.CSSProperties = { fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#45B6E4', marginBottom: '6px' }
@@ -36,6 +41,7 @@ function EventDetailContent() {
   const [event, setEvent] = useState<any>(null)
   const [users, setUsers] = useState<any[]>([])
   const [partners, setPartners] = useState<any[]>([])
+  const [contacts, setContacts] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [editingField, setEditingField] = useState<string | null>(null)
@@ -45,6 +51,7 @@ function EventDetailContent() {
   const [linkLabel, setLinkLabel] = useState('')
   const [linkUrl, setLinkUrl] = useState('')
   const [addPartnerId, setAddPartnerId] = useState('')
+  const [addContactId, setAddContactId] = useState('')
   const [uploadingLogo, setUploadingLogo] = useState(false)
   const logoInputRef = useRef<HTMLInputElement>(null)
   const [showDelete, setShowDelete] = useState(false)
@@ -64,6 +71,7 @@ function EventDetailContent() {
     load()
     fetch(`${API}/settings/users`).then(r => r.json()).then(d => setUsers(d.users || [])).catch(() => {})
     partnersAPI.list({}).then(setPartners).catch(() => {})
+    contactsAPI.list({}).then(setContacts).catch(() => {})
   }, [id])
 
   if (level === 'loading' || loading) return <div style={{ padding: '48px', textAlign: 'center', color: '#45B6E4' }}>Loading…</div>
@@ -123,6 +131,18 @@ function EventDetailContent() {
     setEvent((prev: any) => ({ ...prev, partners: (prev.partners || []).filter((p: any) => p.id !== partnerId) }))
   }
 
+  const linkContact = async () => {
+    if (!addContactId) return
+    const contact = contacts.find((c: any) => c.id === addContactId)
+    await marketingAPI.linkContact(event.id, addContactId)
+    setAddContactId('')
+    if (contact) setEvent((prev: any) => ({ ...prev, contacts: [...(prev.contacts || []), { id: contact.id, first_name: contact.first_name, last_name: contact.last_name, email: contact.email }] }))
+  }
+  const unlinkContact = async (contactId: string) => {
+    await marketingAPI.unlinkContact(event.id, contactId)
+    setEvent((prev: any) => ({ ...prev, contacts: (prev.contacts || []).filter((c: any) => c.id !== contactId) }))
+  }
+
   const uploadLogo = async (file: File) => {
     setUploadingLogo(true)
     try {
@@ -142,6 +162,8 @@ function EventDetailContent() {
 
   const linkedPartnerIds = new Set((event.partners || []).map((p: any) => p.id))
   const availablePartners = partners.filter((p: any) => !linkedPartnerIds.has(p.id))
+  const linkedContactIds = new Set((event.contacts || []).map((c: any) => c.id))
+  const availableContacts = contacts.filter((c: any) => !linkedContactIds.has(c.id))
 
   return (
     <div style={{ padding: '24px 28px', maxWidth: '900px' }}>
@@ -162,6 +184,12 @@ function EventDetailContent() {
                 editing={editingField === 'event_type'} canEdit={canEdit} onStartEdit={() => setEditingField('event_type')}>
                 <select autoFocus style={inp} defaultValue={event.event_type} onChange={e => updateField({ event_type: e.target.value })} onBlur={() => setEditingField(null)}>
                   {Object.entries(TYPE_LABEL).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                </select>
+              </EditableCell>
+              <EditableCell display={<span style={{ background: STATUS_COLOR[event.status]?.bg || '#F1F5F9', color: STATUS_COLOR[event.status]?.color || '#475569', padding: '2px 9px', borderRadius: '10px', fontSize: '10px', fontWeight: '700' }}>{event.status || 'To be planned'}</span>}
+                editing={editingField === 'status'} canEdit={canEdit} onStartEdit={() => setEditingField('status')}>
+                <select autoFocus style={inp} defaultValue={event.status || 'To be planned'} onChange={e => updateField({ status: e.target.value })} onBlur={() => setEditingField(null)}>
+                  {EVENT_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
                 </select>
               </EditableCell>
             </div>
@@ -272,6 +300,33 @@ function EventDetailContent() {
               <div key={p.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', border: '1px solid #EDF2F7', borderRadius: '8px' }}>
                 <a href={`/partners/${p.id}`} style={{ fontSize: '12px', fontWeight: '600', color: '#156082', textDecoration: 'none' }}>{p.name}</a>
                 {canEdit && <button onClick={() => unlinkPartner(p.id)} style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#94A3B8', fontSize: '14px', padding: 0, lineHeight: 1 }}>×</button>}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div style={card}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+          <div style={lbl}>Linked Contacts ({(event.contacts || []).length})</div>
+        </div>
+        {canEdit && availableContacts.length > 0 && (
+          <div style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
+            <select style={{ ...inp, flex: 1 }} value={addContactId} onChange={e => setAddContactId(e.target.value)}>
+              <option value="">Select a contact…</option>
+              {availableContacts.map((c: any) => <option key={c.id} value={c.id}>{c.first_name} {c.last_name}</option>)}
+            </select>
+            <button onClick={linkContact} disabled={!addContactId} style={{ ...btn, background: '#156082', color: 'white' }}>+ Link</button>
+          </div>
+        )}
+        {(event.contacts || []).length === 0 ? (
+          <p style={{ fontSize: '12px', color: '#94A3B8', margin: 0 }}>No contacts linked yet.</p>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            {event.contacts.map((c: any) => (
+              <div key={c.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', border: '1px solid #EDF2F7', borderRadius: '8px' }}>
+                <a href={`/contacts/${c.id}`} style={{ fontSize: '12px', fontWeight: '600', color: '#156082', textDecoration: 'none' }}>{c.first_name} {c.last_name}</a>
+                {canEdit && <button onClick={() => unlinkContact(c.id)} style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#94A3B8', fontSize: '14px', padding: 0, lineHeight: 1 }}>×</button>}
               </div>
             ))}
           </div>
