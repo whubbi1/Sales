@@ -222,6 +222,10 @@ class OpportunitySummary(BaseModel):
     closing_date: Optional[datetime] = None
     contract_start_date: Optional[datetime] = None
     contract_end_date: Optional[datetime] = None
+    # Surfaced so RFP's linked-opportunities list can be filtered by team on the RFP page —
+    # an RFP has no team fields of its own (it links to Opportunities many-to-many).
+    main_operational_team: Optional[OrgEntitySummary] = None
+    sales_team: Optional[OrgEntitySummary] = None
     class Config:
         from_attributes = True
 

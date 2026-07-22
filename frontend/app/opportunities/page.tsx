@@ -43,6 +43,9 @@ function OpportunitiesContent() {
   const [nameSearch, setNameSearch] = useState('')
   const [operationalTeams, setOperationalTeams] = useState<any[]>([])
   const [salesTeams, setSalesTeams] = useState<any[]>([])
+  const [kpiPopup, setKpiPopup] = useState<string | null>(null)
+  const [popupOpTeam, setPopupOpTeam] = useState('')
+  const [popupSalesTeam, setPopupSalesTeam] = useState('')
 
   const prefillCompanyId = searchParams.get('company_id') || ''
   const prefillPartnerId = searchParams.get('partner_id') || ''
@@ -79,6 +82,12 @@ function OpportunitiesContent() {
   }, [])
 
   const totalValue = opportunities.filter(o => o.deal_amount).reduce((sum, o) => sum + o.deal_amount, 0)
+  const KPI_FILTERS: Record<string, (o: any) => boolean> = {
+    open: (o: any) => !['Contract Lost', 'PO Received', 'Contract Finalised'].includes(o.deal_status),
+    won: (o: any) => ['PO Received', 'Contract Finalised'].includes(o.deal_status),
+    lost: (o: any) => o.deal_status === 'Contract Lost',
+  }
+  const KPI_LABELS: Record<string, string> = { open: 'Open Opportunities', won: 'Won', lost: 'Lost' }
   const pipelineByStatus = STATUS_OPTIONS.map(s => {
     const inStatus = opportunities.filter(o => o.deal_status === s)
     return { status: s, count: inStatus.length, total: inStatus.filter(o => o.deal_amount).reduce((sum, o) => sum + o.deal_amount, 0), opportunities: inStatus }
@@ -119,13 +128,16 @@ function OpportunitiesContent() {
           {/* Summary stats */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px', marginBottom: '16px' }}>
             {[
-              { label: 'Total Pipeline', value: `€${totalValue.toLocaleString('en-US', { minimumFractionDigits: 0 })}`, color: '#144766' },
-              { label: 'Open Opportunities', value: opportunities.filter(o => !['Contract Lost', 'PO Received', 'Contract Finalised'].includes(o.deal_status)).length, color: '#219BD6' },
-              { label: 'Won', value: opportunities.filter(o => ['PO Received', 'Contract Finalised'].includes(o.deal_status)).length, color: '#059669' },
-              { label: 'Lost', value: opportunities.filter(o => o.deal_status === 'Contract Lost').length, color: '#DC2626' },
+              { key: 'total', label: 'Total Pipeline', value: `€${totalValue.toLocaleString('en-US', { minimumFractionDigits: 0 })}`, color: '#144766' },
+              { key: 'open', label: 'Open Opportunities', value: opportunities.filter(KPI_FILTERS.open).length, color: '#219BD6' },
+              { key: 'won', label: 'Won', value: opportunities.filter(KPI_FILTERS.won).length, color: '#059669' },
+              { key: 'lost', label: 'Lost', value: opportunities.filter(KPI_FILTERS.lost).length, color: '#DC2626' },
             ].map(stat => (
-              <div key={stat.label} onClick={stat.label === 'Total Pipeline' ? () => { setExpandedStatus(null); setShowPipelineBreakdown(true) } : undefined}
-                style={{ background: 'white', borderRadius: '10px', border: '1px solid #EDF2F7', padding: '14px 16px', boxShadow: '0 1px 3px rgba(0,0,0,0.06)', cursor: stat.label === 'Total Pipeline' ? 'pointer' : 'default' }}>
+              <div key={stat.label} onClick={() => {
+                  if (stat.label === 'Total Pipeline') { setExpandedStatus(null); setShowPipelineBreakdown(true) }
+                  else { setKpiPopup(stat.key); setPopupOpTeam(''); setPopupSalesTeam('') }
+                }}
+                style={{ background: 'white', borderRadius: '10px', border: '1px solid #EDF2F7', padding: '14px 16px', boxShadow: '0 1px 3px rgba(0,0,0,0.06)', cursor: 'pointer' }}>
                 <div style={{ fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#9B9B9B', marginBottom: '4px' }}>{stat.label}</div>
                 <div style={{ fontSize: '20px', fontWeight: '800', color: stat.color }}>{stat.value}</div>
               </div>
@@ -282,6 +294,56 @@ function OpportunitiesContent() {
             onSave={() => { setShowModal(false); load() }}
           />
         )}
+
+        {kpiPopup && (() => {
+          const matches = withDisplay
+            .filter(KPI_FILTERS[kpiPopup])
+            .filter(o => !popupOpTeam || o.main_operational_team_name === popupOpTeam)
+            .filter(o => !popupSalesTeam || o.sales_team_name === popupSalesTeam)
+          return (
+            <div className="modal-overlay" onClick={() => setKpiPopup(null)}>
+              <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '480px' }}>
+                <div className="modal-header">
+                  <h2 style={{ fontSize: '15px', fontWeight: '700', color: '#144766' }}>{KPI_LABELS[kpiPopup]} ({matches.length})</h2>
+                  <button onClick={() => setKpiPopup(null)} style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: '20px', color: '#9B9B9B', lineHeight: 1 }}>×</button>
+                </div>
+                <div className="modal-body">
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '14px' }}>
+                    <div>
+                      <label className="form-label">Operational Team</label>
+                      <select className="form-input" value={popupOpTeam} onChange={e => setPopupOpTeam(e.target.value)}>
+                        <option value="">All teams</option>
+                        {operationalTeams.map((t: any) => <option key={t.id} value={t.title}>{t.title}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="form-label">Sales Team</label>
+                      <select className="form-input" value={popupSalesTeam} onChange={e => setPopupSalesTeam(e.target.value)}>
+                        <option value="">All teams</option>
+                        {salesTeams.map((t: any) => <option key={t.id} value={t.title}>{t.title}</option>)}
+                      </select>
+                    </div>
+                  </div>
+
+                  {matches.length === 0 ? (
+                    <p style={{ fontSize: '12px', color: '#9B9B9B' }}>No opportunities match this filter.</p>
+                  ) : (
+                    <div style={{ maxHeight: '320px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      {matches.map(o => (
+                        <div key={o.id} onClick={() => router.push(`/opportunities/${o.id}`)}
+                          style={{ padding: '9px 12px', borderRadius: '7px', background: '#F8FAFC', border: '1px solid #EDF2F7', cursor: 'pointer', fontSize: '13px', color: '#144766', fontWeight: '600' }}
+                          onMouseEnter={e => (e.currentTarget.style.background = '#EFF6FF')}
+                          onMouseLeave={e => (e.currentTarget.style.background = '#F8FAFC')}>
+                          {o.deal_name}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )
+        })()}
       </main>
     </div>
   )

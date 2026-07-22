@@ -24,8 +24,19 @@ from app.schemas.schemas import (
     PartnerSummary,
 )
 from app.routers.task_manager import create_task as tm_create_task
+from app.routers.opportunities import _attach_org_teams
 
 router = APIRouter()
+
+
+async def _attach_opportunity_teams(db: AsyncSession, rfps: list):
+    # An RFP can link to several Opportunities (many-to-many) — resolve Operational
+    # Team/Sales Team on each of them so the RFP list page can filter by "does any
+    # linked opportunity belong to this team", same _attach_org_teams used by
+    # opportunities.py itself, just applied to the flattened set across all RFPs here.
+    all_opps = [o for r in rfps for o in (r.opportunities or [])]
+    if all_opps:
+        await _attach_org_teams(db, all_opps)
 
 
 async def _attach_partners(db: AsyncSession, objs: list):
@@ -88,6 +99,7 @@ async def list_rfps(company_id: str = None, status_filter: str = None, db: Async
     result = await db.execute(query)
     rfps = result.scalars().all()
     await _attach_partners(db, rfps)
+    await _attach_opportunity_teams(db, rfps)
     return rfps
 
 
@@ -107,6 +119,7 @@ async def create_rfp(data: RFPCreate, db: AsyncSession = Depends(get_db)):
     r = await db.execute(_load_query().where(RFP.id == rfp.id))
     row = r.scalar_one()
     await _attach_partners(db, [row])
+    await _attach_opportunity_teams(db, [row])
     return row
 
 
@@ -117,6 +130,7 @@ async def get_rfp(rfp_id: UUID, db: AsyncSession = Depends(get_db)):
     if not rfp:
         raise HTTPException(status_code=404, detail="RFP not found")
     await _attach_partners(db, [rfp])
+    await _attach_opportunity_teams(db, [rfp])
     return rfp
 
 
@@ -136,6 +150,7 @@ async def update_rfp(rfp_id: UUID, data: RFPUpdate, db: AsyncSession = Depends(g
     r = await db.execute(_load_query().where(RFP.id == rfp_id))
     row = r.scalar_one()
     await _attach_partners(db, [row])
+    await _attach_opportunity_teams(db, [row])
     return row
 
 

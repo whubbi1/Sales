@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { Sidebar } from '@/components/Sidebar'
-import { rfpAPI } from '@/lib/api'
+import { rfpAPI, legalAPI } from '@/lib/api'
 import { PageHeader, EmptyState } from '@/components/shared/RecordLayout'
 import { useReportBuilder, applyReport, ReportPanel, ReportColumn, ColumnResizeHandle, REPORT_CELL_STYLE, SortArrow, Pagination } from '@/components/it/ReportBuilder'
 import { getStoredUser } from '@/lib/auth'
@@ -29,6 +29,11 @@ export default function RFPPage() {
   const [loading, setLoading] = useState(true)
   const [userEmail, setUserEmail] = useState('')
   const [nameSearch, setNameSearch] = useState('')
+  const [operationalTeams, setOperationalTeams] = useState<any[]>([])
+  const [salesTeams, setSalesTeams] = useState<any[]>([])
+  const [kpiPopup, setKpiPopup] = useState<string | null>(null)
+  const [popupOpTeam, setPopupOpTeam] = useState('')
+  const [popupSalesTeam, setPopupSalesTeam] = useState('')
 
   const rb = useReportBuilder('rfp', COLUMNS, userEmail)
 
@@ -45,13 +50,27 @@ export default function RFPPage() {
     load()
     const u = getStoredUser()
     if (u?.email) setUserEmail(u.email)
+    legalAPI.getOrgEntities('operational_team').then(d => setOperationalTeams(d.org_entities || [])).catch(() => {})
+    legalAPI.getOrgEntities('sales_entity').then(d => setSalesTeams(d.org_entities || [])).catch(() => {})
   }, [])
 
+  // An RFP has no team of its own — it links to Opportunities many-to-many, each with its
+  // own team, so a team "matches" an RFP if ANY linked opportunity belongs to it.
   const withDisplay = rfps.map(r => ({
     ...r,
     customer_name: r.company?.name || r.partner?.name || '',
     opportunities_count: r.opportunities?.length || 0,
+    operational_team_names: (r.opportunities || []).map((o: any) => o.main_operational_team?.title).filter(Boolean),
+    sales_team_names: (r.opportunities || []).map((o: any) => o.sales_team?.title).filter(Boolean),
   }))
+
+  const KPI_FILTERS: Record<string, (r: any) => boolean> = {
+    open: (r: any) => r.status === 'Open',
+    submitted: (r: any) => r.status === 'Submitted',
+    won: (r: any) => r.status === 'Won',
+    lost: (r: any) => r.status === 'Lost',
+  }
+  const KPI_LABELS: Record<string, string> = { total: 'All RFPs', open: 'Open', submitted: 'Submitted', won: 'Won', lost: 'Lost' }
   const searched = withDisplay.filter(r => !nameSearch.trim() || r.name.toLowerCase().includes(nameSearch.trim().toLowerCase()))
   const reported = applyReport(searched, COLUMNS, rb.filters, rb.sortField, rb.sortDir)
   const pageRows = reported.slice((rb.page - 1) * 20, rb.page * 20)
@@ -75,13 +94,14 @@ export default function RFPPage() {
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '12px', marginBottom: '16px' }}>
             {[
-              { label: 'Total Amount', value: `€${totalAmount.toLocaleString('en-US', { minimumFractionDigits: 0 })}`, color: '#144766' },
-              { label: 'Open', value: withDisplay.filter(r => r.status === 'Open').length, color: '#219BD6' },
-              { label: 'Submitted', value: withDisplay.filter(r => r.status === 'Submitted').length, color: '#D97706' },
-              { label: 'Won', value: withDisplay.filter(r => r.status === 'Won').length, color: '#059669' },
-              { label: 'Lost', value: withDisplay.filter(r => r.status === 'Lost').length, color: '#DC2626' },
+              { key: 'total', label: 'Total Amount', value: `€${totalAmount.toLocaleString('en-US', { minimumFractionDigits: 0 })}`, color: '#144766' },
+              { key: 'open', label: 'Open', value: withDisplay.filter(r => r.status === 'Open').length, color: '#219BD6' },
+              { key: 'submitted', label: 'Submitted', value: withDisplay.filter(r => r.status === 'Submitted').length, color: '#D97706' },
+              { key: 'won', label: 'Won', value: withDisplay.filter(r => r.status === 'Won').length, color: '#059669' },
+              { key: 'lost', label: 'Lost', value: withDisplay.filter(r => r.status === 'Lost').length, color: '#DC2626' },
             ].map(stat => (
-              <div key={stat.label} style={{ background: 'white', borderRadius: '10px', border: '1px solid #EDF2F7', padding: '14px 16px', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
+              <div key={stat.label} onClick={() => { setKpiPopup(stat.key); setPopupOpTeam(''); setPopupSalesTeam('') }}
+                style={{ background: 'white', borderRadius: '10px', border: '1px solid #EDF2F7', padding: '14px 16px', boxShadow: '0 1px 3px rgba(0,0,0,0.06)', cursor: 'pointer' }}>
                 <div style={{ fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#9B9B9B', marginBottom: '4px' }}>{stat.label}</div>
                 <div style={{ fontSize: '20px', fontWeight: '800', color: stat.color }}>{stat.value}</div>
               </div>
@@ -143,6 +163,56 @@ export default function RFPPage() {
             <Pagination page={rb.page} setPage={rb.setPage} total={reported.length} />
           </div>
         </div>
+
+        {kpiPopup && (() => {
+          const matches = withDisplay
+            .filter(r => kpiPopup === 'total' || KPI_FILTERS[kpiPopup](r))
+            .filter(r => !popupOpTeam || r.operational_team_names.includes(popupOpTeam))
+            .filter(r => !popupSalesTeam || r.sales_team_names.includes(popupSalesTeam))
+          return (
+            <div className="modal-overlay" onClick={() => setKpiPopup(null)}>
+              <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '480px' }}>
+                <div className="modal-header">
+                  <h2 style={{ fontSize: '15px', fontWeight: '700', color: '#144766' }}>{KPI_LABELS[kpiPopup]} ({matches.length})</h2>
+                  <button onClick={() => setKpiPopup(null)} style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: '20px', color: '#9B9B9B', lineHeight: 1 }}>×</button>
+                </div>
+                <div className="modal-body">
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '14px' }}>
+                    <div>
+                      <label className="form-label">Operational Team</label>
+                      <select className="form-input" value={popupOpTeam} onChange={e => setPopupOpTeam(e.target.value)}>
+                        <option value="">All teams</option>
+                        {operationalTeams.map((t: any) => <option key={t.id} value={t.title}>{t.title}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="form-label">Sales Team</label>
+                      <select className="form-input" value={popupSalesTeam} onChange={e => setPopupSalesTeam(e.target.value)}>
+                        <option value="">All teams</option>
+                        {salesTeams.map((t: any) => <option key={t.id} value={t.title}>{t.title}</option>)}
+                      </select>
+                    </div>
+                  </div>
+
+                  {matches.length === 0 ? (
+                    <p style={{ fontSize: '12px', color: '#9B9B9B' }}>No RFPs match this filter.</p>
+                  ) : (
+                    <div style={{ maxHeight: '320px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      {matches.map(r => (
+                        <div key={r.id} onClick={() => router.push(`/rfp/${r.id}`)}
+                          style={{ padding: '9px 12px', borderRadius: '7px', background: '#F8FAFC', border: '1px solid #EDF2F7', cursor: 'pointer', fontSize: '13px', color: '#144766', fontWeight: '600' }}
+                          onMouseEnter={e => (e.currentTarget.style.background = '#EFF6FF')}
+                          onMouseLeave={e => (e.currentTarget.style.background = '#F8FAFC')}>
+                          {r.name}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )
+        })()}
       </main>
     </div>
   )
