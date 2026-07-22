@@ -1661,6 +1661,13 @@ async def startup():
                     owner_email VARCHAR(255), owner_name VARCHAR(255),
                     content TEXT NOT NULL, created_at TIMESTAMP DEFAULT NOW()
                 )""",
+
+                # Contact/Lead Data Source — where the contact originated. Plain columns, no
+                # FK object (polymorphic across marketing_events/projects/partners), same
+                # reasoning as contacts.partner_id above.
+                "ALTER TABLE contacts ADD COLUMN IF NOT EXISTS data_source VARCHAR(20) DEFAULT 'LinkedIn'",
+                "ALTER TABLE contacts ADD COLUMN IF NOT EXISTS data_source_ref_type VARCHAR(20)",
+                "ALTER TABLE contacts ADD COLUMN IF NOT EXISTS data_source_ref_id UUID",
             ]
             for sql in sqls:
                 try:

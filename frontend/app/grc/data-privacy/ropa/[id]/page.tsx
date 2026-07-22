@@ -81,6 +81,10 @@ function ROPADetailContent() {
   const [showTaskModal, setShowTaskModal] = useState(false)
   const [editingTask, setEditingTask] = useState<any>(null)
 
+  const [showDelete, setShowDelete] = useState(false)
+  const [deleteConfirm, setDeleteConfirm] = useState('')
+  const [deleting, setDeleting] = useState(false)
+
   const me = getStoredUser()
 
   const load = async () => {
@@ -165,9 +169,19 @@ function ROPADetailContent() {
     reloadTasks()
   }
 
+  const handleDelete = async () => {
+    if (deleteConfirm !== 'DELETE') return
+    setDeleting(true)
+    try { await ropaAPI.delete(record.id); router.push('/grc/data-privacy') }
+    catch (e: any) { setError(e.message); setDeleting(false) }
+  }
+
   return (
     <div style={{ padding: '24px 28px', maxWidth: '900px' }}>
-      <button onClick={() => router.push('/grc/data-privacy')} style={{ background: 'none', border: 'none', color: '#45B6E4', fontSize: '12px', fontWeight: '700', cursor: 'pointer', padding: 0, marginBottom: '14px' }}>← Back to Data & Privacy</button>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
+        <button onClick={() => router.push('/grc/data-privacy')} style={{ background: 'none', border: 'none', color: '#45B6E4', fontSize: '12px', fontWeight: '700', cursor: 'pointer', padding: 0 }}>← Back to Data & Privacy</button>
+        {canEdit && <button onClick={() => { setDeleteConfirm(''); setShowDelete(true) }} style={{ ...btn, background: 'white', color: '#DC2626', border: '1.5px solid #FCA5A5' }}>Delete Record</button>}
+      </div>
 
       <div style={card}>
         <EditableCell display={<h1 style={{ fontSize: '19px', fontWeight: '800', color: '#156082', margin: '0 0 6px' }}>{record.name}</h1>}
@@ -333,6 +347,33 @@ function ROPADetailContent() {
           onClose={() => setShowTaskModal(false)}
           onSave={() => { setShowTaskModal(false); reloadTasks() }}
         />
+      )}
+
+      {showDelete && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+          onClick={e => { if (e.target === e.currentTarget) setShowDelete(false) }}>
+          <div style={{ background: 'white', borderRadius: '14px', width: '420px', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
+            <div style={{ padding: '20px 24px', borderBottom: '1px solid #EDF2F7', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <h2 style={{ fontSize: '15px', fontWeight: '800', color: '#DC2626', margin: 0 }}>Delete ROPA Record</h2>
+              <button onClick={() => setShowDelete(false)} style={{ background: 'none', border: 'none', fontSize: '20px', cursor: 'pointer', color: '#94A3B8' }}>×</button>
+            </div>
+            <div style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              <p style={{ fontSize: '13px', color: '#3F3F3F', margin: 0 }}>You are about to permanently delete <strong>{record.name}</strong>, including its comments, files, and revision history. This cannot be undone.</p>
+              <div>
+                <div style={lbl}>Type DELETE to confirm</div>
+                <input autoFocus style={{ ...inp, width: '100%', boxSizing: 'border-box' as const }} value={deleteConfirm}
+                  onChange={e => setDeleteConfirm(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') handleDelete() }} placeholder="DELETE" />
+              </div>
+              <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+                <button onClick={() => setShowDelete(false)} style={{ ...btn, background: '#F1F5F9', color: '#64748B' }}>Cancel</button>
+                <button onClick={handleDelete} disabled={deleteConfirm !== 'DELETE' || deleting}
+                  style={{ ...btn, background: deleteConfirm === 'DELETE' ? '#DC2626' : '#FCA5A5', color: 'white', cursor: deleteConfirm === 'DELETE' ? 'pointer' : 'not-allowed' }}>
+                  {deleting ? 'Deleting…' : 'Delete Record'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )

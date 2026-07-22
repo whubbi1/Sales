@@ -25,6 +25,13 @@ class Contact(Base):
     # level by the ALTER TABLE migration in main.py, not declared here to avoid mapper-resolution issues.
     partner_id      = Column(UUID(as_uuid=True), nullable=True)
 
+    # Where this contact/lead originated. When not 'LinkedIn', ref_type/ref_id point at the
+    # specific record (marketing_events / projects / partners) — plain column, no FK object,
+    # since it's polymorphic across three different tables (same reasoning as partner_id above).
+    data_source          = Column(String(20), default='LinkedIn')
+    data_source_ref_type = Column(String(20), nullable=True)
+    data_source_ref_id   = Column(UUID(as_uuid=True), nullable=True)
+
     first_name      = Column(String(255), nullable=False)
     last_name       = Column(String(255), nullable=False)
     email           = Column(String(255))

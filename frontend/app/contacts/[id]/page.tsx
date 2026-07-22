@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import { contactsAPI } from '@/lib/api'
+import { contactsAPI, marketingAPI, projectsAPI, partnersAPI } from '@/lib/api'
 import { RecordLayout, PropertyRow, SidebarSection, SidebarCard, StatusBadge, TabNav } from '@/components/shared/RecordLayout'
 import { ContactModal } from '@/components/contacts/ContactModal'
 import { ContactNotes } from '@/components/contacts/ContactNotes'
@@ -10,6 +10,58 @@ import { EntityTasks } from '@/components/tasks/EntityTasks'
 import { ActivityFeed } from '@/components/shared/ActivityFeed'
 
 const SUB_LABELS: Record<string, string> = { 'Marketing Information': '📧', 'Customer Service Communication': '💬', 'One to One': '🤝' }
+
+const DATA_SOURCE_OPTIONS = ['LinkedIn', 'Event', 'Project', 'Partner']
+
+// Maps a Data Source ref type to how to fetch/list/label its records.
+const REF_TYPE_CONFIG: Record<string, { fetch: () => Promise<any[]>; label: (r: any) => string }> = {
+  Event:   { fetch: () => marketingAPI.listEvents().then((d: any) => d.events || []), label: (r: any) => r.title },
+  Project: { fetch: () => projectsAPI.list(), label: (r: any) => r.project_name },
+  Partner: { fetch: () => partnersAPI.list(), label: (r: any) => r.name },
+}
+
+function DataSourcePickerModal({ type, onClose, onSelect }: { type: string; onClose: () => void; onSelect: (id: string, name: string) => void }) {
+  const [items, setItems] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+  const [search, setSearch] = useState('')
+  const cfg = REF_TYPE_CONFIG[type]
+
+  useEffect(() => {
+    cfg.fetch().then(setItems).catch(() => setItems({} as any)).finally(() => setLoading(false))
+  }, [type])
+
+  const filtered = (Array.isArray(items) ? items : []).filter(i => !search || cfg.label(i)?.toLowerCase().includes(search.toLowerCase()))
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '440px' }}>
+        <div className="modal-header">
+          <h2 style={{ fontSize: '15px', fontWeight: '700', color: '#144766' }}>Select {type}</h2>
+          <button onClick={onClose} style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: '20px', color: '#9B9B9B', lineHeight: 1 }}>×</button>
+        </div>
+        <div className="modal-body">
+          <input className="form-input" autoFocus placeholder={`Search ${type.toLowerCase()}s…`} value={search} onChange={e => setSearch(e.target.value)} style={{ width: '100%', boxSizing: 'border-box', marginBottom: '10px' }} />
+          <div style={{ maxHeight: '320px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+            {loading ? (
+              <p style={{ fontSize: '12px', color: '#9B9B9B', textAlign: 'center', padding: '20px' }}>Loading…</p>
+            ) : filtered.length === 0 ? (
+              <p style={{ fontSize: '12px', color: '#9B9B9B', textAlign: 'center', padding: '20px' }}>No {type.toLowerCase()}s found.</p>
+            ) : filtered.map(item => (
+              <div key={item.id} onClick={() => onSelect(item.id, cfg.label(item))}
+                style={{ padding: '9px 12px', borderRadius: '7px', border: '1px solid #EDF2F7', cursor: 'pointer', fontSize: '13px', color: '#144766', fontWeight: '600' }}
+                onMouseEnter={e => (e.currentTarget.style.background = '#F1F5F9')} onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
+                {cfg.label(item) || '(unnamed)'}
+              </div>
+            ))}
+          </div>
+        </div>
+        <div className="modal-footer">
+          <button className="btn-secondary" onClick={onClose}>Cancel</button>
+        </div>
+      </div>
+    </div>
+  )
+}
 
 export default function ContactDetailPage() {
   const { id } = useParams()
@@ -25,6 +77,10 @@ export default function ContactDetailPage() {
   const [deleteConfirm, setDeleteConfirm] = useState('')
   const [deleting, setDeleting] = useState(false)
 
+  const [editingDataSource, setEditingDataSource] = useState(false)
+  const [dataSourceRefName, setDataSourceRefName] = useState('')
+  const [pickerType, setPickerType] = useState<string | null>(null)
+
   const load = async () => {
     try {
       const [c, opps, ntes, lds] = await Promise.all([
@@ -37,11 +93,41 @@ export default function ContactDetailPage() {
       setOpportunities(opps)
       setNotes(ntes)
       setLeads(lds)
+      if (c.data_source_ref_type && c.data_source_ref_id) {
+        const cfg = REF_TYPE_CONFIG[c.data_source_ref_type]
+        if (cfg) {
+          const items = await cfg.fetch().catch(() => [])
+          const match = (Array.isArray(items) ? items : []).find((i: any) => i.id === c.data_source_ref_id)
+          setDataSourceRefName(match ? cfg.label(match) : '')
+        }
+      } else {
+        setDataSourceRefName('')
+      }
     } catch {
       router.push('/contacts')
     } finally {
       setLoading(false)
     }
+  }
+
+  const saveDataSource = async (newSource: string) => {
+    setEditingDataSource(false)
+    if (newSource === 'LinkedIn') {
+      await contactsAPI.update(contact.id, { data_source: 'LinkedIn', data_source_ref_type: null, data_source_ref_id: null })
+      load()
+    } else {
+      await contactsAPI.update(contact.id, { data_source: newSource, data_source_ref_type: newSource, data_source_ref_id: null })
+      setPickerType(newSource)
+      load()
+    }
+  }
+
+  const selectDataSourceRef = async (refId: string, refName: string) => {
+    if (!pickerType) return
+    await contactsAPI.update(contact.id, { data_source: pickerType, data_source_ref_type: pickerType, data_source_ref_id: refId })
+    setDataSourceRefName(refName)
+    setPickerType(null)
+    load()
   }
 
   useEffect(() => { load() }, [id])
@@ -146,6 +232,26 @@ export default function ContactDetailPage() {
         <PropertyRow label="Job Title" value={contact.job_name} />
         <PropertyRow label="Job Type" value={contact.job_type} />
         <PropertyRow label="Lead Status" value={contact.lead_status ? <StatusBadge value={contact.lead_status} /> : null} />
+        <PropertyRow label="Data Source" value={
+          editingDataSource ? (
+            <select autoFocus className="form-input" style={{ fontSize: '12px', padding: '4px 6px' }} defaultValue={contact.data_source || 'LinkedIn'}
+              onChange={e => saveDataSource(e.target.value)} onBlur={() => setEditingDataSource(false)}>
+              {DATA_SOURCE_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
+            </select>
+          ) : (
+            <span>
+              <span onClick={() => setEditingDataSource(true)} title="Click to change" style={{ cursor: 'pointer', padding: '4px 6px', margin: '-4px -6px', borderRadius: '5px', display: 'inline-block' }}
+                onMouseEnter={e => (e.currentTarget.style.background = '#F1F5F9')} onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
+                {contact.data_source || 'LinkedIn'}
+              </span>
+              {contact.data_source && contact.data_source !== 'LinkedIn' && (
+                <span onClick={() => setPickerType(contact.data_source)} title="Click to select the record" style={{ cursor: 'pointer', color: dataSourceRefName ? '#144766' : '#DC2626', marginLeft: '4px' }}>
+                  — {dataSourceRefName || 'select…'}
+                </span>
+              )}
+            </span>
+          )
+        } />
         <PropertyRow label="Language" value={contact.preferred_language} />
         <PropertyRow label="Assigned To" value={contact.assigned_to} />
       </SidebarSection>
@@ -167,6 +273,7 @@ export default function ContactDetailPage() {
     <>
       <RecordLayout leftColumn={leftColumn} rightColumn={rightColumn} />
       {showEdit && <ContactModal contact={contact} onClose={() => setShowEdit(false)} onSave={() => { setShowEdit(false); load() }} />}
+      {pickerType && <DataSourcePickerModal type={pickerType} onClose={() => setPickerType(null)} onSelect={selectDataSourceRef} />}
       {showDelete && (
         <div className="modal-overlay" onClick={() => setShowDelete(false)}>
           <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '420px' }}>

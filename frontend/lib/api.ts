@@ -391,6 +391,14 @@ export const ropaAPI = {
   getRevisions:  (id: string) => fetchAPI(`/grc/ropa/${id}/revisions/`),
   addRevision:   (id: string, d: any) => fetchAPI(`/grc/ropa/${id}/revisions/`, { method: 'POST', body: JSON.stringify(d) }),
   deleteRevision:(id: string, revisionId: string) => fetchAPI(`/grc/ropa/${id}/revisions/${revisionId}`, { method: 'DELETE' }),
+
+  extractFromFile: async (file: File) => {
+    const fd = new FormData()
+    fd.append('file', file)
+    const res = await fetch(`${API_URL}/grc/ropa/extract`, { method: 'POST', body: fd })
+    if (!res.ok) { const err = await res.json().catch(() => ({})); throw new Error(err.detail || 'Extraction failed') }
+    return res.json()
+  },
 }
 
 // ─── MCP personal access tokens (connect Claude Code/Desktop to WHUBBI) ────────

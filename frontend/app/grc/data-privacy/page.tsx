@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { GRCLayout, useGRCPerm } from '@/components/GRCLayout'
 import { ropaAPI } from '@/lib/api'
@@ -36,6 +36,8 @@ function CreateModal({ onClose, onCreated }: { onClose: () => void; onCreated: (
   const [form, setForm] = useState<Record<string, string>>({})
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  const [extracting, setExtracting] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const submit = async () => {
     if (!form.name?.trim()) { setError('Name is required'); return }
@@ -48,6 +50,22 @@ function CreateModal({ onClose, onCreated }: { onClose: () => void; onCreated: (
     finally { setSaving(false) }
   }
 
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setExtracting(true); setError('')
+    try {
+      const r = await ropaAPI.extractFromFile(file)
+      if (r.error) { setError(`Could not auto-fill from file: ${r.error}`) }
+      else {
+        const cleaned: Record<string, string> = {}
+        for (const [k, v] of Object.entries(r.extracted || {})) { if (v) cleaned[k] = String(v) }
+        setForm(prev => ({ ...prev, ...cleaned }))
+      }
+    } catch (e: any) { setError(e.message) }
+    finally { setExtracting(false); if (fileInputRef.current) fileInputRef.current.value = '' }
+  }
+
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
       onClick={e => { if (e.target === e.currentTarget) onClose() }}>
@@ -57,6 +75,16 @@ function CreateModal({ onClose, onCreated }: { onClose: () => void; onCreated: (
           <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: '20px', cursor: 'pointer', color: '#94A3B8' }}>×</button>
         </div>
         <div style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+          <div style={{ padding: '12px 14px', background: '#EFF6FF', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px' }}>
+            <div>
+              <div style={{ fontSize: '12px', fontWeight: '700', color: '#156082' }}>Auto-fill from a document</div>
+              <div style={{ fontSize: '11px', color: '#64748B' }}>Upload a PDF or text file describing the activity — the fields below will be pre-filled.</div>
+            </div>
+            <input ref={fileInputRef} type="file" style={{ display: 'none' }} onChange={handleFileSelect} />
+            <button onClick={() => fileInputRef.current?.click()} disabled={extracting} style={{ ...btn, background: '#156082', color: 'white', flexShrink: 0 }}>
+              {extracting ? 'Reading…' : '+ Upload File'}
+            </button>
+          </div>
           {CREATE_FIELDS.map(f => (
             <div key={f.key}>
               <label style={lbl}>{f.label}{f.key === 'name' ? ' *' : ''}</label>

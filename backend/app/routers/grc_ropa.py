@@ -8,9 +8,11 @@ from sqlalchemy import text
 from app.database import get_db
 from app.routers.hr import upload_to_s3, s3_ref_to_presigned
 from datetime import datetime
-import uuid
+import uuid, os, json, httpx
 
 router = APIRouter()
+
+ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 
 RECORD_FIELDS = [
     "name", "objective", "legal_base", "application",
@@ -33,6 +35,73 @@ async def _get_record(db: AsyncSession, ropa_id: str) -> dict | None:
     r = await db.execute(text("SELECT * FROM ropa_records WHERE id = CAST(:id AS UUID)"), {"id": ropa_id})
     row = r.fetchone()
     return _row(dict(row._mapping)) if row else None
+
+
+# ─── Extract ROPA fields from an uploaded document (Claude) ────────────────────
+EXTRACT_PROMPT = """Extract information about this data processing activity from the attached document and return ONLY a valid JSON object with this exact structure — use "" for anything not found:
+{
+  "name": "",
+  "objective": "",
+  "legal_base": "",
+  "application": "",
+  "data_subject_categories": "",
+  "data_categories": "",
+  "data_source": "",
+  "internal_recipients": "",
+  "external_recipients": "",
+  "transfers_outside_eu": "",
+  "retention_period": ""
+}
+Return ONLY the JSON, no markdown, no explanation."""
+
+
+async def extract_ropa_with_claude(content: bytes, filename: str, content_type: str) -> dict:
+    if not ANTHROPIC_API_KEY:
+        raise ValueError("ANTHROPIC_API_KEY not configured")
+
+    is_pdf = content_type == "application/pdf" or filename.lower().endswith(".pdf")
+    if is_pdf:
+        import base64
+        b64 = base64.standard_b64encode(content).decode("utf-8")
+        message_content = [
+            {"type": "document", "source": {"type": "base64", "media_type": "application/pdf", "data": b64}},
+            {"type": "text", "text": EXTRACT_PROMPT},
+        ]
+    else:
+        text_content = content.decode("utf-8", errors="ignore")
+        message_content = [{"type": "text", "text": f"{EXTRACT_PROMPT}\n\n--- Document content ---\n{text_content}"}]
+
+    async with httpx.AsyncClient(timeout=60) as client:
+        r = await client.post(
+            "https://api.anthropic.com/v1/messages",
+            headers={
+                "x-api-key": ANTHROPIC_API_KEY,
+                "anthropic-version": "2023-06-01",
+                "anthropic-beta": "pdfs-2024-09-25",
+                "content-type": "application/json",
+            },
+            json={
+                "model": "claude-sonnet-4-6",
+                "max_tokens": 2000,
+                "messages": [{"role": "user", "content": message_content}],
+            },
+        )
+        if r.status_code != 200:
+            raise ValueError(f"Claude API error {r.status_code}: {r.text[:200]}")
+        raw = r.json()["content"][0]["text"].strip()
+        raw = raw.replace("```json", "").replace("```", "").strip()
+        return json.loads(raw)
+
+
+@router.post("/ropa/extract")
+async def extract_ropa(file: UploadFile = File(...)):
+    content = await file.read()
+    try:
+        extracted = await extract_ropa_with_claude(content, file.filename, file.content_type or "")
+        return {"extracted": extracted, "filename": file.filename}
+    except Exception as e:
+        print(f"ROPA extraction error: {e}")
+        return {"extracted": {}, "error": str(e), "filename": file.filename}
 
 
 # ─── Records ─────────────────────────────────────────────────────────────────────

@@ -146,6 +146,9 @@ class ContactBase(BaseModel):
     assigned_to: Optional[str] = None
     assigned_to_email: Optional[str] = None
     notes: Optional[str] = None
+    data_source: Optional[str] = "LinkedIn"
+    data_source_ref_type: Optional[str] = None
+    data_source_ref_id: Optional[UUID] = None
 
     @field_validator("job_type", "lead_status", mode="before")
     @classmethod
