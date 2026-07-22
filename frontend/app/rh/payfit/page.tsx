@@ -25,6 +25,9 @@ export default function PayfitSyncPage() {
   const [showNewAbsence, setShowNewAbsence] = useState(false)
   const [newAbsence, setNewAbsence] = useState({ collaborator_payfit_id: '', absence_type: 'paid_holiday', start_date: '', end_date: '' })
   const [creatingAbsence, setCreatingAbsence] = useState(false)
+  const [expandedId, setExpandedId] = useState<string | null>(null)
+  const [contracts, setContracts] = useState<Record<string, any>>({})
+  const [loadingContract, setLoadingContract] = useState<Record<string, boolean>>({})
 
   useEffect(() => {
     const user = getStoredUser(); if (user) setUserEmail(user.email)
@@ -108,6 +111,19 @@ export default function PayfitSyncPage() {
       loadAbsences()
     } catch (e: any) {
       flash(e.message, 'error')
+    }
+  }
+
+  const toggleExpand = (c: any) => {
+    const next = expandedId === c.id ? null : c.id
+    setExpandedId(next)
+    if (next && !contracts[c.id] && !loadingContract[c.id]) {
+      setLoadingContract(prev => ({ ...prev, [c.id]: true }))
+      fetch(`${API}/payfit/collaborators/${c.id}/contract`)
+        .then(r => r.json())
+        .then(d => setContracts(prev => ({ ...prev, [c.id]: d })))
+        .catch(() => setContracts(prev => ({ ...prev, [c.id]: { available: false, reason: 'Could not reach PayFit' } })))
+        .finally(() => setLoadingContract(prev => ({ ...prev, [c.id]: false })))
     }
   }
 
@@ -195,17 +211,84 @@ export default function PayfitSyncPage() {
           {filteredCollaborators.length === 0 && (
             <div style={{ padding: '24px', textAlign: 'center', color: '#94A3B8', fontSize: '12px' }}>No collaborators synced yet.</div>
           )}
-          {filteredCollaborators.map((c, i) => (
-            <div key={c.id} style={{ padding: '10px 20px', borderTop: i === 0 ? 'none' : '1px solid #F9FAFB', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div>
-                <div style={{ fontSize: '12px', fontWeight: '700', color: '#3F3F3F' }}>{c.first_name} {c.last_name}</div>
-                <div style={{ fontSize: '11px', color: '#94A3B8' }}>{c.email || '—'} · PayFit ID {c.payfit_id}</div>
+          {filteredCollaborators.map((c, i) => {
+            const expanded = expandedId === c.id
+            const contract = contracts[c.id]
+            return (
+              <div key={c.id} style={{ borderTop: i === 0 ? 'none' : '1px solid #F9FAFB' }}>
+                <div style={{ padding: '10px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div onClick={() => toggleExpand(c)} style={{ cursor: 'pointer', flex: 1 }}>
+                    <div style={{ fontSize: '12px', fontWeight: '700', color: '#3F3F3F' }}>{c.first_name} {c.last_name}</div>
+                    <div style={{ fontSize: '11px', color: '#94A3B8' }}>{c.email || '—'} · PayFit ID {c.payfit_id}</div>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+                    <div style={{ fontSize: '11px', color: c.whubbi_user_email ? '#059669' : '#94A3B8', fontWeight: '600' }}>
+                      {c.whubbi_user_email || 'Not linked to a WHUBBI user'}
+                    </div>
+                    <button onClick={() => toggleExpand(c)}
+                      style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '4px 10px', background: expanded ? '#156082' : '#EFF6FF', color: expanded ? 'white' : '#156082', border: 'none', borderRadius: '6px', fontSize: '10px', fontWeight: '700', cursor: 'pointer', fontFamily: 'Montserrat, sans-serif', whiteSpace: 'nowrap' }}>
+                      Extend
+                      <svg width="10" height="10" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}
+                        style={{ transform: expanded ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }}>
+                        <polyline points="6 9 12 15 18 9" />
+                      </svg>
+                    </button>
+                  </div>
+                </div>
+
+                {expanded && (
+                  <div style={{ padding: '14px 20px 16px', background: '#FAFBFC', borderTop: '1px solid #F1F5F9' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '12px', marginBottom: '12px' }}>
+                      <div>
+                        <div style={{ fontSize: '9px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#94A3B8', marginBottom: '2px' }}>Matricule</div>
+                        <div style={{ fontSize: '12px', color: '#3F3F3F', fontWeight: '600' }}>{c.matricule || '—'}</div>
+                      </div>
+                      <div>
+                        <div style={{ fontSize: '9px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#94A3B8', marginBottom: '2px' }}>Birthday</div>
+                        <div style={{ fontSize: '12px', color: '#3F3F3F', fontWeight: '600' }}>
+                          {c.birth_date ? new Date(c.birth_date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}
+                        </div>
+                      </div>
+                      <div>
+                        <div style={{ fontSize: '9px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#94A3B8', marginBottom: '2px' }}>Manager</div>
+                        <div style={{ fontSize: '12px', color: '#3F3F3F', fontWeight: '600' }}>
+                          {c.manager_first_name ? `${c.manager_first_name} ${c.manager_last_name}` : (c.manager_payfit_id ? 'Not yet synced' : '—')}
+                        </div>
+                      </div>
+                      <div>
+                        <div style={{ fontSize: '9px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#94A3B8', marginBottom: '2px' }}>Team</div>
+                        <div style={{ fontSize: '12px', color: '#3F3F3F', fontWeight: '600' }}>{c.team_name || '—'}</div>
+                      </div>
+                    </div>
+
+                    <div style={{ fontSize: '9px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#94A3B8', marginBottom: '6px' }}>Contract</div>
+                    {loadingContract[c.id] ? (
+                      <div style={{ fontSize: '11px', color: '#94A3B8' }}>Checking with PayFit…</div>
+                    ) : contract?.available ? (
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '12px' }}>
+                        <div>
+                          <div style={{ fontSize: '9px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#94A3B8', marginBottom: '2px' }}>Start Date</div>
+                          <div style={{ fontSize: '12px', color: '#3F3F3F', fontWeight: '600' }}>{contract.start_date || '—'}</div>
+                        </div>
+                        <div>
+                          <div style={{ fontSize: '9px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#94A3B8', marginBottom: '2px' }}>End Date</div>
+                          <div style={{ fontSize: '12px', color: '#3F3F3F', fontWeight: '600' }}>{contract.end_date || '—'}</div>
+                        </div>
+                        <div>
+                          <div style={{ fontSize: '9px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#94A3B8', marginBottom: '2px' }}>Status</div>
+                          <div style={{ fontSize: '12px', color: '#3F3F3F', fontWeight: '600' }}>{contract.status || '—'}</div>
+                        </div>
+                      </div>
+                    ) : (
+                      <div style={{ fontSize: '11px', color: '#D97706', background: '#FFF7ED', padding: '8px 12px', borderRadius: '6px', display: 'inline-block' }}>
+                        ⚠️ {contract?.reason || 'Not available.'}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
-              <div style={{ fontSize: '11px', color: c.whubbi_user_email ? '#059669' : '#94A3B8', fontWeight: '600' }}>
-                {c.whubbi_user_email || 'Not linked to a WHUBBI user'}
-              </div>
-            </div>
-          ))}
+            )
+          })}
         </div>
 
         {/* Absences list */}

@@ -256,11 +256,15 @@ async def sync_collaborators(triggered_by: str = "manual", db: AsyncSession = De
 
 @router.get("/collaborators")
 async def list_collaborators(search: str = None, db: AsyncSession = Depends(get_db)):
-    where = "WHERE first_name ILIKE :q OR last_name ILIKE :q OR email ILIKE :q" if search else ""
+    where = "WHERE pc.first_name ILIKE :q OR pc.last_name ILIKE :q OR pc.email ILIKE :q" if search else ""
     params = {"q": f"%{search}%"} if search else {}
     r = await db.execute(text(f"""
-        SELECT id::text, payfit_id, first_name, last_name, email, whubbi_user_email, synced_at
-        FROM payfit_collaborators {where} ORDER BY last_name, first_name
+        SELECT pc.id::text, pc.payfit_id, pc.first_name, pc.last_name, pc.email, pc.whubbi_user_email,
+               pc.matricule, pc.birth_date, pc.team_name, pc.manager_payfit_id, pc.synced_at,
+               mgr.first_name AS manager_first_name, mgr.last_name AS manager_last_name
+        FROM payfit_collaborators pc
+        LEFT JOIN payfit_collaborators mgr ON mgr.payfit_id = pc.manager_payfit_id
+        {where} ORDER BY pc.last_name, pc.first_name
     """), params)
     return {"collaborators": [dict(row._mapping) for row in r.fetchall()]}
 
@@ -273,6 +277,47 @@ async def link_collaborator(collaborator_id: str, data: dict, db: AsyncSession =
     """), {"id": collaborator_id, "email": data.get("whubbi_user_email", "")})
     await db.commit()
     return {"status": "updated"}
+
+
+async def _resolve_contract(payfit_id: str) -> dict:
+    """Contract data is (supposedly) embedded on the collaborator-by-id response, gated by
+    the collaborators:contracts:read scope — separate from the top-level /contracts list
+    endpoint (gated by contracts:read, which 403s). Confirmed via /payfit/test/collaborator_detail
+    that neither scope is actually granted: the response is 200 (base access is fine) but
+    the `contracts` key is entirely absent, not an empty list — so this key genuinely can't
+    see contract data via either path yet, not "this person has no contracts."""
+    try:
+        resp = await _payfit_request("GET", _company_path(f"/collaborators/{payfit_id}"))
+        if resp.status_code == 200:
+            body = resp.json()
+            if "contracts" not in body:
+                return {"available": False, "reason": "Contract data requires the collaborators:contracts:read scope on the PayFit API key, which hasn't been granted yet."}
+            contracts = body.get("contracts") or []
+            latest = contracts[-1] if contracts else None
+            if latest:
+                return {
+                    "available": True,
+                    "start_date": latest.get("startDate"),
+                    "end_date": latest.get("endDate"),
+                    "status": latest.get("status"),
+                }
+            return {"available": False, "reason": "No contracts on file for this collaborator."}
+        if resp.status_code == 403:
+            return {"available": False, "reason": "Contract data requires the collaborators:contracts:read scope on the PayFit API key, which hasn't been granted yet."}
+        return {"available": False, "reason": f"PayFit returned {resp.status_code}"}
+    except Exception as e:
+        return {"available": False, "reason": str(e)}
+
+
+@router.get("/collaborators/{collaborator_id}/contract")
+async def get_collaborator_contract(collaborator_id: str, db: AsyncSession = Depends(get_db)):
+    """Lazy per-row fetch for the HR PayFit Integration page — contract data is only
+    requested when a collaborator's row is actually expanded, not for the whole list at once."""
+    r = await db.execute(text("SELECT payfit_id FROM payfit_collaborators WHERE id = CAST(:id AS UUID)"), {"id": collaborator_id})
+    row = r.fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Collaborator not found")
+    return await _resolve_contract(row[0])
 
 
 @router.get("/my/{email}")
@@ -294,38 +339,7 @@ async def get_my_payfit(email: str, db: AsyncSession = Depends(get_db)):
         return {"linked": False, "collaborator": None, "absences": [], "contract": None}
 
     collaborator = dict(row._mapping)
-
-    # Contract data is (supposedly) embedded on the collaborator-by-id response, gated by
-    # the collaborators:contracts:read scope — separate from the top-level /contracts list
-    # endpoint (gated by contracts:read, which 403s). Confirmed via /payfit/test/collaborator_detail
-    # that neither scope is actually granted: the response is 200 (base access is fine) but
-    # the `contracts` key is entirely absent, not an empty list — so this key genuinely can't
-    # see contract data via either path yet, not "this person has no contracts."
-    contract = {"available": False, "reason": "Not checked yet"}
-    try:
-        resp = await _payfit_request("GET", _company_path(f"/collaborators/{collaborator['payfit_id']}"))
-        if resp.status_code == 200:
-            body = resp.json()
-            if "contracts" not in body:
-                contract = {"available": False, "reason": "Contract data requires the collaborators:contracts:read scope on the PayFit API key, which hasn't been granted yet."}
-            else:
-                contracts = body.get("contracts") or []
-                latest = contracts[-1] if contracts else None
-                if latest:
-                    contract = {
-                        "available": True,
-                        "start_date": latest.get("startDate"),
-                        "end_date": latest.get("endDate"),
-                        "status": latest.get("status"),
-                    }
-                else:
-                    contract = {"available": False, "reason": "No contracts on file for this collaborator."}
-        elif resp.status_code == 403:
-            contract = {"available": False, "reason": "Contract data requires the collaborators:contracts:read scope on the PayFit API key, which hasn't been granted yet."}
-        else:
-            contract = {"available": False, "reason": f"PayFit returned {resp.status_code}"}
-    except Exception as e:
-        contract = {"available": False, "reason": str(e)}
+    contract = await _resolve_contract(collaborator["payfit_id"])
 
     r2 = await db.execute(text("""
         SELECT id::text, payfit_id, absence_type, start_date, end_date, status, source, error_detail, created_at
