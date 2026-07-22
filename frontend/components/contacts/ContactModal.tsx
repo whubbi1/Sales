@@ -1,10 +1,11 @@
 'use client'
 // components/contacts/ContactModal.tsx
 import { useState, useEffect } from 'react'
-import { contactsAPI, companiesAPI, partnersAPI } from '@/lib/api'
+import { contactsAPI, companiesAPI, partnersAPI, marketingAPI, projectsAPI } from '@/lib/api'
 
 const JOB_TYPES = ['CIO','CTO','CISO','SAP Manager','SAP Architect','SAP GRC','SAP Security Manager','SAP Technical Manager','Cybersecurity Architect','SOC Manager','Internal Audit','CFO','Partner','Buyer','Other']
 const SUBSCRIPTIONS = ['Marketing Information','Customer Service Communication','One to One','Opted Out']
+const DATA_SOURCE_OPTIONS = ['LinkedIn', 'Event', 'Project', 'Partner']
 const LANGUAGES = ['Afrikaans','Albanian','Amharic','Arabic','Armenian','Azerbaijani','Basque','Belarusian','Bengali','Bosnian','Bulgarian','Catalan','Chinese (Simplified)','Chinese (Traditional)','Croatian','Czech','Danish','Dutch','English','Estonian','Finnish','French','Georgian','German','Greek','Gujarati','Hebrew','Hindi','Hungarian','Icelandic','Indonesian','Irish','Italian','Japanese','Kazakh','Korean','Latvian','Lithuanian','Macedonian','Malay','Maltese','Mongolian','Nepali','Norwegian','Persian','Polish','Portuguese','Romanian','Russian','Serbian','Slovak','Slovenian','Spanish','Swahili','Swedish','Tamil','Telugu','Thai','Turkish','Ukrainian','Urdu','Vietnamese','Welsh']
 
 // FormField MUST be outside modal to avoid focus loss on re-render
@@ -17,10 +18,19 @@ function FormField({ label, children, full }: { label: string; children: React.R
   )
 }
 
+// Maps a Data Source ref type to how to fetch/list/label its records — mirrors the
+// same config on the contact detail page (frontend/app/contacts/[id]/page.tsx).
+const REF_TYPE_CONFIG: Record<string, { fetch: () => Promise<any[]>; label: (r: any) => string }> = {
+  Event:   { fetch: () => marketingAPI.listEvents().then((d: any) => d.events || []), label: (r: any) => r.title },
+  Project: { fetch: () => projectsAPI.list(), label: (r: any) => r.project_name },
+  Partner: { fetch: () => partnersAPI.list(), label: (r: any) => r.name },
+}
+
 export function ContactModal({ contact, onClose, onSave }: any) {
   const [companies, setCompanies] = useState<any[]>([])
   const [partners, setPartners] = useState<any[]>([])
   const [users, setUsers] = useState<any[]>([])
+  const [dataSourceRefOptions, setDataSourceRefOptions] = useState<any[]>([])
   const [form, setForm] = useState({
     first_name: contact?.first_name || '',
     last_name: contact?.last_name || '',
@@ -38,6 +48,9 @@ export function ContactModal({ contact, onClose, onSave }: any) {
     assigned_to: contact?.assigned_to || '',
     assigned_to_email: contact?.assigned_to_email || '',
     notes: contact?.notes || '',
+    data_source: contact?.data_source || 'LinkedIn',
+    data_source_ref_type: contact?.data_source_ref_type || '',
+    data_source_ref_id: contact?.data_source_ref_id || '',
   })
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -51,6 +64,16 @@ export function ContactModal({ contact, onClose, onSave }: any) {
     partnersAPI.list({}).then(setPartners).catch(() => {})
     fetch('https://api.whubbi.wcomply.com/settings/users').then(r => r.json()).then(d => setUsers(d.users || [])).catch(() => {})
   }, [])
+
+  useEffect(() => {
+    const cfg = REF_TYPE_CONFIG[form.data_source]
+    if (!cfg) { setDataSourceRefOptions([]); return }
+    cfg.fetch().then(setDataSourceRefOptions).catch(() => setDataSourceRefOptions([]))
+  }, [form.data_source])
+
+  const onDataSourceChange = (v: string) => {
+    setForm(p => ({ ...p, data_source: v, data_source_ref_type: v === 'LinkedIn' ? '' : v, data_source_ref_id: v === p.data_source ? p.data_source_ref_id : '' }))
+  }
 
   // Fills in only whatever's currently empty — never overwrites something the user
   // already typed. Works the same way whether creating (fill in the blanks) or editing
@@ -110,7 +133,13 @@ export function ContactModal({ contact, onClose, onSave }: any) {
     if (optOutJustActivated && !optOutReason.trim()) { setError('Please explain why this contact is being opted out'); return }
     setSaving(true); setError('')
     try {
-      const payload = { ...form, company_id: form.company_id || null, partner_id: form.partner_id || null }
+      const payload = {
+        ...form,
+        company_id: form.company_id || null,
+        partner_id: form.partner_id || null,
+        data_source_ref_type: form.data_source_ref_type || null,
+        data_source_ref_id: form.data_source_ref_id || null,
+      }
       let contactId = contact?.id
       if (contact) { await contactsAPI.update(contact.id, payload) }
       else { const created = await contactsAPI.create(payload); contactId = created.id }
@@ -154,6 +183,19 @@ export function ContactModal({ contact, onClose, onSave }: any) {
                   <option value="Connected">Connected</option>
                 </select>
               </FormField>
+              <FormField label="Data Source">
+                <select className="form-input" value={form.data_source} onChange={e => onDataSourceChange(e.target.value)}>
+                  {DATA_SOURCE_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
+                </select>
+              </FormField>
+              {form.data_source !== 'LinkedIn' && (
+                <FormField label={`Select ${form.data_source}`}>
+                  <select className="form-input" value={form.data_source_ref_id} onChange={e => setForm(p => ({ ...p, data_source_ref_id: e.target.value }))}>
+                    <option value="">None selected…</option>
+                    {dataSourceRefOptions.map((r: any) => <option key={r.id} value={r.id}>{REF_TYPE_CONFIG[form.data_source].label(r)}</option>)}
+                  </select>
+                </FormField>
+              )}
             </div>
           </div>
 
