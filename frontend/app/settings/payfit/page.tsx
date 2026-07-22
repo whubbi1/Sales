@@ -62,6 +62,54 @@ export default function PayfitProfilePage() {
               <div style={{ fontSize: '11px', color: '#94A3B8', marginTop: '8px' }}>
                 Last synced {data.collaborator.synced_at ? new Date(data.collaborator.synced_at).toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—'}
               </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '14px', marginTop: '16px', paddingTop: '16px', borderTop: '1px solid #F1F5F9' }}>
+                <div>
+                  <div style={{ fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#94A3B8', marginBottom: '3px' }}>Matricule</div>
+                  <div style={{ fontSize: '12px', color: '#3F3F3F', fontWeight: '600' }}>{data.collaborator.matricule || '—'}</div>
+                </div>
+                <div>
+                  <div style={{ fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#94A3B8', marginBottom: '3px' }}>Birthdate</div>
+                  <div style={{ fontSize: '12px', color: '#3F3F3F', fontWeight: '600' }}>
+                    {data.collaborator.birth_date ? new Date(data.collaborator.birth_date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}
+                  </div>
+                </div>
+                <div>
+                  <div style={{ fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#94A3B8', marginBottom: '3px' }}>Manager</div>
+                  <div style={{ fontSize: '12px', color: '#3F3F3F', fontWeight: '600' }}>
+                    {data.collaborator.manager_first_name ? `${data.collaborator.manager_first_name} ${data.collaborator.manager_last_name}` : (data.collaborator.manager_payfit_id ? 'Not yet synced' : '—')}
+                  </div>
+                </div>
+                <div>
+                  <div style={{ fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#94A3B8', marginBottom: '3px' }}>Team</div>
+                  <div style={{ fontSize: '12px', color: '#3F3F3F', fontWeight: '600' }}>{data.collaborator.team_name || '—'}</div>
+                </div>
+              </div>
+            </div>
+
+            {/* Contract */}
+            <div style={{ background: 'white', borderRadius: '14px', border: '1px solid #EDF2F7', padding: '16px 24px', marginBottom: '16px', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
+              <div style={{ fontSize: '13px', fontWeight: '800', color: '#156082', marginBottom: '8px' }}>Contract</div>
+              {data.contract?.available ? (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '14px' }}>
+                  <div>
+                    <div style={{ fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#94A3B8', marginBottom: '3px' }}>Start Date</div>
+                    <div style={{ fontSize: '12px', color: '#3F3F3F', fontWeight: '600' }}>{data.contract.start_date || '—'}</div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#94A3B8', marginBottom: '3px' }}>End Date</div>
+                    <div style={{ fontSize: '12px', color: '#3F3F3F', fontWeight: '600' }}>{data.contract.end_date || '—'}</div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#94A3B8', marginBottom: '3px' }}>Status</div>
+                    <div style={{ fontSize: '12px', color: '#3F3F3F', fontWeight: '600' }}>{data.contract.status || '—'}</div>
+                  </div>
+                </div>
+              ) : (
+                <div style={{ fontSize: '11px', color: '#D97706', background: '#FFF7ED', padding: '10px 14px', borderRadius: '8px' }}>
+                  ⚠️ {data.contract?.reason || 'Contract data is not available yet.'}
+                </div>
+              )}
             </div>
 
             {/* Absences */}

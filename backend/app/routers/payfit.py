@@ -195,16 +195,26 @@ async def sync_collaborators(triggered_by: str = "manual", db: AsyncSession = De
             if not payfit_id:
                 continue
             await db.execute(text("""
-                INSERT INTO payfit_collaborators (id, payfit_id, first_name, last_name, email, raw_data, synced_at)
-                VALUES (gen_random_uuid(), :payfit_id, :first_name, :last_name, :email, CAST(:raw_data AS JSONB), NOW())
+                INSERT INTO payfit_collaborators (id, payfit_id, first_name, last_name, email,
+                                                   matricule, birth_date, manager_payfit_id, team_name,
+                                                   raw_data, synced_at)
+                VALUES (gen_random_uuid(), :payfit_id, :first_name, :last_name, :email,
+                        :matricule, :birth_date, :manager_payfit_id, :team_name,
+                        CAST(:raw_data AS JSONB), NOW())
                 ON CONFLICT (payfit_id) DO UPDATE SET
                     first_name = EXCLUDED.first_name, last_name = EXCLUDED.last_name,
-                    email = EXCLUDED.email, raw_data = EXCLUDED.raw_data, synced_at = NOW()
+                    email = EXCLUDED.email, matricule = EXCLUDED.matricule,
+                    birth_date = EXCLUDED.birth_date, manager_payfit_id = EXCLUDED.manager_payfit_id,
+                    team_name = EXCLUDED.team_name, raw_data = EXCLUDED.raw_data, synced_at = NOW()
             """), {
                 "payfit_id": payfit_id,
                 "first_name": c.get("firstName", ""),
                 "last_name": c.get("lastName", ""),
                 "email": _extract_email(c),
+                "matricule": c.get("matricule"),
+                "birth_date": _extract_date(c.get("birthDate")),
+                "manager_payfit_id": c.get("managerId"),
+                "team_name": c.get("teamName"),
                 "raw_data": json.dumps(c),
             })
             count += 1
@@ -245,22 +255,32 @@ async def get_my_payfit(email: str, db: AsyncSession = Depends(get_db)):
     collaborator's own email as synced from PayFit, or a manually-set whubbi_user_email
     override (e.g. if the two systems use different addresses for the same person)."""
     r = await db.execute(text("""
-        SELECT id::text, payfit_id, first_name, last_name, email, whubbi_user_email, synced_at
-        FROM payfit_collaborators
-        WHERE LOWER(whubbi_user_email) = LOWER(:email) OR LOWER(email) = LOWER(:email)
-        ORDER BY (whubbi_user_email IS NOT NULL) DESC LIMIT 1
+        SELECT pc.id::text, pc.payfit_id, pc.first_name, pc.last_name, pc.email, pc.whubbi_user_email,
+               pc.matricule, pc.birth_date, pc.team_name, pc.manager_payfit_id, pc.synced_at,
+               mgr.first_name AS manager_first_name, mgr.last_name AS manager_last_name
+        FROM payfit_collaborators pc
+        LEFT JOIN payfit_collaborators mgr ON mgr.payfit_id = pc.manager_payfit_id
+        WHERE LOWER(pc.whubbi_user_email) = LOWER(:email) OR LOWER(pc.email) = LOWER(:email)
+        ORDER BY (pc.whubbi_user_email IS NOT NULL) DESC LIMIT 1
     """), {"email": email})
     row = r.fetchone()
     if not row:
-        return {"linked": False, "collaborator": None, "absences": []}
+        return {"linked": False, "collaborator": None, "absences": [], "contract": None}
 
     collaborator = dict(row._mapping)
+    # Contracts require the contracts:read scope, which the current PayFit API key doesn't
+    # have (see /payfit/test/contracts, 403) — surface that plainly instead of showing nothing
+    # with no explanation, since contract start/end/status genuinely can't be fetched yet.
+    contract = {
+        "available": False,
+        "reason": "Contract data requires the contracts:read scope on the PayFit API key, which hasn't been granted yet.",
+    }
     r2 = await db.execute(text("""
         SELECT id::text, payfit_id, absence_type, start_date, end_date, status, source, error_detail, created_at
         FROM payfit_absences WHERE collaborator_payfit_id = :pid ORDER BY start_date DESC
     """), {"pid": collaborator["payfit_id"]})
     absences = [dict(r._mapping) for r in r2.fetchall()]
-    return {"linked": True, "collaborator": collaborator, "absences": absences}
+    return {"linked": True, "collaborator": collaborator, "absences": absences, "contract": contract}
 
 
 # ─── Absences — the genuinely two-way resource ────────────────────────────────

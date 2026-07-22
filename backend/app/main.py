@@ -579,6 +579,10 @@ async def startup():
                     raw_data JSONB,
                     synced_at TIMESTAMP DEFAULT NOW()
                 )""",
+                "ALTER TABLE payfit_collaborators ADD COLUMN IF NOT EXISTS matricule VARCHAR(50)",
+                "ALTER TABLE payfit_collaborators ADD COLUMN IF NOT EXISTS birth_date DATE",
+                "ALTER TABLE payfit_collaborators ADD COLUMN IF NOT EXISTS manager_payfit_id VARCHAR(100)",
+                "ALTER TABLE payfit_collaborators ADD COLUMN IF NOT EXISTS team_name VARCHAR(255)",
                 """CREATE TABLE IF NOT EXISTS payfit_absences (
                     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                     payfit_id VARCHAR(100) UNIQUE,
