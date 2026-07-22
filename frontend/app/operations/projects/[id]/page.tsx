@@ -38,6 +38,7 @@ function ProjectDetailContent() {
   const [userName, setUserName] = useState('')
 
   const [editingNameField, setEditingNameField] = useState(false)
+  const [editingField, setEditingField] = useState<string | null>(null)
 
   const [activityLog, setActivityLog] = useState<any[]>([])
   const [comments, setComments] = useState<any[]>([])
@@ -51,22 +52,29 @@ function ProjectDetailContent() {
   const [showTaskModal, setShowTaskModal] = useState(false)
   const [editingTask, setEditingTask] = useState<any>(null)
 
+  const [expenses, setExpenses] = useState<any[]>([])
+  const [expenseDate, setExpenseDate] = useState('')
+  const [expenseAmount, setExpenseAmount] = useState('')
+  const [expenseDescription, setExpenseDescription] = useState('')
+
   const load = async () => {
     try {
       const p = await projectsAPI.get(id as string)
       setProject(p)
-      const [log, cmts, sales, proj, tks] = await Promise.all([
+      const [log, cmts, sales, proj, tks, exps] = await Promise.all([
         projectsAPI.getActivityLog(id as string),
         projectsAPI.getComments(id as string),
         projectsAPI.getDocuments(id as string, 'sales'),
         projectsAPI.getDocuments(id as string, 'project'),
         taskManagerAPI.list({ entity_type: 'project', entity_id: id, source: 'operations' }),
+        projectsAPI.getExpenses(id as string),
       ])
       setActivityLog(log)
       setComments(cmts)
       setSalesDocs(sales)
       setProjectDocs(proj)
       setTasks(tks.tasks || tks || [])
+      setExpenses(exps)
     } catch {
       router.push('/operations/projects')
     } finally {
@@ -118,6 +126,18 @@ function ProjectDetailContent() {
     else setProjectDocs(await projectsAPI.getDocuments(project.id, 'project'))
   }
 
+  const addExpense = async () => {
+    if (!expenseDate || !expenseAmount) return
+    await projectsAPI.addExpense(project.id, { expense_date: expenseDate, amount: parseFloat(expenseAmount), description: expenseDescription.trim() || null, created_by: userEmail })
+    setExpenseDate(''); setExpenseAmount(''); setExpenseDescription('')
+    setExpenses(await projectsAPI.getExpenses(project.id))
+  }
+  const deleteExpense = async (e: any) => {
+    if (!confirm('Delete this expense?')) return
+    await projectsAPI.deleteExpense(project.id, e.id)
+    setExpenses(await projectsAPI.getExpenses(project.id))
+  }
+
   const reloadTasks = async () => setTasks((await taskManagerAPI.list({ entity_type: 'project', entity_id: id, source: 'operations' })).tasks || [])
   const toggleTaskDone = async (task: any) => {
     const done = TASK_DONE_STATUSES.includes(task.status)
@@ -143,6 +163,62 @@ function ProjectDetailContent() {
   const startDate = project.is_internal ? project.start_date : project.opportunity?.contract_start_date
   const endDate = project.is_internal ? project.end_date : project.opportunity?.contract_end_date
   const clientName = project.company?.name
+  const isLicenseProject = project.opportunity?.project_status === 'Software Licenses'
+  const toDateInput = (d?: string) => d ? d.slice(0, 10) : ''
+
+  const dateRow = (label: string, field: string) => (
+    <PropertyRow label={label} value={
+      <EditableCell display={fmt(project[field])} editing={editingField === field} onStartEdit={() => setEditingField(field)}>
+        <input autoFocus type="date" className="form-input" style={{ fontSize: '13px', padding: '4px 6px' }} defaultValue={toDateInput(project[field])}
+          onBlur={e => { setEditingField(null); patchProject({ [field]: e.target.value || null }) }} />
+      </EditableCell>
+    } />
+  )
+  const textRow = (label: string, field: string, placeholder?: string) => (
+    <PropertyRow label={label} value={
+      <EditableCell display={project[field]} editing={editingField === field} onStartEdit={() => setEditingField(field)}>
+        <input autoFocus className="form-input" style={{ fontSize: '13px' }} defaultValue={project[field] || ''} placeholder={placeholder}
+          onBlur={e => { setEditingField(null); patchProject({ [field]: e.target.value || null }) }}
+          onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }} />
+      </EditableCell>
+    } />
+  )
+  const numberRow = (label: string, field: string) => (
+    <PropertyRow label={label} value={
+      <EditableCell display={project[field] != null ? project[field].toLocaleString('en-US') : null} editing={editingField === field} onStartEdit={() => setEditingField(field)}>
+        <input autoFocus type="number" className="form-input" style={{ fontSize: '13px' }} defaultValue={project[field] ?? ''}
+          onBlur={e => { setEditingField(null); patchProject({ [field]: e.target.value ? parseFloat(e.target.value) : null }) }}
+          onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }} />
+      </EditableCell>
+    } />
+  )
+  const projectManagerRow = (
+    <PropertyRow label="Project Manager" value={
+      <EditableCell display={project.project_manager_name || project.project_manager_email} editing={editingField === 'project_manager'} onStartEdit={() => setEditingField('project_manager')}>
+        <select autoFocus className="form-input" style={{ fontSize: '13px' }} defaultValue={project.project_manager_email || ''}
+          onChange={e => {
+            const u = users.find((uu: any) => uu.email === e.target.value)
+            setEditingField(null)
+            patchProject({ project_manager_email: e.target.value || null, project_manager_name: u ? (u.display_name || `${u.first_name} ${u.last_name}`) : null })
+          }}
+          onBlur={() => setEditingField(null)}>
+          <option value="">Unassigned</option>
+          {users.map((u: any) => <option key={u.email} value={u.email}>{u.display_name || `${u.first_name} ${u.last_name}`}</option>)}
+        </select>
+      </EditableCell>
+    } />
+  )
+  const selectRow = (label: string, field: string, options: string[]) => (
+    <PropertyRow label={label} value={
+      <EditableCell display={project[field]} editing={editingField === field} onStartEdit={() => setEditingField(field)}>
+        <select autoFocus className="form-input" style={{ fontSize: '13px' }} defaultValue={project[field] || ''}
+          onChange={e => { setEditingField(null); patchProject({ [field]: e.target.value || null }) }} onBlur={() => setEditingField(null)}>
+          <option value="">—</option>
+          {options.map(o => <option key={o} value={o}>{o}</option>)}
+        </select>
+      </EditableCell>
+    } />
+  )
 
   const docsSection = (category: 'sales' | 'project', docs: any[]) => (
     <div>
@@ -202,7 +278,7 @@ function ProjectDetailContent() {
 
           <div style={{ background: 'white', borderRadius: '10px', border: '1px solid #EDF2F7', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
             <div style={{ padding: '0 20px', background: '#FAFBFC', borderBottom: '2px solid #E2E8F0' }}>
-              <TabNav tabs={['Overview', 'Tasks', 'Sales Documentation', 'Project Documentation', 'Comments', 'Staffing']} active={tab} onChange={setTab} />
+              <TabNav tabs={['Overview', 'Tasks', 'Sales Documentation', 'Project Documentation', 'Notes', 'Expenses', 'Staffing']} active={tab} onChange={setTab} />
             </div>
             <div style={{ padding: '20px' }}>
               {tab === 'Overview' && (
@@ -215,6 +291,32 @@ function ProjectDetailContent() {
                   {project.is_internal && <PropertyRow label="Description" value={project.description} />}
                   <PropertyRow label="Project Start" value={fmt(startDate)} />
                   <PropertyRow label="Project End" value={fmt(endDate)} />
+
+                  {isLicenseProject ? (
+                    <>
+                      <p className="section-label" style={{ marginTop: '18px', marginBottom: '8px' }}>License</p>
+                      {dateRow('Revised License Start', 'revised_license_start_date')}
+                      {dateRow('Revised License End', 'revised_license_end_date')}
+                      {dateRow('Actual License Start', 'actual_license_start_date')}
+                      {dateRow('Actual License End', 'actual_license_end_date')}
+                      {selectRow('Invoicing Frequency', 'invoicing_frequency', ['Monthly', 'Yearly'])}
+                      {numberRow('Total Contract Value', 'total_contract_value')}
+                      {selectRow('Invoicing Start', 'invoicing_start', ['Upfront', 'Other'])}
+                      {numberRow('Invoicing Amount per Unit', 'invoicing_amount_per_unit')}
+                    </>
+                  ) : (
+                    <>
+                      <p className="section-label" style={{ marginTop: '18px', marginBottom: '8px' }}>Planning</p>
+                      {dateRow('Revised Project Start', 'revised_start_date')}
+                      {dateRow('Revised Project End', 'revised_end_date')}
+                      {dateRow('Actual Project Start', 'actual_start_date')}
+                      {dateRow('Actual Project End', 'actual_end_date')}
+                    </>
+                  )}
+
+                  <p className="section-label" style={{ marginTop: '18px', marginBottom: '8px' }}>Management</p>
+                  {projectManagerRow}
+                  {textRow('Karanext Reference', 'karanext_reference', 'e.g. KX-00123')}
 
                   <p className="section-label" style={{ marginTop: '20px', marginBottom: '8px' }}>Change History</p>
                   {activityLog.length === 0 ? <p style={{ color: '#9B9B9B', fontSize: '13px' }}>No changes logged yet.</p> : (
@@ -259,13 +361,13 @@ function ProjectDetailContent() {
               {tab === 'Sales Documentation' && docsSection('sales', salesDocs)}
               {tab === 'Project Documentation' && docsSection('project', projectDocs)}
 
-              {tab === 'Comments' && (
+              {tab === 'Notes' && (
                 <div>
                   <div style={{ display: 'flex', gap: '8px', marginBottom: '14px' }}>
-                    <input className="form-input" style={{ flex: 1 }} placeholder="Add a comment…" value={newComment} onChange={e => setNewComment(e.target.value)} onKeyDown={e => e.key === 'Enter' && addComment()} />
+                    <input className="form-input" style={{ flex: 1 }} placeholder="Add a note…" value={newComment} onChange={e => setNewComment(e.target.value)} onKeyDown={e => e.key === 'Enter' && addComment()} />
                     <button className="btn-primary" onClick={addComment}>+ Add</button>
                   </div>
-                  {comments.length === 0 ? <p style={{ color: '#9B9B9B', fontSize: '13px' }}>No comments yet.</p> : (
+                  {comments.length === 0 ? <p style={{ color: '#9B9B9B', fontSize: '13px' }}>No notes yet.</p> : (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                       {comments.map((c: any) => (
                         <div key={c.id} style={{ padding: '10px 14px', border: '1px solid #EDF2F7', borderRadius: '8px' }}>
@@ -277,6 +379,41 @@ function ProjectDetailContent() {
                           <div style={{ fontSize: '10px', color: '#9B9B9B' }}>{fmtDateTime(c.created_at)}</div>
                         </div>
                       ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {tab === 'Expenses' && (
+                <div>
+                  <div style={{ display: 'flex', gap: '8px', marginBottom: '14px', alignItems: 'flex-end' }}>
+                    <div>
+                      <label className="form-label">Date</label>
+                      <input type="date" className="form-input" value={expenseDate} onChange={e => setExpenseDate(e.target.value)} />
+                    </div>
+                    <div>
+                      <label className="form-label">Amount</label>
+                      <input type="number" className="form-input" style={{ width: '120px' }} placeholder="0.00" value={expenseAmount} onChange={e => setExpenseAmount(e.target.value)} />
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <label className="form-label">Description</label>
+                      <input className="form-input" style={{ width: '100%' }} placeholder="Description…" value={expenseDescription} onChange={e => setExpenseDescription(e.target.value)} onKeyDown={e => e.key === 'Enter' && addExpense()} />
+                    </div>
+                    <button className="btn-primary" onClick={addExpense}>+ Add</button>
+                  </div>
+                  {expenses.length === 0 ? <p style={{ color: '#9B9B9B', fontSize: '13px' }}>No expenses yet.</p> : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      {expenses.map((e: any) => (
+                        <div key={e.id} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '10px 14px', border: '1px solid #EDF2F7', borderRadius: '8px' }}>
+                          <div style={{ fontSize: '12px', color: '#9B9B9B', width: '90px', flexShrink: 0 }}>{fmt(e.expense_date)}</div>
+                          <div style={{ fontSize: '13px', fontWeight: '700', color: '#144766', width: '100px', flexShrink: 0 }}>€{e.amount.toLocaleString('en-US', { minimumFractionDigits: 2 })}</div>
+                          <div style={{ flex: 1, fontSize: '13px', color: '#3F3F3F' }}>{e.description || '—'}</div>
+                          <button onClick={() => deleteExpense(e)} style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#DC2626', fontSize: '14px', padding: 0, lineHeight: 1 }}>×</button>
+                        </div>
+                      ))}
+                      <div style={{ display: 'flex', justifyContent: 'flex-end', fontSize: '13px', fontWeight: '700', color: '#144766', padding: '8px 14px' }}>
+                        Total: €{expenses.reduce((sum: number, e: any) => sum + e.amount, 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                      </div>
                     </div>
                   )}
                 </div>

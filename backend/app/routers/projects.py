@@ -8,7 +8,7 @@ from uuid import UUID
 
 from app.database import get_db
 from app.models.project import (
-    Project, ProjectComment, ProjectDocument, ProjectActivityLog,
+    Project, ProjectComment, ProjectDocument, ProjectActivityLog, ProjectExpense,
     ProjectStaffingTask, ProjectStaffingAllocation, ProjectStaffingRole,
 )
 from app.models.timesheet import TimesheetEntry
@@ -19,6 +19,7 @@ from app.schemas.schemas import (
     ProjectCreate, ProjectUpdate, ProjectResponse,
     ProjectCommentCreate, ProjectCommentResponse,
     ProjectDocumentCreate, ProjectDocumentResponse,
+    ProjectExpenseCreate, ProjectExpenseResponse,
     ProjectActivityLogResponse,
     ProjectStaffingTaskCreate, ProjectStaffingTaskUpdate, ProjectStaffingTaskResponse,
     ProjectStaffingAllocationsSet,
@@ -73,15 +74,13 @@ async def _log_change(db: AsyncSession, project_id, field_name: str, old_value, 
 
 
 async def _maybe_create_project(db: AsyncSession, opp: Opportunity):
-    # Fires once per opportunity — the moment its status is (or becomes) Contract Won for a
-    # Daily Invoicing/Project engagement, mirroring _maybe_create_rfp in opportunities.py.
-    # Software Licenses deals never get a Project — they're tracked entirely as Opportunities,
-    # surfaced in Operations > Licenses (a filtered Opportunity view, not a separate entity).
-    # Seeds the staffing plan (Initial + Current) from the RFP Staffing/Costing Sheet if one
-    # exists, since that's the closest thing to a quotation baseline.
+    # Fires once per opportunity — the moment its status is (or becomes) Contract Won,
+    # mirroring _maybe_create_rfp in opportunities.py. Software Licenses deals get a Project
+    # too (tracked via the license_* fields on Project), just without the RFP-staffing-copy
+    # step below, which only makes sense for Daily Invoicing/Project delivery engagements.
     if opp.deal_status != 'Contract Won':
         return None
-    if opp.project_status not in ('Daily Invoicing', 'Project'):
+    if opp.project_status not in ('Daily Invoicing', 'Project', 'Software Licenses'):
         return None
     existing = await db.execute(select(Project.id).where(Project.opportunity_id == opp.id))
     if existing.first():
@@ -97,6 +96,11 @@ async def _maybe_create_project(db: AsyncSession, opp: Opportunity):
     )
     db.add(proj)
     await db.flush()
+
+    if opp.project_status == 'Software Licenses':
+        await db.commit()
+        await db.refresh(proj)
+        return proj
 
     r = await db.execute(select(rfp_opportunity.c.rfp_id).where(rfp_opportunity.c.opportunity_id == opp.id))
     rfp_id = r.scalar_one_or_none()
@@ -244,6 +248,30 @@ async def delete_project_comment(project_id: UUID, comment_id: UUID, db: AsyncSe
     row = r.scalar_one_or_none()
     if not row:
         raise HTTPException(status_code=404, detail="Comment not found")
+    await db.delete(row)
+    await db.commit()
+
+
+# ─── Expenses ───────────────────────────────────────────────────────────────────
+@router.get("/{project_id}/expenses/", response_model=List[ProjectExpenseResponse])
+async def list_project_expenses(project_id: UUID, db: AsyncSession = Depends(get_db)):
+    r = await db.execute(select(ProjectExpense).where(ProjectExpense.project_id == project_id).order_by(ProjectExpense.expense_date.desc()))
+    return r.scalars().all()
+
+@router.post("/{project_id}/expenses/", response_model=ProjectExpenseResponse, status_code=status.HTTP_201_CREATED)
+async def add_project_expense(project_id: UUID, data: ProjectExpenseCreate, db: AsyncSession = Depends(get_db)):
+    row = ProjectExpense(project_id=project_id, **data.model_dump())
+    db.add(row)
+    await db.commit()
+    await db.refresh(row)
+    return row
+
+@router.delete("/{project_id}/expenses/{expense_id}/", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_project_expense(project_id: UUID, expense_id: UUID, db: AsyncSession = Depends(get_db)):
+    r = await db.execute(select(ProjectExpense).where(ProjectExpense.id == expense_id, ProjectExpense.project_id == project_id))
+    row = r.scalar_one_or_none()
+    if not row:
+        raise HTTPException(status_code=404, detail="Expense not found")
     await db.delete(row)
     await db.commit()
 

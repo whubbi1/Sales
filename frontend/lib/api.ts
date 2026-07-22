@@ -271,6 +271,10 @@ export const projectsAPI = {
   addDocument:    (id: string, d: any) => fetchAPI(`/projects/${id}/documents/`, { method: 'POST', body: JSON.stringify(d) }),
   deleteDocument: (id: string, did: string) => fetchAPI(`/projects/${id}/documents/${did}/`, { method: 'DELETE' }),
 
+  getExpenses:   (id: string) => fetchAPI(`/projects/${id}/expenses/`),
+  addExpense:    (id: string, d: any) => fetchAPI(`/projects/${id}/expenses/`, { method: 'POST', body: JSON.stringify(d) }),
+  deleteExpense: (id: string, eid: string) => fetchAPI(`/projects/${id}/expenses/${eid}/`, { method: 'DELETE' }),
+
   getStaffingRoles:   (id: string, planType?: string) => fetchAPI(`/projects/${id}/staffing-roles${qs(planType ? { plan_type: planType } : {})}`),
   addStaffingRole:    (id: string, d: any) => fetchAPI(`/projects/${id}/staffing-roles`, { method: 'POST', body: JSON.stringify(d) }),
   updateStaffingRole: (id: string, roleId: string, d: any) => fetchAPI(`/projects/${id}/staffing-roles/${roleId}`, { method: 'PUT', body: JSON.stringify(d) }),

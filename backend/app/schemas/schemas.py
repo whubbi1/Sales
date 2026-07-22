@@ -225,6 +225,9 @@ class OpportunitySummary(BaseModel):
     closing_date: Optional[datetime] = None
     contract_start_date: Optional[datetime] = None
     contract_end_date: Optional[datetime] = None
+    # Lets a linked Project tell a Software Licenses deal apart from a regular delivery
+    # engagement, to decide which set of Project-only fields to show.
+    project_status: Optional[str] = None
     # Surfaced so RFP's linked-opportunities list can be filtered by team on the RFP page —
     # an RFP has no team fields of its own (it links to Opportunities many-to-many).
     main_operational_team: Optional[OrgEntitySummary] = None
@@ -544,9 +547,31 @@ class ProjectUpdate(BaseModel):
     description: Optional[str] = None
     start_date: Optional[datetime] = None
     end_date: Optional[datetime] = None
+    revised_start_date: Optional[datetime] = None
+    revised_end_date: Optional[datetime] = None
+    actual_start_date: Optional[datetime] = None
+    actual_end_date: Optional[datetime] = None
+    project_manager_email: Optional[str] = None
+    project_manager_name: Optional[str] = None
+    karanext_reference: Optional[str] = None
+    revised_license_start_date: Optional[datetime] = None
+    revised_license_end_date: Optional[datetime] = None
+    actual_license_start_date: Optional[datetime] = None
+    actual_license_end_date: Optional[datetime] = None
+    invoicing_frequency: Optional[str] = None
+    total_contract_value: Optional[float] = None
+    invoicing_start: Optional[str] = None
+    invoicing_amount_per_unit: Optional[float] = None
     # Attributed to the activity log entries this update produces, not persisted on the row.
     changed_by_email: Optional[str] = None
     changed_by_name: Optional[str] = None
+
+    @field_validator("invoicing_frequency", "invoicing_start", mode="before")
+    @classmethod
+    def _blank_enum_to_none(cls, v):
+        # These map to Postgres enum columns that reject '' — the frontend sends '' for
+        # "no selection" instead of omitting the field.
+        return v or None
 
 class ProjectResponse(BaseModel):
     id: UUID
@@ -558,6 +583,21 @@ class ProjectResponse(BaseModel):
     description: Optional[str] = None
     start_date: Optional[datetime] = None
     end_date: Optional[datetime] = None
+    revised_start_date: Optional[datetime] = None
+    revised_end_date: Optional[datetime] = None
+    actual_start_date: Optional[datetime] = None
+    actual_end_date: Optional[datetime] = None
+    project_manager_email: Optional[str] = None
+    project_manager_name: Optional[str] = None
+    karanext_reference: Optional[str] = None
+    revised_license_start_date: Optional[datetime] = None
+    revised_license_end_date: Optional[datetime] = None
+    actual_license_start_date: Optional[datetime] = None
+    actual_license_end_date: Optional[datetime] = None
+    invoicing_frequency: Optional[str] = None
+    total_contract_value: Optional[float] = None
+    invoicing_start: Optional[str] = None
+    invoicing_amount_per_unit: Optional[float] = None
     created_at: datetime
     updated_at: datetime
     opportunity: Optional[OpportunitySummary] = None
@@ -586,6 +626,19 @@ class ProjectDocumentCreate(BaseModel):
     created_by: Optional[str] = None
 
 class ProjectDocumentResponse(ProjectDocumentCreate):
+    id: UUID
+    project_id: UUID
+    created_at: datetime
+    class Config:
+        from_attributes = True
+
+class ProjectExpenseCreate(BaseModel):
+    expense_date: datetime
+    amount: float
+    description: Optional[str] = None
+    created_by: Optional[str] = None
+
+class ProjectExpenseResponse(ProjectExpenseCreate):
     id: UUID
     project_id: UUID
     created_at: datetime

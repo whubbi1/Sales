@@ -1687,6 +1687,37 @@ async def startup():
                 # that somehow ended up without one (e.g. a bulk import that bypassed the ORM
                 # default) with today's date.
                 "UPDATE contacts SET created_at = NOW() WHERE created_at IS NULL",
+
+                # Operations — Projects: revised/actual dates, Project Manager, Karanext
+                # Reference, and (Software Licenses projects only) license dates/invoicing.
+                "ALTER TABLE projects ADD COLUMN IF NOT EXISTS revised_start_date TIMESTAMP",
+                "ALTER TABLE projects ADD COLUMN IF NOT EXISTS revised_end_date TIMESTAMP",
+                "ALTER TABLE projects ADD COLUMN IF NOT EXISTS actual_start_date TIMESTAMP",
+                "ALTER TABLE projects ADD COLUMN IF NOT EXISTS actual_end_date TIMESTAMP",
+                "ALTER TABLE projects ADD COLUMN IF NOT EXISTS project_manager_email VARCHAR(255)",
+                "ALTER TABLE projects ADD COLUMN IF NOT EXISTS project_manager_name VARCHAR(255)",
+                "ALTER TABLE projects ADD COLUMN IF NOT EXISTS karanext_reference VARCHAR(255)",
+                "ALTER TABLE projects ADD COLUMN IF NOT EXISTS revised_license_start_date TIMESTAMP",
+                "ALTER TABLE projects ADD COLUMN IF NOT EXISTS revised_license_end_date TIMESTAMP",
+                "ALTER TABLE projects ADD COLUMN IF NOT EXISTS actual_license_start_date TIMESTAMP",
+                "ALTER TABLE projects ADD COLUMN IF NOT EXISTS actual_license_end_date TIMESTAMP",
+                "ALTER TABLE projects ADD COLUMN IF NOT EXISTS invoicing_frequency VARCHAR(20)",
+                "ALTER TABLE projects ADD COLUMN IF NOT EXISTS total_contract_value FLOAT",
+                "ALTER TABLE projects ADD COLUMN IF NOT EXISTS invoicing_start VARCHAR(20)",
+                "ALTER TABLE projects ADD COLUMN IF NOT EXISTS invoicing_amount_per_unit FLOAT",
+                """CREATE TABLE IF NOT EXISTS project_expenses (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+                    expense_date TIMESTAMP NOT NULL,
+                    amount FLOAT NOT NULL,
+                    description TEXT,
+                    created_by VARCHAR(255),
+                    created_at TIMESTAMP DEFAULT NOW()
+                )""",
+
+                # Software Licenses opportunities now also get a Project (previously
+                # excluded) — backfill any Contract Won license deal that doesn't have one
+                # yet. Handled in Python right after this sqls loop (needs next_internal_id).
             ]
             for sql in sqls:
                 try:
@@ -1708,10 +1739,10 @@ async def startup():
                     await session.execute(text("INSERT INTO monitored_urls (id,name,url,active,created_at) VALUES (gen_random_uuid(),:name,:url,true,NOW())"),{"name":item[0],"url":item[1]})
                 await session.commit()
 
-            # Backfill: every Opportunity just migrated to Contract Won (above) gets its
-            # linked Project created now, same as newly-transitioning ones going forward.
-            # _maybe_create_project no-ops for Software Licenses deals and for opportunities
-            # that already have a Project, so this is safe to run on every startup.
+            # Backfill: every Contract Won Opportunity (including Software Licenses deals,
+            # now that _maybe_create_project accepts those too) gets its linked Project
+            # created if it doesn't have one yet — safe to run on every startup, since the
+            # function no-ops for opportunities that already have a Project.
             try:
                 from app.models.opportunity import Opportunity
                 from app.routers.projects import _maybe_create_project

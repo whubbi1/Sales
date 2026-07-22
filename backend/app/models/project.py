@@ -1,8 +1,9 @@
 # backend/app/models/project.py
 # Operations module — a Project is either auto-created from an Opportunity once it reaches
-# Contract Won with project type Daily Invoicing/Project (is_internal=False, opportunity_id
-# set), or created directly as an Internal Project (is_internal=True, no opportunity, its
-# own name/description/dates/partner). Software Licenses opportunities never get a Project.
+# Contract Won (is_internal=False, opportunity_id set — covering Daily Invoicing/Project
+# engagements as well as Software Licenses deals, which use the license_* fields below
+# instead of the staffing/expense-tracking fields), or created directly as an Internal
+# Project (is_internal=True, no opportunity, its own name/description/dates/partner).
 import uuid
 from datetime import datetime
 from sqlalchemy import Column, String, Text, DateTime, Float, Boolean, Integer, ForeignKey
@@ -27,13 +28,49 @@ class Project(Base):
     project_name   = Column(String(500), nullable=False)
     description    = Column(Text)  # mainly used by internal projects
 
-    # Internal projects only — an Opportunity-linked project's dates are read live from
-    # Opportunity.contract_start_date/contract_end_date instead of duplicated here.
+    # Internal projects only — an Opportunity-linked project's baseline dates are read live
+    # from Opportunity.contract_start_date/contract_end_date instead of duplicated here.
     start_date     = Column(DateTime)
     end_date       = Column(DateTime)
 
+    # Revised/actual dates track the plan drifting from (and then landing versus) the
+    # original Opportunity contract dates / internal start_date/end_date above.
+    revised_start_date = Column(DateTime)
+    revised_end_date   = Column(DateTime)
+    actual_start_date  = Column(DateTime)
+    actual_end_date    = Column(DateTime)
+
+    project_manager_email = Column(String(255))
+    project_manager_name  = Column(String(255))
+    karanext_reference    = Column(String(255))
+
+    # Software Licenses projects only — mirrors the revised/actual start_date/end_date
+    # pattern above but for the license term itself, plus how the license is invoiced.
+    revised_license_start_date = Column(DateTime)
+    revised_license_end_date   = Column(DateTime)
+    actual_license_start_date  = Column(DateTime)
+    actual_license_end_date    = Column(DateTime)
+    # Plain strings, not Postgres enums — these are new fields added post-launch via
+    # migration, and native enum types are painful to extend later (see deal_status_enum).
+    invoicing_frequency        = Column(String(20))  # 'Monthly' | 'Yearly'
+    total_contract_value       = Column(Float)
+    invoicing_start            = Column(String(20))  # 'Upfront' | 'Other'
+    invoicing_amount_per_unit  = Column(Float)
+
     created_at     = Column(DateTime, default=datetime.utcnow)
     updated_at     = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class ProjectExpense(Base):
+    __tablename__ = "project_expenses"
+
+    id           = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    project_id   = Column(UUID(as_uuid=True), ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
+    expense_date = Column(DateTime, nullable=False)
+    amount       = Column(Float, nullable=False)
+    description  = Column(Text)
+    created_by   = Column(String(255))
+    created_at   = Column(DateTime, default=datetime.utcnow)
 
 
 class ProjectComment(Base):
