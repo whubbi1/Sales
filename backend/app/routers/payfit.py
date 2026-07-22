@@ -291,25 +291,31 @@ async def get_my_payfit(email: str, db: AsyncSession = Depends(get_db)):
 
     collaborator = dict(row._mapping)
 
-    # Contract data is embedded on the collaborator-by-id response itself (gated by the
-    # collaborators:contracts:read scope), separate from the top-level /contracts list
-    # endpoint (gated by contracts:read, which 403s — see /payfit/test/contracts). Fetching
-    # this collaborator directly sidesteps that gap entirely if the narrower scope is granted.
+    # Contract data is (supposedly) embedded on the collaborator-by-id response, gated by
+    # the collaborators:contracts:read scope — separate from the top-level /contracts list
+    # endpoint (gated by contracts:read, which 403s). Confirmed via /payfit/test/collaborator_detail
+    # that neither scope is actually granted: the response is 200 (base access is fine) but
+    # the `contracts` key is entirely absent, not an empty list — so this key genuinely can't
+    # see contract data via either path yet, not "this person has no contracts."
     contract = {"available": False, "reason": "Not checked yet"}
     try:
         resp = await _payfit_request("GET", _company_path(f"/collaborators/{collaborator['payfit_id']}"))
         if resp.status_code == 200:
-            contracts = resp.json().get("contracts") or []
-            latest = contracts[-1] if contracts else None
-            if latest:
-                contract = {
-                    "available": True,
-                    "start_date": latest.get("startDate"),
-                    "end_date": latest.get("endDate"),
-                    "status": latest.get("status"),
-                }
+            body = resp.json()
+            if "contracts" not in body:
+                contract = {"available": False, "reason": "Contract data requires the collaborators:contracts:read scope on the PayFit API key, which hasn't been granted yet."}
             else:
-                contract = {"available": False, "reason": "No contracts on file for this collaborator."}
+                contracts = body.get("contracts") or []
+                latest = contracts[-1] if contracts else None
+                if latest:
+                    contract = {
+                        "available": True,
+                        "start_date": latest.get("startDate"),
+                        "end_date": latest.get("endDate"),
+                        "status": latest.get("status"),
+                    }
+                else:
+                    contract = {"available": False, "reason": "No contracts on file for this collaborator."}
         elif resp.status_code == 403:
             contract = {"available": False, "reason": "Contract data requires the collaborators:contracts:read scope on the PayFit API key, which hasn't been granted yet."}
         else:
