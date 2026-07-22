@@ -49,13 +49,17 @@ def _company_path(suffix: str) -> str:
 
 
 async def _fetch_all_pages(path: str, items_key: str, max_pages: int = 50) -> list:
-    """PayFit paginates list endpoints (10/page observed) via meta.nextPageToken — follow
-    it until exhausted so sync isn't silently limited to the first page. max_pages is a
-    backstop against an unexpected infinite loop, not an expected real limit."""
+    """PayFit paginates list endpoints via meta.nextPageToken, confirmed against the real
+    OpenAPI spec: the request query param is also named nextPageToken (same name as the
+    response field), and maxResults caps at 50 (default 10) — follow it until exhausted so
+    sync isn't silently limited to one page. max_pages is a backstop against an unexpected
+    infinite loop, not an expected real limit."""
     items = []
     page_token = None
     for _ in range(max_pages):
-        params = {"pageToken": page_token} if page_token else None
+        params = {"maxResults": "50"}
+        if page_token:
+            params["nextPageToken"] = page_token
         resp = await _payfit_request("GET", path, params=params)
         if resp.status_code != 200:
             raise HTTPException(status_code=502, detail=f"PayFit returned {resp.status_code}: {resp.text[:300]}")
