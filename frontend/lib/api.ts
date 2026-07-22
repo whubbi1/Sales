@@ -499,6 +499,36 @@ export const financeContractsAPI = {
   deleteDocument: (id: string, docId: string) => fetchAPI(`/finance/contracts/${id}/documents/${docId}`, { method: 'DELETE' }),
 }
 
+// ─── Finance: Customers > Contract Management (customer-side sales contracts) ──
+export const financeCustomersAPI = {
+  list:   (p?: any) => fetchAPI(`/finance/customer-contracts${qs(p)}`),
+  get:    (id: string) => fetchAPI(`/finance/customer-contracts/${id}`),
+  create: (d: any) => fetchAPI('/finance/customer-contracts', { method: 'POST', body: JSON.stringify(d) }),
+  update: (id: string, d: any) => fetchAPI(`/finance/customer-contracts/${id}`, { method: 'PUT', body: JSON.stringify(d) }),
+  delete: (id: string) => fetchAPI(`/finance/customer-contracts/${id}`, { method: 'DELETE' }),
+
+  linkContact:   (id: string, contactId: string) => fetchAPI(`/finance/customer-contracts/${id}/contacts/${contactId}`, { method: 'POST' }),
+  unlinkContact: (id: string, contactId: string) => fetchAPI(`/finance/customer-contracts/${id}/contacts/${contactId}`, { method: 'DELETE' }),
+
+  addLink:    (id: string, d: any) => fetchAPI(`/finance/customer-contracts/${id}/links`, { method: 'POST', body: JSON.stringify(d) }),
+  removeLink: (id: string, linkId: string) => fetchAPI(`/finance/customer-contracts/${id}/links/${linkId}`, { method: 'DELETE' }),
+
+  uploadSignedContract: async (id: string, file: File) => {
+    const fd = new FormData()
+    fd.append('file', file)
+    const res = await fetch(`${API_URL}/finance/customer-contracts/${id}/signed-contract`, { method: 'POST', body: fd })
+    if (!res.ok) { const err = await res.json().catch(() => ({})); throw new Error(err.detail || 'Upload failed') }
+    return res.json()
+  },
+  uploadInvoicingDocumentation: async (id: string, file: File) => {
+    const fd = new FormData()
+    fd.append('file', file)
+    const res = await fetch(`${API_URL}/finance/customer-contracts/${id}/invoicing-documentation`, { method: 'POST', body: fd })
+    if (!res.ok) { const err = await res.json().catch(() => ({})); throw new Error(err.detail || 'Upload failed') }
+    return res.json()
+  },
+}
+
 // ─── Finance: Purchasing ───────────────────────────────────────────────────────
 export const financePurchaseOrdersAPI = {
   list:   (p?: any) => fetchAPI(`/finance/purchase-orders${qs(p)}`),

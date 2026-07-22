@@ -1,14 +1,32 @@
 'use client'
 import { useRouter, usePathname } from 'next/navigation'
-import { useEffect, useRef, useState } from 'react'
+import { createContext, useContext, useEffect, useRef, useState } from 'react'
 import { getStoredUser, clearStoredUser } from '@/lib/auth'
+
+const API = 'https://api.whubbi.wcomply.com'
 
 const NAV = [
   { href: '/finance/suppliers',  icon: '🏭', label: 'Suppliers' },
   { href: '/finance/contracts',  icon: '📃', label: 'Contracts' },
   { href: '/finance/purchasing', icon: '🛒', label: 'Purchasing' },
   { href: '/finance/invoicing',  icon: '🧾', label: 'Invoicing' },
+  { href: '/finance/customers',  icon: '🤝', label: 'Customers' },
 ]
+
+type PermLevel = 'loading' | 'none' | 'view' | 'edit'
+type FinancePerms = Record<string, { access_mode?: string; id?: string | null }> | null
+const FinancePermContext = createContext<FinancePerms>(null)
+
+// Only the newly-added Finance pages (Customers) call this to gate themselves — the
+// pre-existing Finance pages stay ungated, same convention as GRC/HR.
+export function useFinancePerm(submodule: string): { level: PermLevel; canEdit: boolean } {
+  const perms = useContext(FinancePermContext)
+  if (perms === null) return { level: 'loading', canEdit: false }
+  const p = perms[submodule]
+  if (!p || p.id == null) return { level: 'edit', canEdit: true }
+  const level = (p.access_mode as PermLevel) || 'none'
+  return { level, canEdit: level === 'edit' }
+}
 
 export function FinanceLayout({ children }: { children: React.ReactNode }) {
   const router      = useRouter()
@@ -16,6 +34,7 @@ export function FinanceLayout({ children }: { children: React.ReactNode }) {
   const redirecting = useRef(false)
   const [userEmail, setUserEmail] = useState('')
   const [userName,  setUserName]  = useState('')
+  const [financePerms, setFinancePerms] = useState<FinancePerms>(null)
 
   useEffect(() => {
     const user = getStoredUser()
@@ -28,6 +47,11 @@ export function FinanceLayout({ children }: { children: React.ReactNode }) {
     }
     setUserEmail(user.email)
     setUserName(user.name)
+
+    fetch(`${API}/settings/permissions/${encodeURIComponent(user.email)}`)
+      .then(r => r.json())
+      .then(d => setFinancePerms(d.permissions?.finance || {}))
+      .catch(() => setFinancePerms({}))
   }, [])
 
   const handleSignOut = () => {
@@ -90,7 +114,9 @@ export function FinanceLayout({ children }: { children: React.ReactNode }) {
       </div>
 
       <main style={{ marginLeft: '220px', width: 'calc(100vw - 220px)', background: '#F5F7FA', minHeight: '100vh', overflowX: 'hidden' }}>
-        {children}
+        <FinancePermContext.Provider value={financePerms}>
+          {children}
+        </FinancePermContext.Provider>
       </main>
     </div>
   )

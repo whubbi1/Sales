@@ -25,7 +25,7 @@ from app.schemas.schemas import (
     ProjectStaffingTaskCreate, ProjectStaffingTaskUpdate, ProjectStaffingTaskResponse,
     ProjectStaffingAllocationsSet,
     ProjectStaffingRoleCreate, ProjectStaffingRoleUpdate, ProjectStaffingRoleResponse,
-    PartnerSummary,
+    PartnerSummary, OrgEntitySummary,
 )
 from app.services.ids import next_internal_id
 
@@ -56,11 +56,20 @@ async def _attach_related(db: AsyncSession, projects: list):
         if row:
             partners[pid] = PartnerSummary(id=row.id, internal_id=row.internal_id, name=row.name, status=row.status)
 
+    team_ids = {str(p.main_operational_team_id) for p in projects if p.main_operational_team_id}
+    teams = {}
+    for tid in team_ids:
+        r = await db.execute(text("SELECT id, code, title FROM legal_org_entities WHERE id = CAST(:id AS UUID)"), {"id": tid})
+        row = r.fetchone()
+        if row:
+            teams[tid] = OrgEntitySummary(id=row.id, code=row.code, title=row.title)
+
     for p in projects:
         opp = opps.get(p.opportunity_id) if p.opportunity_id else None
         p.opportunity = opp
         p.company = companies.get(opp.company_id) if opp and opp.company_id else None
         p.partner = partners.get(str(p.partner_id)) if p.partner_id else None
+        p.main_operational_team = teams.get(str(p.main_operational_team_id)) if p.main_operational_team_id else None
 
 
 async def _log_change(db: AsyncSession, project_id, field_name: str, old_value, new_value, email, name):
@@ -93,6 +102,7 @@ async def _maybe_create_project(db: AsyncSession, opp: Opportunity):
         is_internal=False,
         opportunity_id=opp.id,
         partner_id=opp.partner_id,
+        main_operational_team_id=opp.main_operational_team_id,
         project_name=opp.project_name or opp.deal_name,
     )
     db.add(proj)

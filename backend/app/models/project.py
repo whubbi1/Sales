@@ -23,6 +23,9 @@ class Project(Base):
     # Partner isn't an ORM model (raw-SQL table, see partners.py) — plain column, same trick
     # used throughout this codebase (Opportunity.partner_id, RFP.partner_id, etc).
     partner_id     = Column(UUID(as_uuid=True), nullable=True)
+    # legal_org_entities isn't an ORM model either — same plain-column trick. Carried over
+    # from Opportunity.main_operational_team_id when the project is auto-created from one.
+    main_operational_team_id = Column(UUID(as_uuid=True), nullable=True)
 
     # Editable independently of the linked Opportunity's deal_name.
     project_name   = Column(String(500), nullable=False)

@@ -544,6 +544,7 @@ class ProjectCreate(BaseModel):
 class ProjectUpdate(BaseModel):
     project_name: Optional[str] = None
     partner_id: Optional[UUID] = None
+    main_operational_team_id: Optional[UUID] = None
     description: Optional[str] = None
     status: Optional[str] = None
     status_color: Optional[str] = None
@@ -584,6 +585,7 @@ class ProjectResponse(BaseModel):
     partner_id: Optional[UUID] = None
     project_name: str
     description: Optional[str] = None
+    main_operational_team_id: Optional[UUID] = None
     status: Optional[str] = None
     status_color: Optional[str] = None
     progress: Optional[int] = None
@@ -609,6 +611,7 @@ class ProjectResponse(BaseModel):
     opportunity: Optional[OpportunitySummary] = None
     company: Optional[CompanySummary] = None
     partner: Optional[PartnerSummary] = None
+    main_operational_team: Optional[OrgEntitySummary] = None
     class Config:
         from_attributes = True
 

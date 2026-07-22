@@ -1735,6 +1735,51 @@ async def startup():
                 "ALTER TABLE ropa_records ADD COLUMN IF NOT EXISTS applications JSONB DEFAULT '[]'",
                 """UPDATE ropa_records SET applications = jsonb_build_array(jsonb_build_object('application_name', application))
                    WHERE (application IS NOT NULL AND application != '') AND (applications IS NULL OR applications = '[]'::jsonb)""",
+
+                # Projects — Responsable Operationnel Team, carried over from the linked
+                # Opportunity's main_operational_team_id when auto-created.
+                "ALTER TABLE projects ADD COLUMN IF NOT EXISTS main_operational_team_id UUID REFERENCES legal_org_entities(id) ON DELETE SET NULL",
+
+                # Finance > Customers > Contract Management — customer-side sales contracts,
+                # distinct from the existing supplier-side finance_contracts. A contract can
+                # stand at the customer level alone (contract_type='Master Agreement',
+                # project_id NULL) or be scoped to one specific Project.
+                "CREATE SEQUENCE IF NOT EXISTS finance_customer_contract_id_seq",
+                """CREATE TABLE IF NOT EXISTS finance_customer_contracts (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    internal_id VARCHAR(20) UNIQUE,
+                    company_id UUID REFERENCES companies(id) ON DELETE SET NULL,
+                    opportunity_id UUID REFERENCES opportunities(id) ON DELETE SET NULL,
+                    project_id UUID REFERENCES projects(id) ON DELETE SET NULL,
+                    contract_name VARCHAR(500),
+                    contract_type VARCHAR(30),
+                    contract_start_date DATE,
+                    contract_end_date DATE,
+                    signature_date DATE,
+                    contract_value FLOAT,
+                    signed_contract_url TEXT,
+                    invoicing_conditions VARCHAR(50),
+                    payment_terms VARCHAR(255),
+                    invoice_address_postal TEXT,
+                    invoice_address_email VARCHAR(255),
+                    invoice_address_electronic TEXT,
+                    invoicing_documentation_url TEXT,
+                    created_by VARCHAR(255),
+                    created_at TIMESTAMP DEFAULT NOW(),
+                    updated_at TIMESTAMP DEFAULT NOW()
+                )""",
+                """CREATE TABLE IF NOT EXISTS finance_customer_contract_contacts (
+                    contract_id UUID NOT NULL REFERENCES finance_customer_contracts(id) ON DELETE CASCADE,
+                    contact_id UUID NOT NULL REFERENCES contacts(id) ON DELETE CASCADE,
+                    PRIMARY KEY (contract_id, contact_id)
+                )""",
+                """CREATE TABLE IF NOT EXISTS finance_customer_contract_links (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    contract_id UUID NOT NULL REFERENCES finance_customer_contracts(id) ON DELETE CASCADE,
+                    label VARCHAR(255) NOT NULL,
+                    url TEXT NOT NULL,
+                    created_at TIMESTAMP DEFAULT NOW()
+                )""",
             ]
             for sql in sqls:
                 try:
@@ -1761,20 +1806,32 @@ async def startup():
             # created if it doesn't have one yet — safe to run on every startup, since the
             # function no-ops for opportunities that already have a Project.
             try:
+                from sqlalchemy import select as _select
                 from app.models.opportunity import Opportunity
+                from app.models.project import Project
                 from app.routers.projects import _maybe_create_project
+                from app.routers.finance_customers import _maybe_create_customer_contract
                 r = await session.execute(text("SELECT id FROM opportunities WHERE deal_status = 'Contract Won'"))
                 won_ids = [row[0] for row in r.fetchall()]
-                created = 0
+                created_projects = 0
+                created_contracts = 0
                 for oid in won_ids:
                     opp = await session.get(Opportunity, oid)
-                    if opp:
-                        proj = await _maybe_create_project(session, opp)
-                        if proj:
-                            created += 1
-                print(f"Contract Won project backfill: {created} project(s) created out of {len(won_ids)} opportunity(ies)")
+                    if not opp:
+                        continue
+                    proj = await _maybe_create_project(session, opp)
+                    if proj:
+                        created_projects += 1
+                    else:
+                        r2 = await session.execute(_select(Project).where(Project.opportunity_id == opp.id))
+                        proj = r2.scalar_one_or_none()
+                    if proj:
+                        contract_id = await _maybe_create_customer_contract(session, opp, proj)
+                        if contract_id:
+                            created_contracts += 1
+                print(f"Contract Won backfill: {created_projects} project(s) created, {created_contracts} customer contract(s) created, out of {len(won_ids)} opportunity(ies)")
             except Exception as e:
-                print(f"Contract Won project backfill skipped: {e}")
+                print(f"Contract Won backfill skipped: {e}")
 
         print("Database ready!")
     except Exception as e:
@@ -1839,6 +1896,7 @@ _include("app.routers.training",       "/training",     "Training")
 _include("app.routers.task_manager",   "/task-manager", "TaskManager")
 _include("app.routers.task_teams",     "/task-manager", "TaskTeams")
 _include("app.routers.finance",        "/finance",      "Finance")
+_include("app.routers.finance_customers", "/finance",   "FinanceCustomers")
 _include("app.routers.projects",       "/projects",     "Projects")
 _include("app.routers.timesheets",     "/timesheets",   "Timesheets")
 _include("app.routers.leads",          "/leads",        "Leads")

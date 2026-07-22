@@ -21,6 +21,7 @@ from app.schemas.schemas import (
 )
 from app.services.ids import next_internal_id, compute_deal_name
 from app.routers.projects import _maybe_create_project
+from app.routers.finance_customers import _maybe_create_customer_contract
 
 router = APIRouter()
 
@@ -224,7 +225,9 @@ async def create_opportunity(opp: OpportunityCreate, db: AsyncSession = Depends(
     db.add(db_opp)
     await db.commit()
     new_rfp_id = await _maybe_create_rfp(db, db_opp)
-    await _maybe_create_project(db, db_opp)
+    new_project = await _maybe_create_project(db, db_opp)
+    if new_project:
+        await _maybe_create_customer_contract(db, db_opp, new_project)
     await _sync_staffing_from_consultants(db, db_opp)
     r = await db.execute(select(Opportunity).options(selectinload(Opportunity.company), selectinload(Opportunity.contacts)).where(Opportunity.id == db_opp.id))
     row = r.scalar_one()
@@ -279,7 +282,9 @@ async def update_opportunity(opportunity_id: UUID, data: OpportunityUpdate, db: 
 
     await db.commit()
     new_rfp_id = await _maybe_create_rfp(db, opp)
-    await _maybe_create_project(db, opp)
+    new_project = await _maybe_create_project(db, opp)
+    if new_project:
+        await _maybe_create_customer_contract(db, opp, new_project)
     await _sync_staffing_from_consultants(db, opp)
     r = await db.execute(select(Opportunity).options(selectinload(Opportunity.company), selectinload(Opportunity.contacts)).where(Opportunity.id == opportunity_id))
     row = r.scalar_one()

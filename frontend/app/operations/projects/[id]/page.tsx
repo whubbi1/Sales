@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { OperationsLayout, useOperationsPerm } from '@/components/OperationsLayout'
-import { projectsAPI, taskManagerAPI, contactsAPI } from '@/lib/api'
+import { projectsAPI, taskManagerAPI, contactsAPI, legalAPI } from '@/lib/api'
 import { getStoredUser } from '@/lib/auth'
 import { PropertyRow, SidebarSection, SidebarCard, TabNav } from '@/components/shared/RecordLayout'
 import { TaskModal } from '@/components/tasks/TaskModal'
@@ -41,6 +41,7 @@ function ProjectDetailContent() {
   const [loading, setLoading] = useState(true)
   const [tab, setTab] = useState('Overview')
   const [users, setUsers] = useState<any[]>([])
+  const [operationalTeams, setOperationalTeams] = useState<any[]>([])
   const [userEmail, setUserEmail] = useState('')
   const [userName, setUserName] = useState('')
 
@@ -99,6 +100,7 @@ function ProjectDetailContent() {
   useEffect(() => {
     fetch(`${API}/settings/users`).then(r => r.json()).then(d => setUsers(d.users || [])).catch(() => {})
     contactsAPI.list({}).then(setAllContacts).catch(() => {})
+    legalAPI.getOrgEntities('operational_team').then(d => setOperationalTeams(d.org_entities || [])).catch(() => {})
     const u = getStoredUser()
     if (u) { setUserEmail(u.email); setUserName(u.name) }
   }, [])
@@ -236,6 +238,18 @@ function ProjectDetailContent() {
           onBlur={() => setEditingField(null)}>
           <option value="">Unassigned</option>
           {users.map((u: any) => <option key={u.email} value={u.email}>{u.display_name || `${u.first_name} ${u.last_name}`}</option>)}
+        </select>
+      </EditableCell>
+    } />
+  )
+  const operationalTeamRow = (
+    <PropertyRow label="Responsable Opérationnel Team" value={
+      <EditableCell display={project.main_operational_team?.title} editing={editingField === 'main_operational_team'} onStartEdit={() => setEditingField('main_operational_team')}>
+        <select autoFocus className="form-input" style={{ fontSize: '13px' }} defaultValue={project.main_operational_team_id || ''}
+          onChange={e => { setEditingField(null); patchProject({ main_operational_team_id: e.target.value || null }) }}
+          onBlur={() => setEditingField(null)}>
+          <option value="">None</option>
+          {operationalTeams.map((t: any) => <option key={t.id} value={t.id}>{t.code} — {t.title}</option>)}
         </select>
       </EditableCell>
     } />
@@ -387,6 +401,7 @@ function ProjectDetailContent() {
 
                   <p className="section-label" style={{ marginTop: '18px', marginBottom: '8px' }}>Management</p>
                   {projectManagerRow}
+                  {operationalTeamRow}
                   {textRow('Karanext Reference', 'karanext_reference', 'e.g. KX-00123')}
 
                   <p className="section-label" style={{ marginTop: '20px', marginBottom: '8px' }}>Change History</p>
