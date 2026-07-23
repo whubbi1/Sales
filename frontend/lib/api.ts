@@ -138,6 +138,14 @@ export const marketingAPI = {
   createEmailTemplate: (d: any) => fetchAPI(`/marketing/email-templates`, { method: 'POST', body: JSON.stringify(d) }),
   updateEmailTemplate: (id: string, d: any) => fetchAPI(`/marketing/email-templates/${id}`, { method: 'PUT', body: JSON.stringify(d) }),
   deleteEmailTemplate: (id: string) => fetchAPI(`/marketing/email-templates/${id}`, { method: 'DELETE' }),
+  uploadTemplateAttachment: async (id: string, file: File) => {
+    const fd = new FormData()
+    fd.append('file', file)
+    const res = await fetch(`${API_URL}/marketing/email-templates/${id}/attachments`, { method: 'POST', body: fd })
+    if (!res.ok) { const err = await res.json().catch(() => ({})); throw new Error(err.detail || 'Upload failed') }
+    return res.json()
+  },
+  deleteTemplateAttachment: (id: string, attachmentId: string) => fetchAPI(`/marketing/email-templates/${id}/attachments/${attachmentId}`, { method: 'DELETE' }),
 
   listEventMailings:  (id: string) => fetchAPI(`/marketing/events/${id}/mailings`),
   createEventMailing: (id: string, d: any) => fetchAPI(`/marketing/events/${id}/mailings`, { method: 'POST', body: JSON.stringify(d) }),

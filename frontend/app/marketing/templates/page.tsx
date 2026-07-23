@@ -4,6 +4,7 @@ import { MarketingLayout, useMarketingPerm } from '@/components/MarketingLayout'
 import { marketingAPI } from '@/lib/api'
 import { getStoredUser } from '@/lib/auth'
 import { RichTextEditor } from '@/components/shared/RichTextEditor'
+import { useReportBuilder, applyReport, ReportPanel, ReportColumn, ColumnResizeHandle, SortArrow, Pagination } from '@/components/it/ReportBuilder'
 
 // Mirrors JOB_TYPES in ContactModal.tsx — "audience" targets Contact.job_type values.
 const JOB_TYPES = ['CIO', 'CTO', 'CISO', 'SAP Manager', 'SAP Architect', 'SAP GRC', 'SAP Security Manager', 'SAP Technical Manager', 'Cybersecurity Architect', 'SOC Manager', 'Internal Audit', 'CFO', 'Partner', 'Buyer', 'Other']
@@ -18,6 +19,18 @@ const lbl: React.CSSProperties = {
   marginBottom: '4px', textTransform: 'uppercase' as const, letterSpacing: '0.05em',
 }
 
+const COLUMNS: ReportColumn[] = [
+  { key: 'short_title', label: 'Short Title', filterable: 'text' },
+  { key: 'email_title', label: 'Email Title', filterable: 'text' },
+  { key: 'language', label: 'Language', filterable: 'select', options: LANGUAGES },
+  { key: 'audience_display', label: 'Audience', filterable: 'text' },
+  { key: 'updated_at', label: 'Updated' },
+]
+
+const DEFAULT_COLUMN_WIDTHS: Record<string, number> = {
+  short_title: 220, email_title: 240, language: 120, audience_display: 220, updated_at: 130,
+}
+
 function fmtDate(d: string) {
   return d ? new Date(d).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'
 }
@@ -28,10 +41,27 @@ function TemplateModal({ template, onClose, onSaved }: { template: any; onClose:
   const [language, setLanguage] = useState(template?.language || 'English')
   const [audience, setAudience] = useState<string[]>(template?.audience || [])
   const [content, setContent] = useState(template?.content || '')
+  const [attachments, setAttachments] = useState<any[]>(template?.attachments || [])
+  const [uploading, setUploading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
   const toggleAudience = (jt: string) => setAudience(prev => prev.includes(jt) ? prev.filter(x => x !== jt) : [...prev, jt])
+
+  const uploadAttachment = async (file: File) => {
+    if (!template) return
+    setUploading(true)
+    try {
+      const a = await marketingAPI.uploadTemplateAttachment(template.id, file)
+      setAttachments(prev => [...prev, a])
+    } catch (e: any) { setError(e.message) }
+    finally { setUploading(false) }
+  }
+  const deleteAttachment = async (a: any) => {
+    if (!template) return
+    await marketingAPI.deleteTemplateAttachment(template.id, a.id)
+    setAttachments(prev => prev.filter(x => x.id !== a.id))
+  }
 
   const submit = async () => {
     if (!shortTitle.trim()) { setError('Short title is required'); return }
@@ -86,6 +116,32 @@ function TemplateModal({ template, onClose, onSaved }: { template: any; onClose:
             <label style={lbl}>Content</label>
             <RichTextEditor value={content} onChange={setContent} minHeight="260px" />
           </div>
+          <div>
+            <label style={lbl}>Attachments</label>
+            {!template ? (
+              <p style={{ fontSize: '11px', color: '#94A3B8', margin: 0 }}>Save the template first, then reopen it to attach documents.</p>
+            ) : (
+              <>
+                <label style={{ display: 'inline-block', padding: '7px 14px', background: '#EFF6FF', color: '#156082', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '700', marginBottom: '8px' }}>
+                  {uploading ? 'Uploading…' : '+ Attach Document'}
+                  <input type="file" style={{ display: 'none' }} disabled={uploading}
+                    onChange={e => { const f = e.target.files?.[0]; if (f) uploadAttachment(f); e.target.value = '' }} />
+                </label>
+                {attachments.length === 0 ? (
+                  <p style={{ fontSize: '11px', color: '#94A3B8', margin: 0 }}>No documents attached yet.</p>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    {attachments.map((a: any) => (
+                      <div key={a.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '7px 12px', border: '1px solid #EDF2F7', borderRadius: '7px' }}>
+                        <a href={a.file_url} target="_blank" rel="noopener noreferrer" style={{ fontSize: '12px', color: '#156082', fontWeight: '600', textDecoration: 'none' }}>📎 {a.title}</a>
+                        <button onClick={() => deleteAttachment(a)} style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#94A3B8', fontSize: '14px', padding: 0, lineHeight: 1 }}>×</button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
+          </div>
           {error && <div style={{ background: '#FEF2F2', color: '#DC2626', padding: '10px 14px', borderRadius: '8px', fontSize: '12px' }}>{error}</div>}
         </div>
         <div style={{ padding: '14px 24px', borderTop: '1px solid #EDF2F7', display: 'flex', gap: '10px', justifyContent: 'flex-end', flexShrink: 0 }}>
@@ -103,9 +159,13 @@ function TemplatesContent() {
   const { level, canEdit } = useMarketingPerm('email_templates')
   const [templates, setTemplates] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
+  const [search, setSearch] = useState('')
   const [editing, setEditing] = useState<any>(null)
   const [showModal, setShowModal] = useState(false)
   const [deleteConfirm, setDeleteConfirm] = useState<any>(null)
+  const [userEmail, setUserEmail] = useState('')
+
+  const rb = useReportBuilder('marketing_email_template', COLUMNS, userEmail)
 
   const load = async () => {
     setLoading(true)
@@ -113,7 +173,18 @@ function TemplatesContent() {
     catch (e) { console.error(e) }
     finally { setLoading(false) }
   }
-  useEffect(() => { load() }, [])
+  const openTemplate = async (t: any) => {
+    // The list response doesn't include attachments (kept light, same as Events) — the full
+    // GET does, so re-fetch before opening the edit modal.
+    try { setEditing(await marketingAPI.getEmailTemplate(t.id)) } catch { setEditing(t) }
+    setShowModal(true)
+  }
+
+  useEffect(() => {
+    load()
+    const u = getStoredUser()
+    if (u?.email) setUserEmail(u.email)
+  }, [])
 
   if (level === 'loading') return <div style={{ padding: '48px', textAlign: 'center', color: '#45B6E4' }}>Loading…</div>
   if (level === 'none') return (
@@ -129,43 +200,59 @@ function TemplatesContent() {
     load()
   }
 
+  const withDisplay = templates.map((t: any) => ({ ...t, audience_display: (t.audience || []).join(', ') }))
+  const searched = withDisplay.filter((t: any) => !search || t.short_title.toLowerCase().includes(search.toLowerCase()))
+  const reported = applyReport(searched, COLUMNS, rb.filters, rb.sortField, rb.sortDir)
+  const pageRows = reported.slice((rb.page - 1) * 20, rb.page * 20)
+  const isVisible = (key: string) => rb.visibleCols.includes(key)
+
   return (
     <div style={{ padding: '24px 28px' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' }}>
         <div>
           <h1 style={{ fontSize: '20px', fontWeight: '800', color: '#156082', margin: '0 0 4px' }}>✉️ Template Emails</h1>
-          <p style={{ fontSize: '12px', color: '#94A3B8', margin: 0 }}>{templates.length} template{templates.length !== 1 ? 's' : ''}</p>
+          <p style={{ fontSize: '12px', color: '#94A3B8', margin: 0 }}>{reported.length} template{reported.length !== 1 ? 's' : ''}</p>
         </div>
-        {canEdit && (
-          <button onClick={() => { setEditing(null); setShowModal(true) }} style={{ padding: '9px 18px', background: '#156082', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '700', fontFamily: 'Montserrat, sans-serif' }}>
-            + New Template
-          </button>
-        )}
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <ReportPanel columns={COLUMNS} rb={rb} />
+          {canEdit && (
+            <button onClick={() => { setEditing(null); setShowModal(true) }} style={{ padding: '9px 18px', background: '#156082', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '700', fontFamily: 'Montserrat, sans-serif' }}>
+              + New Template
+            </button>
+          )}
+        </div>
       </div>
 
-      <div style={{ background: 'white', borderRadius: '12px', border: '1px solid #EDF2F7', overflowX: 'auto', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
+      <div style={{ marginBottom: '14px' }}>
+        <input style={{ ...inp, width: '260px' }} placeholder="Search short title…" value={search} onChange={e => setSearch(e.target.value)} />
+      </div>
+
+      <div style={{ background: 'white', borderRadius: '12px', border: '1px solid #EDF2F7', overflowX: 'auto', overflowY: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.06)', maxWidth: '100%' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px', tableLayout: 'fixed' }}>
           <thead style={{ background: '#FAFBFC' }}>
             <tr>
-              {['Short Title', 'Email Title', 'Language', 'Audience', 'Updated', ''].map(h => (
-                <th key={h} style={{ padding: '10px 12px', textAlign: 'left', fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#45B6E4', borderBottom: '1px solid #EDF2F7' }}>{h}</th>
+              {COLUMNS.filter(c => isVisible(c.key)).map(c => (
+                <th key={c.key} onClick={() => rb.toggleSort(c.key)} style={{ position: 'relative', padding: '10px 12px', textAlign: 'left', fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#45B6E4', borderBottom: '1px solid #EDF2F7', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', width: `${rb.columnWidths[c.key] || DEFAULT_COLUMN_WIDTHS[c.key] || 150}px`, cursor: 'pointer', userSelect: 'none' }}>
+                  {c.label}<SortArrow active={rb.sortField === c.key} dir={rb.sortDir} />
+                  <ColumnResizeHandle colKey={c.key} rb={rb} />
+                </th>
               ))}
+              <th style={{ borderBottom: '1px solid #EDF2F7', width: '40px' }} />
             </tr>
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={6} style={{ textAlign: 'center', padding: '48px', color: '#45B6E4' }}>Loading…</td></tr>
-            ) : templates.length === 0 ? (
-              <tr><td colSpan={6} style={{ textAlign: 'center', padding: '48px', color: '#94A3B8' }}>No templates yet.</td></tr>
-            ) : templates.map((t: any) => (
-              <tr key={t.id} style={{ borderBottom: '1px solid #F1F5F9', cursor: 'pointer' }}
-                onClick={() => { setEditing(t); setShowModal(true) }}
+              <tr><td colSpan={COLUMNS.length + 1} style={{ textAlign: 'center', padding: '48px', color: '#45B6E4' }}>Loading…</td></tr>
+            ) : reported.length === 0 ? (
+              <tr><td colSpan={COLUMNS.length + 1} style={{ textAlign: 'center', padding: '48px', color: '#94A3B8' }}>No templates yet.</td></tr>
+            ) : pageRows.map((t: any) => (
+              <tr key={t.id} onClick={() => openTemplate(t)} style={{ borderBottom: '1px solid #F1F5F9', cursor: 'pointer' }}
                 onMouseEnter={ev => (ev.currentTarget.style.background = '#FAFBFC')} onMouseLeave={ev => (ev.currentTarget.style.background = 'transparent')}>
-                <td style={{ padding: '10px 12px', fontWeight: '700', color: '#156082' }}>{t.short_title}</td>
-                <td style={{ padding: '10px 12px', color: '#3F3F3F' }}>{t.email_title || '—'}</td>
-                <td style={{ padding: '10px 12px', color: '#64748B' }}>{t.language || '—'}</td>
-                <td style={{ padding: '10px 12px', color: '#64748B' }}>{(t.audience || []).length ? (t.audience || []).join(', ') : '—'}</td>
-                <td style={{ padding: '10px 12px', color: '#64748B' }}>{fmtDate(t.updated_at)}</td>
+                {isVisible('short_title') && <td style={{ padding: '10px 12px', fontWeight: '700', color: '#156082', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.short_title}</td>}
+                {isVisible('email_title') && <td style={{ padding: '10px 12px', color: '#3F3F3F', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.email_title || '—'}</td>}
+                {isVisible('language') && <td style={{ padding: '10px 12px', color: '#64748B' }}>{t.language || '—'}</td>}
+                {isVisible('audience_display') && <td style={{ padding: '10px 12px', color: '#64748B', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.audience_display || '—'}</td>}
+                {isVisible('updated_at') && <td style={{ padding: '10px 12px', color: '#64748B' }}>{fmtDate(t.updated_at)}</td>}
                 <td style={{ padding: '10px 12px' }} onClick={e => e.stopPropagation()}>
                   {canEdit && <button onClick={() => setDeleteConfirm(t)} style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#DC2626', fontSize: '14px', padding: 0, lineHeight: 1 }}>×</button>}
                 </td>
@@ -173,6 +260,7 @@ function TemplatesContent() {
             ))}
           </tbody>
         </table>
+        <Pagination page={rb.page} setPage={rb.setPage} total={reported.length} />
       </div>
 
       {showModal && <TemplateModal template={editing} onClose={() => setShowModal(false)} onSaved={() => { setShowModal(false); load() }} />}

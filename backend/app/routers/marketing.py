@@ -325,7 +325,16 @@ async def unlink_contact(event_id: str, contact_id: str, db: AsyncSession = Depe
 async def _get_template(db: AsyncSession, template_id: str) -> dict | None:
     r = await db.execute(text("SELECT * FROM marketing_email_templates WHERE id = CAST(:id AS UUID)"), {"id": template_id})
     row = r.fetchone()
-    return _row(dict(row._mapping)) if row else None
+    if not row:
+        return None
+    template = _row(dict(row._mapping))
+    r2 = await db.execute(text("SELECT * FROM marketing_email_template_attachments WHERE template_id = CAST(:id AS UUID) ORDER BY created_at"), {"id": template_id})
+    attachments = [_row(dict(a._mapping)) for a in r2.fetchall()]
+    for a in attachments:
+        if (a.get("file_url") or "").startswith("s3://"):
+            a["file_url"] = await s3_ref_to_presigned(a["file_url"])
+    template["attachments"] = attachments
+    return template
 
 
 @router.get("/email-templates")
@@ -382,6 +391,28 @@ async def update_email_template(template_id: str, data: dict, db: AsyncSession =
 @router.delete("/email-templates/{template_id}")
 async def delete_email_template(template_id: str, db: AsyncSession = Depends(get_db)):
     await db.execute(text("DELETE FROM marketing_email_templates WHERE id = CAST(:id AS UUID)"), {"id": template_id})
+    await db.commit()
+    return {"status": "ok"}
+
+
+@router.post("/email-templates/{template_id}/attachments")
+async def add_template_attachment(template_id: str, file: UploadFile = File(...), db: AsyncSession = Depends(get_db)):
+    content = await file.read()
+    key = f"marketing/email-templates/{template_id}/attachments/{file.filename.replace(' ', '_')}"
+    file_ref = await upload_to_s3(key, content, file.content_type or "application/octet-stream")
+    attachment_id = str(uuid.uuid4())
+    await db.execute(text("""
+        INSERT INTO marketing_email_template_attachments (id, template_id, title, file_url, created_at)
+        VALUES (CAST(:id AS UUID), CAST(:tid AS UUID), :title, :file_url, NOW())
+    """), {"id": attachment_id, "tid": template_id, "title": file.filename, "file_url": file_ref})
+    await db.commit()
+    return {"status": "ok", "id": attachment_id, "title": file.filename, "file_url": await s3_ref_to_presigned(file_ref)}
+
+
+@router.delete("/email-templates/{template_id}/attachments/{attachment_id}")
+async def delete_template_attachment(template_id: str, attachment_id: str, db: AsyncSession = Depends(get_db)):
+    await db.execute(text("DELETE FROM marketing_email_template_attachments WHERE id = CAST(:id AS UUID) AND template_id = CAST(:tid AS UUID)"),
+                      {"id": attachment_id, "tid": template_id})
     await db.commit()
     return {"status": "ok"}
 

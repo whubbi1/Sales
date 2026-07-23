@@ -1890,6 +1890,13 @@ async def startup():
                     contact_id UUID NOT NULL REFERENCES contacts(id) ON DELETE CASCADE,
                     PRIMARY KEY (mailing_id, contact_id)
                 )""",
+                """CREATE TABLE IF NOT EXISTS marketing_email_template_attachments (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    template_id UUID NOT NULL REFERENCES marketing_email_templates(id) ON DELETE CASCADE,
+                    title VARCHAR(500),
+                    file_url TEXT NOT NULL,
+                    created_at TIMESTAMP DEFAULT NOW()
+                )""",
 
                 # Events' status dropdown was relabeled Closed -> Finished in an earlier change,
                 # but at least one pre-existing row still has the old literal value, which throws
@@ -2005,7 +2012,7 @@ async def startup():
         import traceback; traceback.print_exc()
 
 @app.get("/health")
-async def health(): return {"status":"healthy","app":"whubbi","version":"2.0.8"}
+async def health(): return {"status":"healthy","app":"whubbi","version":"2.0.9"}
 
 @app.get("/")
 async def root(): return {"message":"WHUBBI API","version":"2.0.0"}
