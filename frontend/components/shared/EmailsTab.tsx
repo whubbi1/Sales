@@ -25,21 +25,27 @@ function fmt(dt: string | null) {
   return new Date(dt).toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
 }
 
-function LinkEmailModal({ email, entityType, entityId, onClose, onLinked }: any) {
-  const [q, setQ] = useState('')
+function LinkEmailModal({ email, entityType, entityId, defaultContact, onClose, onLinked }: any) {
+  const [q, setQ] = useState(defaultContact?.email || '')
   const [results, setResults] = useState<any[] | null>(null)
   const [searching, setSearching] = useState(false)
   const [error, setError] = useState('')
+  const [linkedIds, setLinkedIds] = useState<Set<string>>(new Set())
 
-  const search = async () => {
-    if (!q.trim()) return
+  const search = async (term?: string) => {
+    const query = (term ?? q).trim()
+    if (!query) return
     setSearching(true); setError('')
     try {
-      const d = await outlookAPI.searchEmails(email, q.trim())
+      const d = await outlookAPI.searchEmails(email, query)
       setResults(d.messages || [])
     } catch (e: any) { setError(e.message) }
     finally { setSearching(false) }
   }
+
+  // Defaults the search to the contact's own address, so the modal opens already showing
+  // every email to/from them — the manual search box stays available to broaden or refine it.
+  useEffect(() => { if (defaultContact?.email) search(defaultContact.email) }, [])
 
   const link = async (m: any) => {
     await outlookAPI.linkEmail({
@@ -47,6 +53,7 @@ function LinkEmailModal({ email, entityType, entityId, onClose, onLinked }: any)
       subject: m.subject, from_address: m.from_address, to_addresses: m.to_addresses,
       received_at: m.received_at, body_preview: m.body_preview, created_by: email,
     })
+    setLinkedIds(prev => new Set(prev).add(m.id))
     onLinked()
   }
 
@@ -62,23 +69,33 @@ function LinkEmailModal({ email, entityType, entityId, onClose, onLinked }: any)
           <div style={{ display: 'flex', gap: '8px', marginBottom: '14px' }}>
             <input autoFocus style={inp} placeholder="Search your mailbox (subject, sender…)" value={q}
               onChange={e => setQ(e.target.value)} onKeyDown={e => e.key === 'Enter' && search()} />
-            <button onClick={search} disabled={searching} style={{ ...btn, background: '#156082', color: 'white', whiteSpace: 'nowrap' as const }}>
+            <button onClick={() => search()} disabled={searching} style={{ ...btn, background: '#156082', color: 'white', whiteSpace: 'nowrap' as const }}>
               {searching ? 'Searching…' : 'Search'}
             </button>
           </div>
           {error && <div style={{ fontSize: '11px', color: '#EF4444', marginBottom: '10px' }}>{error}</div>}
           {results && results.length === 0 && <p style={{ fontSize: '12px', color: '#94A3B8' }}>No matching emails found.</p>}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            {(results || []).map(m => (
-              <div key={m.id} style={{ padding: '12px', background: '#F8FAFC', borderRadius: '10px', border: '1px solid #EDF2F7', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px' }}>
-                <div style={{ minWidth: 0 }}>
-                  <div style={{ fontSize: '12px', fontWeight: '700', color: '#156082', whiteSpace: 'nowrap' as const, overflow: 'hidden', textOverflow: 'ellipsis' }}>{m.subject || '(no subject)'}</div>
-                  <div style={{ fontSize: '10px', color: '#94A3B8', marginTop: '2px' }}>{m.from_address} · {fmt(m.received_at)}</div>
+            {(results || []).map(m => {
+              const isLinked = linkedIds.has(m.id)
+              return (
+                <div key={m.id} style={{ padding: '12px', background: '#F8FAFC', borderRadius: '10px', border: '1px solid #EDF2F7', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px' }}>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontSize: '12px', fontWeight: '700', color: '#156082', whiteSpace: 'nowrap' as const, overflow: 'hidden', textOverflow: 'ellipsis' }}>{m.subject || '(no subject)'}</div>
+                    <div style={{ fontSize: '10px', color: '#94A3B8', marginTop: '2px' }}>{m.from_address} · {fmt(m.received_at)}</div>
+                  </div>
+                  {isLinked ? (
+                    <span style={{ fontSize: '10px', fontWeight: '700', color: '#059669', whiteSpace: 'nowrap' as const }}>Linked ✓</span>
+                  ) : (
+                    <button onClick={() => link(m)} style={{ ...btn, background: '#EFF6FF', color: '#156082', whiteSpace: 'nowrap' as const }}>Link</button>
+                  )}
                 </div>
-                <button onClick={() => link(m)} style={{ ...btn, background: '#EFF6FF', color: '#156082', whiteSpace: 'nowrap' as const }}>Link</button>
-              </div>
-            ))}
+              )
+            })}
           </div>
+        </div>
+        <div style={{ padding: '14px 22px', borderTop: '1px solid #EDF2F7', display: 'flex', justifyContent: 'flex-end' }}>
+          <button onClick={onClose} style={{ ...btn, background: '#156082', color: 'white' }}>Done</button>
         </div>
       </div>
     </div>
@@ -265,7 +282,7 @@ export function EmailsTab({ entityType, entityId, defaultContact }: { entityType
         </div>
       )}
 
-      {showLink && <LinkEmailModal email={email} entityType={entityType} entityId={entityId} onClose={() => setShowLink(false)} onLinked={() => { setShowLink(false); loadEmails() }} />}
+      {showLink && <LinkEmailModal email={email} entityType={entityType} entityId={entityId} defaultContact={defaultContact} onClose={() => setShowLink(false)} onLinked={loadEmails} />}
       {showSend && <SendEmailModal email={email} entityType={entityType} entityId={entityId} defaultContact={defaultContact} onClose={() => setShowSend(false)} onSent={() => { setShowSend(false); loadEmails() }} />}
     </div>
   )

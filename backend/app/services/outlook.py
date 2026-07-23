@@ -21,6 +21,12 @@ async def get_access_token(user_refresh_token: str) -> dict:
     Azure AD may rotate the refresh token on every use — the caller must persist the
     returned refresh_token, not keep reusing the one it started with, or the connection
     will eventually stop refreshing.
+
+    Deliberately omits `scope` here: on a refresh_token grant, Azure AD only allows
+    requesting a subset of the scopes the refresh token was originally issued with —
+    asking for more (e.g. after DELEGATED_SCOPES grows) fails with 400 invalid_scope.
+    Omitting it returns a token for whatever was originally granted; connections made
+    before a scope was added simply won't have it until the user reconnects.
     """
     async with httpx.AsyncClient() as client:
         response = await client.post(
@@ -30,7 +36,6 @@ async def get_access_token(user_refresh_token: str) -> dict:
                 "client_id":     MS_CLIENT_ID,
                 "client_secret": MS_CLIENT_SECRET,
                 "refresh_token": user_refresh_token,
-                "scope":         DELEGATED_SCOPES,
             },
         )
         response.raise_for_status()

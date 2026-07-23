@@ -80,7 +80,10 @@ async def _get_valid_access_token(db: AsyncSession, user_email: str) -> str:
     conn = await _get_connection(db, user_email)
     if not conn:
         raise HTTPException(status_code=404, detail="Mailbox not connected")
-    refreshed = await get_access_token(decrypt(conn["refresh_token_encrypted"]))
+    try:
+        refreshed = await get_access_token(decrypt(conn["refresh_token_encrypted"]))
+    except httpx.HTTPStatusError:
+        raise HTTPException(status_code=401, detail="Your mailbox connection has expired or was revoked — please reconnect it in Settings > Integrations.")
     await _store_tokens(db, user_email, conn["mailbox_email"], refreshed["access_token"], refreshed["refresh_token"], refreshed["expires_in"])
     return refreshed["access_token"]
 
