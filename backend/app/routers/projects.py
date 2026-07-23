@@ -9,7 +9,7 @@ from datetime import datetime
 
 from app.database import get_db
 from app.models.project import (
-    Project, ProjectComment, ProjectDocument, ProjectActivityLog, ProjectExpense,
+    Project, ProjectComment, ProjectDocument, ProjectActivityLog, ProjectExpense, ProjectDeliverable,
     ProjectStaffingTask, ProjectStaffingAllocation, ProjectStaffingRole,
 )
 from app.models.timesheet import TimesheetEntry
@@ -21,6 +21,7 @@ from app.schemas.schemas import (
     ProjectCommentCreate, ProjectCommentResponse,
     ProjectDocumentCreate, ProjectDocumentResponse,
     ProjectExpenseCreate, ProjectExpenseResponse,
+    ProjectDeliverableCreate, ProjectDeliverableUpdate, ProjectDeliverableResponse,
     ProjectActivityLogResponse,
     ProjectStaffingTaskCreate, ProjectStaffingTaskUpdate, ProjectStaffingTaskResponse,
     ProjectStaffingAllocationsSet,
@@ -97,6 +98,9 @@ async def _maybe_create_project(db: AsyncSession, opp: Opportunity):
         return None
 
     project_number = await next_internal_id(db, 'project_number_seq', 'PRJ')
+    # Seeds the Invoicing tab's type selector — independently editable afterward since the
+    # Opportunity itself is frozen once Contract Won.
+    invoicing_type = 'License' if opp.project_status == 'Software Licenses' else opp.project_status
     proj = Project(
         project_number=project_number,
         is_internal=False,
@@ -104,6 +108,7 @@ async def _maybe_create_project(db: AsyncSession, opp: Opportunity):
         partner_id=opp.partner_id,
         main_operational_team_id=opp.main_operational_team_id,
         project_name=opp.project_name or opp.deal_name,
+        invoicing_type=invoicing_type,
     )
     db.add(proj)
     await db.flush()
@@ -295,6 +300,58 @@ async def delete_project_expense(project_id: UUID, expense_id: UUID, db: AsyncSe
     row = r.scalar_one_or_none()
     if not row:
         raise HTTPException(status_code=404, detail="Expense not found")
+    await db.delete(row)
+    await db.commit()
+
+
+# ─── Deliverables (Invoicing tab, Project-type invoicing_type only) ────────────
+DELIVERABLE_AMOUNT_TYPES = {"fixed", "percentage"}
+
+def _validate_deliverable_amount(amount_type: str, fixed_amount, percentage):
+    if amount_type not in DELIVERABLE_AMOUNT_TYPES:
+        raise HTTPException(status_code=400, detail=f"amount_type must be one of {sorted(DELIVERABLE_AMOUNT_TYPES)}")
+    if amount_type == "fixed" and fixed_amount is None:
+        raise HTTPException(status_code=400, detail="fixed_amount is required when amount_type is 'fixed'")
+    if amount_type == "percentage" and percentage is None:
+        raise HTTPException(status_code=400, detail="percentage is required when amount_type is 'percentage'")
+
+@router.get("/{project_id}/deliverables/", response_model=List[ProjectDeliverableResponse])
+async def list_project_deliverables(project_id: UUID, db: AsyncSession = Depends(get_db)):
+    r = await db.execute(select(ProjectDeliverable).where(ProjectDeliverable.project_id == project_id).order_by(ProjectDeliverable.due_date.nullslast(), ProjectDeliverable.created_at))
+    return r.scalars().all()
+
+@router.post("/{project_id}/deliverables/", response_model=ProjectDeliverableResponse, status_code=status.HTTP_201_CREATED)
+async def add_project_deliverable(project_id: UUID, data: ProjectDeliverableCreate, db: AsyncSession = Depends(get_db)):
+    _validate_deliverable_amount(data.amount_type, data.fixed_amount, data.percentage)
+    row = ProjectDeliverable(project_id=project_id, **data.model_dump())
+    db.add(row)
+    await db.commit()
+    await db.refresh(row)
+    return row
+
+@router.put("/{project_id}/deliverables/{deliverable_id}/", response_model=ProjectDeliverableResponse)
+async def update_project_deliverable(project_id: UUID, deliverable_id: UUID, data: ProjectDeliverableUpdate, db: AsyncSession = Depends(get_db)):
+    r = await db.execute(select(ProjectDeliverable).where(ProjectDeliverable.id == deliverable_id, ProjectDeliverable.project_id == project_id))
+    row = r.scalar_one_or_none()
+    if not row:
+        raise HTTPException(status_code=404, detail="Deliverable not found")
+    update_data = data.model_dump(exclude_unset=True)
+    amount_type = update_data.get("amount_type", row.amount_type)
+    fixed_amount = update_data.get("fixed_amount", row.fixed_amount)
+    percentage = update_data.get("percentage", row.percentage)
+    _validate_deliverable_amount(amount_type, fixed_amount, percentage)
+    for k, v in update_data.items():
+        setattr(row, k, v)
+    await db.commit()
+    await db.refresh(row)
+    return row
+
+@router.delete("/{project_id}/deliverables/{deliverable_id}/", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_project_deliverable(project_id: UUID, deliverable_id: UUID, db: AsyncSession = Depends(get_db)):
+    r = await db.execute(select(ProjectDeliverable).where(ProjectDeliverable.id == deliverable_id, ProjectDeliverable.project_id == project_id))
+    row = r.scalar_one_or_none()
+    if not row:
+        raise HTTPException(status_code=404, detail="Deliverable not found")
     await db.delete(row)
     await db.commit()
 

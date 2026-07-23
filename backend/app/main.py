@@ -1715,6 +1715,28 @@ async def startup():
                     created_at TIMESTAMP DEFAULT NOW()
                 )""",
 
+                # Invoicing tab: type selector (independent of the frozen Opportunity's
+                # project_status), per-resource daily rates on the staffing plan, and
+                # Project-type deliverables (fixed amount or % of the Opportunity's deal_amount).
+                "ALTER TABLE projects ADD COLUMN IF NOT EXISTS invoicing_type VARCHAR(20)",
+                "ALTER TABLE project_staffing_roles ADD COLUMN IF NOT EXISTS daily_rate FLOAT",
+                """CREATE TABLE IF NOT EXISTS project_deliverables (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+                    title VARCHAR(500) NOT NULL,
+                    due_date TIMESTAMP,
+                    amount_type VARCHAR(20) NOT NULL,
+                    fixed_amount FLOAT,
+                    percentage FLOAT,
+                    created_by VARCHAR(255),
+                    created_at TIMESTAMP DEFAULT NOW(),
+                    updated_at TIMESTAMP DEFAULT NOW()
+                )""",
+                # Backfill invoicing_type for projects created before this field existed, from
+                # their linked Opportunity's project_status — idempotent, safe every startup.
+                """UPDATE projects p SET invoicing_type = CASE WHEN o.project_status = 'Software Licenses' THEN 'License' ELSE o.project_status END
+                   FROM opportunities o WHERE o.id = p.opportunity_id AND p.opportunity_id IS NOT NULL AND p.invoicing_type IS NULL""",
+
                 # Software Licenses opportunities now also get a Project (previously
                 # excluded) — backfill any Contract Won license deal that doesn't have one
                 # yet. Handled in Python right after this sqls loop (needs next_internal_id).

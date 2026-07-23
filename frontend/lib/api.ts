@@ -276,6 +276,11 @@ export const projectsAPI = {
   addExpense:    (id: string, d: any) => fetchAPI(`/projects/${id}/expenses/`, { method: 'POST', body: JSON.stringify(d) }),
   deleteExpense: (id: string, eid: string) => fetchAPI(`/projects/${id}/expenses/${eid}/`, { method: 'DELETE' }),
 
+  getDeliverables:    (id: string) => fetchAPI(`/projects/${id}/deliverables/`),
+  addDeliverable:     (id: string, d: any) => fetchAPI(`/projects/${id}/deliverables/`, { method: 'POST', body: JSON.stringify(d) }),
+  updateDeliverable:  (id: string, did: string, d: any) => fetchAPI(`/projects/${id}/deliverables/${did}/`, { method: 'PUT', body: JSON.stringify(d) }),
+  deleteDeliverable:  (id: string, did: string) => fetchAPI(`/projects/${id}/deliverables/${did}/`, { method: 'DELETE' }),
+
   getContacts:   (id: string) => fetchAPI(`/projects/${id}/contacts`),
   linkContact:   (id: string, contactId: string) => fetchAPI(`/projects/${id}/contacts/${contactId}`, { method: 'POST' }),
   unlinkContact: (id: string, contactId: string) => fetchAPI(`/projects/${id}/contacts/${contactId}`, { method: 'DELETE' }),

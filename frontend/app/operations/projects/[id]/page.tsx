@@ -32,6 +32,41 @@ function EditableCell({ display, editing, onStartEdit, children }: any) {
   )
 }
 
+// Own internal title/url state, since Sales and Project Documentation now render together
+// on one Documentation tab — sharing page-level state between them would leak keystrokes
+// from one section's inputs into the other's.
+function DocumentsSection({ docs, onAdd, onDelete }: { docs: any[]; onAdd: (title: string, url: string) => void; onDelete: (doc: any) => void }) {
+  const [title, setTitle] = useState('')
+  const [url, setUrl] = useState('')
+  const submit = () => {
+    if (!title.trim() || !url.trim()) return
+    onAdd(title.trim(), url.trim())
+    setTitle(''); setUrl('')
+  }
+  return (
+    <div>
+      <div style={{ display: 'flex', gap: '8px', marginBottom: '14px' }}>
+        <input className="form-input" style={{ flex: 1 }} placeholder="Title…" value={title} onChange={e => setTitle(e.target.value)} />
+        <input className="form-input" style={{ flex: 2 }} placeholder="Link (SharePoint, etc.)…" value={url} onChange={e => setUrl(e.target.value)} onKeyDown={e => e.key === 'Enter' && submit()} />
+        <button className="btn-primary" onClick={submit}>+ Add</button>
+      </div>
+      {docs.length === 0 ? <p style={{ color: '#9B9B9B', fontSize: '13px' }}>No documents listed yet.</p> : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          {docs.map((d: any) => (
+            <div key={d.id} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 14px', border: '1px solid #EDF2F7', borderRadius: '8px' }}>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontWeight: '700', color: '#144766', fontSize: '13px' }}>{d.title}</div>
+                <a href={d.url} target="_blank" rel="noopener noreferrer" style={{ color: '#3B82F6', fontSize: '11px' }}>🔗 Open</a>
+              </div>
+              <button onClick={() => onDelete(d)} style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#DC2626', fontSize: '15px', padding: 0, lineHeight: 1 }}>×</button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function ProjectDetailContent() {
   const { id } = useParams()
   const router = useRouter()
@@ -53,8 +88,6 @@ function ProjectDetailContent() {
   const [newComment, setNewComment] = useState('')
   const [salesDocs, setSalesDocs] = useState<any[]>([])
   const [projectDocs, setProjectDocs] = useState<any[]>([])
-  const [newDocTitle, setNewDocTitle] = useState('')
-  const [newDocUrl, setNewDocUrl] = useState('')
 
   const [tasks, setTasks] = useState<any[]>([])
   const [showTaskModal, setShowTaskModal] = useState(false)
@@ -65,6 +98,16 @@ function ProjectDetailContent() {
   const [expenseAmount, setExpenseAmount] = useState('')
   const [expenseDescription, setExpenseDescription] = useState('')
 
+  const [deliverables, setDeliverables] = useState<any[]>([])
+  const [currentRoles, setCurrentRoles] = useState<any[]>([])
+  const [currentTasks, setCurrentTasks] = useState<any[]>([])
+  const [editingRoleId, setEditingRoleId] = useState<string | null>(null)
+  const [delivTitle, setDelivTitle] = useState('')
+  const [delivDueDate, setDelivDueDate] = useState('')
+  const [delivAmountType, setDelivAmountType] = useState('fixed')
+  const [delivAmount, setDelivAmount] = useState('')
+  const [delivPercentage, setDelivPercentage] = useState('')
+
   const [contacts, setContacts] = useState<any[]>([])
   const [allContacts, setAllContacts] = useState<any[]>([])
   const [addContactId, setAddContactId] = useState('')
@@ -73,7 +116,7 @@ function ProjectDetailContent() {
     try {
       const p = await projectsAPI.get(id as string)
       setProject(p)
-      const [log, cmts, sales, proj, tks, exps, cts] = await Promise.all([
+      const [log, cmts, sales, proj, tks, exps, cts, delivs, roles, stasks] = await Promise.all([
         projectsAPI.getActivityLog(id as string),
         projectsAPI.getComments(id as string),
         projectsAPI.getDocuments(id as string, 'sales'),
@@ -81,6 +124,9 @@ function ProjectDetailContent() {
         taskManagerAPI.list({ entity_type: 'project', entity_id: id, source: 'operations' }),
         projectsAPI.getExpenses(id as string),
         projectsAPI.getContacts(id as string),
+        projectsAPI.getDeliverables(id as string),
+        projectsAPI.getStaffingRoles(id as string, 'current'),
+        projectsAPI.getStaffing(id as string, 'current'),
       ])
       setActivityLog(log)
       setComments(cmts)
@@ -89,6 +135,9 @@ function ProjectDetailContent() {
       setTasks(tks.tasks || tks || [])
       setExpenses(exps)
       setContacts(cts)
+      setDeliverables(delivs)
+      setCurrentRoles(roles)
+      setCurrentTasks(stasks)
     } catch {
       router.push('/operations/projects')
     } finally {
@@ -128,10 +177,8 @@ function ProjectDetailContent() {
     setComments(await projectsAPI.getComments(project.id))
   }
 
-  const addDoc = async (category: 'sales' | 'project') => {
-    if (!newDocTitle.trim() || !newDocUrl.trim()) return
-    await projectsAPI.addDocument(project.id, { category, title: newDocTitle.trim(), url: newDocUrl.trim(), created_by: userEmail })
-    setNewDocTitle(''); setNewDocUrl('')
+  const addDoc = async (category: 'sales' | 'project', title: string, url: string) => {
+    await projectsAPI.addDocument(project.id, { category, title, url, created_by: userEmail })
     if (category === 'sales') setSalesDocs(await projectsAPI.getDocuments(project.id, 'sales'))
     else setProjectDocs(await projectsAPI.getDocuments(project.id, 'project'))
   }
@@ -140,6 +187,28 @@ function ProjectDetailContent() {
     await projectsAPI.deleteDocument(project.id, doc.id)
     if (category === 'sales') setSalesDocs(await projectsAPI.getDocuments(project.id, 'sales'))
     else setProjectDocs(await projectsAPI.getDocuments(project.id, 'project'))
+  }
+
+  const updateRoleRate = async (roleId: string, rate: number | null) => {
+    const updated = await projectsAPI.updateStaffingRole(project.id, roleId, { daily_rate: rate })
+    setCurrentRoles(prev => prev.map((r: any) => r.id === roleId ? updated : r))
+  }
+  const totalDaysForRole = (roleId: string) =>
+    currentTasks.filter((t: any) => t.role_id === roleId).reduce((sum: number, t: any) => sum + (t.allocations || []).reduce((s: number, a: any) => s + a.days, 0), 0)
+
+  const addDeliverable = async () => {
+    if (!delivTitle.trim()) return
+    const payload: any = { title: delivTitle.trim(), due_date: delivDueDate || null, amount_type: delivAmountType, created_by: userEmail }
+    if (delivAmountType === 'fixed') payload.fixed_amount = delivAmount ? parseFloat(delivAmount) : null
+    else payload.percentage = delivPercentage ? parseFloat(delivPercentage) : null
+    await projectsAPI.addDeliverable(project.id, payload)
+    setDelivTitle(''); setDelivDueDate(''); setDelivAmount(''); setDelivPercentage('')
+    setDeliverables(await projectsAPI.getDeliverables(project.id))
+  }
+  const deleteDeliverable = async (d: any) => {
+    if (!confirm(`Delete deliverable "${d.title}"?`)) return
+    await projectsAPI.deleteDeliverable(project.id, d.id)
+    setDeliverables(await projectsAPI.getDeliverables(project.id))
   }
 
   const addExpense = async () => {
@@ -196,6 +265,22 @@ function ProjectDetailContent() {
   const actualStartField = isLicenseProject ? 'actual_license_start_date' : 'actual_start_date'
   const actualEndField = isLicenseProject ? 'actual_license_end_date' : 'actual_end_date'
   const toDateInput = (d?: string) => d ? d.slice(0, 10) : ''
+
+  // Invoicing tab — invoicing_type drives which sub-form shows, independently of the
+  // Opportunity's (frozen) project_status. Expected revenue is computed client-side from
+  // whichever data that sub-form owns: resource rates x days, deliverable amounts, or the
+  // flat total contract value for licenses.
+  const totalProjectAmount = project.opportunity?.deal_amount ?? null
+  const deliverableAmount = (d: any) => d.amount_type === 'fixed' ? (d.fixed_amount || 0) : ((d.percentage || 0) / 100) * (totalProjectAmount || 0)
+  let expectedRevenue: number | null = null
+  if (project.invoicing_type === 'Daily Invoicing') {
+    expectedRevenue = currentRoles.reduce((sum: number, r: any) => sum + (r.daily_rate || 0) * totalDaysForRole(r.id), 0)
+  } else if (project.invoicing_type === 'Project') {
+    expectedRevenue = deliverables.reduce((sum: number, d: any) => sum + deliverableAmount(d), 0)
+  } else if (project.invoicing_type === 'License') {
+    expectedRevenue = project.total_contract_value ?? null
+  }
+  const fmtMoney = (v: number) => `€${v.toLocaleString('en-US', { minimumFractionDigits: 2 })}`
 
   const dateTableCell = (field: string | null, fixedValue?: string) => (
     <td style={{ padding: '8px 12px', borderBottom: '1px solid #F1F5F9', textAlign: 'center' }}>
@@ -266,28 +351,6 @@ function ProjectDetailContent() {
     } />
   )
 
-  const docsSection = (category: 'sales' | 'project', docs: any[]) => (
-    <div>
-      <div style={{ display: 'flex', gap: '8px', marginBottom: '14px' }}>
-        <input className="form-input" style={{ flex: 1 }} placeholder="Title…" value={newDocTitle} onChange={e => setNewDocTitle(e.target.value)} />
-        <input className="form-input" style={{ flex: 2 }} placeholder="Link (SharePoint, etc.)…" value={newDocUrl} onChange={e => setNewDocUrl(e.target.value)} />
-        <button className="btn-primary" onClick={() => addDoc(category)}>+ Add</button>
-      </div>
-      {docs.length === 0 ? <p style={{ color: '#9B9B9B', fontSize: '13px' }}>No documents listed yet.</p> : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-          {docs.map((d: any) => (
-            <div key={d.id} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 14px', border: '1px solid #EDF2F7', borderRadius: '8px' }}>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontWeight: '700', color: '#144766', fontSize: '13px' }}>{d.title}</div>
-                <a href={d.url} target="_blank" rel="noopener noreferrer" style={{ color: '#3B82F6', fontSize: '11px' }}>🔗 Open</a>
-              </div>
-              <button onClick={() => deleteDoc(category, d)} style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#DC2626', fontSize: '15px', padding: 0, lineHeight: 1 }}>×</button>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  )
 
   return (
     <div style={{ padding: '24px 28px' }}>
@@ -326,7 +389,7 @@ function ProjectDetailContent() {
 
           <div style={{ background: 'white', borderRadius: '10px', border: '1px solid #EDF2F7', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
             <div style={{ padding: '0 20px', background: '#FAFBFC', borderBottom: '2px solid #E2E8F0' }}>
-              <TabNav tabs={['Overview', 'Notes', 'Tasks', 'Sales Documentation', 'Project Documentation', 'Staffing', 'Expenses']} active={tab} onChange={setTab} />
+              <TabNav tabs={['Overview', 'Notes', 'Tasks', 'Documentation', 'Invoicing', 'Staffing', 'Expenses']} active={tab} onChange={setTab} />
             </div>
             <div style={{ padding: '20px' }}>
               {tab === 'Overview' && (
@@ -363,16 +426,6 @@ function ProjectDetailContent() {
                       </tr>
                     </tbody>
                   </table>
-
-                  {isLicenseProject && (
-                    <>
-                      <p className="section-label" style={{ marginTop: '18px', marginBottom: '8px' }}>Invoicing</p>
-                      {selectRow('Invoicing Frequency', 'invoicing_frequency', ['Monthly', 'Yearly'])}
-                      {numberRow('Total Contract Value', 'total_contract_value')}
-                      {selectRow('Invoicing Start', 'invoicing_start', ['Upfront', 'Other'])}
-                      {numberRow('Invoicing Amount per Unit', 'invoicing_amount_per_unit')}
-                    </>
-                  )}
 
                   <p className="section-label" style={{ marginTop: '18px', marginBottom: '8px' }}>Status</p>
                   {selectRow('Status', 'status', STATUS_OPTIONS)}
@@ -444,8 +497,14 @@ function ProjectDetailContent() {
                 </div>
               )}
 
-              {tab === 'Sales Documentation' && docsSection('sales', salesDocs)}
-              {tab === 'Project Documentation' && docsSection('project', projectDocs)}
+              {tab === 'Documentation' && (
+                <div>
+                  <p className="section-label" style={{ marginBottom: '10px' }}>Sales Documentation</p>
+                  <DocumentsSection docs={salesDocs} onAdd={(t, u) => addDoc('sales', t, u)} onDelete={d => deleteDoc('sales', d)} />
+                  <p className="section-label" style={{ marginTop: '28px', marginBottom: '10px' }}>Project Documentation</p>
+                  <DocumentsSection docs={projectDocs} onAdd={(t, u) => addDoc('project', t, u)} onDelete={d => deleteDoc('project', d)} />
+                </div>
+              )}
 
               {tab === 'Notes' && (
                 <div>
@@ -500,6 +559,129 @@ function ProjectDetailContent() {
                       <div style={{ display: 'flex', justifyContent: 'flex-end', fontSize: '13px', fontWeight: '700', color: '#144766', padding: '8px 14px' }}>
                         Total: €{expenses.reduce((sum: number, e: any) => sum + e.amount, 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}
                       </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {tab === 'Invoicing' && (
+                <div>
+                  <div style={{ display: 'flex', gap: '32px', marginBottom: '22px', flexWrap: 'wrap' }}>
+                    <div>
+                      <div className="section-label" style={{ marginBottom: '6px' }}>Type of Project</div>
+                      <EditableCell display={project.invoicing_type} editing={editingField === 'invoicing_type'} onStartEdit={() => setEditingField('invoicing_type')}>
+                        <select autoFocus className="form-input" style={{ fontSize: '13px' }} defaultValue={project.invoicing_type || ''}
+                          onChange={e => { setEditingField(null); patchProject({ invoicing_type: e.target.value || null }) }} onBlur={() => setEditingField(null)}>
+                          <option value="">Select type…</option>
+                          <option value="Daily Invoicing">Daily Invoicing</option>
+                          <option value="Project">Project</option>
+                          <option value="License">License</option>
+                        </select>
+                      </EditableCell>
+                    </div>
+                    <div>
+                      <div className="section-label" style={{ marginBottom: '6px' }}>Expected Revenue</div>
+                      <div style={{ fontSize: '20px', fontWeight: '800', color: '#144766' }}>{expectedRevenue != null ? fmtMoney(expectedRevenue) : '—'}</div>
+                    </div>
+                  </div>
+
+                  {!project.invoicing_type && <p style={{ color: '#9B9B9B', fontSize: '13px' }}>Select a project type above to configure invoicing.</p>}
+
+                  {project.invoicing_type === 'Daily Invoicing' && (
+                    <div>
+                      <p className="section-label" style={{ marginBottom: '8px' }}>Resource Daily Rates</p>
+                      {currentRoles.length === 0 ? <p style={{ color: '#9B9B9B', fontSize: '13px' }}>No resources in the staffing plan yet — add them from the Staffing tab.</p> : (
+                        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                          <thead>
+                            <tr>
+                              {['Resource', 'Role', 'Total Days', 'Daily Rate', 'Revenue'].map((h, i) => (
+                                <th key={h} style={{ padding: '8px 12px', textAlign: i >= 2 ? 'right' : 'left', fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#9B9B9B', borderBottom: '1px solid #E2E8F0' }}>{h}</th>
+                              ))}
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {currentRoles.map((role: any) => {
+                              const days = totalDaysForRole(role.id)
+                              return (
+                                <tr key={role.id}>
+                                  <td style={{ padding: '8px 12px', borderBottom: '1px solid #F1F5F9', fontSize: '13px', color: '#3F3F3F' }}>{role.resource_name || role.resource_email || '—'}</td>
+                                  <td style={{ padding: '8px 12px', borderBottom: '1px solid #F1F5F9', fontSize: '13px', color: '#3F3F3F' }}>{role.name}</td>
+                                  <td style={{ padding: '8px 12px', borderBottom: '1px solid #F1F5F9', fontSize: '13px', color: '#3F3F3F', textAlign: 'right' }}>{days.toLocaleString('en-US')}</td>
+                                  <td style={{ padding: '8px 12px', borderBottom: '1px solid #F1F5F9', textAlign: 'right' }}>
+                                    <EditableCell display={role.daily_rate != null ? fmtMoney(role.daily_rate) : null} editing={editingRoleId === role.id} onStartEdit={() => setEditingRoleId(role.id)}>
+                                      <input autoFocus type="number" className="form-input" style={{ fontSize: '13px', width: '110px', textAlign: 'right' }} defaultValue={role.daily_rate ?? ''}
+                                        onBlur={e => { setEditingRoleId(null); updateRoleRate(role.id, e.target.value ? parseFloat(e.target.value) : null) }}
+                                        onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }} />
+                                    </EditableCell>
+                                  </td>
+                                  <td style={{ padding: '8px 12px', borderBottom: '1px solid #F1F5F9', fontSize: '13px', fontWeight: '700', color: '#144766', textAlign: 'right' }}>{fmtMoney((role.daily_rate || 0) * days)}</td>
+                                </tr>
+                              )
+                            })}
+                          </tbody>
+                        </table>
+                      )}
+                    </div>
+                  )}
+
+                  {project.invoicing_type === 'Project' && (
+                    <div>
+                      <p className="section-label" style={{ marginBottom: '8px' }}>Deliverables{totalProjectAmount != null && ` (Total Project Amount: ${fmtMoney(totalProjectAmount)})`}</p>
+                      <div style={{ display: 'flex', gap: '8px', marginBottom: '14px', alignItems: 'flex-end', flexWrap: 'wrap' }}>
+                        <div>
+                          <label className="form-label">Title</label>
+                          <input className="form-input" placeholder="e.g. Design Sign-off" value={delivTitle} onChange={e => setDelivTitle(e.target.value)} />
+                        </div>
+                        <div>
+                          <label className="form-label">Due Date</label>
+                          <input type="date" className="form-input" value={delivDueDate} onChange={e => setDelivDueDate(e.target.value)} />
+                        </div>
+                        <div>
+                          <label className="form-label">Amount Type</label>
+                          <select className="form-input" value={delivAmountType} onChange={e => setDelivAmountType(e.target.value)}>
+                            <option value="fixed">Fixed Amount</option>
+                            <option value="percentage">% of Total Project Amount</option>
+                          </select>
+                        </div>
+                        {delivAmountType === 'fixed' ? (
+                          <div>
+                            <label className="form-label">Amount</label>
+                            <input type="number" className="form-input" style={{ width: '120px' }} placeholder="0.00" value={delivAmount} onChange={e => setDelivAmount(e.target.value)} />
+                          </div>
+                        ) : (
+                          <div>
+                            <label className="form-label">Percentage</label>
+                            <input type="number" className="form-input" style={{ width: '90px' }} placeholder="0" value={delivPercentage} onChange={e => setDelivPercentage(e.target.value)} />
+                          </div>
+                        )}
+                        <button className="btn-primary" onClick={addDeliverable}>+ Add</button>
+                      </div>
+                      {deliverables.length === 0 ? <p style={{ color: '#9B9B9B', fontSize: '13px' }}>No deliverables yet.</p> : (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                          {deliverables.map((d: any) => (
+                            <div key={d.id} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '10px 14px', border: '1px solid #EDF2F7', borderRadius: '8px' }}>
+                              <div style={{ fontSize: '12px', color: '#9B9B9B', width: '90px', flexShrink: 0 }}>{fmt(d.due_date) || '—'}</div>
+                              <div style={{ flex: 1, fontSize: '13px', color: '#3F3F3F' }}>{d.title}</div>
+                              <div style={{ fontSize: '12px', color: '#9B9B9B', width: '90px', flexShrink: 0 }}>{d.amount_type === 'fixed' ? 'Fixed' : `${d.percentage}%`}</div>
+                              <div style={{ fontSize: '13px', fontWeight: '700', color: '#144766', width: '120px', textAlign: 'right', flexShrink: 0 }}>{fmtMoney(deliverableAmount(d))}</div>
+                              <button onClick={() => deleteDeliverable(d)} style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#DC2626', fontSize: '14px', padding: 0, lineHeight: 1 }}>×</button>
+                            </div>
+                          ))}
+                          <div style={{ display: 'flex', justifyContent: 'flex-end', fontSize: '13px', fontWeight: '700', color: '#144766', padding: '8px 14px' }}>
+                            Total: {fmtMoney(expectedRevenue || 0)}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {project.invoicing_type === 'License' && (
+                    <div>
+                      <p className="section-label" style={{ marginBottom: '8px' }}>License Invoicing</p>
+                      {selectRow('Invoicing Frequency', 'invoicing_frequency', ['Monthly', 'Yearly'])}
+                      {numberRow('Total Contract Value', 'total_contract_value')}
+                      {selectRow('Invoicing Start', 'invoicing_start', ['Upfront', 'Other'])}
+                      {numberRow('Invoicing Amount per Unit', 'invoicing_amount_per_unit')}
                     </div>
                   )}
                 </div>

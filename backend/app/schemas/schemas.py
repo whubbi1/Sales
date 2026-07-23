@@ -592,11 +592,12 @@ class ProjectUpdate(BaseModel):
     total_contract_value: Optional[float] = None
     invoicing_start: Optional[str] = None
     invoicing_amount_per_unit: Optional[float] = None
+    invoicing_type: Optional[str] = None
     # Attributed to the activity log entries this update produces, not persisted on the row.
     changed_by_email: Optional[str] = None
     changed_by_name: Optional[str] = None
 
-    @field_validator("invoicing_frequency", "invoicing_start", "status", "status_color", mode="before")
+    @field_validator("invoicing_frequency", "invoicing_start", "invoicing_type", "status", "status_color", mode="before")
     @classmethod
     def _blank_enum_to_none(cls, v):
         # These map to Postgres enum columns that reject '' — the frontend sends '' for
@@ -632,6 +633,7 @@ class ProjectResponse(BaseModel):
     total_contract_value: Optional[float] = None
     invoicing_start: Optional[str] = None
     invoicing_amount_per_unit: Optional[float] = None
+    invoicing_type: Optional[str] = None
     created_at: datetime
     updated_at: datetime
     opportunity: Optional[OpportunitySummary] = None
@@ -680,6 +682,29 @@ class ProjectExpenseResponse(ProjectExpenseCreate):
     class Config:
         from_attributes = True
 
+class ProjectDeliverableCreate(BaseModel):
+    title: str
+    due_date: Optional[datetime] = None
+    amount_type: str  # 'fixed' | 'percentage'
+    fixed_amount: Optional[float] = None
+    percentage: Optional[float] = None
+    created_by: Optional[str] = None
+
+class ProjectDeliverableUpdate(BaseModel):
+    title: Optional[str] = None
+    due_date: Optional[datetime] = None
+    amount_type: Optional[str] = None
+    fixed_amount: Optional[float] = None
+    percentage: Optional[float] = None
+
+class ProjectDeliverableResponse(ProjectDeliverableCreate):
+    id: UUID
+    project_id: UUID
+    created_at: datetime
+    updated_at: datetime
+    class Config:
+        from_attributes = True
+
 class ProjectActivityLogResponse(BaseModel):
     id: UUID
     project_id: UUID
@@ -697,11 +722,13 @@ class ProjectStaffingRoleCreate(BaseModel):
     name: str
     resource_email: Optional[str] = None
     resource_name: Optional[str] = None
+    daily_rate: Optional[float] = None
 
 class ProjectStaffingRoleUpdate(BaseModel):
     name: Optional[str] = None
     resource_email: Optional[str] = None
     resource_name: Optional[str] = None
+    daily_rate: Optional[float] = None
 
 class ProjectStaffingRoleResponse(ProjectStaffingRoleCreate):
     id: UUID

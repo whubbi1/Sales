@@ -55,6 +55,13 @@ class Project(Base):
     project_manager_name  = Column(String(255))
     karanext_reference    = Column(String(255))
 
+    # Drives which sub-form the Invoicing tab shows — defaults from the linked Opportunity's
+    # project_status at creation (and via a one-time backfill for pre-existing projects), but
+    # is independently editable here since the Opportunity itself is frozen after Contract Won
+    # and a project's actual invoicing setup can need correcting afterward. Plain string, not a
+    # native enum, per this codebase's convention for fields added post-launch.
+    invoicing_type        = Column(String(20))  # 'Daily Invoicing' | 'Project' | 'License'
+
     # Software Licenses projects only — mirrors the revised/actual start_date/end_date
     # pattern above but for the license term itself, plus how the license is invoiced.
     revised_license_start_date = Column(DateTime)
@@ -82,6 +89,23 @@ class ProjectExpense(Base):
     description  = Column(Text)
     created_by   = Column(String(255))
     created_at   = Column(DateTime, default=datetime.utcnow)
+
+
+# Invoicing tab, Project-type invoicing_type only — each deliverable bills either a fixed
+# amount or a percentage of the linked Opportunity's deal_amount, not both.
+class ProjectDeliverable(Base):
+    __tablename__ = "project_deliverables"
+
+    id           = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    project_id   = Column(UUID(as_uuid=True), ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
+    title        = Column(String(500), nullable=False)
+    due_date     = Column(DateTime)
+    amount_type  = Column(String(20), nullable=False)  # 'fixed' | 'percentage'
+    fixed_amount = Column(Float, nullable=True)
+    percentage   = Column(Float, nullable=True)  # 0-100, of the linked Opportunity's deal_amount
+    created_by   = Column(String(255))
+    created_at   = Column(DateTime, default=datetime.utcnow)
+    updated_at   = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
 class ProjectComment(Base):
@@ -136,6 +160,9 @@ class ProjectStaffingRole(Base):
     name           = Column(String(255), nullable=False)
     resource_email = Column(String(255))
     resource_name  = Column(String(255))
+    # Daily Invoicing only — set from the Invoicing tab, multiplied by this role's total
+    # allocated days (summed across its tasks) to compute expected revenue.
+    daily_rate     = Column(Float, nullable=True)
 
     created_at     = Column(DateTime, default=datetime.utcnow)
     updated_at     = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
