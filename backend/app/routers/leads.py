@@ -225,6 +225,39 @@ async def close_lead_with_opportunity(lead_id: UUID, data: LeadCloseWithOpportun
     return row
 
 
+# ─── Linked Partners / Contacts (incremental, alongside the full-replace via PUT above) ──
+@router.post("/{lead_id}/partners/{partner_id}")
+async def link_lead_partner(lead_id: UUID, partner_id: UUID, db: AsyncSession = Depends(get_db)):
+    exists = await db.execute(select(lead_partner).where(lead_partner.c.lead_id == lead_id, lead_partner.c.partner_id == partner_id))
+    if not exists.first():
+        await db.execute(insert(lead_partner).values(lead_id=lead_id, partner_id=partner_id))
+        await db.commit()
+    return {"status": "ok"}
+
+
+@router.delete("/{lead_id}/partners/{partner_id}")
+async def unlink_lead_partner(lead_id: UUID, partner_id: UUID, db: AsyncSession = Depends(get_db)):
+    await db.execute(sa_delete(lead_partner).where(lead_partner.c.lead_id == lead_id, lead_partner.c.partner_id == partner_id))
+    await db.commit()
+    return {"status": "ok"}
+
+
+@router.post("/{lead_id}/contacts/{contact_id}")
+async def link_lead_contact(lead_id: UUID, contact_id: UUID, db: AsyncSession = Depends(get_db)):
+    exists = await db.execute(select(lead_partner_contact).where(lead_partner_contact.c.lead_id == lead_id, lead_partner_contact.c.contact_id == contact_id))
+    if not exists.first():
+        await db.execute(insert(lead_partner_contact).values(lead_id=lead_id, contact_id=contact_id))
+        await db.commit()
+    return {"status": "ok"}
+
+
+@router.delete("/{lead_id}/contacts/{contact_id}")
+async def unlink_lead_contact(lead_id: UUID, contact_id: UUID, db: AsyncSession = Depends(get_db)):
+    await db.execute(sa_delete(lead_partner_contact).where(lead_partner_contact.c.lead_id == lead_id, lead_partner_contact.c.contact_id == contact_id))
+    await db.commit()
+    return {"status": "ok"}
+
+
 @router.delete("/{lead_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_lead(lead_id: UUID, db: AsyncSession = Depends(get_db)):
     r = await db.execute(select(Lead).where(Lead.id == lead_id))

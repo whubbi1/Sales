@@ -200,6 +200,11 @@ export const leadsAPI = {
   getFiles:   (id: string) => fetchAPI(`/leads/${id}/files/`),
   addFile:    (id: string, d: any) => fetchAPI(`/leads/${id}/files/`, { method: 'POST', body: JSON.stringify(d) }),
   deleteFile: (id: string, fileId: string) => fetchAPI(`/leads/${id}/files/${fileId}/`, { method: 'DELETE' }),
+
+  linkPartner:   (id: string, partnerId: string) => fetchAPI(`/leads/${id}/partners/${partnerId}`, { method: 'POST' }),
+  unlinkPartner: (id: string, partnerId: string) => fetchAPI(`/leads/${id}/partners/${partnerId}`, { method: 'DELETE' }),
+  linkContact:   (id: string, contactId: string) => fetchAPI(`/leads/${id}/contacts/${contactId}`, { method: 'POST' }),
+  unlinkContact: (id: string, contactId: string) => fetchAPI(`/leads/${id}/contacts/${contactId}`, { method: 'DELETE' }),
 }
 
 export const opportunitiesAPI = {
@@ -231,6 +236,9 @@ export const opportunitiesAPI = {
   addLink:    (id: string, d: any) => fetchAPI(`/opportunities/${id}/links`, { method: 'POST', body: JSON.stringify(d) }),
   updateLink: (id: string, lid: string, d: any) => fetchAPI(`/opportunities/${id}/links/${lid}`, { method: 'PUT', body: JSON.stringify(d) }),
   deleteLink: (id: string, lid: string) => fetchAPI(`/opportunities/${id}/links/${lid}`, { method: 'DELETE' }),
+
+  linkContact:   (id: string, contactId: string) => fetchAPI(`/opportunities/${id}/contacts/${contactId}`, { method: 'POST' }),
+  unlinkContact: (id: string, contactId: string) => fetchAPI(`/opportunities/${id}/contacts/${contactId}`, { method: 'DELETE' }),
 }
 
 // ─── RFPs ─────────────────────────────────────────────────────────────────────

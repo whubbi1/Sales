@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import { leadsAPI } from '@/lib/api'
+import { leadsAPI, contactsAPI, partnersAPI } from '@/lib/api'
 import { getStoredUser } from '@/lib/auth'
 import { RecordLayout, PropertyRow, SidebarSection, SidebarCard, StatusBadge, TabNav } from '@/components/shared/RecordLayout'
 import { LeadModal } from '@/components/leads/LeadModal'
@@ -9,6 +9,7 @@ import { TaskModal } from '@/components/tasks/TaskModal'
 import { OpportunityModal } from '@/components/opportunities/OpportunityModal'
 import { taskManagerAPI } from '@/lib/api'
 import { EmailsTab } from '@/components/shared/EmailsTab'
+import { PickerModal } from '@/components/shared/PickerModal'
 
 const TASK_DONE_STATUSES = ['resolved', 'closed']
 // Display-only relabeling — the underlying status value stays 'Create an Opportunity'
@@ -44,6 +45,9 @@ export default function LeadDetailPage() {
   const [tasks, setTasks] = useState<any[]>([])
   const [showTaskModal, setShowTaskModal] = useState(false)
   const [editingTask, setEditingTask] = useState<any>(null)
+
+  const [showAddContact, setShowAddContact] = useState(false)
+  const [showAddPartner, setShowAddPartner] = useState(false)
 
   const load = async () => {
     try {
@@ -95,6 +99,9 @@ export default function LeadDetailPage() {
     await leadsAPI.deleteFile(lead.id, f.id)
     setFiles(await leadsAPI.getFiles(lead.id))
   }
+
+  const unlinkContact = async (contactId: string) => { await leadsAPI.unlinkContact(lead.id, contactId); load() }
+  const unlinkPartner = async (partnerId: string) => { await leadsAPI.unlinkPartner(lead.id, partnerId); load() }
 
   const reloadTasks = async () => setTasks((await taskManagerAPI.list({ entity_type: 'lead', entity_id: id, source: 'sales' })).tasks || [])
   const toggleTaskDone = async (task: any) => {
@@ -294,13 +301,13 @@ export default function LeadDetailPage() {
       <SidebarSection title="Company">
         {lead.company ? <SidebarCard title={lead.company.name} subtitle={`Status: ${lead.company.status}`} href={`/companies/${lead.company.id}`} color="#144766" /> : <p style={{ fontSize: '12px', color: '#9B9B9B' }}>No company.</p>}
       </SidebarSection>
-      <SidebarSection title="Contacts">
+      <SidebarSection title="Contacts" onAdd={() => setShowAddContact(true)}>
         {lead.contact && <SidebarCard title={`${lead.contact.first_name} ${lead.contact.last_name}`} subtitle={lead.contact.job_type || lead.contact.email || 'Company Contact'} href={`/contacts/${lead.contact.id}`} color="#e97132" />}
-        {(lead.partner_contacts || []).map((c: any) => <SidebarCard key={c.id} title={`${c.first_name} ${c.last_name}`} subtitle={c.job_type || c.email || 'Partner Contact'} href={`/contacts/${c.id}`} color="#7C3AED" />)}
+        {(lead.partner_contacts || []).map((c: any) => <SidebarCard key={c.id} title={`${c.first_name} ${c.last_name}`} subtitle={c.job_type || c.email || 'Partner Contact'} href={`/contacts/${c.id}`} color="#7C3AED" onRemove={() => unlinkContact(c.id)} />)}
         {!lead.contact && (!lead.partner_contacts || lead.partner_contacts.length === 0) && <p style={{ fontSize: '12px', color: '#9B9B9B' }}>No contacts set.</p>}
       </SidebarSection>
-      <SidebarSection title={`Partners (${lead.partners?.length || 0})`}>
-        {(!lead.partners || lead.partners.length === 0) ? <p style={{ fontSize: '12px', color: '#9B9B9B' }}>No partners.</p> : lead.partners.map((p: any) => <SidebarCard key={p.id} title={p.name} subtitle={`Status: ${p.status}`} href={`/partners/${p.id}`} color="#7C3AED" />)}
+      <SidebarSection title={`Partners (${lead.partners?.length || 0})`} onAdd={() => setShowAddPartner(true)}>
+        {(!lead.partners || lead.partners.length === 0) ? <p style={{ fontSize: '12px', color: '#9B9B9B' }}>No partners.</p> : lead.partners.map((p: any) => <SidebarCard key={p.id} title={p.name} subtitle={`Status: ${p.status}`} href={`/partners/${p.id}`} color="#7C3AED" onRemove={() => unlinkPartner(p.id)} />)}
       </SidebarSection>
       <SidebarSection title="Teams">
         <PropertyRow label="Main Operational Team" value={lead.main_operational_team ? `${lead.main_operational_team.code} — ${lead.main_operational_team.title}` : null} />
@@ -324,6 +331,24 @@ export default function LeadDetailPage() {
       {showEdit && <LeadModal lead={lead} onClose={() => setShowEdit(false)} onSave={() => { setShowEdit(false); load() }} />}
       {showDuplicate && <LeadModal duplicateFrom={lead} onClose={() => setShowDuplicate(false)} onSave={(newLead: any) => { setShowDuplicate(false); router.push(`/leads/${newLead.id}`) }} />}
       {showCreateOpportunity && <OpportunityModal fromLead={lead} onClose={() => setShowCreateOpportunity(false)} onSave={() => setShowCreateOpportunity(false)} />}
+      {showAddContact && (
+        <PickerModal
+          title="Add a Contact" placeholder="Search contacts by name or email…"
+          searchFn={q => contactsAPI.list(q.trim() ? { search: q.trim() } : undefined)}
+          renderLabel={(c: any) => ({ title: `${c.first_name} ${c.last_name}`, subtitle: c.job_type || c.email })}
+          onPick={async (c: any) => { await leadsAPI.linkContact(lead.id, c.id); load() }}
+          onClose={() => setShowAddContact(false)}
+        />
+      )}
+      {showAddPartner && (
+        <PickerModal
+          title="Add a Partner" placeholder="Search partners by name…"
+          searchFn={q => partnersAPI.list(q.trim() ? { search: q.trim() } : undefined)}
+          renderLabel={(p: any) => ({ title: p.name, subtitle: `Status: ${p.status}` })}
+          onPick={async (p: any) => { await leadsAPI.linkPartner(lead.id, p.id); load() }}
+          onClose={() => setShowAddPartner(false)}
+        />
+      )}
       {showTaskModal && (
         <TaskModal
           task={editingTask}

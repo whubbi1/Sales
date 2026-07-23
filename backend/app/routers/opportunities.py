@@ -319,6 +319,34 @@ async def update_opportunity(opportunity_id: UUID, data: OpportunityUpdate, db: 
     row.rfp_id = new_rfp_id
     return row
 
+# ─── Linked Contacts (incremental, alongside the full-replace via PUT above) ────
+@router.post("/{opportunity_id}/contacts/{contact_id}")
+async def link_opportunity_contact(opportunity_id: UUID, contact_id: UUID, db: AsyncSession = Depends(get_db)):
+    r = await db.execute(select(Opportunity).options(selectinload(Opportunity.contacts)).where(Opportunity.id == opportunity_id))
+    opp = r.scalar_one_or_none()
+    if not opp:
+        raise HTTPException(status_code=404, detail="Opportunity not found")
+    rc = await db.execute(select(Contact).where(Contact.id == contact_id))
+    contact = rc.scalar_one_or_none()
+    if not contact:
+        raise HTTPException(status_code=404, detail="Contact not found")
+    if contact not in opp.contacts:
+        opp.contacts.append(contact)
+        await db.commit()
+    return {"status": "ok"}
+
+
+@router.delete("/{opportunity_id}/contacts/{contact_id}")
+async def unlink_opportunity_contact(opportunity_id: UUID, contact_id: UUID, db: AsyncSession = Depends(get_db)):
+    r = await db.execute(select(Opportunity).options(selectinload(Opportunity.contacts)).where(Opportunity.id == opportunity_id))
+    opp = r.scalar_one_or_none()
+    if not opp:
+        raise HTTPException(status_code=404, detail="Opportunity not found")
+    opp.contacts = [c for c in opp.contacts if c.id != contact_id]
+    await db.commit()
+    return {"status": "ok"}
+
+
 @router.delete("/{opportunity_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_opportunity(opportunity_id: UUID, db: AsyncSession = Depends(get_db)):
     r = await db.execute(select(Opportunity).where(Opportunity.id == opportunity_id))

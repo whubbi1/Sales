@@ -39,17 +39,22 @@ export function SidebarSection({ title, children, onAdd }: { title: string; chil
   )
 }
 
-export function SidebarCard({ title, subtitle, href, color = '#156082' }: { title: string; subtitle?: string; href: string; color?: string }) {
+export function SidebarCard({ title, subtitle, href, color = '#156082', onRemove }: { title: string; subtitle?: string; href: string; color?: string; onRemove?: () => void }) {
   return (
-    <a href={href} style={{ textDecoration: 'none', display: 'block' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '8px 10px', borderRadius: '7px', marginBottom: '4px', border: '1px solid #EDF2F7', background: 'white', cursor: 'pointer' }}>
-        <div style={{ width: '28px', height: '28px', borderRadius: '6px', background: color, color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px', fontWeight: '800', flexShrink: 0 }}>{title[0]?.toUpperCase()}</div>
-        <div style={{ minWidth: 0 }}>
-          <div style={{ fontSize: '12px', fontWeight: '600', color: '#156082', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{title}</div>
-          {subtitle && <div style={{ fontSize: '11px', color: '#45B6E4', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{subtitle}</div>}
+    <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginBottom: '4px' }}>
+      <a href={href} style={{ textDecoration: 'none', display: 'block', flex: 1, minWidth: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '8px 10px', borderRadius: '7px', border: '1px solid #EDF2F7', background: 'white', cursor: 'pointer' }}>
+          <div style={{ width: '28px', height: '28px', borderRadius: '6px', background: color, color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px', fontWeight: '800', flexShrink: 0 }}>{title[0]?.toUpperCase()}</div>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontSize: '12px', fontWeight: '600', color: '#156082', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{title}</div>
+            {subtitle && <div style={{ fontSize: '11px', color: '#45B6E4', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{subtitle}</div>}
+          </div>
         </div>
-      </div>
-    </a>
+      </a>
+      {onRemove && (
+        <button onClick={e => { e.preventDefault(); onRemove() }} title="Remove" style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#94A3B8', fontSize: '16px', padding: '0 4px', flexShrink: 0, lineHeight: 1 }}>×</button>
+      )}
+    </div>
   )
 }
 

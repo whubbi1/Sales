@@ -1,13 +1,14 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import { opportunitiesAPI, companiesAPI, taskManagerAPI } from '@/lib/api'
+import { opportunitiesAPI, companiesAPI, contactsAPI, taskManagerAPI } from '@/lib/api'
 import { getStoredUser } from '@/lib/auth'
 import { RecordLayout, PropertyRow, SidebarSection, SidebarCard, TabNav } from '@/components/shared/RecordLayout'
 import { OpportunityModal } from '@/components/opportunities/OpportunityModal'
 import { OpportunityLinksSection } from '@/components/opportunities/OpportunityLinksSection'
 import { TaskModal } from '@/components/tasks/TaskModal'
 import { EmailsTab } from '@/components/shared/EmailsTab'
+import { PickerModal } from '@/components/shared/PickerModal'
 
 // Click-to-edit date row, same interaction as the EditableCell pattern used across the
 // IT/Training/GRC report pages — click the value, swap in a date input, save on blur.
@@ -86,6 +87,8 @@ export default function OpportunityDetailPage() {
   const [tasks, setTasks] = useState<any[]>([])
   const [showTaskModal, setShowTaskModal] = useState(false)
   const [editingTask, setEditingTask] = useState<any>(null)
+
+  const [showAddContact, setShowAddContact] = useState(false)
 
   const [editingDateField, setEditingDateField] = useState<string | null>(null)
 
@@ -208,6 +211,8 @@ export default function OpportunityDetailPage() {
     await opportunitiesAPI.deleteComment(opp.id, c.id)
     setComments(await opportunitiesAPI.getComments(opp.id))
   }
+
+  const unlinkContact = async (contactId: string) => { await opportunitiesAPI.unlinkContact(opp.id, contactId); load() }
 
   const reloadTasks = async () => setTasks((await taskManagerAPI.list({ entity_type: 'opportunity', entity_id: id, source: 'sales' })).tasks || [])
   const toggleTaskDone = async (task: any) => {
@@ -476,8 +481,8 @@ export default function OpportunityDetailPage() {
       <SidebarSection title="Company">
         {opp.company ? <SidebarCard title={opp.company.name} subtitle={`Status: ${opp.company.status}`} href={`/companies/${opp.company.id}`} color="#144766" /> : <p style={{ fontSize: '12px', color: '#9B9B9B' }}>No company.</p>}
       </SidebarSection>
-      <SidebarSection title={`Contacts (${opp.contacts?.length || 0})`}>
-        {(!opp.contacts || opp.contacts.length === 0) ? <p style={{ fontSize: '12px', color: '#9B9B9B' }}>No contacts.</p> : opp.contacts.map((c: any) => <SidebarCard key={c.id} title={`${c.first_name} ${c.last_name}`} subtitle={c.job_type || c.email} href={`/contacts/${c.id}`} color="#e97132" />)}
+      <SidebarSection title={`Contacts (${opp.contacts?.length || 0})`} onAdd={() => setShowAddContact(true)}>
+        {(!opp.contacts || opp.contacts.length === 0) ? <p style={{ fontSize: '12px', color: '#9B9B9B' }}>No contacts.</p> : opp.contacts.map((c: any) => <SidebarCard key={c.id} title={`${c.first_name} ${c.last_name}`} subtitle={c.job_type || c.email} href={`/contacts/${c.id}`} color="#e97132" onRemove={() => unlinkContact(c.id)} />)}
       </SidebarSection>
       <SidebarSection title="Partner">
         {opp.partner ? <SidebarCard title={opp.partner.name} subtitle={`Status: ${opp.partner.status}`} href={`/partners/${opp.partner.id}`} color="#7C3AED" /> : <p style={{ fontSize: '12px', color: '#9B9B9B' }}>No partner.</p>}
@@ -532,6 +537,15 @@ export default function OpportunityDetailPage() {
       <RecordLayout leftColumn={leftColumn} rightColumn={rightColumn} />
       {showEdit && <OpportunityModal opportunity={opp} onClose={() => setShowEdit(false)} onSave={() => { setShowEdit(false); load() }} />}
       {showDuplicate && <OpportunityModal duplicateFrom={opp} onClose={() => setShowDuplicate(false)} onSave={() => setShowDuplicate(false)} />}
+      {showAddContact && (
+        <PickerModal
+          title="Add a Contact" placeholder="Search contacts by name or email…"
+          searchFn={q => contactsAPI.list(q.trim() ? { search: q.trim() } : undefined)}
+          renderLabel={(c: any) => ({ title: `${c.first_name} ${c.last_name}`, subtitle: c.job_type || c.email })}
+          onPick={async (c: any) => { await opportunitiesAPI.linkContact(opp.id, c.id); load() }}
+          onClose={() => setShowAddContact(false)}
+        />
+      )}
       {showTaskModal && (
         <TaskModal
           task={editingTask}
