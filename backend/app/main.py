@@ -1734,7 +1734,11 @@ async def startup():
                 )""",
                 # Backfill invoicing_type for projects created before this field existed, from
                 # their linked Opportunity's project_status — idempotent, safe every startup.
-                """UPDATE projects p SET invoicing_type = CASE WHEN o.project_status = 'Software Licenses' THEN 'License' ELSE o.project_status END
+                # project_status is a native Postgres enum; casting to text is required to mix
+                # it with the 'License' literal in one CASE expression (bare enum + text literal
+                # in the same CASE raises "types ... cannot be matched", which silently rolled
+                # this UPDATE back on the first deploy).
+                """UPDATE projects p SET invoicing_type = CASE WHEN o.project_status = 'Software Licenses' THEN 'License' ELSE o.project_status::text END
                    FROM opportunities o WHERE o.id = p.opportunity_id AND p.opportunity_id IS NOT NULL AND p.invoicing_type IS NULL""",
 
                 # Software Licenses opportunities now also get a Project (previously
