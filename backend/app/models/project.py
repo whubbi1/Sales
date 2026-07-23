@@ -61,6 +61,10 @@ class Project(Base):
     # and a project's actual invoicing setup can need correcting afterward. Plain string, not a
     # native enum, per this codebase's convention for fields added post-launch.
     invoicing_type        = Column(String(20))  # 'Daily Invoicing' | 'Project' | 'License'
+    # Carried over from the Opportunity's deal_amount at creation (and via backfill), shown
+    # next to Type of Project on the Invoicing tab — independently editable afterward, same
+    # reasoning as invoicing_type above.
+    expected_revenue      = Column(Float, nullable=True)
 
     # Software Licenses projects only — mirrors the revised/actual start_date/end_date
     # pattern above but for the license term itself, plus how the license is invoiced.
@@ -161,7 +165,9 @@ class ProjectStaffingRole(Base):
     resource_email = Column(String(255))
     resource_name  = Column(String(255))
     # Daily Invoicing only — set from the Invoicing tab, multiplied by this role's total
-    # allocated days (summed across its tasks) to compute expected revenue.
+    # allocated days (summed across its tasks) for the per-resource revenue breakdown shown
+    # there. Doesn't feed Project.expected_revenue, which is carried from the Opportunity
+    # instead and edited independently.
     daily_rate     = Column(Float, nullable=True)
 
     created_at     = Column(DateTime, default=datetime.utcnow)
@@ -198,3 +204,30 @@ class ProjectStaffingAllocation(Base):
     period_start = Column(DateTime, nullable=False)
     period_type  = Column(SAEnum('week', 'month', name='project_staffing_period_type_enum'), nullable=False)
     days         = Column(Float, nullable=False, default=0)
+
+
+# ─── Basic staffing plan — WHUBBI has two staffing functionalities: Extended (the
+# roles/tasks/allocations plan above, only used when the Opportunity has a linked RFP) and
+# Basic (this one, a flat person + monthly-days list, mirroring OpportunityStaffing exactly).
+# A project gets whichever one applies at creation — Extended copied from the RFP, Basic
+# copied from the Opportunity's own OpportunityStaffing — and edits independently afterward.
+class ProjectStaffingBasic(Base):
+    __tablename__ = "project_staffing_basic"
+
+    id         = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    project_id = Column(UUID(as_uuid=True), ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
+    user_email = Column(String(255), nullable=False)
+    user_name  = Column(String(255))
+    role       = Column(String(255))
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    months = relationship("ProjectStaffingBasicMonth", cascade="all, delete-orphan", order_by="ProjectStaffingBasicMonth.month")
+
+
+class ProjectStaffingBasicMonth(Base):
+    __tablename__ = "project_staffing_basic_months"
+
+    id          = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    staffing_id = Column(UUID(as_uuid=True), ForeignKey("project_staffing_basic.id", ondelete="CASCADE"), nullable=False)
+    month       = Column(DateTime, nullable=False)
+    days        = Column(Float, nullable=False, default=0)

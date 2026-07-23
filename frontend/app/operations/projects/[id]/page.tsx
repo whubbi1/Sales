@@ -21,6 +21,21 @@ const HEALTH_HEX: Record<string, string> = { red: '#DC2626', orange: '#D97706', 
 const fmt = (d?: string) => d ? new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : undefined
 const fmtDateTime = (d?: string) => d ? new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : ''
 
+// Every 1st-of-month between two dates (inclusive) — Basic staffing's grid columns, same
+// helper as the Opportunity detail page's own Staffing tab.
+function monthsBetween(start?: string, end?: string): { key: string; label: string }[] {
+  if (!start || !end) return []
+  const s = new Date(start), e = new Date(end)
+  const months: { key: string; label: string }[] = []
+  let cur = new Date(s.getFullYear(), s.getMonth(), 1)
+  const last = new Date(e.getFullYear(), e.getMonth(), 1)
+  while (cur <= last) {
+    months.push({ key: `${cur.getFullYear()}-${String(cur.getMonth() + 1).padStart(2, '0')}-01`, label: cur.toLocaleDateString('en-US', { month: 'short', year: 'numeric' }) })
+    cur = new Date(cur.getFullYear(), cur.getMonth() + 1, 1)
+  }
+  return months
+}
+
 function EditableCell({ display, editing, onStartEdit, children }: any) {
   return editing ? children : (
     <div onClick={onStartEdit} title="Click to edit"
@@ -101,6 +116,9 @@ function ProjectDetailContent() {
   const [deliverables, setDeliverables] = useState<any[]>([])
   const [currentRoles, setCurrentRoles] = useState<any[]>([])
   const [currentTasks, setCurrentTasks] = useState<any[]>([])
+  const [staffingBasic, setStaffingBasic] = useState<any[]>([])
+  const [addStaffEmail, setAddStaffEmail] = useState('')
+  const [addStaffRole, setAddStaffRole] = useState('')
   const [editingRoleId, setEditingRoleId] = useState<string | null>(null)
   const [delivTitle, setDelivTitle] = useState('')
   const [delivDueDate, setDelivDueDate] = useState('')
@@ -116,7 +134,7 @@ function ProjectDetailContent() {
     try {
       const p = await projectsAPI.get(id as string)
       setProject(p)
-      const [log, cmts, sales, proj, tks, exps, cts, delivs, roles, stasks] = await Promise.all([
+      const [log, cmts, sales, proj, tks, exps, cts, delivs, roles, stasks, basic] = await Promise.all([
         projectsAPI.getActivityLog(id as string),
         projectsAPI.getComments(id as string),
         projectsAPI.getDocuments(id as string, 'sales'),
@@ -127,6 +145,7 @@ function ProjectDetailContent() {
         projectsAPI.getDeliverables(id as string),
         projectsAPI.getStaffingRoles(id as string, 'current'),
         projectsAPI.getStaffing(id as string, 'current'),
+        projectsAPI.getStaffingBasic(id as string),
       ])
       setActivityLog(log)
       setComments(cmts)
@@ -138,6 +157,7 @@ function ProjectDetailContent() {
       setDeliverables(delivs)
       setCurrentRoles(roles)
       setCurrentTasks(stasks)
+      setStaffingBasic(basic)
     } catch {
       router.push('/operations/projects')
     } finally {
@@ -211,6 +231,24 @@ function ProjectDetailContent() {
     setDeliverables(await projectsAPI.getDeliverables(project.id))
   }
 
+  const addStaffingBasicEntry = async () => {
+    if (!addStaffEmail) return
+    const u = users.find((uu: any) => uu.email === addStaffEmail)
+    await projectsAPI.addStaffingBasic(project.id, { user_email: addStaffEmail, user_name: u?.display_name || `${u?.first_name} ${u?.last_name}`, role: addStaffRole })
+    setAddStaffEmail(''); setAddStaffRole('')
+    setStaffingBasic(await projectsAPI.getStaffingBasic(project.id))
+  }
+  const removeStaffingBasicEntry = async (sid: string) => {
+    try { await projectsAPI.removeStaffingBasic(project.id, sid) } catch (e: any) { alert(e.message); return }
+    setStaffingBasic(await projectsAPI.getStaffingBasic(project.id))
+  }
+  const saveStaffingBasicMonth = async (staffingRow: any, monthKey: string, days: number) => {
+    const months = (staffingRow.months || []).filter((m: any) => m.month.slice(0, 10) !== monthKey)
+    if (days > 0) months.push({ month: monthKey, days })
+    setStaffingBasic(prev => prev.map((s: any) => s.id === staffingRow.id ? { ...s, months } : s))
+    await projectsAPI.setStaffingBasicMonths(project.id, staffingRow.id, months)
+  }
+
   const addExpense = async () => {
     if (!expenseDate || !expenseAmount) return
     await projectsAPI.addExpense(project.id, { expense_date: expenseDate, amount: parseFloat(expenseAmount), description: expenseDescription.trim() || null, created_by: userEmail })
@@ -267,20 +305,15 @@ function ProjectDetailContent() {
   const toDateInput = (d?: string) => d ? d.slice(0, 10) : ''
 
   // Invoicing tab — invoicing_type drives which sub-form shows, independently of the
-  // Opportunity's (frozen) project_status. Expected revenue is computed client-side from
-  // whichever data that sub-form owns: resource rates x days, deliverable amounts, or the
-  // flat total contract value for licenses.
+  // Opportunity's (frozen) project_status. Expected Revenue is carried from the Opportunity's
+  // deal_amount (see expected_revenue on Project) and independently editable from here on —
+  // it no longer derives from the sub-form data below; the resource-rate and deliverable
+  // amounts are still shown as their own breakdown/checksum, just not fed into the header figure.
   const totalProjectAmount = project.opportunity?.deal_amount ?? null
   const deliverableAmount = (d: any) => d.amount_type === 'fixed' ? (d.fixed_amount || 0) : ((d.percentage || 0) / 100) * (totalProjectAmount || 0)
-  let expectedRevenue: number | null = null
-  if (project.invoicing_type === 'Daily Invoicing') {
-    expectedRevenue = currentRoles.reduce((sum: number, r: any) => sum + (r.daily_rate || 0) * totalDaysForRole(r.id), 0)
-  } else if (project.invoicing_type === 'Project') {
-    expectedRevenue = deliverables.reduce((sum: number, d: any) => sum + deliverableAmount(d), 0)
-  } else if (project.invoicing_type === 'License') {
-    expectedRevenue = project.total_contract_value ?? null
-  }
+  const deliverablesTotal = deliverables.reduce((sum: number, d: any) => sum + deliverableAmount(d), 0)
   const fmtMoney = (v: number) => `€${v.toLocaleString('en-US', { minimumFractionDigits: 2 })}`
+  const headlineValueStyle: React.CSSProperties = { fontSize: '20px', fontWeight: '800', color: '#144766' }
 
   const dateTableCell = (field: string | null, fixedValue?: string) => (
     <td style={{ padding: '8px 12px', borderBottom: '1px solid #F1F5F9', textAlign: 'center' }}>
@@ -569,7 +602,7 @@ function ProjectDetailContent() {
                   <div style={{ display: 'flex', gap: '32px', marginBottom: '22px', flexWrap: 'wrap' }}>
                     <div>
                       <div className="section-label" style={{ marginBottom: '6px' }}>Type of Project</div>
-                      <EditableCell display={project.invoicing_type} editing={editingField === 'invoicing_type'} onStartEdit={() => setEditingField('invoicing_type')}>
+                      <EditableCell display={<span style={headlineValueStyle}>{project.invoicing_type || '—'}</span>} editing={editingField === 'invoicing_type'} onStartEdit={() => setEditingField('invoicing_type')}>
                         <select autoFocus className="form-input" style={{ fontSize: '13px' }} defaultValue={project.invoicing_type || ''}
                           onChange={e => { setEditingField(null); patchProject({ invoicing_type: e.target.value || null }) }} onBlur={() => setEditingField(null)}>
                           <option value="">Select type…</option>
@@ -581,7 +614,11 @@ function ProjectDetailContent() {
                     </div>
                     <div>
                       <div className="section-label" style={{ marginBottom: '6px' }}>Expected Revenue</div>
-                      <div style={{ fontSize: '20px', fontWeight: '800', color: '#144766' }}>{expectedRevenue != null ? fmtMoney(expectedRevenue) : '—'}</div>
+                      <EditableCell display={<span style={headlineValueStyle}>{project.expected_revenue != null ? fmtMoney(project.expected_revenue) : '—'}</span>} editing={editingField === 'expected_revenue'} onStartEdit={() => setEditingField('expected_revenue')}>
+                        <input autoFocus type="number" className="form-input" style={{ fontSize: '13px', width: '160px' }} defaultValue={project.expected_revenue ?? ''}
+                          onBlur={e => { setEditingField(null); patchProject({ expected_revenue: e.target.value ? parseFloat(e.target.value) : null }) }}
+                          onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }} />
+                      </EditableCell>
                     </div>
                   </div>
 
@@ -668,7 +705,7 @@ function ProjectDetailContent() {
                             </div>
                           ))}
                           <div style={{ display: 'flex', justifyContent: 'flex-end', fontSize: '13px', fontWeight: '700', color: '#144766', padding: '8px 14px' }}>
-                            Total: {fmtMoney(expectedRevenue || 0)}
+                            Deliverables Total: {fmtMoney(deliverablesTotal)}
                           </div>
                         </div>
                       )}
@@ -687,8 +724,79 @@ function ProjectDetailContent() {
                 </div>
               )}
 
-              {tab === 'Staffing' && (
+              {tab === 'Staffing' && project.staffing_mode === 'extended' && (
                 <ProjectStaffingSheet projectId={project.id} startDate={startDate} endDate={endDate} users={users} />
+              )}
+
+              {tab === 'Staffing' && project.staffing_mode === 'basic' && (
+                <div>
+                  <div style={{ display: 'flex', gap: '8px', marginBottom: '14px' }}>
+                    <select className="form-input" style={{ width: '220px' }} value={addStaffEmail} onChange={e => setAddStaffEmail(e.target.value)}>
+                      <option value="">Select employee…</option>
+                      {[...users].sort((a: any, b: any) => (a.display_name || `${a.first_name} ${a.last_name}`).localeCompare(b.display_name || `${b.first_name} ${b.last_name}`)).map((u: any) => <option key={u.email} value={u.email}>{u.display_name || `${u.first_name} ${u.last_name}`}</option>)}
+                    </select>
+                    <input className="form-input" style={{ width: '180px' }} placeholder="Role (optional)" value={addStaffRole} onChange={e => setAddStaffRole(e.target.value)} />
+                    <button className="btn-primary" onClick={addStaffingBasicEntry} disabled={!addStaffEmail}>+ Add</button>
+                  </div>
+                  {staffingBasic.length === 0 ? <p style={{ color: '#9B9B9B', fontSize: '13px' }}>No one staffed on this project yet.</p> : !startDate || !endDate ? (
+                    <div>
+                      <p style={{ color: '#D97706', fontSize: '12px', marginBottom: '14px' }}>Set a Start Date and End Date to allocate days per month.</p>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        {[...staffingBasic].sort((a: any, b: any) => (a.user_name || a.user_email).localeCompare(b.user_name || b.user_email)).map((s: any) => (
+                          <div key={s.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', border: '1px solid #EDF2F7', borderRadius: '8px' }}>
+                            <div>
+                              <div style={{ fontWeight: '700', color: '#144766', fontSize: '13px' }}>{s.user_name || s.user_email}</div>
+                              {s.role && <div style={{ fontSize: '11px', color: '#9B9B9B' }}>{s.role}</div>}
+                            </div>
+                            <button onClick={() => removeStaffingBasicEntry(s.id)} style={{ padding: '5px 10px', background: '#FEF2F2', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '11px', color: '#DC2626', fontWeight: '700' }}>Remove</button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : (() => {
+                    const months = monthsBetween(startDate, endDate)
+                    const sorted = [...staffingBasic].sort((a: any, b: any) => (a.user_name || a.user_email).localeCompare(b.user_name || b.user_email))
+                    return (
+                      <div style={{ overflowX: 'auto' }}>
+                        <table style={{ borderCollapse: 'collapse', fontSize: '12px', width: '100%' }}>
+                          <thead>
+                            <tr>
+                              <th style={{ textAlign: 'left', padding: '8px 10px', fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.06em', color: '#9B9B9B', borderBottom: '1px solid #E2E8F0', whiteSpace: 'nowrap' }}>Resource</th>
+                              {months.map(m => <th key={m.key} style={{ textAlign: 'center', padding: '8px 8px', fontSize: '10px', fontWeight: '700', color: '#9B9B9B', borderBottom: '1px solid #E2E8F0', whiteSpace: 'nowrap' }}>{m.label}</th>)}
+                              <th style={{ textAlign: 'center', padding: '8px 10px', fontSize: '10px', fontWeight: '700', color: '#144766', borderBottom: '1px solid #E2E8F0' }}>Total</th>
+                              <th style={{ borderBottom: '1px solid #E2E8F0' }} />
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {sorted.map((s: any) => {
+                              const dayFor = (key: string) => (s.months || []).find((m: any) => m.month.slice(0, 10) === key)?.days || ''
+                              const total = (s.months || []).reduce((sum: number, m: any) => sum + (m.days || 0), 0)
+                              return (
+                                <tr key={s.id}>
+                                  <td style={{ padding: '8px 10px', borderBottom: '1px solid #F1F5F9', whiteSpace: 'nowrap' }}>
+                                    <div style={{ fontWeight: '700', color: '#144766' }}>{s.user_name || s.user_email}</div>
+                                    {s.role && <div style={{ fontSize: '10px', color: '#9B9B9B' }}>{s.role}</div>}
+                                  </td>
+                                  {months.map(m => (
+                                    <td key={m.key} style={{ padding: '4px', borderBottom: '1px solid #F1F5F9', textAlign: 'center' }}>
+                                      <input type="number" min={0} step={0.5} defaultValue={dayFor(m.key)} placeholder="0"
+                                        onBlur={e => saveStaffingBasicMonth(s, m.key, Number(e.target.value) || 0)}
+                                        style={{ width: '52px', textAlign: 'center', fontSize: '12px', padding: '4px', border: '1px solid #E2E8F0', borderRadius: '5px' }} />
+                                    </td>
+                                  ))}
+                                  <td style={{ padding: '8px 10px', borderBottom: '1px solid #F1F5F9', textAlign: 'center', fontWeight: '700', color: '#144766' }}>{total || '—'}</td>
+                                  <td style={{ padding: '8px 10px', borderBottom: '1px solid #F1F5F9' }}>
+                                    <button onClick={() => removeStaffingBasicEntry(s.id)} style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#DC2626', fontSize: '15px', padding: 0, lineHeight: 1 }}>×</button>
+                                  </td>
+                                </tr>
+                              )
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    )
+                  })()}
+                </div>
               )}
             </div>
           </div>

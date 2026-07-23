@@ -297,6 +297,12 @@ export const projectsAPI = {
   setStaffingAllocations: (id: string, taskId: string, allocations: { period_start: string; period_type: string; days: number }[]) =>
     fetchAPI(`/projects/${id}/staffing/${taskId}/allocations`, { method: 'PUT', body: JSON.stringify({ allocations }) }),
   getStaffingActuals: (id: string) => fetchAPI(`/projects/${id}/staffing/actuals`),
+
+  getStaffingBasic:       (id: string) => fetchAPI(`/projects/${id}/staffing-basic/`),
+  addStaffingBasic:       (id: string, d: any) => fetchAPI(`/projects/${id}/staffing-basic/`, { method: 'POST', body: JSON.stringify(d) }),
+  removeStaffingBasic:    (id: string, sid: string) => fetchAPI(`/projects/${id}/staffing-basic/${sid}/`, { method: 'DELETE' }),
+  setStaffingBasicMonths: (id: string, sid: string, months: { month: string; days: number }[]) =>
+    fetchAPI(`/projects/${id}/staffing-basic/${sid}/months`, { method: 'PUT', body: JSON.stringify({ months }) }),
 }
 
 // ─── Reporting & Analytics ──────────────────────────────────────────────────────

@@ -11,9 +11,11 @@ from app.database import get_db
 from app.models.project import (
     Project, ProjectComment, ProjectDocument, ProjectActivityLog, ProjectExpense, ProjectDeliverable,
     ProjectStaffingTask, ProjectStaffingAllocation, ProjectStaffingRole,
+    ProjectStaffingBasic, ProjectStaffingBasicMonth,
 )
 from app.models.timesheet import TimesheetEntry
 from app.models.opportunity import Opportunity
+from app.models.opportunity_extra import OpportunityStaffing
 from app.models.company import Company
 from app.models.rfp import rfp_opportunity, RFPStaffingTask, RFPStaffingRole
 from app.schemas.schemas import (
@@ -26,6 +28,7 @@ from app.schemas.schemas import (
     ProjectStaffingTaskCreate, ProjectStaffingTaskUpdate, ProjectStaffingTaskResponse,
     ProjectStaffingAllocationsSet,
     ProjectStaffingRoleCreate, ProjectStaffingRoleUpdate, ProjectStaffingRoleResponse,
+    ProjectStaffingBasicCreate, ProjectStaffingBasicResponse, ProjectStaffingBasicMonthsUpdate,
     PartnerSummary, OrgEntitySummary,
 )
 from app.services.ids import next_internal_id
@@ -65,12 +68,30 @@ async def _attach_related(db: AsyncSession, projects: list):
         if row:
             teams[tid] = OrgEntitySummary(id=row.id, code=row.code, title=row.title)
 
+    # Extended staffing (roles/tasks/allocations) is only meant for projects whose Opportunity
+    # has an RFP — but some projects already got manually-entered Extended data before this
+    # rule existed, so also treat those as 'extended' rather than hiding that data behind a
+    # Basic UI that can't show it.
+    rfp_opp_ids = set()
+    if opp_ids:
+        r = await db.execute(select(rfp_opportunity.c.opportunity_id).where(rfp_opportunity.c.opportunity_id.in_(opp_ids)))
+        rfp_opp_ids = {row[0] for row in r.all()}
+    project_ids = [p.id for p in projects]
+    extended_project_ids = set()
+    if project_ids:
+        r = await db.execute(select(ProjectStaffingRole.project_id).where(ProjectStaffingRole.project_id.in_(project_ids), ProjectStaffingRole.plan_type == 'current'))
+        extended_project_ids |= {row[0] for row in r.all()}
+        r = await db.execute(select(ProjectStaffingTask.project_id).where(ProjectStaffingTask.project_id.in_(project_ids), ProjectStaffingTask.plan_type == 'current'))
+        extended_project_ids |= {row[0] for row in r.all()}
+
     for p in projects:
         opp = opps.get(p.opportunity_id) if p.opportunity_id else None
         p.opportunity = opp
         p.company = companies.get(opp.company_id) if opp and opp.company_id else None
         p.partner = partners.get(str(p.partner_id)) if p.partner_id else None
         p.main_operational_team = teams.get(str(p.main_operational_team_id)) if p.main_operational_team_id else None
+        has_rfp = bool(opp and opp.id in rfp_opp_ids)
+        p.staffing_mode = 'extended' if (has_rfp or p.id in extended_project_ids) else 'basic'
 
 
 async def _log_change(db: AsyncSession, project_id, field_name: str, old_value, new_value, email, name):
@@ -98,8 +119,8 @@ async def _maybe_create_project(db: AsyncSession, opp: Opportunity):
         return None
 
     project_number = await next_internal_id(db, 'project_number_seq', 'PRJ')
-    # Seeds the Invoicing tab's type selector — independently editable afterward since the
-    # Opportunity itself is frozen once Contract Won.
+    # Seeds the Invoicing tab's type selector and Expected Revenue — both independently
+    # editable afterward since the Opportunity itself is frozen once Contract Won.
     invoicing_type = 'License' if opp.project_status == 'Software Licenses' else opp.project_status
     proj = Project(
         project_number=project_number,
@@ -109,6 +130,7 @@ async def _maybe_create_project(db: AsyncSession, opp: Opportunity):
         main_operational_team_id=opp.main_operational_team_id,
         project_name=opp.project_name or opp.deal_name,
         invoicing_type=invoicing_type,
+        expected_revenue=opp.deal_amount,
     )
     db.add(proj)
     await db.flush()
@@ -152,6 +174,15 @@ async def _maybe_create_project(db: AsyncSession, opp: Opportunity):
                     for a in task.allocations
                 ]
                 db.add(new_task)
+    else:
+        # No RFP — Basic staffing instead, copied from the Opportunity's own staffing list
+        # (mirrors the Extended copy above: independent from here on, so the Opportunity
+        # being frozen after Contract Won doesn't block adjusting staffing on the Project).
+        r3 = await db.execute(select(OpportunityStaffing).options(selectinload(OpportunityStaffing.months)).where(OpportunityStaffing.opportunity_id == opp.id))
+        for s in r3.scalars().all():
+            new_staffing = ProjectStaffingBasic(project_id=proj.id, user_email=s.user_email, user_name=s.user_name, role=s.role)
+            new_staffing.months = [ProjectStaffingBasicMonth(month=m.month, days=m.days) for m in s.months]
+            db.add(new_staffing)
 
     await db.commit()
     await db.refresh(proj)
@@ -540,3 +571,42 @@ async def get_staffing_actuals(project_id: UUID, db: AsyncSession = Depends(get_
         {**v, "months": [{"month": m, "days": d} for m, d in sorted(v["months"].items())]}
         for v in by_resource.values()
     ]
+
+
+# ─── Basic staffing (mirrors Opportunity's /staffing/ endpoints in opportunities.py) ────
+@router.get("/{project_id}/staffing-basic/", response_model=List[ProjectStaffingBasicResponse])
+async def list_project_staffing_basic(project_id: UUID, db: AsyncSession = Depends(get_db)):
+    r = await db.execute(
+        select(ProjectStaffingBasic).options(selectinload(ProjectStaffingBasic.months))
+        .where(ProjectStaffingBasic.project_id == project_id).order_by(ProjectStaffingBasic.created_at)
+    )
+    return r.scalars().all()
+
+@router.post("/{project_id}/staffing-basic/", response_model=ProjectStaffingBasicResponse, status_code=status.HTTP_201_CREATED)
+async def add_project_staffing_basic(project_id: UUID, data: ProjectStaffingBasicCreate, db: AsyncSession = Depends(get_db)):
+    row = ProjectStaffingBasic(project_id=project_id, **data.model_dump())
+    db.add(row)
+    await db.commit()
+    r = await db.execute(select(ProjectStaffingBasic).options(selectinload(ProjectStaffingBasic.months)).where(ProjectStaffingBasic.id == row.id))
+    return r.scalar_one()
+
+@router.delete("/{project_id}/staffing-basic/{staffing_id}/", status_code=status.HTTP_204_NO_CONTENT)
+async def remove_project_staffing_basic(project_id: UUID, staffing_id: UUID, db: AsyncSession = Depends(get_db)):
+    r = await db.execute(select(ProjectStaffingBasic).where(ProjectStaffingBasic.id == staffing_id, ProjectStaffingBasic.project_id == project_id))
+    row = r.scalar_one_or_none()
+    if not row:
+        raise HTTPException(status_code=404, detail="Staffing entry not found")
+    await db.delete(row)
+    await db.commit()
+
+@router.put("/{project_id}/staffing-basic/{staffing_id}/months", response_model=ProjectStaffingBasicResponse)
+async def set_project_staffing_basic_months(project_id: UUID, staffing_id: UUID, data: ProjectStaffingBasicMonthsUpdate, db: AsyncSession = Depends(get_db)):
+    r = await db.execute(select(ProjectStaffingBasic).options(selectinload(ProjectStaffingBasic.months))
+                          .where(ProjectStaffingBasic.id == staffing_id, ProjectStaffingBasic.project_id == project_id))
+    row = r.scalar_one_or_none()
+    if not row:
+        raise HTTPException(status_code=404, detail="Staffing entry not found")
+    row.months = [ProjectStaffingBasicMonth(month=m.month, days=m.days) for m in data.months]
+    await db.commit()
+    r = await db.execute(select(ProjectStaffingBasic).options(selectinload(ProjectStaffingBasic.months)).where(ProjectStaffingBasic.id == staffing_id))
+    return r.scalar_one()

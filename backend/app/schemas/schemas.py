@@ -593,6 +593,7 @@ class ProjectUpdate(BaseModel):
     invoicing_start: Optional[str] = None
     invoicing_amount_per_unit: Optional[float] = None
     invoicing_type: Optional[str] = None
+    expected_revenue: Optional[float] = None
     # Attributed to the activity log entries this update produces, not persisted on the row.
     changed_by_email: Optional[str] = None
     changed_by_name: Optional[str] = None
@@ -634,12 +635,17 @@ class ProjectResponse(BaseModel):
     invoicing_start: Optional[str] = None
     invoicing_amount_per_unit: Optional[float] = None
     invoicing_type: Optional[str] = None
+    expected_revenue: Optional[float] = None
     created_at: datetime
     updated_at: datetime
     opportunity: Optional[OpportunitySummary] = None
     company: Optional[CompanySummary] = None
     partner: Optional[PartnerSummary] = None
     main_operational_team: Optional[OrgEntitySummary] = None
+    # Computed, not a stored column — 'extended' if the linked Opportunity has an RFP or this
+    # project already has manually-entered Extended (roles/tasks) data, 'basic' otherwise.
+    # Drives which Staffing sub-UI the frontend shows (see _attach_related in projects.py).
+    staffing_mode: Optional[str] = None
     class Config:
         from_attributes = True
 
@@ -771,6 +777,24 @@ class ProjectStaffingTaskResponse(ProjectStaffingTaskCreate):
 
 class ProjectStaffingAllocationsSet(BaseModel):
     allocations: List[ProjectStaffingAllocationIn]
+
+# ─── Basic staffing (mirrors StaffingCreate/StaffingResponse/StaffingMonthsUpdate above,
+# but scoped to Project instead of Opportunity) ─────────────────────────────────
+class ProjectStaffingBasicCreate(BaseModel):
+    user_email: str
+    user_name: Optional[str] = None
+    role: Optional[str] = None
+
+class ProjectStaffingBasicResponse(ProjectStaffingBasicCreate):
+    id: UUID
+    project_id: UUID
+    created_at: datetime
+    months: Optional[List[StaffingMonth]] = []
+    class Config:
+        from_attributes = True
+
+class ProjectStaffingBasicMonthsUpdate(BaseModel):
+    months: List[StaffingMonth]
 
 # ─── Timesheets ─────────────────────────────────────────────────────────────────
 class TimesheetEntryCreate(BaseModel):

@@ -1741,6 +1741,32 @@ async def startup():
                 """UPDATE projects p SET invoicing_type = CASE WHEN o.project_status = 'Software Licenses' THEN 'License' ELSE o.project_status::text END
                    FROM opportunities o WHERE o.id = p.opportunity_id AND p.opportunity_id IS NOT NULL AND p.invoicing_type IS NULL""",
 
+                # Expected Revenue on the Invoicing tab — carried from the Opportunity's
+                # deal_amount, independently editable afterward. deal_amount is a plain Float,
+                # not an enum, so no cast is needed here (unlike invoicing_type above).
+                "ALTER TABLE projects ADD COLUMN IF NOT EXISTS expected_revenue FLOAT",
+                """UPDATE projects p SET expected_revenue = o.deal_amount
+                   FROM opportunities o WHERE o.id = p.opportunity_id AND p.opportunity_id IS NOT NULL AND p.expected_revenue IS NULL""",
+
+                # Basic staffing — the other of WHUBBI's two staffing functionalities (Extended,
+                # above, is RFP-only). Mirrors opportunity_staffing/opportunity_staffing_months.
+                # Data is copied in per-project by the Python backfill right after this loop,
+                # since it needs to check each project's RFP linkage first.
+                """CREATE TABLE IF NOT EXISTS project_staffing_basic (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+                    user_email VARCHAR(255) NOT NULL,
+                    user_name VARCHAR(255),
+                    role VARCHAR(255),
+                    created_at TIMESTAMP DEFAULT NOW()
+                )""",
+                """CREATE TABLE IF NOT EXISTS project_staffing_basic_months (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    staffing_id UUID NOT NULL REFERENCES project_staffing_basic(id) ON DELETE CASCADE,
+                    month TIMESTAMP NOT NULL,
+                    days FLOAT NOT NULL DEFAULT 0
+                )""",
+
                 # Software Licenses opportunities now also get a Project (previously
                 # excluded) — backfill any Contract Won license deal that doesn't have one
                 # yet. Handled in Python right after this sqls loop (needs next_internal_id).
@@ -1884,13 +1910,57 @@ async def startup():
             except Exception as e:
                 print(f"Contract Won backfill skipped: {e}")
 
+            # Basic staffing backfill — projects created before this feature only ever got
+            # Extended staffing (copied from an RFP, or left empty if there wasn't one). Any
+            # project whose Opportunity has no RFP, and that has no manually-entered Extended
+            # data of its own (preserved rather than overwritten), gets its Opportunity's own
+            # staffing list copied in as Basic staffing.
+            try:
+                from sqlalchemy import select as _select
+                from sqlalchemy.orm import selectinload as _selectinload
+                from app.models.project import ProjectStaffingBasic, ProjectStaffingBasicMonth
+                from app.models.opportunity_extra import OpportunityStaffing
+                from app.models.rfp import rfp_opportunity as _rfp_opp_t
+                r = await session.execute(text("SELECT id, opportunity_id FROM projects WHERE is_internal = false AND opportunity_id IS NOT NULL"))
+                candidates = r.fetchall()
+                synced_basic = 0
+                for pid, oid in candidates:
+                    has_rfp = await session.execute(_select(_rfp_opp_t.c.rfp_id).where(_rfp_opp_t.c.opportunity_id == oid))
+                    if has_rfp.first():
+                        continue  # Extended applies — nothing to backfill
+                    has_extended = await session.execute(text("""
+                        SELECT 1 WHERE EXISTS (SELECT 1 FROM project_staffing_roles WHERE project_id = :pid AND plan_type = 'current')
+                           OR EXISTS (SELECT 1 FROM project_staffing_tasks WHERE project_id = :pid AND plan_type = 'current')
+                    """), {"pid": str(pid)})
+                    if has_extended.first():
+                        continue  # already has manually-entered Extended data — preserve it as-is
+                    has_basic = await session.execute(text("SELECT 1 FROM project_staffing_basic WHERE project_id = :pid LIMIT 1"), {"pid": str(pid)})
+                    if has_basic.first():
+                        continue  # already backfilled on a previous startup
+                    r2 = await session.execute(
+                        _select(OpportunityStaffing).options(_selectinload(OpportunityStaffing.months))
+                        .where(OpportunityStaffing.opportunity_id == oid)
+                    )
+                    entries = r2.scalars().all()
+                    if not entries:
+                        continue
+                    for s in entries:
+                        new_staffing = ProjectStaffingBasic(project_id=pid, user_email=s.user_email, user_name=s.user_name, role=s.role)
+                        new_staffing.months = [ProjectStaffingBasicMonth(month=m.month, days=m.days) for m in s.months]
+                        session.add(new_staffing)
+                    await session.commit()
+                    synced_basic += 1
+                print(f"Basic staffing backfill: {synced_basic} project(s) got Basic staffing copied from their Opportunity, out of {len(candidates)} checked")
+            except Exception as e:
+                print(f"Basic staffing backfill skipped: {e}")
+
         print("Database ready!")
     except Exception as e:
         print(f"STARTUP ERROR: {e}")
         import traceback; traceback.print_exc()
 
 @app.get("/health")
-async def health(): return {"status":"healthy","app":"whubbi","version":"2.0.5"}
+async def health(): return {"status":"healthy","app":"whubbi","version":"2.0.6"}
 
 @app.get("/")
 async def root(): return {"message":"WHUBBI API","version":"2.0.0"}
