@@ -134,8 +134,7 @@ const REGISTRY: ModuleGroup[] = [
     { label: 'Curriculum Vitae', href: '/settings/cv' },
     { label: 'Training', href: '/settings/training' },
     { label: 'Certifications', href: '/settings/certifications' },
-    { label: 'PayFit', href: '/settings/payfit' },
-    { label: 'Claude / MCP Access', href: '/settings/mcp' },
+    { label: 'Integrations', href: '/settings/integrations' },
   ] },
 ]
 
