@@ -42,6 +42,14 @@ def _require_entity_type(entity_type: str):
         raise HTTPException(status_code=400, detail=f"entity_type must be one of {sorted(ENTITY_TYPES)}")
 
 
+def _parse_dt(value: str | None):
+    # asyncpg binds TIMESTAMP params as native datetimes — Graph's receivedDateTime (and any
+    # other ISO string the frontend sends) has to be parsed before it reaches the query.
+    if not value:
+        return None
+    return datetime.fromisoformat(value.replace("Z", "+00:00"))
+
+
 async def _get_connection(db: AsyncSession, user_email: str) -> dict | None:
     r = await db.execute(text("SELECT * FROM outlook_connections WHERE user_email = :e"), {"e": user_email})
     row = r.fetchone()
@@ -178,7 +186,7 @@ async def link_email(data: dict, db: AsyncSession = Depends(get_db)):
     """), {
         "id": email_id, "et": data["entity_type"], "eid": data["entity_id"], "mid": data.get("provider_message_id"),
         "subject": data.get("subject"), "from_addr": data.get("from_address"),
-        "to_addrs": json.dumps(data.get("to_addresses") or []), "sent_at": data.get("received_at") or data.get("sent_at"),
+        "to_addrs": json.dumps(data.get("to_addresses") or []), "sent_at": _parse_dt(data.get("received_at") or data.get("sent_at")),
         "preview": data.get("body_preview"), "created_by": data.get("created_by", ""),
     })
     await db.commit()
