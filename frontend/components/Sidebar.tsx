@@ -56,8 +56,11 @@ export function Sidebar() {
       </div>
 
       {/* Nav */}
-      <nav style={{ flex: 1, padding: '4px 8px' }}>
+      <div style={{ padding: '8px 8px 4px', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
         <EasyAccessMenu />
+      </div>
+
+      <nav style={{ flex: 1, padding: '4px 8px' }}>
         {navItems.map(item => {
           const active = pathname === item.href || pathname.startsWith(item.href + '/')
           return (

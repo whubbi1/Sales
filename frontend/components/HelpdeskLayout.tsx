@@ -79,8 +79,11 @@ export default function HelpdeskLayout({ children }: Props) {
         </div>
 
 
-        <nav style={{ flex: 1, padding: '8px' }}>
+        <div style={{ padding: '8px 8px 4px', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
           <EasyAccessMenu />
+        </div>
+
+        <nav style={{ flex: 1, padding: '8px' }}>
           {visible.map(item => {
             const active = isActive(item.href)
             return (

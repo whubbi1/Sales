@@ -148,11 +148,15 @@ function isPermVisible(perms: any, moduleKey?: string, subKey?: string) {
 
 export function EasyAccessMenu() {
   const router = useRouter()
+  // Mirrors PageHeader's own "Search" text -> inline input swap (see RecordLayout.tsx) —
+  // clicking "Easy Access" swaps the button for a search input in the same spot, and matches
+  // dropping under it as you type, instead of opening a separate modal.
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
   const [perms, setPerms] = useState<any>(null)
   const [helpdeskRole, setHelpdeskRole] = useState<string | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
+  const containerRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     if (!open) return
@@ -170,8 +174,15 @@ export function EasyAccessMenu() {
   useEffect(() => {
     if (!open) return
     const onKeyDown = (e: KeyboardEvent) => { if (e.key === 'Escape') { setOpen(false); setQuery('') } }
+    const onClickOutside = (e: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) { setOpen(false); setQuery('') }
+    }
     document.addEventListener('keydown', onKeyDown)
-    return () => document.removeEventListener('keydown', onKeyDown)
+    document.addEventListener('mousedown', onClickOutside)
+    return () => {
+      document.removeEventListener('keydown', onKeyDown)
+      document.removeEventListener('mousedown', onClickOutside)
+    }
   }, [open])
 
   const q = query.trim().toLowerCase()
@@ -192,53 +203,47 @@ export function EasyAccessMenu() {
   }
 
   return (
-    <>
-      <button onClick={() => setOpen(true)} style={{
-        width: '100%', display: 'flex', alignItems: 'center', gap: '10px',
-        padding: '9px 12px', borderRadius: '8px', marginBottom: '2px',
-        background: 'transparent', color: 'rgba(255,255,255,0.6)',
-        fontSize: '12px', fontWeight: 500, border: 'none', cursor: 'pointer',
-        fontFamily: 'Montserrat, sans-serif', textAlign: 'left',
-      }}
-        onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.08)')}
-        onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
-        <span style={{ fontSize: '14px', flexShrink: 0 }}>🔎</span>
-        Easy Access
-      </button>
+    <div ref={containerRef} style={{ position: 'relative', marginBottom: '2px' }}>
+      {open ? (
+        <input ref={inputRef} className="form-input" value={query} onChange={e => setQuery(e.target.value)}
+          placeholder="Search modules & functionalities…"
+          style={{ fontSize: '12px', padding: '8px 11px' }} />
+      ) : (
+        <button onClick={() => setOpen(true)} style={{
+          width: '100%', display: 'flex', alignItems: 'center', gap: '10px',
+          padding: '9px 12px', borderRadius: '8px',
+          background: 'transparent', color: 'rgba(255,255,255,0.6)',
+          fontSize: '12px', fontWeight: 500, border: 'none', cursor: 'pointer',
+          fontFamily: 'Montserrat, sans-serif', textAlign: 'left',
+        }}
+          onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.08)')}
+          onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
+          <span style={{ fontSize: '14px', flexShrink: 0 }}>🔎</span>
+          Easy Access
+        </button>
+      )}
 
-      {open && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.35)', zIndex: 2000, display: 'flex', justifyContent: 'center', paddingTop: '10vh' }}
-          onClick={() => { setOpen(false); setQuery('') }}>
-          <div onClick={e => e.stopPropagation()} style={{ width: '480px', maxWidth: '90vw', maxHeight: '70vh', background: 'white', borderRadius: '12px', boxShadow: '0 20px 60px rgba(0,0,0,0.3)', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-            <div style={{ padding: '14px' }}>
-              <input ref={inputRef} autoFocus value={query} onChange={e => setQuery(e.target.value)}
-                placeholder="Type a module or functionality… (e.g. Oper)"
-                style={{ width: '100%', boxSizing: 'border-box', fontSize: '14px', padding: '10px 12px', border: '1px solid #E2E8F0', borderRadius: '8px', fontFamily: 'Montserrat, sans-serif', outline: 'none' }} />
+      {open && q.length > 0 && (
+        <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, marginTop: '4px', background: 'white', borderRadius: '8px', boxShadow: '0 10px 30px rgba(0,0,0,0.3)', zIndex: 500, maxHeight: '60vh', overflowY: 'auto' }}>
+          {perms === null ? (
+            <div style={{ padding: '14px', fontSize: '12px', color: '#9B9B9B' }}>Loading…</div>
+          ) : results.length === 0 ? (
+            <div style={{ padding: '14px', fontSize: '12px', color: '#9B9B9B' }}>No matching modules or functionalities.</div>
+          ) : results.map(g => (
+            <div key={g.module} style={{ padding: '6px 0' }}>
+              <div style={{ padding: '4px 14px', fontSize: '10px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#9B9B9B' }}>{g.icon} {g.module}</div>
+              {g.items.map(it => (
+                <button key={it.href} onClick={() => navigate(it.href)}
+                  style={{ display: 'block', width: '100%', textAlign: 'left', padding: '8px 14px', fontSize: '12.5px', color: '#144766', fontWeight: 600, background: 'transparent', border: 'none', cursor: 'pointer', fontFamily: 'Montserrat, sans-serif' }}
+                  onMouseEnter={e => (e.currentTarget.style.background = '#F1F5F9')}
+                  onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
+                  {g.module} {it.label}
+                </button>
+              ))}
             </div>
-            {q.length > 0 && (
-              <div style={{ overflowY: 'auto', borderTop: '1px solid #EDF2F7', flex: 1 }}>
-                {perms === null ? (
-                  <div style={{ padding: '16px', fontSize: '12px', color: '#9B9B9B' }}>Loading…</div>
-                ) : results.length === 0 ? (
-                  <div style={{ padding: '16px', fontSize: '12px', color: '#9B9B9B' }}>No matching modules or functionalities.</div>
-                ) : results.map(g => (
-                  <div key={g.module} style={{ padding: '6px 0' }}>
-                    <div style={{ padding: '4px 16px', fontSize: '10px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#9B9B9B' }}>{g.icon} {g.module}</div>
-                    {g.items.map(it => (
-                      <button key={it.href} onClick={() => navigate(it.href)}
-                        style={{ display: 'block', width: '100%', textAlign: 'left', padding: '9px 16px', fontSize: '13px', color: '#144766', fontWeight: 600, background: 'transparent', border: 'none', cursor: 'pointer', fontFamily: 'Montserrat, sans-serif' }}
-                        onMouseEnter={e => (e.currentTarget.style.background = '#F1F5F9')}
-                        onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
-                        {g.module} {it.label}
-                      </button>
-                    ))}
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
+          ))}
         </div>
       )}
-    </>
+    </div>
   )
 }

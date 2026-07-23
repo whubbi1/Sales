@@ -61,8 +61,11 @@ export function LegalLayout({ children }: { children: React.ReactNode }) {
         </div>
 
 
-        <nav style={{ flex: 1, padding: '10px 8px', overflowY: 'auto' }}>
+        <div style={{ padding: '10px 8px 6px', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
           <EasyAccessMenu />
+        </div>
+
+        <nav style={{ flex: 1, padding: '10px 8px', overflowY: 'auto' }}>
           {NAV.map(item => {
             const active = path === item.href || path.startsWith(item.href)
             return (

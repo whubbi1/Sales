@@ -61,8 +61,11 @@ export default function TrainingLayout({ children }: { children: React.ReactNode
         </div>
       </div>
 
-      <nav style={{ flex: 1, padding: '8px' }}>
+      <div style={{ padding: '8px 8px 4px', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
         <EasyAccessMenu />
+      </div>
+
+      <nav style={{ flex: 1, padding: '8px' }}>
         {NAV_ITEMS.map(item => {
           const active = isActive(item.href)
           return (
