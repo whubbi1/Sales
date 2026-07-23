@@ -119,7 +119,7 @@ function ProjectDetailContent() {
   const [staffingBasic, setStaffingBasic] = useState<any[]>([])
   const [addStaffEmail, setAddStaffEmail] = useState('')
   const [addStaffRole, setAddStaffRole] = useState('')
-  const [editingRoleId, setEditingRoleId] = useState<string | null>(null)
+  const [editingRateId, setEditingRateId] = useState<string | null>(null)
   const [delivTitle, setDelivTitle] = useState('')
   const [delivDueDate, setDelivDueDate] = useState('')
   const [delivAmountType, setDelivAmountType] = useState('fixed')
@@ -215,6 +215,15 @@ function ProjectDetailContent() {
   }
   const totalDaysForRole = (roleId: string) =>
     currentTasks.filter((t: any) => t.role_id === roleId).reduce((sum: number, t: any) => sum + (t.allocations || []).reduce((s: number, a: any) => s + a.days, 0), 0)
+
+  // Basic-mode equivalent of updateRoleRate/totalDaysForRole above — most projects use Basic
+  // staffing (no RFP), so the Invoicing tab's resource-rate table needs to read from whichever
+  // staffing_mode actually applies, not just the Extended roles.
+  const updateBasicRate = async (staffingId: string, rate: number | null) => {
+    const updated = await projectsAPI.updateStaffingBasic(project.id, staffingId, { daily_rate: rate })
+    setStaffingBasic(prev => prev.map((s: any) => s.id === staffingId ? updated : s))
+  }
+  const totalDaysForBasic = (s: any) => (s.months || []).reduce((sum: number, m: any) => sum + (m.days || 0), 0)
 
   const addDeliverable = async () => {
     if (!delivTitle.trim()) return
@@ -314,6 +323,14 @@ function ProjectDetailContent() {
   const deliverablesTotal = deliverables.reduce((sum: number, d: any) => sum + deliverableAmount(d), 0)
   const fmtMoney = (v: number) => `€${v.toLocaleString('en-US', { minimumFractionDigits: 2 })}`
   const headlineValueStyle: React.CSSProperties = { fontSize: '20px', fontWeight: '800', color: '#144766' }
+
+  // Daily Invoicing's resource-rate table reads from whichever staffing functionality this
+  // project actually uses — Extended (RFP-only) or Basic (everyone else) — normalized to one
+  // shape so the table itself doesn't need to care which.
+  const invoicingResources = project.staffing_mode === 'extended'
+    ? currentRoles.map((r: any) => ({ kind: 'extended', id: r.id, name: r.resource_name || r.resource_email, role: r.name, days: totalDaysForRole(r.id), daily_rate: r.daily_rate }))
+    : staffingBasic.map((s: any) => ({ kind: 'basic', id: s.id, name: s.user_name || s.user_email, role: s.role, days: totalDaysForBasic(s), daily_rate: s.daily_rate }))
+  const updateResourceRate = (item: any, rate: number | null) => item.kind === 'extended' ? updateRoleRate(item.id, rate) : updateBasicRate(item.id, rate)
 
   const dateTableCell = (field: string | null, fixedValue?: string) => (
     <td style={{ padding: '8px 12px', borderBottom: '1px solid #F1F5F9', textAlign: 'center' }}>
@@ -627,7 +644,7 @@ function ProjectDetailContent() {
                   {project.invoicing_type === 'Daily Invoicing' && (
                     <div>
                       <p className="section-label" style={{ marginBottom: '8px' }}>Resource Daily Rates</p>
-                      {currentRoles.length === 0 ? <p style={{ color: '#9B9B9B', fontSize: '13px' }}>No resources in the staffing plan yet — add them from the Staffing tab.</p> : (
+                      {invoicingResources.length === 0 ? <p style={{ color: '#9B9B9B', fontSize: '13px' }}>No resources in the staffing plan yet — add them from the Staffing tab.</p> : (
                         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                           <thead>
                             <tr>
@@ -637,24 +654,21 @@ function ProjectDetailContent() {
                             </tr>
                           </thead>
                           <tbody>
-                            {currentRoles.map((role: any) => {
-                              const days = totalDaysForRole(role.id)
-                              return (
-                                <tr key={role.id}>
-                                  <td style={{ padding: '8px 12px', borderBottom: '1px solid #F1F5F9', fontSize: '13px', color: '#3F3F3F' }}>{role.resource_name || role.resource_email || '—'}</td>
-                                  <td style={{ padding: '8px 12px', borderBottom: '1px solid #F1F5F9', fontSize: '13px', color: '#3F3F3F' }}>{role.name}</td>
-                                  <td style={{ padding: '8px 12px', borderBottom: '1px solid #F1F5F9', fontSize: '13px', color: '#3F3F3F', textAlign: 'right' }}>{days.toLocaleString('en-US')}</td>
-                                  <td style={{ padding: '8px 12px', borderBottom: '1px solid #F1F5F9', textAlign: 'right' }}>
-                                    <EditableCell display={role.daily_rate != null ? fmtMoney(role.daily_rate) : null} editing={editingRoleId === role.id} onStartEdit={() => setEditingRoleId(role.id)}>
-                                      <input autoFocus type="number" className="form-input" style={{ fontSize: '13px', width: '110px', textAlign: 'right' }} defaultValue={role.daily_rate ?? ''}
-                                        onBlur={e => { setEditingRoleId(null); updateRoleRate(role.id, e.target.value ? parseFloat(e.target.value) : null) }}
-                                        onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }} />
-                                    </EditableCell>
-                                  </td>
-                                  <td style={{ padding: '8px 12px', borderBottom: '1px solid #F1F5F9', fontSize: '13px', fontWeight: '700', color: '#144766', textAlign: 'right' }}>{fmtMoney((role.daily_rate || 0) * days)}</td>
-                                </tr>
-                              )
-                            })}
+                            {invoicingResources.map((item: any) => (
+                              <tr key={item.id}>
+                                <td style={{ padding: '8px 12px', borderBottom: '1px solid #F1F5F9', fontSize: '13px', color: '#3F3F3F' }}>{item.name || '—'}</td>
+                                <td style={{ padding: '8px 12px', borderBottom: '1px solid #F1F5F9', fontSize: '13px', color: '#3F3F3F' }}>{item.role || '—'}</td>
+                                <td style={{ padding: '8px 12px', borderBottom: '1px solid #F1F5F9', fontSize: '13px', color: '#3F3F3F', textAlign: 'right' }}>{item.days.toLocaleString('en-US')}</td>
+                                <td style={{ padding: '8px 12px', borderBottom: '1px solid #F1F5F9', textAlign: 'right' }}>
+                                  <EditableCell display={item.daily_rate != null ? fmtMoney(item.daily_rate) : null} editing={editingRateId === item.id} onStartEdit={() => setEditingRateId(item.id)}>
+                                    <input autoFocus type="number" className="form-input" style={{ fontSize: '13px', width: '110px', textAlign: 'right' }} defaultValue={item.daily_rate ?? ''}
+                                      onBlur={e => { setEditingRateId(null); updateResourceRate(item, e.target.value ? parseFloat(e.target.value) : null) }}
+                                      onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }} />
+                                  </EditableCell>
+                                </td>
+                                <td style={{ padding: '8px 12px', borderBottom: '1px solid #F1F5F9', fontSize: '13px', fontWeight: '700', color: '#144766', textAlign: 'right' }}>{fmtMoney((item.daily_rate || 0) * item.days)}</td>
+                              </tr>
+                            ))}
                           </tbody>
                         </table>
                       )}

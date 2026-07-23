@@ -784,6 +784,10 @@ class ProjectStaffingBasicCreate(BaseModel):
     user_email: str
     user_name: Optional[str] = None
     role: Optional[str] = None
+    daily_rate: Optional[float] = None
+
+class ProjectStaffingBasicUpdate(BaseModel):
+    daily_rate: Optional[float] = None
 
 class ProjectStaffingBasicResponse(ProjectStaffingBasicCreate):
     id: UUID

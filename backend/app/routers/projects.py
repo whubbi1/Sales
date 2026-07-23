@@ -28,7 +28,7 @@ from app.schemas.schemas import (
     ProjectStaffingTaskCreate, ProjectStaffingTaskUpdate, ProjectStaffingTaskResponse,
     ProjectStaffingAllocationsSet,
     ProjectStaffingRoleCreate, ProjectStaffingRoleUpdate, ProjectStaffingRoleResponse,
-    ProjectStaffingBasicCreate, ProjectStaffingBasicResponse, ProjectStaffingBasicMonthsUpdate,
+    ProjectStaffingBasicCreate, ProjectStaffingBasicUpdate, ProjectStaffingBasicResponse, ProjectStaffingBasicMonthsUpdate,
     PartnerSummary, OrgEntitySummary,
 )
 from app.services.ids import next_internal_id
@@ -588,6 +588,19 @@ async def add_project_staffing_basic(project_id: UUID, data: ProjectStaffingBasi
     db.add(row)
     await db.commit()
     r = await db.execute(select(ProjectStaffingBasic).options(selectinload(ProjectStaffingBasic.months)).where(ProjectStaffingBasic.id == row.id))
+    return r.scalar_one()
+
+@router.put("/{project_id}/staffing-basic/{staffing_id}/", response_model=ProjectStaffingBasicResponse)
+async def update_project_staffing_basic(project_id: UUID, staffing_id: UUID, data: ProjectStaffingBasicUpdate, db: AsyncSession = Depends(get_db)):
+    r = await db.execute(select(ProjectStaffingBasic).options(selectinload(ProjectStaffingBasic.months))
+                          .where(ProjectStaffingBasic.id == staffing_id, ProjectStaffingBasic.project_id == project_id))
+    row = r.scalar_one_or_none()
+    if not row:
+        raise HTTPException(status_code=404, detail="Staffing entry not found")
+    for k, v in data.model_dump(exclude_unset=True).items():
+        setattr(row, k, v)
+    await db.commit()
+    r = await db.execute(select(ProjectStaffingBasic).options(selectinload(ProjectStaffingBasic.months)).where(ProjectStaffingBasic.id == staffing_id))
     return r.scalar_one()
 
 @router.delete("/{project_id}/staffing-basic/{staffing_id}/", status_code=status.HTTP_204_NO_CONTENT)

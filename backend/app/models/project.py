@@ -219,6 +219,10 @@ class ProjectStaffingBasic(Base):
     user_email = Column(String(255), nullable=False)
     user_name  = Column(String(255))
     role       = Column(String(255))
+    # Daily Invoicing only — mirrors ProjectStaffingRole.daily_rate, so anyone staffed here
+    # (the common case, Basic being the default staffing mode) shows up on the Invoicing tab's
+    # resource-rate breakdown too, not just Extended-mode projects.
+    daily_rate = Column(Float, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     months = relationship("ProjectStaffingBasicMonth", cascade="all, delete-orphan", order_by="ProjectStaffingBasicMonth.month")

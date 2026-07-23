@@ -1766,6 +1766,9 @@ async def startup():
                     month TIMESTAMP NOT NULL,
                     days FLOAT NOT NULL DEFAULT 0
                 )""",
+                # So Basic-staffed resources also show up on the Invoicing tab's per-resource
+                # rate breakdown, not just Extended (RFP-only) ones.
+                "ALTER TABLE project_staffing_basic ADD COLUMN IF NOT EXISTS daily_rate FLOAT",
 
                 # Software Licenses opportunities now also get a Project (previously
                 # excluded) — backfill any Contract Won license deal that doesn't have one
@@ -1960,7 +1963,7 @@ async def startup():
         import traceback; traceback.print_exc()
 
 @app.get("/health")
-async def health(): return {"status":"healthy","app":"whubbi","version":"2.0.6"}
+async def health(): return {"status":"healthy","app":"whubbi","version":"2.0.7"}
 
 @app.get("/")
 async def root(): return {"message":"WHUBBI API","version":"2.0.0"}

@@ -300,6 +300,7 @@ export const projectsAPI = {
 
   getStaffingBasic:       (id: string) => fetchAPI(`/projects/${id}/staffing-basic/`),
   addStaffingBasic:       (id: string, d: any) => fetchAPI(`/projects/${id}/staffing-basic/`, { method: 'POST', body: JSON.stringify(d) }),
+  updateStaffingBasic:    (id: string, sid: string, d: any) => fetchAPI(`/projects/${id}/staffing-basic/${sid}/`, { method: 'PUT', body: JSON.stringify(d) }),
   removeStaffingBasic:    (id: string, sid: string) => fetchAPI(`/projects/${id}/staffing-basic/${sid}/`, { method: 'DELETE' }),
   setStaffingBasicMonths: (id: string, sid: string, months: { month: string; days: number }[]) =>
     fetchAPI(`/projects/${id}/staffing-basic/${sid}/months`, { method: 'PUT', body: JSON.stringify({ months }) }),
