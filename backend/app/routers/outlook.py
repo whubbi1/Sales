@@ -8,7 +8,7 @@
 import os
 import uuid
 import json
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException
@@ -44,10 +44,16 @@ def _require_entity_type(entity_type: str):
 
 def _parse_dt(value: str | None):
     # asyncpg binds TIMESTAMP params as native datetimes — Graph's receivedDateTime (and any
-    # other ISO string the frontend sends) has to be parsed before it reaches the query.
+    # other ISO string the frontend sends) has to be parsed before it reaches the query. The
+    # linked_emails.sent_at column is TIMESTAMP WITHOUT TIME ZONE, so the tz-aware datetime
+    # fromisoformat produces from a "Z"/offset suffix has to be normalized to naive UTC first —
+    # asyncpg rejects binding a tz-aware value to a naive timestamp column.
     if not value:
         return None
-    return datetime.fromisoformat(value.replace("Z", "+00:00"))
+    dt = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    if dt.tzinfo is not None:
+        dt = dt.astimezone(timezone.utc).replace(tzinfo=None)
+    return dt
 
 
 async def _get_connection(db: AsyncSession, user_email: str) -> dict | None:
