@@ -83,8 +83,8 @@ function MailingModal({ eventId, mailing, templates, users, contacts, onClose, o
         await marketingAPI.updateMailing(mailing.id, payload)
         // Reconcile the contact list against whatever it was before, since update_mailing
         // doesn't touch contacts itself (only create does) — mirrors marketing_mailing_contacts.
-        const before = new Set((mailing.contacts || []).map((c: any) => c.id))
-        const after = new Set(contactIds)
+        const before = new Set<string>((mailing.contacts || []).map((c: any) => c.id))
+        const after = new Set<string>(contactIds)
         for (const cid of after) if (!before.has(cid)) await marketingAPI.linkMailingContact(mailing.id, cid)
         for (const cid of before) if (!after.has(cid)) await marketingAPI.unlinkMailingContact(mailing.id, cid)
       } else {
