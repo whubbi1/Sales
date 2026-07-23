@@ -253,7 +253,7 @@ export default function ContactsPage() {
             </div>
           </div>
         )}
-        {showModal && <ContactModal onClose={() => setShowModal(false)} onSave={() => { setShowModal(false); load() }} />}
+        {showModal && <ContactModal onClose={() => setShowModal(false)} onSave={(newContactId?: string) => { setShowModal(false); if (newContactId) router.push(`/contacts/${newContactId}`); else load() }} />}
       </main>
     </div>
   )

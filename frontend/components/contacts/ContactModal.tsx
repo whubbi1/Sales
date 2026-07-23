@@ -141,10 +141,11 @@ export function ContactModal({ contact, onClose, onSave }: any) {
         data_source_ref_id: form.data_source_ref_id || null,
       }
       let contactId = contact?.id
+      const isNew = !contact
       if (contact) { await contactsAPI.update(contact.id, payload) }
       else { const created = await contactsAPI.create(payload); contactId = created.id }
       if (optOutJustActivated && contactId) await contactsAPI.createNote(contactId, { content: `Opted out: ${optOutReason.trim()}` })
-      onSave()
+      onSave(isNew ? contactId : undefined)
     } catch (e: any) { setError(e.message) }
     finally { setSaving(false) }
   }
