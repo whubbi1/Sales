@@ -1853,6 +1853,48 @@ async def startup():
                 # Backfill lead_id on Opportunities created before this field existed, using the
                 # existing reverse pointer (Lead.opportunity_id) — idempotent, safe every startup.
                 "UPDATE opportunities o SET lead_id = l.id FROM leads l WHERE l.opportunity_id = o.id AND o.lead_id IS NULL",
+
+                # Marketing — Template Emails (reusable content) and Mailings (a template sent
+                # to a chosen group of contacts on a given date, assigned to an event).
+                """CREATE TABLE IF NOT EXISTS marketing_email_templates (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    short_title VARCHAR(255) NOT NULL,
+                    email_title VARCHAR(500),
+                    language VARCHAR(100),
+                    audience JSONB DEFAULT '[]'::jsonb,
+                    content TEXT,
+                    created_by VARCHAR(255),
+                    created_at TIMESTAMP DEFAULT NOW(),
+                    updated_at TIMESTAMP DEFAULT NOW()
+                )""",
+                # email_title/content are a snapshot copied from the template at assignment
+                # time (same "carry over then edit independently" pattern used everywhere else
+                # in this codebase) — not a live reference, so a mailing keeps what it's actually
+                # going to send even if the source template is edited or deleted afterward.
+                """CREATE TABLE IF NOT EXISTS marketing_mailings (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    event_id UUID NOT NULL REFERENCES marketing_events(id) ON DELETE CASCADE,
+                    template_id UUID REFERENCES marketing_email_templates(id) ON DELETE SET NULL,
+                    name VARCHAR(500) NOT NULL,
+                    email_title VARCHAR(500),
+                    content TEXT,
+                    owner_email VARCHAR(255),
+                    owner_name VARCHAR(255),
+                    sender_name VARCHAR(255),
+                    send_date DATE,
+                    created_at TIMESTAMP DEFAULT NOW(),
+                    updated_at TIMESTAMP DEFAULT NOW()
+                )""",
+                """CREATE TABLE IF NOT EXISTS marketing_mailing_contacts (
+                    mailing_id UUID NOT NULL REFERENCES marketing_mailings(id) ON DELETE CASCADE,
+                    contact_id UUID NOT NULL REFERENCES contacts(id) ON DELETE CASCADE,
+                    PRIMARY KEY (mailing_id, contact_id)
+                )""",
+
+                # Events' status dropdown was relabeled Closed -> Finished in an earlier change,
+                # but at least one pre-existing row still has the old literal value, which throws
+                # off the "ongoing" KPI query (status != 'Finished') by counting it as ongoing.
+                "UPDATE marketing_events SET status = 'Finished' WHERE status = 'Closed'",
             ]
             for sql in sqls:
                 try:
@@ -1963,7 +2005,7 @@ async def startup():
         import traceback; traceback.print_exc()
 
 @app.get("/health")
-async def health(): return {"status":"healthy","app":"whubbi","version":"2.0.7"}
+async def health(): return {"status":"healthy","app":"whubbi","version":"2.0.8"}
 
 @app.get("/")
 async def root(): return {"message":"WHUBBI API","version":"2.0.0"}

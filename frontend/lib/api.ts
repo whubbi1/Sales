@@ -132,6 +132,19 @@ export const marketingAPI = {
   unlinkPartner: (id: string, partnerId: string) => fetchAPI(`/marketing/events/${id}/partners/${partnerId}`, { method: 'DELETE' }),
   linkContact:   (id: string, contactId: string) => fetchAPI(`/marketing/events/${id}/contacts/${contactId}`, { method: 'POST' }),
   unlinkContact: (id: string, contactId: string) => fetchAPI(`/marketing/events/${id}/contacts/${contactId}`, { method: 'DELETE' }),
+
+  listEmailTemplates:  () => fetchAPI(`/marketing/email-templates`),
+  getEmailTemplate:    (id: string) => fetchAPI(`/marketing/email-templates/${id}`),
+  createEmailTemplate: (d: any) => fetchAPI(`/marketing/email-templates`, { method: 'POST', body: JSON.stringify(d) }),
+  updateEmailTemplate: (id: string, d: any) => fetchAPI(`/marketing/email-templates/${id}`, { method: 'PUT', body: JSON.stringify(d) }),
+  deleteEmailTemplate: (id: string) => fetchAPI(`/marketing/email-templates/${id}`, { method: 'DELETE' }),
+
+  listEventMailings:  (id: string) => fetchAPI(`/marketing/events/${id}/mailings`),
+  createEventMailing: (id: string, d: any) => fetchAPI(`/marketing/events/${id}/mailings`, { method: 'POST', body: JSON.stringify(d) }),
+  updateMailing:      (mid: string, d: any) => fetchAPI(`/marketing/mailings/${mid}`, { method: 'PUT', body: JSON.stringify(d) }),
+  deleteMailing:      (mid: string) => fetchAPI(`/marketing/mailings/${mid}`, { method: 'DELETE' }),
+  linkMailingContact:   (mid: string, contactId: string) => fetchAPI(`/marketing/mailings/${mid}/contacts/${contactId}`, { method: 'POST' }),
+  unlinkMailingContact: (mid: string, contactId: string) => fetchAPI(`/marketing/mailings/${mid}/contacts/${contactId}`, { method: 'DELETE' }),
 }
 
 // ─── Contacts ─────────────────────────────────────────────────────────────────

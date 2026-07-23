@@ -38,7 +38,7 @@ MODULES = {
     "development":  ["general", "test_plans", "test_campaigns", "remediation"],
     "training":     ["manager"],
     "tasks":        ["manager"],
-    "marketing":    ["events", "company_website", "competitor_analysis", "social_marketing", "marketing_plan", "marketing_material"],
+    "marketing":    ["events", "company_website", "competitor_analysis", "social_marketing", "marketing_plan", "marketing_material", "email_templates"],
     "operations":   ["projects", "internal_projects", "licenses", "staffing", "timesheets", "payfit"],
     "reporting":    ["reports", "dashboards"],
 }

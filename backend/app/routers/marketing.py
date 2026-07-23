@@ -1,6 +1,7 @@
 # backend/app/routers/marketing.py
-# Marketing — Events (owner, contributors, named URLs, linked Partners).
-# Company Website / Competitor Analysis / Social Marketing / Marketing Plan / Marketing Material
+# Marketing — Events (owner, contributors, named URLs, linked Partners), Email Templates,
+# and Mailings (a template sent to a chosen group of contacts, assigned to an event).
+# Company Website / Competitor Analysis / Social Marketing / Marketing Plan
 # are nav placeholders only for now — no backend endpoints for those yet.
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -8,6 +9,7 @@ from sqlalchemy import text
 from app.database import get_db
 from app.routers.hr import upload_to_s3, s3_ref_to_presigned
 import uuid
+import json
 
 router = APIRouter()
 
@@ -315,5 +317,175 @@ async def link_contact(event_id: str, contact_id: str, db: AsyncSession = Depend
 async def unlink_contact(event_id: str, contact_id: str, db: AsyncSession = Depends(get_db)):
     await db.execute(text("DELETE FROM marketing_event_contacts WHERE event_id = CAST(:eid AS UUID) AND contact_id = CAST(:cid AS UUID)"),
                       {"eid": event_id, "cid": contact_id})
+    await db.commit()
+    return {"status": "ok"}
+
+
+# ─── Email Templates — reusable content, not tied to a single event/mailing ──────
+async def _get_template(db: AsyncSession, template_id: str) -> dict | None:
+    r = await db.execute(text("SELECT * FROM marketing_email_templates WHERE id = CAST(:id AS UUID)"), {"id": template_id})
+    row = r.fetchone()
+    return _row(dict(row._mapping)) if row else None
+
+
+@router.get("/email-templates")
+async def list_email_templates(db: AsyncSession = Depends(get_db)):
+    r = await db.execute(text("SELECT * FROM marketing_email_templates ORDER BY updated_at DESC"))
+    return {"templates": [_row(dict(row._mapping)) for row in r.fetchall()]}
+
+
+@router.post("/email-templates")
+async def create_email_template(data: dict, db: AsyncSession = Depends(get_db)):
+    if not data.get("short_title"):
+        raise HTTPException(status_code=400, detail="short_title is required")
+    template_id = str(uuid.uuid4())
+    await db.execute(text("""
+        INSERT INTO marketing_email_templates (id, short_title, email_title, language, audience, content, created_by, created_at, updated_at)
+        VALUES (CAST(:id AS UUID), :short_title, :email_title, :language, CAST(:audience AS JSONB), :content, :created_by, NOW(), NOW())
+    """), {
+        "id": template_id, "short_title": data["short_title"], "email_title": data.get("email_title"),
+        "language": data.get("language"), "audience": json.dumps(data.get("audience") or []),
+        "content": data.get("content"), "created_by": data.get("created_by", ""),
+    })
+    await db.commit()
+    return await _get_template(db, template_id)
+
+
+@router.get("/email-templates/{template_id}")
+async def get_email_template(template_id: str, db: AsyncSession = Depends(get_db)):
+    template = await _get_template(db, template_id)
+    if not template:
+        raise HTTPException(status_code=404, detail="Template not found")
+    return template
+
+
+@router.put("/email-templates/{template_id}")
+async def update_email_template(template_id: str, data: dict, db: AsyncSession = Depends(get_db)):
+    existing = await _get_template(db, template_id)
+    if not existing:
+        raise HTTPException(status_code=404, detail="Template not found")
+    merged = {**existing, **data}
+    await db.execute(text("""
+        UPDATE marketing_email_templates SET
+            short_title = :short_title, email_title = :email_title, language = :language,
+            audience = CAST(:audience AS JSONB), content = :content, updated_at = NOW()
+        WHERE id = CAST(:id AS UUID)
+    """), {
+        "id": template_id, "short_title": merged.get("short_title"), "email_title": merged.get("email_title"),
+        "language": merged.get("language"), "audience": json.dumps(merged.get("audience") or []),
+        "content": merged.get("content"),
+    })
+    await db.commit()
+    return await _get_template(db, template_id)
+
+
+@router.delete("/email-templates/{template_id}")
+async def delete_email_template(template_id: str, db: AsyncSession = Depends(get_db)):
+    await db.execute(text("DELETE FROM marketing_email_templates WHERE id = CAST(:id AS UUID)"), {"id": template_id})
+    await db.commit()
+    return {"status": "ok"}
+
+
+# ─── Mailings — a Template Email sent to a chosen group of contacts on a given date,
+# assigned to an event. Any event can have mailings, not just event_type='mailing' ones —
+# e.g. a webinar's own invite mailing lives here too. ─────────────────────────────
+async def _attach_mailing_extras(db: AsyncSession, mailings: list):
+    for m in mailings:
+        template = await _get_template(db, m["template_id"]) if m.get("template_id") else None
+        m["template"] = {"id": template["id"], "short_title": template["short_title"]} if template else None
+        r = await db.execute(text("""
+            SELECT c.id, c.first_name, c.last_name, c.email FROM marketing_mailing_contacts mc
+            JOIN contacts c ON c.id = mc.contact_id WHERE mc.mailing_id = CAST(:id AS UUID) ORDER BY c.first_name, c.last_name
+        """), {"id": m["id"]})
+        m["contacts"] = [_row(dict(row._mapping)) for row in r.fetchall()]
+
+
+@router.get("/events/{event_id}/mailings")
+async def list_event_mailings(event_id: str, db: AsyncSession = Depends(get_db)):
+    r = await db.execute(text("SELECT * FROM marketing_mailings WHERE event_id = CAST(:eid AS UUID) ORDER BY send_date NULLS LAST, created_at DESC"), {"eid": event_id})
+    mailings = [_row(dict(row._mapping)) for row in r.fetchall()]
+    await _attach_mailing_extras(db, mailings)
+    return {"mailings": mailings}
+
+
+@router.post("/events/{event_id}/mailings")
+async def create_event_mailing(event_id: str, data: dict, db: AsyncSession = Depends(get_db)):
+    if not data.get("name"):
+        raise HTTPException(status_code=400, detail="name is required")
+    mailing_id = str(uuid.uuid4())
+    await db.execute(text("""
+        INSERT INTO marketing_mailings (id, event_id, template_id, name, email_title, content, owner_email, owner_name, sender_name, send_date, created_at, updated_at)
+        VALUES (CAST(:id AS UUID), CAST(:eid AS UUID), CAST(:template_id AS UUID), :name, :email_title, :content, :owner_email, :owner_name, :sender_name,
+                CAST(NULLIF(:send_date,'') AS DATE), NOW(), NOW())
+    """), {
+        "id": mailing_id, "eid": event_id, "template_id": data.get("template_id"), "name": data["name"],
+        "email_title": data.get("email_title"), "content": data.get("content"),
+        "owner_email": data.get("owner_email"), "owner_name": data.get("owner_name"),
+        "sender_name": data.get("sender_name"), "send_date": data.get("send_date") or "",
+    })
+    for cid in (data.get("contact_ids") or []):
+        await db.execute(text("""
+            INSERT INTO marketing_mailing_contacts (mailing_id, contact_id) VALUES (CAST(:mid AS UUID), CAST(:cid AS UUID)) ON CONFLICT DO NOTHING
+        """), {"mid": mailing_id, "cid": cid})
+    await db.commit()
+    r = await db.execute(text("SELECT * FROM marketing_mailings WHERE id = CAST(:id AS UUID)"), {"id": mailing_id})
+    mailing = _row(dict(r.fetchone()._mapping))
+    await _attach_mailing_extras(db, [mailing])
+    return mailing
+
+
+@router.put("/mailings/{mailing_id}")
+async def update_mailing(mailing_id: str, data: dict, db: AsyncSession = Depends(get_db)):
+    r = await db.execute(text("SELECT id FROM marketing_mailings WHERE id = CAST(:id AS UUID)"), {"id": mailing_id})
+    if not r.first():
+        raise HTTPException(status_code=404, detail="Mailing not found")
+    # Only overwrites columns the client actually sent (same COALESCE convention as
+    # update_event above) — data is always a fresh JSON dict here, so every value is a plain
+    # string, unlike existing-row values which come back as real date/UUID objects.
+    await db.execute(text("""
+        UPDATE marketing_mailings SET
+            template_id = COALESCE(CAST(NULLIF(:template_id,'') AS UUID), template_id),
+            name = COALESCE(NULLIF(:name,''), name),
+            email_title = COALESCE(:email_title, email_title),
+            content = COALESCE(:content, content),
+            owner_email = COALESCE(:owner_email, owner_email),
+            owner_name = COALESCE(:owner_name, owner_name),
+            sender_name = COALESCE(:sender_name, sender_name),
+            send_date = COALESCE(CAST(NULLIF(:send_date,'') AS DATE), send_date),
+            updated_at = NOW()
+        WHERE id = CAST(:id AS UUID)
+    """), {
+        "id": mailing_id, "template_id": data.get("template_id") or "", "name": data.get("name") or "",
+        "email_title": data.get("email_title"), "content": data.get("content"),
+        "owner_email": data.get("owner_email"), "owner_name": data.get("owner_name"),
+        "sender_name": data.get("sender_name"), "send_date": data.get("send_date") or "",
+    })
+    await db.commit()
+    r2 = await db.execute(text("SELECT * FROM marketing_mailings WHERE id = CAST(:id AS UUID)"), {"id": mailing_id})
+    mailing = _row(dict(r2.fetchone()._mapping))
+    await _attach_mailing_extras(db, [mailing])
+    return mailing
+
+
+@router.delete("/mailings/{mailing_id}")
+async def delete_mailing(mailing_id: str, db: AsyncSession = Depends(get_db)):
+    await db.execute(text("DELETE FROM marketing_mailings WHERE id = CAST(:id AS UUID)"), {"id": mailing_id})
+    await db.commit()
+    return {"status": "ok"}
+
+
+@router.post("/mailings/{mailing_id}/contacts/{contact_id}")
+async def link_mailing_contact(mailing_id: str, contact_id: str, db: AsyncSession = Depends(get_db)):
+    await db.execute(text("""
+        INSERT INTO marketing_mailing_contacts (mailing_id, contact_id) VALUES (CAST(:mid AS UUID), CAST(:cid AS UUID)) ON CONFLICT DO NOTHING
+    """), {"mid": mailing_id, "cid": contact_id})
+    await db.commit()
+    return {"status": "ok"}
+
+
+@router.delete("/mailings/{mailing_id}/contacts/{contact_id}")
+async def unlink_mailing_contact(mailing_id: str, contact_id: str, db: AsyncSession = Depends(get_db)):
+    await db.execute(text("DELETE FROM marketing_mailing_contacts WHERE mailing_id = CAST(:mid AS UUID) AND contact_id = CAST(:cid AS UUID)"),
+                      {"mid": mailing_id, "cid": contact_id})
     await db.commit()
     return {"status": "ok"}

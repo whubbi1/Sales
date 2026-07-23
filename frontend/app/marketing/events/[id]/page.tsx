@@ -4,6 +4,7 @@ import { useParams, useRouter } from 'next/navigation'
 import { MarketingLayout, useMarketingPerm } from '@/components/MarketingLayout'
 import { marketingAPI, partnersAPI, contactsAPI } from '@/lib/api'
 import { getStoredUser } from '@/lib/auth'
+import { RichTextEditor } from '@/components/shared/RichTextEditor'
 
 const API = 'https://api.whubbi.wcomply.com'
 
@@ -34,6 +35,138 @@ function EditableCell({ display, editing, canEdit, onStartEdit, children }: any)
   )
 }
 
+// Creating/editing a Mailing assigned to this event — picking a template snapshots its
+// email_title/content into this mailing's own fields (see marketing.py), independently
+// editable from there. The mailing group defaults to contacts matching the template's
+// audience (job_type) but any contact can be added or removed.
+function MailingModal({ eventId, mailing, templates, users, contacts, onClose, onSaved }: any) {
+  const [templateId, setTemplateId] = useState(mailing?.template_id || '')
+  const [name, setName] = useState(mailing?.name || '')
+  const [emailTitle, setEmailTitle] = useState(mailing?.email_title || '')
+  const [content, setContent] = useState(mailing?.content || '')
+  const [ownerEmail, setOwnerEmail] = useState(mailing?.owner_email || '')
+  const [senderName, setSenderName] = useState(mailing?.sender_name || '')
+  const [sendDate, setSendDate] = useState(mailing?.send_date ? mailing.send_date.slice(0, 10) : '')
+  const [contactIds, setContactIds] = useState<string[]>((mailing?.contacts || []).map((c: any) => c.id))
+  const [contactSearch, setContactSearch] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+
+  const applyTemplate = (tid: string) => {
+    setTemplateId(tid)
+    const t = templates.find((tt: any) => tt.id === tid)
+    if (!t) return
+    setEmailTitle(t.email_title || '')
+    setContent(t.content || '')
+    // Pre-selects the mailing group from the template's declared audience — still just a
+    // starting point, every contact stays individually toggleable below.
+    if (!mailing && (t.audience || []).length > 0) {
+      setContactIds(contacts.filter((c: any) => t.audience.includes(c.job_type)).map((c: any) => c.id))
+    }
+  }
+
+  const toggleContact = (cid: string) => setContactIds(prev => prev.includes(cid) ? prev.filter(x => x !== cid) : [...prev, cid])
+  const filteredContacts = contacts.filter((c: any) => !contactSearch.trim() || `${c.first_name} ${c.last_name}`.toLowerCase().includes(contactSearch.trim().toLowerCase()))
+
+  const submit = async () => {
+    if (!name.trim()) { setError('Mailing name is required'); return }
+    setSaving(true); setError('')
+    try {
+      const u = users.find((uu: any) => uu.email === ownerEmail)
+      const payload = {
+        template_id: templateId || null, name: name.trim(), email_title: emailTitle || null, content,
+        owner_email: ownerEmail || null, owner_name: u ? (u.display_name || `${u.first_name} ${u.last_name}`) : null,
+        sender_name: senderName.trim() || null, send_date: sendDate || null,
+        contact_ids: contactIds,
+      }
+      if (mailing) {
+        await marketingAPI.updateMailing(mailing.id, payload)
+        // Reconcile the contact list against whatever it was before, since update_mailing
+        // doesn't touch contacts itself (only create does) — mirrors marketing_mailing_contacts.
+        const before = new Set((mailing.contacts || []).map((c: any) => c.id))
+        const after = new Set(contactIds)
+        for (const cid of after) if (!before.has(cid)) await marketingAPI.linkMailingContact(mailing.id, cid)
+        for (const cid of before) if (!after.has(cid)) await marketingAPI.unlinkMailingContact(mailing.id, cid)
+      } else {
+        await marketingAPI.createEventMailing(eventId, payload)
+      }
+      onSaved()
+    } catch (e: any) { setError(e.message) }
+    finally { setSaving(false) }
+  }
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+      onClick={e => { if (e.target === e.currentTarget) onClose() }}>
+      <div style={{ background: 'white', borderRadius: '14px', width: '640px', maxWidth: '92vw', maxHeight: '88vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
+        <div style={{ padding: '18px 24px', borderBottom: '1px solid #EDF2F7', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
+          <h2 style={{ fontSize: '15px', fontWeight: '800', color: '#156082', margin: 0 }}>{mailing ? 'Edit Mailing' : 'New Mailing'}</h2>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: '20px', cursor: 'pointer', color: '#94A3B8' }}>×</button>
+        </div>
+        <div style={{ padding: '20px 24px', overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: '14px' }}>
+          <div style={{ display: 'flex', gap: '12px' }}>
+            <div style={{ flex: 1 }}>
+              <label style={lbl}>Mailing Name *</label>
+              <input style={{ ...inp, width: '100%', boxSizing: 'border-box' }} value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Q3 Newsletter - August batch" />
+            </div>
+            <div style={{ flex: 1 }}>
+              <label style={lbl}>Send Date</label>
+              <input type="date" style={{ ...inp, width: '100%', boxSizing: 'border-box' }} value={sendDate} onChange={e => setSendDate(e.target.value)} />
+            </div>
+          </div>
+          <div style={{ display: 'flex', gap: '12px' }}>
+            <div style={{ flex: 1 }}>
+              <label style={lbl}>Owner</label>
+              <select style={{ ...inp, width: '100%' }} value={ownerEmail} onChange={e => setOwnerEmail(e.target.value)}>
+                <option value="">Select owner…</option>
+                {users.map((u: any) => <option key={u.email} value={u.email}>{u.display_name || `${u.first_name} ${u.last_name}`}</option>)}
+              </select>
+            </div>
+            <div style={{ flex: 1 }}>
+              <label style={lbl}>Sender Name</label>
+              <input style={{ ...inp, width: '100%', boxSizing: 'border-box' }} value={senderName} onChange={e => setSenderName(e.target.value)} placeholder="Name shown as the sender" />
+            </div>
+          </div>
+          <div>
+            <label style={lbl}>Template</label>
+            <select style={{ ...inp, width: '100%' }} value={templateId} onChange={e => applyTemplate(e.target.value)}>
+              <option value="">No template — write content directly</option>
+              {templates.map((t: any) => <option key={t.id} value={t.id}>{t.short_title}</option>)}
+            </select>
+          </div>
+          <div>
+            <label style={lbl}>Email Title (subject)</label>
+            <input style={{ ...inp, width: '100%', boxSizing: 'border-box' }} value={emailTitle} onChange={e => setEmailTitle(e.target.value)} />
+          </div>
+          <div>
+            <label style={lbl}>Content</label>
+            <RichTextEditor value={content} onChange={setContent} minHeight="200px" />
+          </div>
+          <div>
+            <label style={lbl}>Mailing Group ({contactIds.length} contact{contactIds.length !== 1 ? 's' : ''})</label>
+            <input style={{ ...inp, width: '100%', boxSizing: 'border-box', marginBottom: '6px' }} placeholder="Search contacts…" value={contactSearch} onChange={e => setContactSearch(e.target.value)} />
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', maxHeight: '140px', overflowY: 'auto', border: '1px solid #E2E8F0', borderRadius: '8px', padding: '8px' }}>
+              {filteredContacts.length === 0 ? <span style={{ fontSize: '12px', color: '#94A3B8' }}>No matching contacts.</span> : filteredContacts.map((c: any) => (
+                <label key={c.id} style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '12px', padding: '3px 8px', borderRadius: '6px', background: contactIds.includes(c.id) ? '#EEF2FF' : '#F8FAFC', cursor: 'pointer' }}>
+                  <input type="checkbox" checked={contactIds.includes(c.id)} onChange={() => toggleContact(c.id)} />
+                  {c.first_name} {c.last_name}
+                </label>
+              ))}
+            </div>
+          </div>
+          {error && <div style={{ background: '#FEF2F2', color: '#DC2626', padding: '10px 14px', borderRadius: '8px', fontSize: '12px' }}>{error}</div>}
+        </div>
+        <div style={{ padding: '14px 24px', borderTop: '1px solid #EDF2F7', display: 'flex', gap: '10px', justifyContent: 'flex-end', flexShrink: 0 }}>
+          <button onClick={onClose} style={{ padding: '9px 18px', background: '#F1F5F9', color: '#64748B', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '700', fontFamily: 'Montserrat, sans-serif' }}>Cancel</button>
+          <button onClick={submit} disabled={saving} style={{ padding: '9px 18px', background: saving ? '#94A3B8' : '#156082', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '700', fontFamily: 'Montserrat, sans-serif' }}>
+            {saving ? 'Saving…' : mailing ? 'Save Changes' : 'Create Mailing'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function EventDetailContent() {
   const { id } = useParams()
   const router = useRouter()
@@ -42,6 +175,10 @@ function EventDetailContent() {
   const [users, setUsers] = useState<any[]>([])
   const [partners, setPartners] = useState<any[]>([])
   const [contacts, setContacts] = useState<any[]>([])
+  const [templates, setTemplates] = useState<any[]>([])
+  const [mailings, setMailings] = useState<any[]>([])
+  const [showMailingModal, setShowMailingModal] = useState(false)
+  const [editingMailing, setEditingMailing] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [editingField, setEditingField] = useState<string | null>(null)
@@ -66,12 +203,15 @@ function EventDetailContent() {
     } catch (e: any) { setError(e.message) }
     finally { setLoading(false) }
   }
+  const loadMailings = () => marketingAPI.listEventMailings(id as string).then(d => setMailings(d.mailings || [])).catch(() => {})
 
   useEffect(() => {
     load()
+    loadMailings()
     fetch(`${API}/settings/users`).then(r => r.json()).then(d => setUsers(d.users || [])).catch(() => {})
     partnersAPI.list({}).then(setPartners).catch(() => {})
     contactsAPI.list({}).then(setContacts).catch(() => {})
+    marketingAPI.listEmailTemplates().then(d => setTemplates(d.templates || [])).catch(() => {})
   }, [id])
 
   if (level === 'loading' || loading) return <div style={{ padding: '48px', textAlign: 'center', color: '#45B6E4' }}>Loading…</div>
@@ -141,6 +281,12 @@ function EventDetailContent() {
   const unlinkContact = async (contactId: string) => {
     await marketingAPI.unlinkContact(event.id, contactId)
     setEvent((prev: any) => ({ ...prev, contacts: (prev.contacts || []).filter((c: any) => c.id !== contactId) }))
+  }
+
+  const deleteMailing = async (mailing: any) => {
+    if (!confirm(`Delete mailing "${mailing.name}"?`)) return
+    await marketingAPI.deleteMailing(mailing.id)
+    loadMailings()
   }
 
   const uploadLogo = async (file: File) => {
@@ -377,6 +523,41 @@ function EventDetailContent() {
           </div>
         )}
       </div>
+
+      <div style={card}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+          <div style={lbl}>Mailings ({mailings.length})</div>
+          {canEdit && <button onClick={() => { setEditingMailing(null); setShowMailingModal(true) }} style={{ ...btn, background: '#EFF6FF', color: '#156082' }}>+ New Mailing</button>}
+        </div>
+        {mailings.length === 0 ? (
+          <p style={{ fontSize: '12px', color: '#94A3B8', margin: 0 }}>No mailings assigned to this event yet.</p>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            {mailings.map((m: any) => (
+              <div key={m.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 12px', border: '1px solid #EDF2F7', borderRadius: '8px', cursor: canEdit ? 'pointer' : 'default' }}
+                onClick={() => { if (canEdit) { setEditingMailing(m); setShowMailingModal(true) } }}>
+                <div>
+                  <div style={{ fontSize: '12px', fontWeight: '700', color: '#156082' }}>{m.name}</div>
+                  <div style={{ fontSize: '10px', color: '#94A3B8' }}>
+                    {m.template?.short_title ? `Template: ${m.template.short_title} · ` : ''}
+                    {(m.contacts || []).length} recipient{(m.contacts || []).length !== 1 ? 's' : ''}
+                    {m.send_date ? ` · Sends ${fmtDate(m.send_date)}` : ''}
+                    {m.owner_name ? ` · Owner: ${m.owner_name}` : ''}
+                    {m.sender_name ? ` · From: ${m.sender_name}` : ''}
+                  </div>
+                </div>
+                {canEdit && <button onClick={e => { e.stopPropagation(); deleteMailing(m) }} style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#94A3B8', fontSize: '14px', padding: 0, lineHeight: 1 }}>×</button>}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {showMailingModal && (
+        <MailingModal eventId={event.id} mailing={editingMailing} templates={templates} users={users} contacts={contacts}
+          onClose={() => setShowMailingModal(false)}
+          onSaved={() => { setShowMailingModal(false); loadMailings() }} />
+      )}
 
       {showDelete && (
         <div className="modal-overlay" onClick={() => setShowDelete(false)}>
