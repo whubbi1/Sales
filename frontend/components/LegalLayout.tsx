@@ -2,6 +2,7 @@
 import { useRouter, usePathname } from 'next/navigation'
 import { useEffect, useRef, useState } from 'react'
 import { getStoredUser, clearStoredUser } from '@/lib/auth'
+import { EasyAccessMenu } from '@/components/shared/EasyAccessMenu'
 
 const NAV = [
   { href: '/legal/entities',  icon: '🏢', label: 'Legal Entities' },
@@ -61,6 +62,7 @@ export function LegalLayout({ children }: { children: React.ReactNode }) {
 
 
         <nav style={{ flex: 1, padding: '10px 8px', overflowY: 'auto' }}>
+          <EasyAccessMenu />
           {NAV.map(item => {
             const active = path === item.href || path.startsWith(item.href)
             return (

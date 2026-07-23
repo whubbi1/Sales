@@ -2,6 +2,7 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import { getStoredUser, clearStoredUser } from '@/lib/auth'
+import { EasyAccessMenu } from '@/components/shared/EasyAccessMenu'
 
 const NAV_ITEMS = [
   { href: '/settings',              label: 'Dashboard',                icon: '🏠' },
@@ -50,6 +51,7 @@ export default function ProfileLayout({ children }: { children: React.ReactNode 
       </div>
 
       <nav style={{ flex: 1, padding: '8px' }}>
+        <EasyAccessMenu />
         {NAV_ITEMS.map(item => {
           const active = isActive(item.href)
           return (

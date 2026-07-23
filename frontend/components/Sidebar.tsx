@@ -4,6 +4,7 @@ import { usePathname, useRouter } from 'next/navigation'
 import { useEffect, useRef, useState } from 'react'
 import { signOut } from 'aws-amplify/auth'
 import { getStoredUser } from '@/lib/auth'
+import { EasyAccessMenu } from '@/components/shared/EasyAccessMenu'
 
 const navItems = [
   { href: '/dashboard', label: 'Dashboard', icon: <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg> },
@@ -56,6 +57,7 @@ export function Sidebar() {
 
       {/* Nav */}
       <nav style={{ flex: 1, padding: '4px 8px' }}>
+        <EasyAccessMenu />
         {navItems.map(item => {
           const active = pathname === item.href || pathname.startsWith(item.href + '/')
           return (

@@ -2,6 +2,7 @@
 import { useRouter, usePathname } from 'next/navigation'
 import { createContext, useContext, useEffect, useRef, useState } from 'react'
 import { getStoredUser, clearStoredUser } from '@/lib/auth'
+import { EasyAccessMenu } from '@/components/shared/EasyAccessMenu'
 
 const API = 'https://api.whubbi.wcomply.com'
 
@@ -81,6 +82,7 @@ export function FinanceLayout({ children }: { children: React.ReactNode }) {
         </div>
 
         <nav style={{ flex: 1, padding: '10px 8px', overflowY: 'auto' }}>
+          <EasyAccessMenu />
           {NAV.map(item => {
             const active = path === item.href || path.startsWith(item.href)
             return (

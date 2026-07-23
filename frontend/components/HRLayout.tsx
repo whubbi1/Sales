@@ -2,6 +2,7 @@
 import { useRouter, usePathname } from 'next/navigation'
 import { createContext, useContext, useEffect, useRef, useState } from 'react'
 import { getStoredUser, clearStoredUser } from '@/lib/auth'
+import { EasyAccessMenu } from '@/components/shared/EasyAccessMenu'
 
 const API = 'https://api.whubbi.wcomply.com'
 
@@ -89,6 +90,7 @@ export function HRLayout({ children }: { children: React.ReactNode }) {
         </div>
 
         <nav style={{ flex: 1, padding: '10px 8px', overflowY: 'auto' }}>
+          <EasyAccessMenu />
           {[...NAV, ...HR_MANAGER_NAV].map(item => {
             const active = path === item.href || (item.href !== '/rh' && path.startsWith(item.href))
             return (

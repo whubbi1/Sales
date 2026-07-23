@@ -2,6 +2,7 @@
 import { useRouter, usePathname } from 'next/navigation'
 import { useEffect, useRef, useState } from 'react'
 import { getStoredUser, clearStoredUser } from '@/lib/auth'
+import { EasyAccessMenu } from '@/components/shared/EasyAccessMenu'
 
 const API = 'https://api.whubbi.wcomply.com'
 
@@ -79,6 +80,7 @@ export default function HelpdeskLayout({ children }: Props) {
 
 
         <nav style={{ flex: 1, padding: '8px' }}>
+          <EasyAccessMenu />
           {visible.map(item => {
             const active = isActive(item.href)
             return (

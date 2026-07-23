@@ -2,6 +2,7 @@
 import React, { createContext, useContext, useEffect, useRef, useState } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import { getStoredUser, clearStoredUser } from '@/lib/auth'
+import { EasyAccessMenu } from '@/components/shared/EasyAccessMenu'
 
 const API = 'https://api.whubbi.wcomply.com'
 
@@ -61,6 +62,7 @@ export default function TasksLayout({ children }: { children: React.ReactNode })
       </div>
 
       <nav style={{ flex: 1, padding: '8px' }}>
+        <EasyAccessMenu />
         {NAV_ITEMS.map(item => {
           const active = isActive(item.href)
           return (
