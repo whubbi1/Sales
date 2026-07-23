@@ -226,7 +226,8 @@ async def send_and_log_email(data: dict, db: AsyncSession = Depends(get_db)):
                 "toRecipients": [{"emailAddress": {"address": to_address}}],
             },
         )
-        draft_resp.raise_for_status()
+        if draft_resp.status_code >= 400:
+            raise HTTPException(status_code=502, detail=f"Microsoft Graph refused to create the draft: {draft_resp.text}")
         message_id = draft_resp.json()["id"]
 
         send_resp = await client.post(
@@ -234,7 +235,7 @@ async def send_and_log_email(data: dict, db: AsyncSession = Depends(get_db)):
             headers={"Authorization": f"Bearer {access_token}"},
         )
         if send_resp.status_code not in (200, 202):
-            raise HTTPException(status_code=502, detail="Microsoft Graph refused to send the message")
+            raise HTTPException(status_code=502, detail=f"Microsoft Graph refused to send the message: {send_resp.text}")
 
     conn = await _get_connection(db, email)
     email_id = str(uuid.uuid4())

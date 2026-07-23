@@ -13,7 +13,7 @@ MS_CLIENT_SECRET = os.getenv("MS_CLIENT_SECRET")
 
 # Delegated scopes for the per-user mailbox connection (Outlook router) — distinct from the
 # app-only ".default" scope used by microsoft.py's client-credentials flow for org-wide data.
-DELEGATED_SCOPES = "Mail.Read Mail.Send offline_access User.Read"
+DELEGATED_SCOPES = "Mail.Read Mail.ReadWrite Mail.Send offline_access User.Read"
 
 async def get_access_token(user_refresh_token: str) -> dict:
     """Échanger un refresh token contre un nouvel access token Microsoft Graph.
