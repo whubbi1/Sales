@@ -25,7 +25,7 @@ GRAPH_BASE = "https://graph.microsoft.com/v1.0"
 AUTHORIZE_URL = f"https://login.microsoftonline.com/{MS_TENANT_ID}/oauth2/v2.0/authorize"
 TOKEN_URL = f"https://login.microsoftonline.com/{MS_TENANT_ID}/oauth2/v2.0/token"
 REDIRECT_URI = os.getenv("OUTLOOK_REDIRECT_URI", "https://api.whubbi.wcomply.com/outlook/callback")
-FRONTEND_BASE_URL = os.getenv("FRONTEND_BASE_URL", "https://dev.whubbi.wcomply.com")
+FRONTEND_BASE_URL = os.getenv("FRONTEND_BASE_URL", "https://master.da3cm8ewfvjqw.amplifyapp.com")
 
 ENTITY_TYPES = {"lead", "opportunity", "contact"}
 
