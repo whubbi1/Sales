@@ -11,8 +11,17 @@ MS_TENANT_ID     = os.getenv("MS_TENANT_ID")
 MS_CLIENT_ID     = os.getenv("MS_CLIENT_ID")
 MS_CLIENT_SECRET = os.getenv("MS_CLIENT_SECRET")
 
-async def get_access_token(user_refresh_token: str) -> str:
-    """Obtenir un access token Microsoft Graph depuis un refresh token utilisateur."""
+# Delegated scopes for the per-user mailbox connection (Outlook router) — distinct from the
+# app-only ".default" scope used by microsoft.py's client-credentials flow for org-wide data.
+DELEGATED_SCOPES = "Mail.Read Mail.Send offline_access User.Read"
+
+async def get_access_token(user_refresh_token: str) -> dict:
+    """Échanger un refresh token contre un nouvel access token Microsoft Graph.
+
+    Azure AD may rotate the refresh token on every use — the caller must persist the
+    returned refresh_token, not keep reusing the one it started with, or the connection
+    will eventually stop refreshing.
+    """
     async with httpx.AsyncClient() as client:
         response = await client.post(
             f"https://login.microsoftonline.com/{MS_TENANT_ID}/oauth2/v2.0/token",
@@ -21,11 +30,16 @@ async def get_access_token(user_refresh_token: str) -> str:
                 "client_id":     MS_CLIENT_ID,
                 "client_secret": MS_CLIENT_SECRET,
                 "refresh_token": user_refresh_token,
-                "scope":         "https://graph.microsoft.com/.default",
+                "scope":         DELEGATED_SCOPES,
             },
         )
         response.raise_for_status()
-        return response.json()["access_token"]
+        data = response.json()
+        return {
+            "access_token": data["access_token"],
+            "refresh_token": data.get("refresh_token", user_refresh_token),
+            "expires_in": data.get("expires_in", 3600),
+        }
 
 async def get_recent_emails(access_token: str, top: int = 20) -> list[dict]:
     """Récupérer les emails récents de l'utilisateur."""

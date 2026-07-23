@@ -14,6 +14,7 @@ const NAV_ITEMS = [
   { href: '/settings/certifications', label: 'Certifications',         icon: '🏅' },
   { href: '/settings/payfit',       label: 'PayFit',                   icon: '💰' },
   { href: '/settings/mcp',          label: 'Claude / MCP Access',      icon: '🔌' },
+  { href: '/settings/integrations', label: 'Integrations',             icon: '📧' },
 ]
 
 export default function ProfileLayout({ children }: { children: React.ReactNode }) {

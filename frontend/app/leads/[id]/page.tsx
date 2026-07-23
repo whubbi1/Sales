@@ -8,6 +8,7 @@ import { LeadModal } from '@/components/leads/LeadModal'
 import { TaskModal } from '@/components/tasks/TaskModal'
 import { OpportunityModal } from '@/components/opportunities/OpportunityModal'
 import { taskManagerAPI } from '@/lib/api'
+import { EmailsTab } from '@/components/shared/EmailsTab'
 
 const TASK_DONE_STATUSES = ['resolved', 'closed']
 // Display-only relabeling — the underlying status value stays 'Create an Opportunity'
@@ -172,7 +173,7 @@ export default function LeadDetailPage() {
 
       <div style={{ background: 'white', borderRadius: '10px', border: '1px solid #EDF2F7', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
         <div style={{ padding: '0 20px', background: '#FAFBFC', borderBottom: '2px solid #E2E8F0' }}>
-          <TabNav tabs={['Overview', 'Notes', 'Files', 'Tasks']} active={tab} onChange={setTab} />
+          <TabNav tabs={['Overview', 'Notes', 'Files', 'Tasks', 'Emails']} active={tab} onChange={setTab} />
         </div>
         <div style={{ padding: '20px' }}>
           {tab === 'Overview' && (
@@ -281,6 +282,8 @@ export default function LeadDetailPage() {
               )}
             </div>
           )}
+
+          {tab === 'Emails' && <EmailsTab entityType="lead" entityId={id as string} />}
         </div>
       </div>
     </div>

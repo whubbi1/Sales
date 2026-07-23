@@ -7,6 +7,7 @@ import { RecordLayout, PropertyRow, SidebarSection, SidebarCard, TabNav } from '
 import { OpportunityModal } from '@/components/opportunities/OpportunityModal'
 import { OpportunityLinksSection } from '@/components/opportunities/OpportunityLinksSection'
 import { TaskModal } from '@/components/tasks/TaskModal'
+import { EmailsTab } from '@/components/shared/EmailsTab'
 
 // Click-to-edit date row, same interaction as the EditableCell pattern used across the
 // IT/Training/GRC report pages — click the value, swap in a date input, save on blur.
@@ -263,7 +264,7 @@ export default function OpportunityDetailPage() {
 
       <div style={{ background: 'white', borderRadius: '10px', border: '1px solid #EDF2F7', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
         <div style={{ padding: '0 20px', background: '#FAFBFC', borderBottom: '2px solid #E2E8F0' }}>
-          <TabNav tabs={['Overview', 'Notes', 'Staffing', 'Checklist', 'Files', 'Tasks']} active={tab} onChange={setTab} />
+          <TabNav tabs={['Overview', 'Notes', 'Staffing', 'Checklist', 'Files', 'Tasks', 'Emails']} active={tab} onChange={setTab} />
         </div>
         <div style={{ padding: '20px' }}>
           {tab === 'Overview' && (
@@ -463,6 +464,8 @@ export default function OpportunityDetailPage() {
               <OpportunityLinksSection opportunityId={opp.id} />
             </div>
           )}
+
+          {tab === 'Emails' && <EmailsTab entityType="opportunity" entityId={opp.id} />}
         </div>
       </div>
     </div>

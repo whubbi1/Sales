@@ -591,3 +591,17 @@ export const cleanupAPI = {
   reviewSuggestion: (id: string, d: any) => fetchAPI(`/contacts/cleanup/suggestions/${id}`, { method: 'PUT', body: JSON.stringify(d) }),
   brokenLinks: () => fetchAPI(`/cleanup/broken-links`, { method: 'POST' }),
 }
+
+// ─── Outlook (mailbox connection, linked emails) ───────────────────────────────
+export const outlookAPI = {
+  status:     (email: string) => fetchAPI(`/outlook/status${qs({ email })}`),
+  connect:    (email: string) => fetchAPI(`/outlook/connect${qs({ email })}`),
+  disconnect: (email: string) => fetchAPI(`/outlook/connection${qs({ email })}`, { method: 'DELETE' }),
+
+  searchEmails: (email: string, q: string) => fetchAPI(`/outlook/emails/search${qs({ email, q })}`),
+
+  listLinkedEmails: (entityType: string, entityId: string) => fetchAPI(`/outlook/emails/linked${qs({ entity_type: entityType, entity_id: entityId })}`),
+  linkEmail:        (d: any) => fetchAPI('/outlook/emails/link', { method: 'POST', body: JSON.stringify(d) }),
+  unlinkEmail:      (id: string) => fetchAPI(`/outlook/emails/linked/${id}`, { method: 'DELETE' }),
+  sendEmail:        (d: any) => fetchAPI('/outlook/emails/send', { method: 'POST', body: JSON.stringify(d) }),
+}

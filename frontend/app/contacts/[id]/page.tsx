@@ -8,6 +8,7 @@ import { ContactNotes } from '@/components/contacts/ContactNotes'
 import { ContactArticles } from '@/components/contacts/ContactArticles'
 import { EntityTasks } from '@/components/tasks/EntityTasks'
 import { ActivityFeed } from '@/components/shared/ActivityFeed'
+import { EmailsTab } from '@/components/shared/EmailsTab'
 
 const SUB_LABELS: Record<string, string> = { 'Marketing Information': '📧', 'Customer Service Communication': '💬', 'One to One': '🤝', 'Opted Out': '🚫' }
 
@@ -208,7 +209,7 @@ export default function ContactDetailPage() {
 
       <div style={{ background: 'white', borderRadius: '10px', border: '1px solid #EDF2F7', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
         <div style={{ padding: '0 20px', background: '#FAFBFC', borderBottom: '2px solid #E2E8F0' }}>
-          <TabNav tabs={['Overview', 'Notes', 'Articles', 'Tasks']} active={tab} onChange={setTab} />
+          <TabNav tabs={['Overview', 'Notes', 'Articles', 'Tasks', 'Emails']} active={tab} onChange={setTab} />
         </div>
         <div style={{ padding: '20px' }}>
           {tab === 'Overview' && (
@@ -221,6 +222,7 @@ export default function ContactDetailPage() {
           {tab === 'Notes' && <ContactNotes contactId={id as string} onChange={() => contactsAPI.getNotes(id as string).then(setNotes)} />}
           {tab === 'Articles' && <ContactArticles contactId={id as string} />}
           {tab === 'Tasks' && <EntityTasks entityType="contact" entityId={id as string} entityLabel={`${contact.first_name} ${contact.last_name}`} />}
+          {tab === 'Emails' && <EmailsTab entityType="contact" entityId={id as string} defaultContact={contact} />}
         </div>
       </div>
     </div>

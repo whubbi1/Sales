@@ -1902,6 +1902,37 @@ async def startup():
                 # but at least one pre-existing row still has the old literal value, which throws
                 # off the "ongoing" KPI query (status != 'Finished') by counting it as ongoing.
                 "UPDATE marketing_events SET status = 'Finished' WHERE status = 'Closed'",
+
+                # Outlook mailbox connections (one per WHUBBI user, delegated OAuth) — tokens
+                # are stored encrypted (see app/services/token_crypto.py), never in plaintext.
+                """CREATE TABLE IF NOT EXISTS outlook_connections (
+                    user_email VARCHAR(255) PRIMARY KEY,
+                    mailbox_email VARCHAR(255),
+                    access_token_encrypted TEXT,
+                    refresh_token_encrypted TEXT,
+                    token_expires_at TIMESTAMP,
+                    connected_at TIMESTAMP DEFAULT NOW()
+                )""",
+                # Emails linked to a Lead/Opportunity/Contact — either found in the connected
+                # mailbox and linked manually, or sent by WHUBBI itself (optionally from a
+                # Template Email) and logged automatically.
+                """CREATE TABLE IF NOT EXISTS linked_emails (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    entity_type VARCHAR(20) NOT NULL,
+                    entity_id UUID NOT NULL,
+                    direction VARCHAR(10) NOT NULL,
+                    provider_message_id VARCHAR(500),
+                    subject VARCHAR(1000),
+                    from_address VARCHAR(255),
+                    to_addresses JSONB DEFAULT '[]'::jsonb,
+                    sent_at TIMESTAMP,
+                    body_preview TEXT,
+                    body_html TEXT,
+                    template_id UUID REFERENCES marketing_email_templates(id) ON DELETE SET NULL,
+                    created_by_email VARCHAR(255),
+                    created_at TIMESTAMP DEFAULT NOW()
+                )""",
+                "CREATE INDEX IF NOT EXISTS ix_linked_emails_entity ON linked_emails (entity_type, entity_id)",
             ]
             for sql in sqls:
                 try:
@@ -2012,7 +2043,7 @@ async def startup():
         import traceback; traceback.print_exc()
 
 @app.get("/health")
-async def health(): return {"status":"healthy","app":"whubbi","version":"2.0.9"}
+async def health(): return {"status":"healthy","app":"whubbi","version":"2.1.0"}
 
 @app.get("/")
 async def root(): return {"message":"WHUBBI API","version":"2.0.0"}
