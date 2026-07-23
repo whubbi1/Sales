@@ -102,6 +102,43 @@ async def get_event_kpis(db: AsyncSession = Depends(get_db)):
     }
 
 
+# The row list behind one of the get_event_kpis() counts, for the KPI-card click-through popup.
+KPI_DETAIL_QUERIES = {
+    "ongoing_events": """
+        SELECT id, title, status, event_type, event_date, end_date FROM marketing_events
+        WHERE status != 'Finished' ORDER BY event_date NULLS LAST
+    """,
+    "closed_events_last_year": """
+        SELECT id, title, status, event_type, event_date, end_date FROM marketing_events
+        WHERE status = 'Finished' AND COALESCE(end_date, event_date) >= NOW() - INTERVAL '1 year'
+        ORDER BY end_date DESC NULLS LAST
+    """,
+    "leads_from_events": """
+        SELECT l.id, l.lead_number, l.title, l.status, e.id AS event_id, e.title AS event_title
+        FROM leads l JOIN marketing_events e ON e.id = l.event_id
+        WHERE l.event_id IS NOT NULL ORDER BY l.created_at DESC
+    """,
+    "opportunities_from_events": """
+        SELECT DISTINCT o.id, o.deal_id, o.deal_name, o.deal_status
+        FROM opportunities o JOIN leads l ON l.opportunity_id = o.id
+        WHERE l.event_id IS NOT NULL ORDER BY o.deal_name
+    """,
+    "won_deals_from_events": """
+        SELECT DISTINCT o.id, o.deal_id, o.deal_name, o.deal_status
+        FROM opportunities o JOIN leads l ON l.opportunity_id = o.id
+        WHERE l.event_id IS NOT NULL AND o.deal_status = 'Contract Won' ORDER BY o.deal_name
+    """,
+}
+
+@router.get("/events/kpis/details")
+async def get_event_kpis_details(kind: str, db: AsyncSession = Depends(get_db)):
+    query = KPI_DETAIL_QUERIES.get(kind)
+    if not query:
+        raise HTTPException(status_code=400, detail=f"kind must be one of {sorted(KPI_DETAIL_QUERIES)}")
+    r = await db.execute(text(query))
+    return {"items": [_row(dict(row._mapping)) for row in r.fetchall()]}
+
+
 @router.get("/events/{event_id}")
 async def get_event(event_id: str, db: AsyncSession = Depends(get_db)):
     event = await _get_event(db, event_id)

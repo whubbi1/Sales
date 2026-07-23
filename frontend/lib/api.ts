@@ -108,6 +108,7 @@ export const partnersAPI = {
 export const marketingAPI = {
   listEvents:  (p?: any) => fetchAPI(`/marketing/events${qs(p)}`),
   getEventKPIs: () => fetchAPI(`/marketing/events/kpis`),
+  getEventKPIDetails: (kind: string) => fetchAPI(`/marketing/events/kpis/details?kind=${kind}`),
   getEvent:    (id: string) => fetchAPI(`/marketing/events/${id}`),
   createEvent: (d: any) => fetchAPI('/marketing/events', { method: 'POST', body: JSON.stringify(d) }),
   updateEvent: (id: string, d: any) => fetchAPI(`/marketing/events/${id}`, { method: 'PUT', body: JSON.stringify(d) }),

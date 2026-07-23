@@ -106,11 +106,58 @@ function NewEventModal({ onClose, onCreated }: { onClose: () => void; onCreated:
   )
 }
 
-function KPICard({ label, value, color }: { label: string; value: number | string; color: string }) {
+function KPICard({ label, value, color, onClick }: { label: string; value: number | string; color: string; onClick: () => void }) {
   return (
-    <div style={{ background: 'white', borderRadius: '12px', border: '1px solid #EDF2F7', boxShadow: '0 1px 3px rgba(0,0,0,0.06)', padding: '14px 18px', flex: 1, minWidth: '150px' }}>
+    <button onClick={onClick} style={{ background: 'white', borderRadius: '12px', border: '1px solid #EDF2F7', boxShadow: '0 1px 3px rgba(0,0,0,0.06)', padding: '14px 18px', flex: 1, minWidth: '150px', cursor: 'pointer', textAlign: 'left', fontFamily: 'Montserrat, sans-serif' }}
+      onMouseEnter={e => (e.currentTarget.style.boxShadow = '0 4px 14px rgba(0,0,0,0.1)')}
+      onMouseLeave={e => (e.currentTarget.style.boxShadow = '0 1px 3px rgba(0,0,0,0.06)')}>
       <div style={{ fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#94A3B8', marginBottom: '4px' }}>{label}</div>
       <div style={{ fontSize: '24px', fontWeight: '800', color }}>{value}</div>
+    </button>
+  )
+}
+
+function KPIDetailsModal({ kind, label, onClose }: { kind: string; label: string; onClose: () => void }) {
+  const [items, setItems] = useState<any[] | null>(null)
+
+  useEffect(() => {
+    marketingAPI.getEventKPIDetails(kind).then(d => setItems(d.items || [])).catch(() => setItems([]))
+  }, [kind])
+
+  const linkFor = (item: any) => {
+    if (kind === 'leads_from_events') return `/leads/${item.id}`
+    if (kind === 'opportunities_from_events' || kind === 'won_deals_from_events') return `/opportunities/${item.id}`
+    return `/marketing/events/${item.id}`
+  }
+  const titleFor = (item: any) => item.title || item.deal_name || item.lead_number || item.id
+  const subtitleFor = (item: any) => {
+    if (kind === 'leads_from_events') return `From event: ${item.event_title}${item.status ? ' · ' + item.status : ''}`
+    if (kind === 'opportunities_from_events' || kind === 'won_deals_from_events') return `${item.deal_id ? item.deal_id + ' · ' : ''}${item.deal_status || ''}`
+    return `${TYPE_LABEL[item.event_type] || item.event_type}${item.status ? ' · ' + item.status : ''}${item.event_date ? ' · ' + fmtDate(item.event_date) : ''}`
+  }
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+      onClick={e => { if (e.target === e.currentTarget) onClose() }}>
+      <div style={{ background: 'white', borderRadius: '14px', width: '520px', maxWidth: '90vw', maxHeight: '75vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
+        <div style={{ padding: '18px 22px', borderBottom: '1px solid #EDF2F7', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
+          <h2 style={{ fontSize: '15px', fontWeight: '800', color: '#156082', margin: 0 }}>{label} {items && `(${items.length})`}</h2>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: '20px', cursor: 'pointer', color: '#94A3B8' }}>×</button>
+        </div>
+        <div style={{ padding: '10px 12px', overflowY: 'auto', flex: 1 }}>
+          {items === null ? (
+            <p style={{ padding: '20px', textAlign: 'center', color: '#94A3B8', fontSize: '13px' }}>Loading…</p>
+          ) : items.length === 0 ? (
+            <p style={{ padding: '20px', textAlign: 'center', color: '#94A3B8', fontSize: '13px' }}>No records.</p>
+          ) : items.map((item: any) => (
+            <a key={item.id} href={linkFor(item)} style={{ display: 'block', padding: '10px 12px', borderRadius: '8px', textDecoration: 'none' }}
+              onMouseEnter={e => (e.currentTarget.style.background = '#F1F5F9')} onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
+              <div style={{ fontSize: '13px', fontWeight: '700', color: '#156082' }}>{titleFor(item)}</div>
+              <div style={{ fontSize: '11px', color: '#94A3B8' }}>{subtitleFor(item)}</div>
+            </a>
+          ))}
+        </div>
+      </div>
     </div>
   )
 }
@@ -124,6 +171,7 @@ function EventsContent() {
   const [search, setSearch] = useState('')
   const [showNew, setShowNew] = useState(false)
   const [userEmail, setUserEmail] = useState('')
+  const [kpiDetail, setKpiDetail] = useState<{ kind: string; label: string } | null>(null)
 
   const rb = useReportBuilder('marketing_event', COLUMNS, userEmail)
 
@@ -181,11 +229,11 @@ function EventsContent() {
 
       {kpis && (
         <div style={{ display: 'flex', gap: '12px', marginBottom: '18px', flexWrap: 'wrap' }}>
-          <KPICard label="Ongoing Events" value={kpis.ongoing_events} color="#156082" />
-          <KPICard label="Closed Events (Last Year)" value={kpis.closed_events_last_year} color="#64748B" />
-          <KPICard label="Leads from Events" value={kpis.leads_from_events} color="#219BD6" />
-          <KPICard label="Opportunities from Events" value={kpis.opportunities_from_events} color="#D97706" />
-          <KPICard label="Won Deals from Events" value={kpis.won_deals_from_events} color="#059669" />
+          <KPICard label="Ongoing Events" value={kpis.ongoing_events} color="#156082" onClick={() => setKpiDetail({ kind: 'ongoing_events', label: 'Ongoing Events' })} />
+          <KPICard label="Closed Events (Last Year)" value={kpis.closed_events_last_year} color="#64748B" onClick={() => setKpiDetail({ kind: 'closed_events_last_year', label: 'Closed Events (Last Year)' })} />
+          <KPICard label="Leads from Events" value={kpis.leads_from_events} color="#219BD6" onClick={() => setKpiDetail({ kind: 'leads_from_events', label: 'Leads from Events' })} />
+          <KPICard label="Opportunities from Events" value={kpis.opportunities_from_events} color="#D97706" onClick={() => setKpiDetail({ kind: 'opportunities_from_events', label: 'Opportunities from Events' })} />
+          <KPICard label="Won Deals from Events" value={kpis.won_deals_from_events} color="#059669" onClick={() => setKpiDetail({ kind: 'won_deals_from_events', label: 'Won Deals from Events' })} />
         </div>
       )}
 
@@ -228,6 +276,7 @@ function EventsContent() {
       </div>
 
       {showNew && <NewEventModal onClose={() => setShowNew(false)} onCreated={id => { setShowNew(false); router.push(`/marketing/events/${id}`) }} />}
+      {kpiDetail && <KPIDetailsModal kind={kpiDetail.kind} label={kpiDetail.label} onClose={() => setKpiDetail(null)} />}
     </div>
   )
 }
