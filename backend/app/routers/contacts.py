@@ -39,7 +39,7 @@ async def _attach_partners(db: AsyncSession, objs: list):
 @router.get("/", response_model=List[ContactResponse])
 async def list_contacts(
     skip: int = 0, limit: int = 100,
-    search: str = None, company_id: str = None, partner_id: str = None,
+    search: str = None, company_id: str = None, partner_id: str = None, partner_only: bool = None,
     db: AsyncSession = Depends(get_db)
 ):
     query = select(Contact).options(selectinload(Contact.company))
@@ -53,6 +53,8 @@ async def list_contacts(
         query = query.where(Contact.company_id == company_id)
     if partner_id:
         query = query.where(Contact.partner_id == partner_id)
+    if partner_only:
+        query = query.where(Contact.partner_id.isnot(None))
     query = query.offset(skip).limit(limit).order_by(Contact.updated_at.desc())
     result = await db.execute(query)
     contacts = result.scalars().all()

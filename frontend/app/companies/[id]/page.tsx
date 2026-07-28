@@ -310,9 +310,9 @@ export default function CompanyDetailPage() {
       {showLinkedInSearch && <LinkedInContactSearchModal companyId={id as string} onClose={() => setShowLinkedInSearch(false)} onCreated={() => { setShowLinkedInSearch(false); load() }} />}
       {showAddPartnerContact && (
         <PickerModal
-          title="Add a Partner Contact" placeholder="Search contacts by name or email…"
-          searchFn={q => contactsAPI.list(q.trim() ? { search: q.trim() } : undefined)}
-          renderLabel={(c: any) => ({ title: `${c.first_name} ${c.last_name}`, subtitle: c.job_type || c.email })}
+          title="Add a Partner Contact" placeholder="Search partner contacts by name or email…"
+          searchFn={q => contactsAPI.list({ partner_only: true, ...(q.trim() ? { search: q.trim() } : {}) })}
+          renderLabel={(c: any) => ({ title: `${c.first_name} ${c.last_name}`, subtitle: c.partner?.name || c.job_type || c.email })}
           onPick={async (c: any) => { await companiesAPI.linkPartnerContact(id as string, c.id); load() }}
           onClose={() => setShowAddPartnerContact(false)}
         />
