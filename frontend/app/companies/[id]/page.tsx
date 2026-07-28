@@ -2,7 +2,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { companiesAPI, taskManagerAPI } from '@/lib/api'
+import { companiesAPI, taskManagerAPI, contactsAPI } from '@/lib/api'
 import { RecordLayout, PropertyRow, SidebarSection, SidebarCard, StatusBadge, TabNav } from '@/components/shared/RecordLayout'
 import { CompanyModal } from '@/components/companies/CompanyModal'
 import { CompanyNotes } from '@/components/companies/CompanyNotes'
@@ -11,6 +11,7 @@ import { EntityTasks } from '@/components/tasks/EntityTasks'
 import { CompanyServices } from '@/components/companies/CompanyServices'
 import { ActivityFeed } from '@/components/shared/ActivityFeed'
 import { LinkedInContactSearchModal } from '@/components/companies/LinkedInContactSearchModal'
+import { PickerModal } from '@/components/shared/PickerModal'
 
 const LEVEL_COLORS: Record<number, string> = { 1: '#144766', 2: '#1a5a84', 3: '#219BD6', 4: '#7DD3F0' }
 const LEVEL_LABELS: Record<number, string> = { 1: 'Group', 2: 'Parent', 3: 'Child', 4: 'Sub-Child' }
@@ -37,6 +38,12 @@ export default function CompanyDetailPage() {
   const [uploadingLogo, setUploadingLogo] = useState(false)
   const logoInputRef = useRef<HTMLInputElement>(null)
   const [showLinkedInSearch, setShowLinkedInSearch] = useState(false)
+  const [showAddPartnerContact, setShowAddPartnerContact] = useState(false)
+
+  const unlinkPartnerContact = async (contactId: string) => {
+    await companiesAPI.unlinkPartnerContact(id as string, contactId)
+    load()
+  }
 
   const uploadLogo = async (file: File) => {
     setUploadingLogo(true)
@@ -263,6 +270,9 @@ export default function CompanyDetailPage() {
       <SidebarSection title={`Leads (${leads.length})`} onAdd={() => router.push(`/leads?company_id=${id}`)}>
         {leads.length === 0 ? <p style={{ fontSize: '12px', color: '#9B9B9B' }}>No leads.</p> : leads.map((l: any) => <SidebarCard key={l.id} title={l.title || l.name} subtitle={l.status} href={`/leads/${l.id}`} color="#D97706" />)}
       </SidebarSection>
+      <SidebarSection title={`Partner Contacts (${company.partner_contacts?.length || 0})`} onAdd={() => setShowAddPartnerContact(true)}>
+        {(!company.partner_contacts || company.partner_contacts.length === 0) ? <p style={{ fontSize: '12px', color: '#9B9B9B' }}>No partner contacts.</p> : company.partner_contacts.map((c: any) => <SidebarCard key={c.id} title={`${c.first_name} ${c.last_name}`} subtitle={c.job_type || c.email || 'Partner Contact'} href={`/contacts/${c.id}`} color="#7C3AED" onRemove={() => unlinkPartnerContact(c.id)} />)}
+      </SidebarSection>
       <SidebarSection title="About this company">
         <PropertyRow label="Status" value={<StatusBadge value={company.status} />} />
         <PropertyRow label="Level" value={LEVEL_LABELS[company.level]} />
@@ -298,6 +308,15 @@ export default function CompanyDetailPage() {
       <RecordLayout leftColumn={leftColumn} rightColumn={rightColumn} />
       {showEdit && <CompanyModal company={company} companies={allCompanies} onClose={() => setShowEdit(false)} onSave={() => { setShowEdit(false); load() }} />}
       {showLinkedInSearch && <LinkedInContactSearchModal companyId={id as string} onClose={() => setShowLinkedInSearch(false)} onCreated={() => { setShowLinkedInSearch(false); load() }} />}
+      {showAddPartnerContact && (
+        <PickerModal
+          title="Add a Partner Contact" placeholder="Search contacts by name or email…"
+          searchFn={q => contactsAPI.list(q.trim() ? { search: q.trim() } : undefined)}
+          renderLabel={(c: any) => ({ title: `${c.first_name} ${c.last_name}`, subtitle: c.job_type || c.email })}
+          onPick={async (c: any) => { await companiesAPI.linkPartnerContact(id as string, c.id); load() }}
+          onClose={() => setShowAddPartnerContact(false)}
+        />
+      )}
       {showDelete && (
         <div className="modal-overlay" onClick={() => setShowDelete(false)}>
           <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '420px' }}>

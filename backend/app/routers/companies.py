@@ -1,7 +1,7 @@
 # backend/app/routers/companies.py
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, or_
+from sqlalchemy import select, or_, insert, delete as sa_delete
 from sqlalchemy.orm import selectinload
 from typing import List
 from uuid import UUID
@@ -12,7 +12,7 @@ from sqlalchemy import text as sql_text
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 
 from app.database import get_db
-from app.models.company import Company, CompanyNote, CompanyArticle, CompanyTask
+from app.models.company import Company, CompanyNote, CompanyArticle, CompanyTask, company_partner_contact
 from app.models.contact import Contact
 from app.models.opportunity import Opportunity
 
@@ -46,6 +46,30 @@ async def _attach_main_contacts(db: AsyncSession, companies: list):
         c.main_contact = contacts.get(c.main_contact_id) if getattr(c, "main_contact_id", None) else None
 
 
+async def _attach_partner_contacts(db: AsyncSession, companies: list):
+    # Same flat-join-table pattern as Lead's partner_contacts (backend/app/routers/leads.py) —
+    # a company_partner_contacts row is just (company_id, contact_id), no ORM relationship
+    # (avoids a second backref collision on the Company<->Contact pair, same reason
+    # main_contact is attached manually above).
+    ids = [c.id for c in companies]
+    pc_map: dict = {}
+    if ids:
+        r = await db.execute(
+            select(company_partner_contact.c.company_id, company_partner_contact.c.contact_id)
+            .where(company_partner_contact.c.company_id.in_(ids))
+        )
+        for row in r.all():
+            pc_map.setdefault(row.company_id, []).append(row.contact_id)
+    all_ids = {cid for cids in pc_map.values() for cid in cids}
+    contacts = {}
+    if all_ids:
+        r = await db.execute(select(Contact).where(Contact.id.in_(all_ids)))
+        for contact in r.scalars().all():
+            contacts[contact.id] = contact
+    for c in companies:
+        c.partner_contacts = [contacts[cid] for cid in pc_map.get(c.id, []) if cid in contacts]
+
+
 async def _attach_logos(companies: list):
     # Mutates the transient in-memory attribute only — safe here since none of this
     # router's read paths commit again after fetching, so the presigned value (unlike
@@ -70,6 +94,7 @@ async def list_companies(
     result = await db.execute(query)
     companies = result.scalars().all()
     await _attach_main_contacts(db, companies)
+    await _attach_partner_contacts(db, companies)
     await _attach_logos(companies)
     return companies
 
@@ -90,6 +115,7 @@ async def create_company(company: CompanyCreate, db: AsyncSession = Depends(get_
     r = await db.execute(select(Company).options(selectinload(Company.parent), selectinload(Company.children)).where(Company.id == db_company.id))
     row = r.scalar_one()
     await _attach_main_contacts(db, [row])
+    await _attach_partner_contacts(db, [row])
     await _attach_logos([row])
     return row
 
@@ -209,6 +235,7 @@ async def get_company(company_id: UUID, db: AsyncSession = Depends(get_db)):
     if not company:
         raise HTTPException(status_code=404, detail="Company not found")
     await _attach_main_contacts(db, [company])
+    await _attach_partner_contacts(db, [company])
     await _attach_logos([company])
     return company
 
@@ -277,6 +304,7 @@ async def update_company(company_id: UUID, data: CompanyUpdate, db: AsyncSession
     r = await db.execute(select(Company).options(selectinload(Company.parent), selectinload(Company.children)).where(Company.id == company_id))
     row = r.scalar_one()
     await _attach_main_contacts(db, [row])
+    await _attach_partner_contacts(db, [row])
     await _attach_logos([row])
     return row
 
@@ -299,6 +327,28 @@ async def get_company_contacts(company_id: UUID, db: AsyncSession = Depends(get_
 async def get_company_opportunities(company_id: UUID, db: AsyncSession = Depends(get_db)):
     r = await db.execute(select(Opportunity).where(Opportunity.company_id == company_id))
     return r.scalars().all()
+
+@router.get("/{company_id}/partner-contacts", response_model=List[ContactSummary])
+async def get_company_partner_contacts(company_id: UUID, db: AsyncSession = Depends(get_db)):
+    r = await db.execute(
+        select(Contact).join(company_partner_contact, company_partner_contact.c.contact_id == Contact.id)
+        .where(company_partner_contact.c.company_id == company_id)
+    )
+    return r.scalars().all()
+
+@router.post("/{company_id}/partner-contacts/{contact_id}")
+async def link_company_partner_contact(company_id: UUID, contact_id: UUID, db: AsyncSession = Depends(get_db)):
+    exists = await db.execute(select(company_partner_contact).where(company_partner_contact.c.company_id == company_id, company_partner_contact.c.contact_id == contact_id))
+    if not exists.first():
+        await db.execute(insert(company_partner_contact).values(company_id=company_id, contact_id=contact_id))
+        await db.commit()
+    return {"status": "ok"}
+
+@router.delete("/{company_id}/partner-contacts/{contact_id}")
+async def unlink_company_partner_contact(company_id: UUID, contact_id: UUID, db: AsyncSession = Depends(get_db)):
+    await db.execute(sa_delete(company_partner_contact).where(company_partner_contact.c.company_id == company_id, company_partner_contact.c.contact_id == contact_id))
+    await db.commit()
+    return {"status": "ok"}
 
 @router.get("/{company_id}/leads")
 async def get_company_leads(company_id: UUID, db: AsyncSession = Depends(get_db)):

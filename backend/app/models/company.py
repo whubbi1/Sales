@@ -1,7 +1,7 @@
 # backend/app/models/company.py
 import uuid
 from datetime import datetime
-from sqlalchemy import Column, String, Text, DateTime, Integer, ForeignKey
+from sqlalchemy import Column, String, Text, DateTime, Integer, ForeignKey, Table
 from sqlalchemy import Enum as SAEnum
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import relationship
@@ -13,6 +13,16 @@ class CompanyStatus(str, enum.Enum):
     prospect = "prospect"
     client = "client"
     partner = "partner"
+
+# Partner-side contacts assignable to a company — a flat list, same shape as
+# lead_partner_contact (see models/lead.py): not mapped to a specific Partner record,
+# just any Contact the user wants associated with this Company as a partner contact.
+company_partner_contact = Table(
+    'company_partner_contacts',
+    Base.metadata,
+    Column('company_id', UUID(as_uuid=True), ForeignKey('companies.id', ondelete='CASCADE')),
+    Column('contact_id', UUID(as_uuid=True), ForeignKey('contacts.id', ondelete='CASCADE')),
+)
 
 class Company(Base):
     __tablename__ = "companies"

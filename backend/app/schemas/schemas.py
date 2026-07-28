@@ -62,6 +62,7 @@ class CompanyResponse(CompanyBase):
     parent: Optional[CompanySummary] = None
     children: Optional[List[CompanySummary]] = []
     main_contact: Optional[ContactSummary] = None
+    partner_contacts: Optional[List[ContactSummary]] = []
     created_at: datetime
     updated_at: datetime
     class Config:
