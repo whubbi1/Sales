@@ -156,10 +156,17 @@ async def get_event(event_id: str, db: AsyncSession = Depends(get_db)):
         SELECT c.id, c.first_name, c.last_name, c.email FROM marketing_event_contacts ec
         JOIN contacts c ON c.id = ec.contact_id WHERE ec.event_id = CAST(:id AS UUID) ORDER BY c.first_name, c.last_name
     """), {"id": event_id})
+    files = await db.execute(text("SELECT * FROM marketing_event_files WHERE event_id = CAST(:id AS UUID) ORDER BY created_at DESC"), {"id": event_id})
     event["contributors"] = [_row(dict(r._mapping)) for r in contributors.fetchall()]
     event["urls"] = [_row(dict(r._mapping)) for r in urls.fetchall()]
     event["partners"] = [_row(dict(r._mapping)) for r in partners.fetchall()]
     event["contacts"] = [_row(dict(r._mapping)) for r in contacts.fetchall()]
+    event["files"] = []
+    for f in files.fetchall():
+        f = _row(dict(f._mapping))
+        if (f.get("file_url") or "").startswith("s3://"):
+            f["file_url"] = await s3_ref_to_presigned(f["file_url"])
+        event["files"].append(f)
 
     # Leads sourced from this event, and how many of those progressed to an Opportunity/deal.
     stats = await db.execute(text("""
@@ -235,6 +242,32 @@ async def upload_event_logo(event_id: str, file: UploadFile = File(...), db: Asy
                       {"ref": logo_ref, "id": event_id})
     await db.commit()
     return {"status": "ok", "logo_url": await s3_ref_to_presigned(logo_ref)}
+
+
+# ─── Files ───────────────────────────────────────────────────────────────────────
+@router.post("/events/{event_id}/files")
+async def add_event_file(event_id: str, file: UploadFile = File(...), db: AsyncSession = Depends(get_db)):
+    event = await _get_event(db, event_id)
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found")
+    content = await file.read()
+    key = f"marketing/events/{event_id}/files/{file.filename.replace(' ', '_')}"
+    file_ref = await upload_to_s3(key, content, file.content_type or "application/octet-stream")
+    file_id = str(uuid.uuid4())
+    await db.execute(text("""
+        INSERT INTO marketing_event_files (id, event_id, title, file_url, created_at)
+        VALUES (CAST(:id AS UUID), CAST(:eid AS UUID), :title, :file_url, NOW())
+    """), {"id": file_id, "eid": event_id, "title": file.filename, "file_url": file_ref})
+    await db.commit()
+    return {"status": "ok", "id": file_id, "title": file.filename, "file_url": await s3_ref_to_presigned(file_ref)}
+
+
+@router.delete("/events/{event_id}/files/{file_id}")
+async def delete_event_file(event_id: str, file_id: str, db: AsyncSession = Depends(get_db)):
+    await db.execute(text("DELETE FROM marketing_event_files WHERE id = CAST(:id AS UUID) AND event_id = CAST(:eid AS UUID)"),
+                      {"id": file_id, "eid": event_id})
+    await db.commit()
+    return {"status": "ok"}
 
 
 # ─── Contributors ────────────────────────────────────────────────────────────────

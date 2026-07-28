@@ -1933,6 +1933,16 @@ async def startup():
                     created_at TIMESTAMP DEFAULT NOW()
                 )""",
                 "CREATE INDEX IF NOT EXISTS ix_linked_emails_entity ON linked_emails (entity_type, entity_id)",
+
+                # Event Files — real uploaded attachments on an Event, same shape as
+                # marketing_email_template_attachments above (title + S3 file_url).
+                """CREATE TABLE IF NOT EXISTS marketing_event_files (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    event_id UUID NOT NULL REFERENCES marketing_events(id) ON DELETE CASCADE,
+                    title VARCHAR(500),
+                    file_url TEXT NOT NULL,
+                    created_at TIMESTAMP DEFAULT NOW()
+                )""",
             ]
             for sql in sqls:
                 try:

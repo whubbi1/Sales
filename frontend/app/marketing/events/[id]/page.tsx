@@ -191,6 +191,7 @@ function EventDetailContent() {
   const [addContactId, setAddContactId] = useState('')
   const [uploadingLogo, setUploadingLogo] = useState(false)
   const logoInputRef = useRef<HTMLInputElement>(null)
+  const [uploadingFile, setUploadingFile] = useState(false)
   const [showDelete, setShowDelete] = useState(false)
   const [deleteConfirm, setDeleteConfirm] = useState('')
   const [deleting, setDeleting] = useState(false)
@@ -257,6 +258,19 @@ function EventDetailContent() {
   const removeLink = async (uid: string) => {
     await marketingAPI.removeUrl(event.id, uid)
     setEvent((prev: any) => ({ ...prev, urls: (prev.urls || []).filter((u: any) => u.id !== uid) }))
+  }
+
+  const uploadFile = async (file: File) => {
+    setUploadingFile(true)
+    try {
+      const f = await marketingAPI.uploadEventFile(event.id, file)
+      setEvent((prev: any) => ({ ...prev, files: [f, ...(prev.files || [])] }))
+    } catch (e: any) { setError(e.message) }
+    finally { setUploadingFile(false) }
+  }
+  const removeFile = async (fileId: string) => {
+    await marketingAPI.deleteEventFile(event.id, fileId)
+    setEvent((prev: any) => ({ ...prev, files: (prev.files || []).filter((f: any) => f.id !== fileId) }))
   }
 
   const linkPartner = async () => {
@@ -520,6 +534,31 @@ function EventDetailContent() {
             <input style={{ ...inp, flex: 1 }} placeholder="https://…" value={linkUrl} onChange={e => setLinkUrl(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') addLink() }} />
             <button onClick={addLink} style={{ ...btn, background: '#156082', color: 'white' }}>Add</button>
             <button onClick={() => { setShowAddLink(false); setLinkLabel(''); setLinkUrl('') }} style={{ ...btn, background: '#F1F5F9', color: '#64748B' }}>Cancel</button>
+          </div>
+        )}
+      </div>
+
+      <div style={card}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+          <div style={lbl}>Files ({(event.files || []).length})</div>
+          {canEdit && (
+            <label style={{ ...btn, background: '#EFF6FF', color: '#156082', display: 'inline-block' }}>
+              {uploadingFile ? 'Uploading…' : '+ Add File'}
+              <input type="file" style={{ display: 'none' }} disabled={uploadingFile}
+                onChange={e => { const f = e.target.files?.[0]; if (f) uploadFile(f); e.target.value = '' }} />
+            </label>
+          )}
+        </div>
+        {(event.files || []).length === 0 ? (
+          <p style={{ fontSize: '12px', color: '#94A3B8', margin: 0 }}>No files attached yet.</p>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            {(event.files || []).map((f: any) => (
+              <div key={f.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', border: '1px solid #EDF2F7', borderRadius: '8px' }}>
+                <a href={f.file_url} target="_blank" rel="noopener noreferrer" style={{ fontSize: '12px', color: '#156082', fontWeight: '600', textDecoration: 'none' }}>📎 {f.title}</a>
+                {canEdit && <button onClick={() => removeFile(f.id)} style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#94A3B8', fontSize: '14px', padding: 0, lineHeight: 1 }}>×</button>}
+              </div>
+            ))}
           </div>
         )}
       </div>

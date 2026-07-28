@@ -131,6 +131,15 @@ export const marketingAPI = {
   addUrl:    (id: string, d: any) => fetchAPI(`/marketing/events/${id}/urls`, { method: 'POST', body: JSON.stringify(d) }),
   removeUrl: (id: string, uid: string) => fetchAPI(`/marketing/events/${id}/urls/${uid}`, { method: 'DELETE' }),
 
+  uploadEventFile: async (id: string, file: File) => {
+    const fd = new FormData()
+    fd.append('file', file)
+    const res = await fetch(`${API_URL}/marketing/events/${id}/files`, { method: 'POST', body: fd })
+    if (!res.ok) { const err = await res.json().catch(() => ({})); throw new Error(err.detail || 'Upload failed') }
+    return res.json()
+  },
+  deleteEventFile: (id: string, fileId: string) => fetchAPI(`/marketing/events/${id}/files/${fileId}`, { method: 'DELETE' }),
+
   linkPartner:   (id: string, partnerId: string) => fetchAPI(`/marketing/events/${id}/partners/${partnerId}`, { method: 'POST' }),
   unlinkPartner: (id: string, partnerId: string) => fetchAPI(`/marketing/events/${id}/partners/${partnerId}`, { method: 'DELETE' }),
   linkContact:   (id: string, contactId: string) => fetchAPI(`/marketing/events/${id}/contacts/${contactId}`, { method: 'POST' }),
