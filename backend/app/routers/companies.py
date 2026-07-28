@@ -129,6 +129,7 @@ async def get_dashboard_stats(db: AsyncSession = Depends(get_db)):
     won_sql = ", ".join(f"'{s}'" for s in _WON_STATUSES)
     r = await db.execute(sql_text(f"""
         SELECT
+            (SELECT COUNT(*) FROM companies) AS total_companies,
             (SELECT COUNT(*) FROM contacts) AS total_contacts,
             (SELECT COUNT(*) FROM opportunities WHERE deal_status NOT IN ({lost_or_won_sql})) AS open_count,
             (SELECT COALESCE(SUM(deal_amount), 0) FROM opportunities WHERE deal_status NOT IN ({lost_or_won_sql})) AS open_amount,
@@ -137,6 +138,7 @@ async def get_dashboard_stats(db: AsyncSession = Depends(get_db)):
     """))
     row = r.fetchone()
     return {
+        "total_companies": row.total_companies,
         "total_contacts": row.total_contacts,
         "open_count": row.open_count,
         "open_amount": float(row.open_amount),

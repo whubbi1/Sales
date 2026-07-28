@@ -107,7 +107,7 @@ export default function CompaniesPage() {
           {stats && (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '12px', marginBottom: '16px' }}>
               {[
-                { label: 'Contacts', value: stats.total_contacts, color: '#144766' },
+                { label: 'Companies', value: stats.total_companies, color: '#144766' },
                 { label: 'Open Opportunities', value: stats.open_count, color: '#219BD6' },
                 { label: 'Open Pipeline', value: `€${stats.open_amount.toLocaleString('en-US', { minimumFractionDigits: 0 })}`, color: '#219BD6' },
                 { label: 'Won Opportunities', value: stats.won_count, color: '#059669' },
