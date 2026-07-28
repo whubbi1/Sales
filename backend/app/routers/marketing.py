@@ -553,3 +553,50 @@ async def unlink_mailing_contact(mailing_id: str, contact_id: str, db: AsyncSess
                       {"mid": mailing_id, "cid": contact_id})
     await db.commit()
     return {"status": "ok"}
+
+
+# ─── Marketplaces — a simple bookmark list of marketplace sites ──────────────────
+@router.get("/marketplaces")
+async def list_marketplaces(db: AsyncSession = Depends(get_db)):
+    r = await db.execute(text("SELECT * FROM marketing_marketplaces ORDER BY name"))
+    return {"marketplaces": [_row(dict(row._mapping)) for row in r.fetchall()]}
+
+
+@router.post("/marketplaces")
+async def create_marketplace(data: dict, db: AsyncSession = Depends(get_db)):
+    if not data.get("name") or not data.get("url"):
+        raise HTTPException(status_code=400, detail="name and url are required")
+    marketplace_id = str(uuid.uuid4())
+    await db.execute(text("""
+        INSERT INTO marketing_marketplaces (id, name, url, description, created_by_email, created_at, updated_at)
+        VALUES (CAST(:id AS UUID), :name, :url, :description, :created_by_email, NOW(), NOW())
+    """), {
+        "id": marketplace_id, "name": data["name"], "url": data["url"],
+        "description": data.get("description"), "created_by_email": data.get("created_by_email"),
+    })
+    await db.commit()
+    r = await db.execute(text("SELECT * FROM marketing_marketplaces WHERE id = CAST(:id AS UUID)"), {"id": marketplace_id})
+    return _row(dict(r.fetchone()._mapping))
+
+
+@router.put("/marketplaces/{marketplace_id}")
+async def update_marketplace(marketplace_id: str, data: dict, db: AsyncSession = Depends(get_db)):
+    if not data.get("name") or not data.get("url"):
+        raise HTTPException(status_code=400, detail="name and url are required")
+    await db.execute(text("""
+        UPDATE marketing_marketplaces SET name = :name, url = :url, description = :description, updated_at = NOW()
+        WHERE id = CAST(:id AS UUID)
+    """), {"id": marketplace_id, "name": data["name"], "url": data["url"], "description": data.get("description")})
+    await db.commit()
+    r = await db.execute(text("SELECT * FROM marketing_marketplaces WHERE id = CAST(:id AS UUID)"), {"id": marketplace_id})
+    row = r.fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Marketplace not found")
+    return _row(dict(row._mapping))
+
+
+@router.delete("/marketplaces/{marketplace_id}")
+async def delete_marketplace(marketplace_id: str, db: AsyncSession = Depends(get_db)):
+    await db.execute(text("DELETE FROM marketing_marketplaces WHERE id = CAST(:id AS UUID)"), {"id": marketplace_id})
+    await db.commit()
+    return {"status": "ok"}

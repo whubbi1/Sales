@@ -1957,6 +1957,18 @@ async def startup():
                     created_by_email VARCHAR(255),
                     created_at TIMESTAMP DEFAULT NOW()
                 )""",
+
+                # Marketing Marketplaces — a simple bookmark list of marketplace sites (name,
+                # link, short description), shown under the Marketing module.
+                """CREATE TABLE IF NOT EXISTS marketing_marketplaces (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    name VARCHAR(255) NOT NULL,
+                    url TEXT NOT NULL,
+                    description TEXT,
+                    created_by_email VARCHAR(255),
+                    created_at TIMESTAMP DEFAULT NOW(),
+                    updated_at TIMESTAMP DEFAULT NOW()
+                )""",
             ]
             for sql in sqls:
                 try:

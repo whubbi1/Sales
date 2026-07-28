@@ -159,6 +159,11 @@ export const marketingAPI = {
   },
   deleteTemplateAttachment: (id: string, attachmentId: string) => fetchAPI(`/marketing/email-templates/${id}/attachments/${attachmentId}`, { method: 'DELETE' }),
 
+  listMarketplaces:   () => fetchAPI(`/marketing/marketplaces`),
+  createMarketplace:  (d: any) => fetchAPI(`/marketing/marketplaces`, { method: 'POST', body: JSON.stringify(d) }),
+  updateMarketplace:  (id: string, d: any) => fetchAPI(`/marketing/marketplaces/${id}`, { method: 'PUT', body: JSON.stringify(d) }),
+  deleteMarketplace:  (id: string) => fetchAPI(`/marketing/marketplaces/${id}`, { method: 'DELETE' }),
+
   listEventMailings:  (id: string) => fetchAPI(`/marketing/events/${id}/mailings`),
   createEventMailing: (id: string, d: any) => fetchAPI(`/marketing/events/${id}/mailings`, { method: 'POST', body: JSON.stringify(d) }),
   updateMailing:      (mid: string, d: any) => fetchAPI(`/marketing/mailings/${mid}`, { method: 'PUT', body: JSON.stringify(d) }),

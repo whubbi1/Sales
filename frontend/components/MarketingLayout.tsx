@@ -9,6 +9,7 @@ const API = 'https://api.whubbi.wcomply.com'
 const NAV = [
   { href: '/marketing/events',               icon: '🎪', label: 'Events' },
   { href: '/marketing/templates',            icon: '✉️', label: 'Template Emails' },
+  { href: '/marketing/marketplaces',         icon: '🛒', label: 'Marketplaces' },
   { href: '/marketing/company-website',      icon: '🌐', label: 'Company Website' },
   { href: '/marketing/competitor-analysis',  icon: '🔬', label: 'Competitor Analysis' },
   { href: '/marketing/social-marketing',     icon: '📱', label: 'Social Marketing' },
