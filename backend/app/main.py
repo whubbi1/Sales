@@ -1969,6 +1969,13 @@ async def startup():
                     created_at TIMESTAMP DEFAULT NOW(),
                     updated_at TIMESTAMP DEFAULT NOW()
                 )""",
+
+                # Marketplaces — link to a Partner, a 1-5 star rating, and an average job
+                # requests count (rating validated at the API layer, same as other free-form
+                # small-range fields in this app — no DB CHECK constraint).
+                "ALTER TABLE marketing_marketplaces ADD COLUMN IF NOT EXISTS partner_id UUID REFERENCES partners(id) ON DELETE SET NULL",
+                "ALTER TABLE marketing_marketplaces ADD COLUMN IF NOT EXISTS rating INTEGER",
+                "ALTER TABLE marketing_marketplaces ADD COLUMN IF NOT EXISTS avg_job_requests INTEGER",
             ]
             for sql in sqls:
                 try:

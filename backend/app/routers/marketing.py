@@ -556,43 +556,78 @@ async def unlink_mailing_contact(mailing_id: str, contact_id: str, db: AsyncSess
 
 
 # ─── Marketplaces — a simple bookmark list of marketplace sites ──────────────────
+async def _attach_marketplace_partners(db: AsyncSession, marketplaces: list):
+    # Looked up one id at a time (same pattern as _attach_partners in contacts.py) rather than
+    # an ANY(:ids) array bind — this codebase's raw-SQL routers don't rely on asyncpg inferring
+    # array param types from a plain Python list.
+    ids = {m["partner_id"] for m in marketplaces if m.get("partner_id")}
+    partners = {}
+    for pid in ids:
+        r = await db.execute(text("SELECT id, name, status FROM partners WHERE id = CAST(:id AS UUID)"), {"id": pid})
+        row = r.fetchone()
+        if row:
+            partners[pid] = {"id": str(row.id), "name": row.name, "status": row.status}
+    for m in marketplaces:
+        m["partner"] = partners.get(m.get("partner_id"))
+
+
+def _validate_rating(data: dict):
+    rating = data.get("rating")
+    if rating is not None and rating != "" and not (1 <= int(rating) <= 5):
+        raise HTTPException(status_code=400, detail="rating must be between 1 and 5")
+
+
 @router.get("/marketplaces")
 async def list_marketplaces(db: AsyncSession = Depends(get_db)):
     r = await db.execute(text("SELECT * FROM marketing_marketplaces ORDER BY name"))
-    return {"marketplaces": [_row(dict(row._mapping)) for row in r.fetchall()]}
+    marketplaces = [_row(dict(row._mapping)) for row in r.fetchall()]
+    await _attach_marketplace_partners(db, marketplaces)
+    return {"marketplaces": marketplaces}
 
 
 @router.post("/marketplaces")
 async def create_marketplace(data: dict, db: AsyncSession = Depends(get_db)):
     if not data.get("name") or not data.get("url"):
         raise HTTPException(status_code=400, detail="name and url are required")
+    _validate_rating(data)
     marketplace_id = str(uuid.uuid4())
     await db.execute(text("""
-        INSERT INTO marketing_marketplaces (id, name, url, description, created_by_email, created_at, updated_at)
-        VALUES (CAST(:id AS UUID), :name, :url, :description, :created_by_email, NOW(), NOW())
+        INSERT INTO marketing_marketplaces (id, name, url, description, partner_id, rating, avg_job_requests, created_by_email, created_at, updated_at)
+        VALUES (CAST(:id AS UUID), :name, :url, :description, CAST(NULLIF(:partner_id,'') AS UUID), :rating, :avg_job_requests, :created_by_email, NOW(), NOW())
     """), {
         "id": marketplace_id, "name": data["name"], "url": data["url"],
-        "description": data.get("description"), "created_by_email": data.get("created_by_email"),
+        "description": data.get("description"), "partner_id": data.get("partner_id") or "",
+        "rating": data.get("rating") or None, "avg_job_requests": data.get("avg_job_requests") or None,
+        "created_by_email": data.get("created_by_email"),
     })
     await db.commit()
     r = await db.execute(text("SELECT * FROM marketing_marketplaces WHERE id = CAST(:id AS UUID)"), {"id": marketplace_id})
-    return _row(dict(r.fetchone()._mapping))
+    marketplace = _row(dict(r.fetchone()._mapping))
+    await _attach_marketplace_partners(db, [marketplace])
+    return marketplace
 
 
 @router.put("/marketplaces/{marketplace_id}")
 async def update_marketplace(marketplace_id: str, data: dict, db: AsyncSession = Depends(get_db)):
     if not data.get("name") or not data.get("url"):
         raise HTTPException(status_code=400, detail="name and url are required")
+    _validate_rating(data)
     await db.execute(text("""
-        UPDATE marketing_marketplaces SET name = :name, url = :url, description = :description, updated_at = NOW()
+        UPDATE marketing_marketplaces SET name = :name, url = :url, description = :description,
+            partner_id = CAST(NULLIF(:partner_id,'') AS UUID), rating = :rating, avg_job_requests = :avg_job_requests, updated_at = NOW()
         WHERE id = CAST(:id AS UUID)
-    """), {"id": marketplace_id, "name": data["name"], "url": data["url"], "description": data.get("description")})
+    """), {
+        "id": marketplace_id, "name": data["name"], "url": data["url"], "description": data.get("description"),
+        "partner_id": data.get("partner_id") or "", "rating": data.get("rating") or None, "avg_job_requests": data.get("avg_job_requests") or None,
+    })
     await db.commit()
     r = await db.execute(text("SELECT * FROM marketing_marketplaces WHERE id = CAST(:id AS UUID)"), {"id": marketplace_id})
     row = r.fetchone()
     if not row:
         raise HTTPException(status_code=404, detail="Marketplace not found")
-    return _row(dict(row._mapping))
+    marketplace = _row(dict(row._mapping))
+    await _attach_marketplace_partners(db, [marketplace])
+    return marketplace
 
 
 @router.delete("/marketplaces/{marketplace_id}")
