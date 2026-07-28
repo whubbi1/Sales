@@ -1943,6 +1943,20 @@ async def startup():
                     file_url TEXT NOT NULL,
                     created_at TIMESTAMP DEFAULT NOW()
                 )""",
+
+                # Mass Upload — holds a parsed CSV/XLSX between the "parse" step (upload +
+                # preview) and the "import" step (column mapping submitted), since those are two
+                # separate requests that can land on different backend instances behind the LB.
+                # Short-lived: deleted right after a successful (or failed) import.
+                """CREATE TABLE IF NOT EXISTS mass_upload_sessions (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    filename VARCHAR(500),
+                    headers JSONB DEFAULT '[]',
+                    rows JSONB DEFAULT '[]',
+                    row_count INTEGER DEFAULT 0,
+                    created_by_email VARCHAR(255),
+                    created_at TIMESTAMP DEFAULT NOW()
+                )""",
             ]
             for sql in sqls:
                 try:
@@ -2115,6 +2129,7 @@ _include("app.routers.projects",       "/projects",     "Projects")
 _include("app.routers.timesheets",     "/timesheets",   "Timesheets")
 _include("app.routers.leads",          "/leads",        "Leads")
 _include("app.routers.reporting",      "/reporting",    "Reporting")
+_include("app.routers.mass_upload",    "/mass-upload",  "MassUpload")
 
 try:
     from app.routers import auth, outlook, copilot

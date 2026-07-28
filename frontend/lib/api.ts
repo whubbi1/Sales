@@ -625,3 +625,18 @@ export const outlookAPI = {
   unlinkEmail:      (id: string) => fetchAPI(`/outlook/emails/linked/${id}`, { method: 'DELETE' }),
   sendEmail:        (d: any) => fetchAPI('/outlook/emails/send', { method: 'POST', body: JSON.stringify(d) }),
 }
+
+// ─── Mass Upload ────────────────────────────────────────────────────────────────
+export const massUploadAPI = {
+  listEntities: () => fetchAPI(`/mass-upload/entities`),
+  getFields:    (entityType: string) => fetchAPI(`/mass-upload/fields${qs({ entity_type: entityType })}`),
+  parse: async (file: File, createdByEmail: string) => {
+    const fd = new FormData()
+    fd.append('file', file)
+    const res = await fetch(`${API_URL}/mass-upload/parse${qs({ created_by_email: createdByEmail })}`, { method: 'POST', body: fd })
+    if (!res.ok) { const err = await res.json().catch(() => ({})); throw new Error(err.detail || 'Could not read this file') }
+    return res.json()
+  },
+  import: (sessionId: string, entityType: string, mapping: Record<string, string>) =>
+    fetchAPI(`/mass-upload/import`, { method: 'POST', body: JSON.stringify({ session_id: sessionId, entity_type: entityType, mapping }) }),
+}
