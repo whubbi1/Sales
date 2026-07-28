@@ -81,7 +81,11 @@ async def _attach_logos(companies: list):
 
 @router.get("/", response_model=List[CompanyResponse])
 async def list_companies(
-    skip: int = 0, limit: int = 100,
+    # The companies list page fetches once and does its own client-side filter/sort/paging
+    # (see frontend/app/companies/page.tsx) — 100 silently truncated the 2,452-row table well
+    # before any of that ran, hiding companies with no clue why. High ceiling instead of no
+    # limit at all, so a single request still can't runaway-fetch an unbounded table.
+    skip: int = 0, limit: int = 10000,
     status: str = None, search: str = None,
     db: AsyncSession = Depends(get_db)
 ):
