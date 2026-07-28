@@ -196,7 +196,7 @@ export default function CompaniesPage() {
           </div>
         </div>
 
-        {showModal && <CompanyModal onClose={() => setShowModal(false)} onSave={() => { setShowModal(false); load() }} companies={companies.filter(c => !c._isPartner)} />}
+        {showModal && <CompanyModal onClose={() => setShowModal(false)} onSave={(created: any) => { setShowModal(false); router.push(`/companies/${created.id}`) }} companies={companies.filter(c => !c._isPartner)} />}
       </main>
     </div>
   )

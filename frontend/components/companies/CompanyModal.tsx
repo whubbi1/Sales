@@ -106,9 +106,8 @@ export function CompanyModal({ company, companies = [], onClose, onSave }: any) 
     setSaving(true); setError('')
     try {
       const payload = { ...form, parent_id: form.parent_id || null, main_contact_id: form.main_contact_id || null, employee_count: form.employee_count === '' ? null : Number(form.employee_count) }
-      if (company) { await companiesAPI.update(company.id, payload) }
-      else { await companiesAPI.create(payload) }
-      onSave()
+      const result = company ? await companiesAPI.update(company.id, payload) : await companiesAPI.create(payload)
+      onSave(result)
     } catch (e: any) { setError(e.message) }
     finally { setSaving(false) }
   }
