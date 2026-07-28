@@ -27,7 +27,7 @@ export default function PartnersPage() {
   const [userEmail, setUserEmail] = useState('')
   const [nameSearch, setNameSearch] = useState('')
 
-  const rb = useReportBuilder('partner', COLUMNS, userEmail)
+  const rb = useReportBuilder('partner', COLUMNS, userEmail, 'updated_at', 'desc')
 
   const load = async () => {
     try {

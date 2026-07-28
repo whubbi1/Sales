@@ -57,7 +57,7 @@ async def list_partners(search: str = None, db: AsyncSession = Depends(get_db)):
     if search:
         where = "WHERE p.name ILIKE :q OR p.contact_name ILIKE :q"
         params["q"] = f"%{search}%"
-    r = await db.execute(text(f"{_PARTNER_SELECT} {where} ORDER BY p.name"), params)
+    r = await db.execute(text(f"{_PARTNER_SELECT} {where} ORDER BY p.updated_at DESC"), params)
     return [await _attach_logo(_row(dict(row._mapping))) for row in r.fetchall()]
 
 

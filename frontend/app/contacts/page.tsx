@@ -80,7 +80,7 @@ export default function ContactsPage() {
     setAiResult(result); setAiLoading(false)
   }
 
-  const rb = useReportBuilder('contact', COLUMNS, userEmail)
+  const rb = useReportBuilder('contact', COLUMNS, userEmail, 'updated_at', 'desc')
 
   const load = async () => {
     try {

@@ -40,7 +40,7 @@ export default function CompaniesPage() {
   const [stats, setStats] = useState<any>(null)
   const [nameSearch, setNameSearch] = useState('')
 
-  const rb = useReportBuilder('company', COLUMNS, userEmail)
+  const rb = useReportBuilder('company', COLUMNS, userEmail, 'updated_at', 'desc')
 
   const load = async () => {
     try {

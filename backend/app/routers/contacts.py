@@ -53,7 +53,7 @@ async def list_contacts(
         query = query.where(Contact.company_id == company_id)
     if partner_id:
         query = query.where(Contact.partner_id == partner_id)
-    query = query.offset(skip).limit(limit).order_by(Contact.last_name, Contact.first_name)
+    query = query.offset(skip).limit(limit).order_by(Contact.updated_at.desc())
     result = await db.execute(query)
     contacts = result.scalars().all()
     await _attach_partners(db, contacts)

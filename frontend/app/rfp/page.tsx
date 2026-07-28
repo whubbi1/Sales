@@ -35,7 +35,7 @@ export default function RFPPage() {
   const [popupOpTeam, setPopupOpTeam] = useState('')
   const [popupSalesTeam, setPopupSalesTeam] = useState('')
 
-  const rb = useReportBuilder('rfp', COLUMNS, userEmail)
+  const rb = useReportBuilder('rfp', COLUMNS, userEmail, 'updated_at', 'desc')
 
   const load = async () => {
     try {

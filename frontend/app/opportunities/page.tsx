@@ -59,7 +59,7 @@ function OpportunitiesContent() {
     { key: 'sales_team_name', label: 'Sales Team', filterable: 'select', options: salesTeams.map((t: any) => t.title) },
   ], [operationalTeams, salesTeams])
 
-  const rb = useReportBuilder('opportunity', COLUMNS, userEmail)
+  const rb = useReportBuilder('opportunity', COLUMNS, userEmail, 'updated_at', 'desc')
 
   const load = async () => {
     try {

@@ -66,7 +66,7 @@ function LeadsContent() {
     { key: 'sales_team_name', label: 'Sales Team', filterable: 'select', options: salesTeams.map((t: any) => t.title) },
   ], [operationalTeams, salesTeams])
 
-  const rb = useReportBuilder('leads', COLUMNS, userEmail)
+  const rb = useReportBuilder('leads', COLUMNS, userEmail, 'updated_at', 'desc')
 
   const load = async () => {
     try {

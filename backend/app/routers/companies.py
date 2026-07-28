@@ -90,7 +90,7 @@ async def list_companies(
         query = query.where(Company.status == status)
     if search:
         query = query.where(or_(Company.name.ilike(f"%{search}%"), Company.contact_name.ilike(f"%{search}%")))
-    query = query.offset(skip).limit(limit).order_by(Company.level, Company.name)
+    query = query.offset(skip).limit(limit).order_by(Company.updated_at.desc())
     result = await db.execute(query)
     companies = result.scalars().all()
     await _attach_main_contacts(db, companies)

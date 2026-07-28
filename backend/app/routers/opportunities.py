@@ -217,7 +217,7 @@ async def list_opportunities(
         query = query.where(Opportunity.partner_id == partner_id)
     if deal_status:
         query = query.where(Opportunity.deal_status == deal_status)
-    query = query.offset(skip).limit(limit).order_by(Opportunity.created_at.desc())
+    query = query.offset(skip).limit(limit).order_by(Opportunity.updated_at.desc())
     result = await db.execute(query)
     opps = result.scalars().all()
     await _attach_partners(db, opps)

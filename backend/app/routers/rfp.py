@@ -95,7 +95,7 @@ async def list_rfps(company_id: str = None, status_filter: str = None, db: Async
         query = query.where(RFP.company_id == company_id)
     if status_filter:
         query = query.where(RFP.status == status_filter)
-    query = query.order_by(RFP.created_at.desc())
+    query = query.order_by(RFP.updated_at.desc())
     result = await db.execute(query)
     rfps = result.scalars().all()
     await _attach_partners(db, rfps)

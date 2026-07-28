@@ -20,12 +20,14 @@ function storageKeyFor(module: string, userEmail: string) {
   return userEmail ? `it_report_state_${module}_${userEmail}` : ''
 }
 
-export function useReportBuilder(module: string, columns: ReportColumn[], userEmail: string) {
+export function useReportBuilder(module: string, columns: ReportColumn[], userEmail: string, defaultSortField?: string, defaultSortDir?: 'asc' | 'desc') {
   const allKeys = columns.map(c => c.key)
+  const initialSortField = defaultSortField || columns[0]?.key || ''
+  const initialSortDir = defaultSortDir || 'asc'
   const [visibleCols, setVisibleCols] = useState<string[]>(allKeys)
   const [filters, setFilters] = useState<Record<string, string>>({})
-  const [sortField, setSortField] = useState<string>(columns[0]?.key || '')
-  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
+  const [sortField, setSortField] = useState<string>(initialSortField)
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>(initialSortDir)
   const [columnWidths, setColumnWidths] = useState<Record<string, number>>({})
   const [savedViews, setSavedViews] = useState<any[]>([])
   const [activeViewId, setActiveViewId] = useState<string>('')
@@ -97,8 +99,8 @@ export function useReportBuilder(module: string, columns: ReportColumn[], userEm
   const applyView = (view: any) => {
     setVisibleCols(view.columns && view.columns.length ? view.columns : allKeys)
     setFilters(view.filters || {})
-    setSortField(view.sort_field || columns[0]?.key || '')
-    setSortDir((view.sort_dir as any) || 'asc')
+    setSortField(view.sort_field || initialSortField)
+    setSortDir((view.sort_dir as any) || initialSortDir)
     setColumnWidths(view.column_widths || {})
     setActiveViewId(view.id)
   }
@@ -116,7 +118,7 @@ export function useReportBuilder(module: string, columns: ReportColumn[], userEm
   }
 
   const resetToDefault = () => {
-    setVisibleCols(allKeys); setFilters({}); setSortField(columns[0]?.key || ''); setSortDir('asc'); setColumnWidths({}); setActiveViewId('')
+    setVisibleCols(allKeys); setFilters({}); setSortField(initialSortField); setSortDir(initialSortDir); setColumnWidths({}); setActiveViewId('')
   }
 
   return {

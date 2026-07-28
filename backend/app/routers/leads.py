@@ -128,7 +128,7 @@ async def list_leads(
         query = query.where(or_(Lead.title.ilike(f"%{search}%"), Lead.lead_number.ilike(f"%{search}%")))
     if lead_status:
         query = query.where(Lead.status == lead_status)
-    query = query.offset(skip).limit(limit).order_by(Lead.created_at.desc())
+    query = query.offset(skip).limit(limit).order_by(Lead.updated_at.desc())
     r = await db.execute(query)
     leads = r.scalars().all()
     await _attach_related(db, leads)
