@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { OperationsLayout, useOperationsPerm } from '@/components/OperationsLayout'
-import { projectsAPI, taskManagerAPI, contactsAPI, legalAPI } from '@/lib/api'
+import { projectsAPI, taskManagerAPI, contactsAPI, legalAPI, partnersAPI } from '@/lib/api'
 import { getStoredUser } from '@/lib/auth'
 import { PropertyRow, SidebarSection, SidebarCard, TabNav } from '@/components/shared/RecordLayout'
 import { TaskModal } from '@/components/tasks/TaskModal'
@@ -129,6 +129,8 @@ function ProjectDetailContent() {
   const [contacts, setContacts] = useState<any[]>([])
   const [allContacts, setAllContacts] = useState<any[]>([])
   const [addContactId, setAddContactId] = useState('')
+  const [allPartners, setAllPartners] = useState<any[]>([])
+  const [addPartnerId, setAddPartnerId] = useState('')
 
   const load = async () => {
     try {
@@ -169,6 +171,7 @@ function ProjectDetailContent() {
   useEffect(() => {
     fetch(`${API}/settings/users`).then(r => r.json()).then(d => setUsers(d.users || [])).catch(() => {})
     contactsAPI.list({}).then(setAllContacts).catch(() => {})
+    partnersAPI.list({}).then(setAllPartners).catch(() => {})
     legalAPI.getOrgEntities('operational_team').then(d => setOperationalTeams(d.org_entities || [])).catch(() => {})
     const u = getStoredUser()
     if (u) { setUserEmail(u.email); setUserName(u.name) }
@@ -280,6 +283,13 @@ function ProjectDetailContent() {
     await projectsAPI.unlinkContact(project.id, c.id)
     setContacts(await projectsAPI.getContacts(project.id))
   }
+
+  const linkPartner = async () => {
+    if (!addPartnerId) return
+    await patchProject({ partner_id: addPartnerId })
+    setAddPartnerId('')
+  }
+  const unlinkPartner = async () => patchProject({ partner_id: null })
 
   const reloadTasks = async () => setTasks((await taskManagerAPI.list({ entity_type: 'project', entity_id: id, source: 'operations' })).tasks || [])
   const toggleTaskDone = async (task: any) => {
@@ -852,11 +862,24 @@ function ProjectDetailContent() {
               </div>
             )}
           </SidebarSection>
-          {project.partner && (
-            <SidebarSection title="Partner">
-              <SidebarCard title={project.partner.name} subtitle="Partner" href={`/partners/${project.partner.id}`} color="#7C3AED" />
-            </SidebarSection>
-          )}
+          <SidebarSection title="Partner">
+            {project.partner ? (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <div style={{ flex: 1 }}>
+                  <SidebarCard title={project.partner.name} subtitle="Partner" href={`/partners/${project.partner.id}`} color="#7C3AED" />
+                </div>
+                <button onClick={unlinkPartner} title="Remove" style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#DC2626', fontSize: '14px', padding: '0 4px', lineHeight: 1 }}>×</button>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', gap: '6px' }}>
+                <select className="form-input" style={{ flex: 1, fontSize: '12px' }} value={addPartnerId} onChange={e => setAddPartnerId(e.target.value)}>
+                  <option value="">Select a partner…</option>
+                  {allPartners.map((p: any) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                </select>
+                <button className="btn-primary" style={{ fontSize: '12px', padding: '6px 10px' }} onClick={linkPartner} disabled={!addPartnerId}>+ Link</button>
+              </div>
+            )}
+          </SidebarSection>
           {!project.is_internal && project.opportunity && (
             <SidebarSection title="Opportunity">
               <SidebarCard title={project.opportunity.deal_name} subtitle={project.opportunity.deal_status} href={`/opportunities/${project.opportunity_id}`} color="#219BD6" />
