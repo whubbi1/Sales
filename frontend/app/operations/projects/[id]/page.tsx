@@ -449,7 +449,14 @@ function ProjectDetailContent() {
                       <PropertyRow label="Linked Opportunity" value={project.opportunity ? <a href={`/opportunities/${project.opportunity_id}`} style={{ color: '#219BD6', fontWeight: '600' }}>{project.opportunity.deal_name} ↗</a> : null} />
                     </div>
                   )}
-                  {project.is_internal && <PropertyRow label="Description" value={project.description} />}
+                  {project.is_internal && (
+                    <PropertyRow label="Description" value={
+                      <EditableCell display={project.description} editing={editingField === 'description'} onStartEdit={() => setEditingField('description')}>
+                        <textarea autoFocus className="form-input" style={{ fontSize: '13px', width: '100%', minHeight: '70px', resize: 'vertical' }} defaultValue={project.description || ''}
+                          onBlur={e => { setEditingField(null); patchProject({ description: e.target.value.trim() || null }) }} />
+                      </EditableCell>
+                    } />
+                  )}
 
                   <p className="section-label" style={{ marginTop: '10px', marginBottom: '8px' }}>{isLicenseProject ? 'License Dates' : 'Dates'}</p>
                   <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '18px' }}>
