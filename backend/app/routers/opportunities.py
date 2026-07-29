@@ -198,7 +198,9 @@ async def _maybe_create_rfp(db: AsyncSession, opp: Opportunity):
 
 @router.get("/", response_model=List[OpportunityResponse])
 async def list_opportunities(
-    skip: int = 0, limit: int = 100,
+    # Same fix as companies.py/contacts.py — the dashboard and list page count the fetched
+    # array itself, so this needs enough headroom to not silently truncate as the table grows.
+    skip: int = 0, limit: int = 10000,
     search: str = None, company_id: str = None, partner_id: str = None, deal_status: str = None,
     db: AsyncSession = Depends(get_db)
 ):

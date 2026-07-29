@@ -38,7 +38,10 @@ async def _attach_partners(db: AsyncSession, objs: list):
 
 @router.get("/", response_model=List[ContactResponse])
 async def list_contacts(
-    skip: int = 0, limit: int = 100,
+    # See the identical companies.py fix — the contacts KPI on the Sales dashboard and the
+    # Contacts page itself both just count the fetched array, so a 100-row default silently
+    # capped the displayed total below the real count once the table passed 100 rows.
+    skip: int = 0, limit: int = 10000,
     search: str = None, company_id: str = None, partner_id: str = None, partner_only: bool = None,
     db: AsyncSession = Depends(get_db)
 ):

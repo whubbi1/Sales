@@ -24,6 +24,26 @@ const OPP_STATUS_STYLE: Record<string, { bg: string; color: string; short: strin
   'Contract Lost':                { bg: '#FEF2F2', color: '#DC2626', short: 'Lost' },
 }
 
+const CONTACT_STATUS_STYLE: Record<string, { bg: string; color: string }> = {
+  New:       { bg: '#F1F5F9', color: '#45B6E4' },
+  Open:      { bg: '#FFF7ED', color: '#D97706' },
+  Connected: { bg: '#ECFDF5', color: '#059669' },
+}
+
+const LEAD_STATUS_STYLE: Record<string, { bg: string; color: string; short: string }> = {
+  'Open':                     { bg: '#FFF7ED', color: '#D97706', short: 'Open' },
+  'In Progress':              { bg: '#EFF6FF', color: '#3B82F6', short: 'In Progress' },
+  'Closed':                   { bg: '#F1F5F9', color: '#64748B', short: 'Closed' },
+  'Create an Opportunity':    { bg: '#ECFDF5', color: '#059669', short: 'Converted' },
+}
+
+const EVENT_STATUS_STYLE: Record<string, { bg: string; color: string }> = {
+  'To be planned':      { bg: '#F1F5F9', color: '#475569' },
+  'Planned':            { bg: '#EFF6FF', color: '#156082' },
+  'Under preparation':  { bg: '#FFF7ED', color: '#D97706' },
+  'Finished':           { bg: '#F1F5F9', color: '#64748B' },
+}
+
 function StatCard({ icon, label, count, color, sub, onClick }: {
   icon: string; label: string; count: number | string; color: string
   sub?: { label: string; count: number; bg: string; textColor: string }[]
@@ -84,6 +104,9 @@ export default function DashboardPage() {
 
   const companyByStatus = countByStatus(companies, 'status')
   const oppByStatus = countByStatus(opportunities, 'deal_status')
+  const contactByStatus = countByStatus(contacts, 'lead_status')
+  const leadByStatus = countByStatus(leads, 'status')
+  const eventByStatus = countByStatus(events, 'status')
 
   const wonAll = opportunities.filter(o => WON_STATUSES.includes(o.deal_status) && o.deal_amount)
   const wonYear = wonAll.filter(o => o.closing_date && String(o.closing_date).startsWith(CURRENT_YEAR))
@@ -95,7 +118,6 @@ export default function DashboardPage() {
 
   const fmt = (n: number) => `€${n.toLocaleString('en-US', { minimumFractionDigits: 0 })}`
 
-  const leadsByOrigin = countByStatus(leads, 'origin')
   const leadsTransferred = leads.filter(l => l.opportunity_id).length
   const today = new Date().toISOString().slice(0, 10)
   const eventsPlanned = events.filter(e => (e.end_date || e.event_date) >= today).length
@@ -130,6 +152,12 @@ export default function DashboardPage() {
               <StatCard
                 icon="👤" label="Contacts" count={contacts.length} color="#848EA5"
                 onClick={() => router.push('/contacts')}
+                sub={Object.entries(contactByStatus).map(([status, count]) => ({
+                  label: status,
+                  count: count as number,
+                  bg: CONTACT_STATUS_STYLE[status]?.bg || '#F1F5F9',
+                  textColor: CONTACT_STATUS_STYLE[status]?.color || '#475569',
+                }))}
               />
               <StatCard
                 icon="💼" label="Opportunities" count={opportunities.length} color="#e97132"
@@ -174,11 +202,11 @@ export default function DashboardPage() {
               <StatCard
                 icon="🎯" label="Leads" count={leads.length} color="#7C3AED"
                 onClick={() => router.push('/leads')}
-                sub={Object.entries(leadsByOrigin).map(([origin, count]) => ({
-                  label: origin,
+                sub={Object.entries(leadByStatus).map(([status, count]) => ({
+                  label: LEAD_STATUS_STYLE[status]?.short || status,
                   count: count as number,
-                  bg: '#F5F3FF',
-                  textColor: '#7C3AED',
+                  bg: LEAD_STATUS_STYLE[status]?.bg || '#F1F5F9',
+                  textColor: LEAD_STATUS_STYLE[status]?.color || '#475569',
                 }))}
               />
               <StatCard
@@ -188,6 +216,12 @@ export default function DashboardPage() {
               <StatCard
                 icon="📅" label="Events Planned" count={eventsPlanned} color="#D97706"
                 onClick={() => router.push('/marketing/events')}
+                sub={Object.entries(eventByStatus).map(([status, count]) => ({
+                  label: status,
+                  count: count as number,
+                  bg: EVENT_STATUS_STYLE[status]?.bg || '#F1F5F9',
+                  textColor: EVENT_STATUS_STYLE[status]?.color || '#475569',
+                }))}
               />
             </div>
           </>)}
