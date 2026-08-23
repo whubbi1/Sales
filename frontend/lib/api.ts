@@ -1,9 +1,18 @@
 // lib/api.ts
+import { getIdToken } from '@/lib/auth'
+
 const API_URL = 'https://api.whubbi.wcomply.com'
+
+// Every route the backend serves (other than /settings/whubbi-access and /health)
+// now requires this — see require_whubbi_access in app/routers/settings.py.
+function authHeaders(): Record<string, string> {
+  const token = getIdToken()
+  return token ? { Authorization: `Bearer ${token}` } : {}
+}
 
 async function fetchAPI(path: string, options: RequestInit = {}) {
   const res = await fetch(`${API_URL}${path}`, {
-    headers: { 'Content-Type': 'application/json', ...options.headers },
+    headers: { 'Content-Type': 'application/json', ...authHeaders(), ...options.headers },
     ...options,
   })
   if (!res.ok) {
@@ -31,7 +40,7 @@ export const companiesAPI = {
   uploadLogo: async (id: string, file: File) => {
     const fd = new FormData()
     fd.append('file', file)
-    const res = await fetch(`${API_URL}/companies/${id}/logo`, { method: 'POST', body: fd })
+    const res = await fetch(`${API_URL}/companies/${id}/logo`, { method: 'POST', headers: authHeaders(), body: fd })
     if (!res.ok) { const err = await res.json().catch(() => ({})); throw new Error(err.detail || 'Upload failed') }
     return res.json()
   },
@@ -101,7 +110,7 @@ export const partnersAPI = {
   uploadLogo: async (id: string, file: File) => {
     const fd = new FormData()
     fd.append('file', file)
-    const res = await fetch(`${API_URL}/partners/${id}/logo`, { method: 'POST', body: fd })
+    const res = await fetch(`${API_URL}/partners/${id}/logo`, { method: 'POST', headers: authHeaders(), body: fd })
     if (!res.ok) { const err = await res.json().catch(() => ({})); throw new Error(err.detail || 'Upload failed') }
     return res.json()
   },
@@ -120,7 +129,7 @@ export const marketingAPI = {
   uploadEventLogo: async (id: string, file: File) => {
     const fd = new FormData()
     fd.append('file', file)
-    const res = await fetch(`${API_URL}/marketing/events/${id}/logo`, { method: 'POST', body: fd })
+    const res = await fetch(`${API_URL}/marketing/events/${id}/logo`, { method: 'POST', headers: authHeaders(), body: fd })
     if (!res.ok) { const err = await res.json().catch(() => ({})); throw new Error(err.detail || 'Upload failed') }
     return res.json()
   },
@@ -134,7 +143,7 @@ export const marketingAPI = {
   uploadEventFile: async (id: string, file: File) => {
     const fd = new FormData()
     fd.append('file', file)
-    const res = await fetch(`${API_URL}/marketing/events/${id}/files`, { method: 'POST', body: fd })
+    const res = await fetch(`${API_URL}/marketing/events/${id}/files`, { method: 'POST', headers: authHeaders(), body: fd })
     if (!res.ok) { const err = await res.json().catch(() => ({})); throw new Error(err.detail || 'Upload failed') }
     return res.json()
   },
@@ -153,7 +162,7 @@ export const marketingAPI = {
   uploadTemplateAttachment: async (id: string, file: File) => {
     const fd = new FormData()
     fd.append('file', file)
-    const res = await fetch(`${API_URL}/marketing/email-templates/${id}/attachments`, { method: 'POST', body: fd })
+    const res = await fetch(`${API_URL}/marketing/email-templates/${id}/attachments`, { method: 'POST', headers: authHeaders(), body: fd })
     if (!res.ok) { const err = await res.json().catch(() => ({})); throw new Error(err.detail || 'Upload failed') }
     return res.json()
   },
@@ -459,7 +468,7 @@ export const ropaAPI = {
     const fd = new FormData()
     fd.append('file', file)
     fd.append('uploaded_by_email', uploadedByEmail)
-    const res = await fetch(`${API_URL}/grc/ropa/${id}/files`, { method: 'POST', body: fd })
+    const res = await fetch(`${API_URL}/grc/ropa/${id}/files`, { method: 'POST', headers: authHeaders(), body: fd })
     if (!res.ok) { const err = await res.json().catch(() => ({})); throw new Error(err.detail || 'Upload failed') }
     return res.json()
   },
@@ -472,7 +481,7 @@ export const ropaAPI = {
   extractFromFile: async (file: File) => {
     const fd = new FormData()
     fd.append('file', file)
-    const res = await fetch(`${API_URL}/grc/ropa/extract`, { method: 'POST', body: fd })
+    const res = await fetch(`${API_URL}/grc/ropa/extract`, { method: 'POST', headers: authHeaders(), body: fd })
     if (!res.ok) { const err = await res.json().catch(() => ({})); throw new Error(err.detail || 'Extraction failed') }
     return res.json()
   },
@@ -552,7 +561,7 @@ export const financeContractsAPI = {
     const fd = new FormData()
     fd.append('file', file)
     fd.append('uploaded_by_email', uploadedByEmail)
-    const res = await fetch(`${API_URL}/finance/contracts/${id}/documents`, { method: 'POST', body: fd })
+    const res = await fetch(`${API_URL}/finance/contracts/${id}/documents`, { method: 'POST', headers: authHeaders(), body: fd })
     if (!res.ok) { const err = await res.json().catch(() => ({})); throw new Error(err.detail || 'Upload failed') }
     return res.json()
   },
@@ -576,14 +585,14 @@ export const financeCustomersAPI = {
   uploadSignedContract: async (id: string, file: File) => {
     const fd = new FormData()
     fd.append('file', file)
-    const res = await fetch(`${API_URL}/finance/customer-contracts/${id}/signed-contract`, { method: 'POST', body: fd })
+    const res = await fetch(`${API_URL}/finance/customer-contracts/${id}/signed-contract`, { method: 'POST', headers: authHeaders(), body: fd })
     if (!res.ok) { const err = await res.json().catch(() => ({})); throw new Error(err.detail || 'Upload failed') }
     return res.json()
   },
   uploadInvoicingDocumentation: async (id: string, file: File) => {
     const fd = new FormData()
     fd.append('file', file)
-    const res = await fetch(`${API_URL}/finance/customer-contracts/${id}/invoicing-documentation`, { method: 'POST', body: fd })
+    const res = await fetch(`${API_URL}/finance/customer-contracts/${id}/invoicing-documentation`, { method: 'POST', headers: authHeaders(), body: fd })
     if (!res.ok) { const err = await res.json().catch(() => ({})); throw new Error(err.detail || 'Upload failed') }
     return res.json()
   },
@@ -638,7 +647,7 @@ export const massUploadAPI = {
   parse: async (file: File, createdByEmail: string) => {
     const fd = new FormData()
     fd.append('file', file)
-    const res = await fetch(`${API_URL}/mass-upload/parse${qs({ created_by_email: createdByEmail })}`, { method: 'POST', body: fd })
+    const res = await fetch(`${API_URL}/mass-upload/parse${qs({ created_by_email: createdByEmail })}`, { method: 'POST', headers: authHeaders(), body: fd })
     if (!res.ok) { const err = await res.json().catch(() => ({})); throw new Error(err.detail || 'Could not read this file') }
     return res.json()
   },

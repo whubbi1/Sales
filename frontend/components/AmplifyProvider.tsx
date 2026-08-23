@@ -18,7 +18,7 @@ function AccessGate() {
     if (pathname.startsWith('/auth/')) return
     const user = getStoredUser()
     if (!user) return
-    checkWhubbiAccess(user.email).then(access => {
+    checkWhubbiAccess(user.idToken).then(access => {
       if (!access.has_access) {
         clearStoredUser()
         router.push('/auth/login')

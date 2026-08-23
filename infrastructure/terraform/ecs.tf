@@ -92,11 +92,32 @@ resource "aws_lb_target_group" "backend" {
   }
 }
 
-# Listener HTTP (port 80) - HTTPS sera active apres validation du certificat SSL
+# Listener HTTP (port 80) - redirige tout vers HTTPS, ne sert plus jamais l'app en clair
 resource "aws_lb_listener" "http" {
   load_balancer_arn = aws_lb.main.arn
   port              = "80"
   protocol          = "HTTP"
+
+  default_action {
+    type = "redirect"
+
+    redirect {
+      port        = "443"
+      protocol    = "HTTPS"
+      status_code = "HTTP_301"
+    }
+  }
+}
+
+# Listener HTTPS (port 443) - depend de la validation DNS du certificat ACM
+# (voir secrets.tf: aws_acm_certificate_validation.main), donc ce listener ne
+# peut pas exister tant que le CNAME de validation n'a pas ete ajoute au DNS.
+resource "aws_lb_listener" "https" {
+  load_balancer_arn = aws_lb.main.arn
+  port              = "443"
+  protocol          = "HTTPS"
+  ssl_policy        = "ELBSecurityPolicy-TLS13-1-2-2021-06"
+  certificate_arn   = aws_acm_certificate_validation.main.certificate_arn
 
   default_action {
     type             = "forward"
@@ -174,7 +195,20 @@ resource "aws_ecs_task_definition" "backend" {
 
     environment = [
       { name = "ENVIRONMENT", value = var.environment },
-      { name = "APP_NAME",    value = "whubbi" }
+      { name = "APP_NAME",    value = "whubbi" },
+      # Real server-side verification of the Cognito ID token the frontend sends as
+      # `Authorization: Bearer` (see app/routers/settings.py get_verified_email) —
+      # previously not passed to this task at all, so the backend had no way to
+      # verify anything even if it wanted to. Not secrets: a user pool ID, region,
+      # and app client ID are not sensitive (the frontend already ships the same
+      # three values to the browser as NEXT_PUBLIC_* build-time env vars).
+      { name = "COGNITO_USER_POOL_ID", value = aws_cognito_user_pool.main.id },
+      { name = "COGNITO_REGION",       value = var.aws_region },
+      # The "frontend" app client is the one whose OAuth/PKCE flow actually issues
+      # the ID tokens the browser sends — not the separate "backend" client (direct
+      # USER_PASSWORD_AUTH, unrelated to this flow) — so this must match its ID
+      # exactly, or every token's audience check would fail closed.
+      { name = "COGNITO_CLIENT_ID", value = aws_cognito_user_pool_client.frontend.id }
     ]
 
     secrets = [

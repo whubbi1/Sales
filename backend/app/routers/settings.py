@@ -3,6 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException, Header
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
 from app.database import get_db
+from jose import jwt, JWTError
 import httpx
 import os
 import base64
@@ -24,6 +25,118 @@ WHUBBI_GROUP_NAME = os.getenv("MS_WHUBBI_GROUP_NAME", "WHUBBI")
 WHUBBI_GROUP_ID_ENV = os.getenv("MS_WHUBBI_GROUP_ID", "").strip()
 _whubbi_group_cache = {"id": None, "members": None, "fetched_at": 0.0}
 WHUBBI_GROUP_CACHE_TTL = 300  # seconds
+
+# ─── Cognito token verification ────────────────────────────────────────────────
+# Previously, every protected-looking endpoint in this backend had NO server-side
+# auth at all — the WHUBBI group check below was only ever called from the
+# frontend at login, purely to decide whether to show the app. Anyone who knew
+# (or guessed) the API's base URL could call any endpoint directly, no token
+# required. get_verified_email / require_whubbi_access below are the real
+# enforcement, applied per-route in main.py's _include() and individually where
+# a route needs finer-grained treatment (see settings.py's own routes below, and
+# outlook.py).
+COGNITO_USER_POOL_ID = os.getenv("COGNITO_USER_POOL_ID", "")
+COGNITO_REGION = os.getenv("COGNITO_REGION", os.getenv("AWS_REGION", "eu-west-1"))
+COGNITO_CLIENT_ID = os.getenv("COGNITO_CLIENT_ID", "")
+COGNITO_ISSUER = f"https://cognito-idp.{COGNITO_REGION}.amazonaws.com/{COGNITO_USER_POOL_ID}"
+_jwks_cache = {"keys": None, "fetched_at": 0.0}
+JWKS_CACHE_TTL = 3600  # seconds — Cognito's signing keys rotate rarely, if ever
+
+
+async def _get_jwks(force_refresh: bool = False) -> dict:
+    now = time.time()
+    if not force_refresh and _jwks_cache["keys"] is not None and now - _jwks_cache["fetched_at"] < JWKS_CACHE_TTL:
+        return _jwks_cache["keys"]
+    async with httpx.AsyncClient(timeout=10) as client:
+        resp = await client.get(f"{COGNITO_ISSUER}/.well-known/jwks.json")
+        resp.raise_for_status()
+        _jwks_cache["keys"] = resp.json()
+        _jwks_cache["fetched_at"] = now
+        return _jwks_cache["keys"]
+
+
+async def get_verified_email(authorization: str | None = Header(None)) -> str:
+    """FastAPI dependency: verifies the Cognito ID token sent as
+    `Authorization: Bearer <token>` — a real signature check against Cognito's
+    published JWKS, plus issuer/audience/token_use checks, not just decoding the
+    payload (which is what the frontend used to do, and is trivially forgeable).
+    Returns the token's verified `email` claim. Raises 401 for anything wrong:
+    missing header, expired token, bad signature, wrong issuer/audience."""
+    if not COGNITO_USER_POOL_ID or not COGNITO_CLIENT_ID:
+        # Misconfigured deployment, not a client error — fail closed rather than
+        # silently accepting tokens we have no way to actually verify.
+        raise HTTPException(status_code=500, detail="Auth is not configured on this server")
+    if not authorization or not authorization.lower().startswith("bearer "):
+        raise HTTPException(status_code=401, detail="Missing bearer token")
+    token = authorization.split(" ", 1)[1].strip()
+    try:
+        unverified_header = jwt.get_unverified_header(token)
+        jwks = await _get_jwks()
+        key = next((k for k in jwks.get("keys", []) if k.get("kid") == unverified_header.get("kid")), None)
+        if key is None:
+            # Not necessarily an attack — Cognito does rotate keys occasionally.
+            # Refresh once and retry before giving up.
+            jwks = await _get_jwks(force_refresh=True)
+            key = next((k for k in jwks.get("keys", []) if k.get("kid") == unverified_header.get("kid")), None)
+        if key is None:
+            raise JWTError("Signing key not found")
+        claims = jwt.decode(token, key, algorithms=["RS256"], audience=COGNITO_CLIENT_ID, issuer=COGNITO_ISSUER)
+        if claims.get("token_use") != "id":
+            raise JWTError(f"Unexpected token_use: {claims.get('token_use')!r}")
+        email = claims.get("email")
+        if not email:
+            raise JWTError("Token has no email claim")
+        return email
+    except JWTError as e:
+        raise HTTPException(status_code=401, detail=f"Invalid token: {e}")
+
+async def _resolve_whubbi_access(email: str, db: AsyncSession) -> dict:
+    """Shared logic behind both the login-time check and require_whubbi_access
+    below: is `email` currently allowed into WHUBBI? Fails closed — if the group
+    check is unavailable and there's no cached membership list to fall back on
+    (see get_whubbi_group_members), access is denied rather than granted. A
+    transient Graph blip is absorbed by that function's stale-cache fallback;
+    it's only a genuinely prolonged outage or a broken Azure AD setup that would
+    actually deny people here, and that's now loud in the logs rather than
+    silently bypassed."""
+    r = await db.execute(text("SELECT is_excluded FROM user_profiles WHERE email = :email"), {"email": email})
+    row = r.fetchone()
+    is_excluded = bool(row.is_excluded) if row else False
+
+    members = await get_whubbi_group_members()
+    if members is None:
+        print(f"WHUBBI access check unavailable for {email} — denying access (fail closed).")
+        return {"has_access": False, "is_group_member": None, "is_excluded": is_excluded, "check_available": False}
+
+    member_emails = {u.get("mail", "").lower() for u in members if u.get("mail")}
+    is_member = email.lower() in member_emails
+    return {"has_access": is_member and not is_excluded, "is_group_member": is_member, "is_excluded": is_excluded, "check_available": True}
+
+
+@router.get("/whubbi-access")
+async def check_whubbi_access(email: str = Depends(get_verified_email), db: AsyncSession = Depends(get_db)):
+    """Login gate, called once right after sign-in. Takes no input of its own —
+    `email` comes from the verified Cognito token (get_verified_email), not a URL
+    parameter, so this can no longer be used to probe or spoof any arbitrary
+    email's access/exclusion status (the previous /whubbi-access/{email} shape
+    let anyone query anyone)."""
+    return await _resolve_whubbi_access(email, db)
+
+
+async def require_whubbi_access(email: str = Depends(get_verified_email), db: AsyncSession = Depends(get_db)) -> str:
+    """FastAPI dependency enforced on every protected route (see main.py's
+    _include()): the request must carry a valid, signed Cognito token
+    (get_verified_email) AND that user must currently be a WHUBBI group member
+    and not excluded. Returns the verified email so a handler can use it (e.g.
+    for audit logging) without re-deriving it. This is the actual server-side
+    enforcement that was missing entirely before — the frontend's login-time
+    check above only ever controlled whether the SPA showed itself; it never
+    protected the API."""
+    access = await _resolve_whubbi_access(email, db)
+    if not access["has_access"]:
+        raise HTTPException(status_code=403, detail="Not authorized for WHUBBI")
+    return email
+
 
 # Modules & submodules definition
 MODULES = {
@@ -93,11 +206,14 @@ async def _get_whubbi_group_id(token: str) -> str | None:
 
 async def get_whubbi_group_members() -> list | None:
     """Members of the WHUBBI Azure AD security group, cached briefly to avoid a
-    round-trip to Graph on every request. Returns None if the check couldn't be
-    completed (Graph unreachable, permission not granted, group not found) —
-    callers must treat None as "check unavailable" and fail open, not "empty
-    group", or a Graph outage / an incomplete Azure AD setup would lock out
-    the whole company."""
+    round-trip to Graph on every request. On failure (Graph unreachable,
+    permission not granted, group not found), falls back to the last
+    successfully-fetched member list if one exists — even if past its normal
+    TTL — so a brief Graph blip doesn't affect anyone. Only returns None when
+    there is no cached list at all (e.g. right after a fresh deploy, before
+    the first successful fetch); callers must treat None as "check
+    unavailable" and fail closed (deny access), not fail open — see
+    check_whubbi_access."""
     now = time.time()
     if _whubbi_group_cache["members"] is not None and now - _whubbi_group_cache["fetched_at"] < WHUBBI_GROUP_CACHE_TTL:
         return _whubbi_group_cache["members"]
@@ -105,7 +221,7 @@ async def get_whubbi_group_members() -> list | None:
         token = await get_ms_token()
         group_id = await _get_whubbi_group_id(token)
         if not group_id:
-            return None
+            raise RuntimeError("WHUBBI security group could not be resolved in Azure AD")
         members = []
         url = f"https://graph.microsoft.com/v1.0/groups/{group_id}/transitiveMembers/microsoft.graph.user"
         params = {"$select": "id,displayName,givenName,surname,mail,jobTitle,department", "$top": 999}
@@ -121,7 +237,10 @@ async def get_whubbi_group_members() -> list | None:
         _whubbi_group_cache["fetched_at"] = now
         return members
     except Exception as e:
-        print(f"WHUBBI group membership check failed, failing open: {e}")
+        if _whubbi_group_cache["members"] is not None:
+            print(f"WHUBBI group membership check failed, using last-known membership (age: {now - _whubbi_group_cache['fetched_at']:.0f}s): {e}")
+            return _whubbi_group_cache["members"]
+        print(f"WHUBBI group membership check failed with no cached fallback available — denying access until this recovers: {e}")
         return None
 
 
@@ -213,7 +332,7 @@ async def sync_user_from_ms(email: str, db: AsyncSession) -> dict:
 
 
 # ─── Get or sync profile ──────────────────────────────────────────────────────
-@router.get("/profile/{email}")
+@router.get("/profile/{email}", dependencies=[Depends(require_whubbi_access)])
 async def get_profile(email: str, sync: bool = False, db: AsyncSession = Depends(get_db)):
     if not sync:
         result = await db.execute(text("SELECT * FROM user_profiles WHERE email = :email"), {"email": email})
@@ -225,13 +344,13 @@ async def get_profile(email: str, sync: bool = False, db: AsyncSession = Depends
     return await sync_user_from_ms(email, db)
 
 
-@router.post("/profile/{email}/sync")
+@router.post("/profile/{email}/sync", dependencies=[Depends(require_whubbi_access)])
 async def sync_profile(email: str, db: AsyncSession = Depends(get_db)):
     return await sync_user_from_ms(email, db)
 
 
 # ─── Permissions ─────────────────────────────────────────────────────────────
-@router.get("/permissions/{email}")
+@router.get("/permissions/{email}", dependencies=[Depends(require_whubbi_access)])
 async def get_permissions(email: str, db: AsyncSession = Depends(get_db)):
     result = await db.execute(
         text("SELECT * FROM whubbi_permissions WHERE user_email = :email ORDER BY module, submodule"),
@@ -260,7 +379,7 @@ async def get_permissions(email: str, db: AsyncSession = Depends(get_db)):
     return {"email": email, "permissions": matrix, "modules": MODULES}
 
 
-@router.put("/permissions/{email}")
+@router.put("/permissions/{email}", dependencies=[Depends(require_whubbi_access)])
 async def update_permissions(email: str, data: dict, db: AsyncSession = Depends(get_db)):
     """Update permissions for a user. Admin only."""
     import json as _json
@@ -291,7 +410,7 @@ async def update_permissions(email: str, data: dict, db: AsyncSession = Depends(
 
 
 # ─── MCP personal access tokens ────────────────────────────────────────────────
-@router.post("/mcp-tokens")
+@router.post("/mcp-tokens", dependencies=[Depends(require_whubbi_access)])
 async def create_mcp_token(data: dict, db: AsyncSession = Depends(get_db)):
     email = data.get("email")
     if not email:
@@ -312,7 +431,7 @@ async def create_mcp_token(data: dict, db: AsyncSession = Depends(get_db)):
             "label": data.get("label", "My token"), "created_at": str(r.created_at)}
 
 
-@router.get("/mcp-tokens/{email}")
+@router.get("/mcp-tokens/{email}", dependencies=[Depends(require_whubbi_access)])
 async def list_mcp_tokens(email: str, db: AsyncSession = Depends(get_db)):
     result = await db.execute(text("""
         SELECT id, label, token_prefix, created_at, last_used_at, revoked_at
@@ -325,7 +444,7 @@ async def list_mcp_tokens(email: str, db: AsyncSession = Depends(get_db)):
     } for r in result.fetchall()]}
 
 
-@router.delete("/mcp-tokens/{token_id}")
+@router.delete("/mcp-tokens/{token_id}", dependencies=[Depends(require_whubbi_access)])
 async def revoke_mcp_token(token_id: str, db: AsyncSession = Depends(get_db)):
     await db.execute(text("UPDATE mcp_tokens SET revoked_at = NOW() WHERE id = CAST(:id AS UUID)"), {"id": token_id})
     await db.commit()
@@ -361,7 +480,7 @@ async def _main_location_by_email(db: AsyncSession) -> dict:
         for row in r.fetchall()
     }
 
-@router.get("/users")
+@router.get("/users", dependencies=[Depends(require_whubbi_access)])
 async def list_users(db: AsyncSession = Depends(get_db)):
     """List WHUBBI security-group members — tries the MS AD group first, falls back to DB cache."""
     locations = await _main_location_by_email(db)
@@ -400,30 +519,11 @@ async def list_users(db: AsyncSession = Depends(get_db)):
     return {"users": users, "source": "db_cache"}
 
 
-@router.get("/whubbi-access/{email}")
-async def check_whubbi_access(email: str, db: AsyncSession = Depends(get_db)):
-    """Login gate: access requires membership in the WHUBBI Azure AD security group
-    and not being manually excluded. If the group check itself is unavailable (Graph
-    unreachable, permission not granted, group not found), that half fails open so a
-    transient issue or an incomplete Azure AD setup doesn't lock out the whole
-    company — is_excluded is still enforced either way."""
-    r = await db.execute(text("SELECT is_excluded FROM user_profiles WHERE email = :email"), {"email": email})
-    row = r.fetchone()
-    is_excluded = bool(row.is_excluded) if row else False
-
-    members = await get_whubbi_group_members()
-    if members is None:
-        return {"has_access": not is_excluded, "is_group_member": None, "is_excluded": is_excluded, "check_available": False}
-
-    member_emails = {u.get("mail", "").lower() for u in members if u.get("mail")}
-    is_member = email.lower() in member_emails
-    return {"has_access": is_member and not is_excluded, "is_group_member": is_member, "is_excluded": is_excluded, "check_available": True}
-
 
 # ─── Company Links (shown on the home page, managed from the IT module) ───────
 COMPANY_LINK_CATEGORIES = ["WCOMPLY Internal Tools", "Partner Portals"]
 
-@router.get("/company-links")
+@router.get("/company-links", dependencies=[Depends(require_whubbi_access)])
 async def get_company_links(db: AsyncSession = Depends(get_db)):
     try:
         result = await db.execute(text("""
@@ -439,7 +539,7 @@ async def get_company_links(db: AsyncSession = Depends(get_db)):
     except Exception:
         return {"links": []}
 
-@router.get("/company-links/all")
+@router.get("/company-links/all", dependencies=[Depends(require_whubbi_access)])
 async def get_all_company_links(db: AsyncSession = Depends(get_db)):
     result = await db.execute(text("""
         SELECT id, label, url, icon, active, sort_order, location_id, location_name, category
@@ -451,11 +551,11 @@ async def get_all_company_links(db: AsyncSession = Depends(get_db)):
         if l.get("location_id"): l["location_id"] = str(l["location_id"])
     return {"links": links}
 
-@router.get("/company-links/meta")
+@router.get("/company-links/meta", dependencies=[Depends(require_whubbi_access)])
 async def get_company_links_meta():
     return {"categories": COMPANY_LINK_CATEGORIES}
 
-@router.post("/company-links")
+@router.post("/company-links", dependencies=[Depends(require_whubbi_access)])
 async def create_company_link(data: dict, db: AsyncSession = Depends(get_db)):
     import uuid
     link_id = str(uuid.uuid4())
@@ -470,7 +570,7 @@ async def create_company_link(data: dict, db: AsyncSession = Depends(get_db)):
     await db.commit()
     return {"status": "ok", "id": link_id}
 
-@router.put("/company-links/{link_id}")
+@router.put("/company-links/{link_id}", dependencies=[Depends(require_whubbi_access)])
 async def update_company_link(link_id: str, data: dict, db: AsyncSession = Depends(get_db)):
     await db.execute(text("""
         UPDATE company_links SET
@@ -491,7 +591,7 @@ async def update_company_link(link_id: str, data: dict, db: AsyncSession = Depen
     await db.commit()
     return {"status": "ok"}
 
-@router.delete("/company-links/{link_id}")
+@router.delete("/company-links/{link_id}", dependencies=[Depends(require_whubbi_access)])
 async def delete_company_link(link_id: str, db: AsyncSession = Depends(get_db)):
     await db.execute(text("DELETE FROM company_links WHERE id = CAST(:id AS UUID)"), {"id": link_id})
     await db.commit()
@@ -503,7 +603,7 @@ async def delete_company_link(link_id: str, db: AsyncSession = Depends(get_db)):
 ORG_ASSIGNMENT_CATEGORIES = ["company_ids", "location_ids", "sales_org_ids", "purchasing_org_ids", "operational_org_ids"]
 
 
-@router.get("/org-assignments/{email}")
+@router.get("/org-assignments/{email}", dependencies=[Depends(require_whubbi_access)])
 async def get_org_assignments(email: str, db: AsyncSession = Depends(get_db)):
     r = await db.execute(text("SELECT * FROM whubbi_org_assignments WHERE user_email = :email"), {"email": email})
     row = r.fetchone()
@@ -520,7 +620,7 @@ async def get_org_assignments(email: str, db: AsyncSession = Depends(get_db)):
     return result
 
 
-@router.put("/org-assignments/{email}")
+@router.put("/org-assignments/{email}", dependencies=[Depends(require_whubbi_access)])
 async def set_org_assignments(email: str, data: dict, db: AsyncSession = Depends(get_db)):
     values = {cat: json.dumps(data.get(cat) or []) for cat in ORG_ASSIGNMENT_CATEGORIES}
     await db.execute(text("""
@@ -543,7 +643,7 @@ async def set_org_assignments(email: str, data: dict, db: AsyncSession = Depends
 
 
 # ─── Per-user main location (drives which company links appear on the home page) ─
-@router.get("/main-location/{email}")
+@router.get("/main-location/{email}", dependencies=[Depends(require_whubbi_access)])
 async def get_main_location(email: str, db: AsyncSession = Depends(get_db)):
     r = await db.execute(text("SELECT main_location_id, main_location_name, is_excluded FROM user_profiles WHERE email = :email"), {"email": email})
     row = r.fetchone()
@@ -555,7 +655,7 @@ async def get_main_location(email: str, db: AsyncSession = Depends(get_db)):
         "is_excluded": bool(row.is_excluded),
     }
 
-@router.put("/main-location/{email}")
+@router.put("/main-location/{email}", dependencies=[Depends(require_whubbi_access)])
 async def set_main_location(email: str, data: dict, db: AsyncSession = Depends(get_db)):
     location_id = data.get("main_location_id") or ""
     location_name = data.get("main_location_name") or "All"

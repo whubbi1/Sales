@@ -16,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
 
 from app.database import get_db
+from app.routers.settings import require_whubbi_access
 from app.services.outlook import get_access_token, DELEGATED_SCOPES, MS_TENANT_ID, MS_CLIENT_ID, MS_CLIENT_SECRET
 from app.services.token_crypto import encrypt, decrypt, encrypt_state, decrypt_state
 
@@ -89,13 +90,13 @@ async def _get_valid_access_token(db: AsyncSession, user_email: str) -> str:
 
 
 # ─── Connection lifecycle ────────────────────────────────────────────────────────
-@router.get("/status")
+@router.get("/status", dependencies=[Depends(require_whubbi_access)])
 async def outlook_status(email: str, db: AsyncSession = Depends(get_db)):
     conn = await _get_connection(db, email)
     return {"connected": bool(conn), "mailbox_email": conn["mailbox_email"] if conn else None}
 
 
-@router.get("/connect")
+@router.get("/connect", dependencies=[Depends(require_whubbi_access)])
 async def outlook_connect(email: str):
     state = encrypt_state({"email": email, "nonce": str(uuid.uuid4())})
     params = {
@@ -142,7 +143,7 @@ async def outlook_callback(code: str = None, state: str = None, error: str = Non
     return RedirectResponse(f"{settings_url}?outlook_connected=1")
 
 
-@router.delete("/connection")
+@router.delete("/connection", dependencies=[Depends(require_whubbi_access)])
 async def outlook_disconnect(email: str, db: AsyncSession = Depends(get_db)):
     await db.execute(text("DELETE FROM outlook_connections WHERE user_email = :e"), {"e": email})
     await db.commit()
@@ -150,7 +151,7 @@ async def outlook_disconnect(email: str, db: AsyncSession = Depends(get_db)):
 
 
 # ─── Search the connected mailbox (for linking an existing email) ───────────────
-@router.get("/emails/search")
+@router.get("/emails/search", dependencies=[Depends(require_whubbi_access)])
 async def search_emails(email: str, q: str, db: AsyncSession = Depends(get_db)):
     access_token = await _get_valid_access_token(db, email)
     async with httpx.AsyncClient() as client:
@@ -172,7 +173,7 @@ async def search_emails(email: str, q: str, db: AsyncSession = Depends(get_db)):
 
 
 # ─── Linked emails (per Lead/Opportunity/Contact) ────────────────────────────────
-@router.get("/emails/linked")
+@router.get("/emails/linked", dependencies=[Depends(require_whubbi_access)])
 async def list_linked_emails(entity_type: str, entity_id: str, db: AsyncSession = Depends(get_db)):
     _require_entity_type(entity_type)
     r = await db.execute(text("""
@@ -183,7 +184,7 @@ async def list_linked_emails(entity_type: str, entity_id: str, db: AsyncSession 
     return {"emails": [_row(dict(row._mapping)) for row in r.fetchall()]}
 
 
-@router.post("/emails/link")
+@router.post("/emails/link", dependencies=[Depends(require_whubbi_access)])
 async def link_email(data: dict, db: AsyncSession = Depends(get_db)):
     _require_entity_type(data.get("entity_type"))
     if not data.get("entity_id"):
@@ -202,7 +203,7 @@ async def link_email(data: dict, db: AsyncSession = Depends(get_db)):
     return {"status": "ok", "id": email_id}
 
 
-@router.delete("/emails/linked/{email_id}")
+@router.delete("/emails/linked/{email_id}", dependencies=[Depends(require_whubbi_access)])
 async def unlink_email(email_id: str, db: AsyncSession = Depends(get_db)):
     await db.execute(text("DELETE FROM linked_emails WHERE id = CAST(:id AS UUID)"), {"id": email_id})
     await db.commit()
@@ -210,7 +211,7 @@ async def unlink_email(email_id: str, db: AsyncSession = Depends(get_db)):
 
 
 # ─── Send + log an email (optionally from a Template Email) ─────────────────────
-@router.post("/emails/send")
+@router.post("/emails/send", dependencies=[Depends(require_whubbi_access)])
 async def send_and_log_email(data: dict, db: AsyncSession = Depends(get_db)):
     email = data.get("email")
     if not email:
