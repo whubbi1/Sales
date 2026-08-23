@@ -69,7 +69,7 @@ export default function CallbackPage() {
           )
 
           if (email) {
-            const access = await checkWhubbiAccess(email)
+            const access = await checkWhubbiAccess(tokens.id_token)
             if (!access.has_access) {
               setStatus(
                 access.is_excluded
@@ -85,6 +85,7 @@ export default function CallbackPage() {
             email,
             name,
             exp: payload.exp,
+            idToken: tokens.id_token,
           }))
 
           const dest = localStorage.getItem('redirectAfterLogin') || '/home'

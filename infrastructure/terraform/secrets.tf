@@ -50,3 +50,16 @@ resource "aws_acm_certificate" "main" {
 
   tags = { Name = "whubbi-ssl-cert" }
 }
+
+# There's no Route53 zone in this Terraform root (DNS for wcomply.com is managed
+# externally), so the validation CNAME(s) below can't be created automatically.
+# `terraform apply` will block on this resource until whoever has DNS access adds
+# the record(s) from the `acm_validation_records` output — that's expected, not
+# a bug; increase the timeout below if that DNS change takes a while to land.
+resource "aws_acm_certificate_validation" "main" {
+  certificate_arn = aws_acm_certificate.main.arn
+
+  timeouts {
+    create = "45m"
+  }
+}

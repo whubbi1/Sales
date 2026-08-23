@@ -1,6 +1,7 @@
-from fastapi import FastAPI, Request
+from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from app.routers.settings import require_whubbi_access
 
 app = FastAPI(title="WHUBBI API", version="2.0.0")
 app.add_middleware(CORSMiddleware,
@@ -2099,12 +2100,20 @@ async def debug_routes():
             routes.append({"path": route.path, "methods": sorted(route.methods)})
     return {"total": len(routes), "routes": sorted(routes, key=lambda r: r["path"])}
 
-def _include(module_path: str, prefix: str, tag: str):
+def _include(module_path: str, prefix: str, tag: str, protect: bool = True):
+    """protect=True (the default) requires a valid, signed-in WHUBBI member on
+    every route in this router (see require_whubbi_access in
+    app.routers.settings) — this is real server-side enforcement, not just the
+    frontend's login-time check. Pass protect=False only for a router that
+    handles its own auth per-route (settings.py does, since it contains the
+    login-gate endpoint itself) or that isn't reachable from the regular
+    frontend at all."""
     try:
         import importlib
         mod = importlib.import_module(module_path)
-        app.include_router(mod.router, prefix=prefix, tags=[tag])
-        print(f"✓ {tag}")
+        deps = [Depends(require_whubbi_access)] if protect else []
+        app.include_router(mod.router, prefix=prefix, tags=[tag], dependencies=deps)
+        print(f"✓ {tag}{' (protected)' if protect else ''}")
     except Exception as e:
         import traceback
         print(f"✗ ROUTER FAILED [{tag}]: {e}")
@@ -2123,7 +2132,11 @@ _include("app.routers.admin",          "/admin",        "Admin")
 _include("app.routers.admin_ops",      "/admin",        "AdminOps")
 _include("app.routers.microsoft",      "/microsoft",    "Microsoft")
 _include("app.routers.ecs_control",    "/ecs",          "ECS")
-_include("app.routers.settings",       "/settings",     "Settings")
+# settings.py is excluded from the blanket dependency above: it hosts the
+# login-gate endpoint itself (/settings/whubbi-access), which needs a valid
+# token but can't require *already being authorized* without locking everyone
+# out. It protects its own other routes individually — see settings.py.
+_include("app.routers.settings",       "/settings",     "Settings", protect=False)
 _include("app.routers.hr",             "/hr",           "HR")
 _include("app.routers.hr_checklists",  "/hr",           "HRChecklists")
 _include("app.routers.grc",            "/grc",          "GRC")
@@ -2152,9 +2165,15 @@ _include("app.routers.mass_upload",    "/mass-upload",  "MassUpload")
 
 try:
     from app.routers import auth, outlook, copilot
-    app.include_router(auth.router,    prefix="/auth",    tags=["Auth"])
+    # auth.router is just a trivial health-style stub today — nothing to protect.
+    app.include_router(auth.router, prefix="/auth", tags=["Auth"])
+    # outlook.router is NOT blanket-protected here: its /callback route is a
+    # plain browser redirect target from Microsoft's OAuth flow and can't carry
+    # an Authorization header — it has its own encrypted-state CSRF protection
+    # instead. Its other routes (status/connect/emails/*) are protected
+    # individually inside outlook.py.
     app.include_router(outlook.router, prefix="/outlook", tags=["Outlook"])
-    app.include_router(copilot.router, prefix="/copilot", tags=["Copilot"])
+    app.include_router(copilot.router, prefix="/copilot", tags=["Copilot"], dependencies=[Depends(require_whubbi_access)])
 except Exception as e:
     print(f"✗ ROUTER FAILED [auth/outlook/copilot]: {e}")
 
