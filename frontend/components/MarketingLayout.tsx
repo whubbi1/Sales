@@ -13,6 +13,7 @@ const NAV = [
   { href: '/marketing/company-website',      icon: '🌐', label: 'Company Website' },
   { href: '/marketing/competitor-analysis',  icon: '🔬', label: 'Competitor Analysis' },
   { href: '/marketing/social-marketing',     icon: '📱', label: 'Social Marketing' },
+  { href: '/marketing/social-media-influence', icon: '🚀', label: 'Social Media Influence' },
   { href: '/marketing/marketing-plan',       icon: '🗺️', label: 'Marketing Plan' },
   { href: '/marketing/marketing-material',   icon: '🖼️', label: 'Marketing Material' },
 ]

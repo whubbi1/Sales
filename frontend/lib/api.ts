@@ -172,6 +172,32 @@ export const marketingAPI = {
   unlinkMailingContact: (mid: string, contactId: string) => fetchAPI(`/marketing/mailings/${mid}/contacts/${contactId}`, { method: 'DELETE' }),
 }
 
+// ─── Social Media Influence ───────────────────────────────────────────────────
+export const socialInfluenceAPI = {
+  listSources:   () => fetchAPI(`/marketing/influence-sources`),
+  getSource:     (id: string) => fetchAPI(`/marketing/influence-sources/${id}`),
+  createSource:  (d: any) => fetchAPI(`/marketing/influence-sources`, { method: 'POST', body: JSON.stringify(d) }),
+  updateSource:  (id: string, d: any) => fetchAPI(`/marketing/influence-sources/${id}`, { method: 'PUT', body: JSON.stringify(d) }),
+  deleteSource:  (id: string) => fetchAPI(`/marketing/influence-sources/${id}`, { method: 'DELETE' }),
+  checkSource:   (id: string) => fetchAPI(`/marketing/influence-sources/${id}/check`, { method: 'POST' }),
+  getSourceUpdates: (id: string) => fetchAPI(`/marketing/influence-sources/${id}/updates`),
+  uploadSource: async (name: string, checkFrequency: string, file: File, createdByEmail: string) => {
+    const fd = new FormData()
+    fd.append('name', name)
+    fd.append('check_frequency', checkFrequency)
+    fd.append('created_by_email', createdByEmail)
+    fd.append('file', file)
+    const res = await fetch(`${API_URL}/marketing/influence-sources/upload`, { method: 'POST', body: fd })
+    if (!res.ok) { const err = await res.json().catch(() => ({})); throw new Error(err.detail || 'Upload failed') }
+    return res.json()
+  },
+
+  listPosts:   () => fetchAPI(`/marketing/social-posts`),
+  generatePost: (d: any) => fetchAPI(`/marketing/social-posts/generate`, { method: 'POST', body: JSON.stringify(d) }),
+  updatePost:  (id: string, d: any) => fetchAPI(`/marketing/social-posts/${id}`, { method: 'PUT', body: JSON.stringify(d) }),
+  deletePost:  (id: string) => fetchAPI(`/marketing/social-posts/${id}`, { method: 'DELETE' }),
+}
+
 // ─── Contacts ─────────────────────────────────────────────────────────────────
 export const contactsAPI = {
   list:   (p?: any) => fetchAPI(`/contacts/${qs(p)}`),

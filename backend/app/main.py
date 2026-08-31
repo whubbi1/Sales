@@ -24,7 +24,7 @@ async def global_exception_handler(request: Request, exc: Exception):
 async def startup():
     try:
         from app.database import engine, Base
-        from app.models import company, contact, opportunity, opportunity_extra, error_log, url_monitor, user_profile, helpdesk, background_jobs, grc, hr, project, timesheet, lead, reporting
+        from app.models import company, contact, opportunity, opportunity_extra, error_log, url_monitor, user_profile, helpdesk, background_jobs, grc, hr, project, timesheet, lead, reporting, social_influence
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
 
@@ -2119,6 +2119,7 @@ _include("app.routers.broken_links",   "/cleanup",      "BrokenLinks")
 _include("app.routers.tasks",          "/tasks",        "Tasks")
 _include("app.routers.partners",       "/partners",     "Partners")
 _include("app.routers.marketing",      "/marketing",    "Marketing")
+_include("app.routers.social_influence", "/marketing",  "SocialInfluence")
 _include("app.routers.admin",          "/admin",        "Admin")
 _include("app.routers.admin_ops",      "/admin",        "AdminOps")
 _include("app.routers.microsoft",      "/microsoft",    "Microsoft")
@@ -2188,4 +2189,18 @@ try:
 except Exception as e:
     import traceback
     print(f"✗ ROUTER FAILED [MCP]: {e}")
+    traceback.print_exc()
+
+try:
+    from app.routers.social_influence import periodic_check_loop as _social_influence_check_loop
+
+    @app.on_event("startup")
+    async def _start_social_influence_monitor():
+        import asyncio
+        asyncio.create_task(_social_influence_check_loop())
+
+    print("✓ SocialInfluence monitor")
+except Exception as e:
+    import traceback
+    print(f"✗ ROUTER FAILED [SocialInfluence monitor]: {e}")
     traceback.print_exc()
