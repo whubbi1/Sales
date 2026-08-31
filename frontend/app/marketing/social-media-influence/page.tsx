@@ -28,26 +28,28 @@ const STATUS_COLOR: Record<string, { bg: string; text: string }> = {
 }
 
 export default function SocialMediaInfluencePage() {
+  return <MarketingLayout><SocialMediaInfluenceContent /></MarketingLayout>
+}
+
+function SocialMediaInfluenceContent() {
   const { canEdit } = useMarketingPerm('social_media_influence')
   const [tab, setTab] = useState('Sources')
 
   return (
-    <MarketingLayout>
-      <div style={{ padding: '28px 32px', maxWidth: '980px' }}>
-        <div style={{ marginBottom: '20px' }}>
-          <h1 style={{ fontSize: '20px', fontWeight: '800', color: '#156082', margin: '0 0 4px' }}>Social Media Influence</h1>
-          <p style={{ fontSize: '13px', color: '#45B6E4', margin: 0 }}>
-            Monitor information sources and generate on-brand LinkedIn/X post drafts with Claude.
-          </p>
-        </div>
-
-        <TabNav tabs={['Sources', 'Compose', 'Posts']} active={tab} onChange={setTab} />
-
-        {tab === 'Sources' && <SourcesTab canEdit={canEdit} />}
-        {tab === 'Compose' && <ComposeTab canEdit={canEdit} />}
-        {tab === 'Posts' && <PostsTab canEdit={canEdit} />}
+    <div style={{ padding: '28px 32px', maxWidth: '980px' }}>
+      <div style={{ marginBottom: '20px' }}>
+        <h1 style={{ fontSize: '20px', fontWeight: '800', color: '#156082', margin: '0 0 4px' }}>Social Media Influence</h1>
+        <p style={{ fontSize: '13px', color: '#45B6E4', margin: 0 }}>
+          Monitor information sources and generate on-brand LinkedIn/X post drafts with Claude.
+        </p>
       </div>
-    </MarketingLayout>
+
+      <TabNav tabs={['Sources', 'Compose', 'Posts']} active={tab} onChange={setTab} />
+
+      {tab === 'Sources' && <SourcesTab canEdit={canEdit} />}
+      {tab === 'Compose' && <ComposeTab canEdit={canEdit} />}
+      {tab === 'Posts' && <PostsTab canEdit={canEdit} />}
+    </div>
   )
 }
 
