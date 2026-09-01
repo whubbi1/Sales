@@ -13,7 +13,7 @@ class InfluenceSource(Base):
     language          = Column(String(50))                   # free text, e.g. 'English' — same convention as marketing_email_templates.language
     category          = Column(String(30))                   # 'Competitor' | 'Solution Provider' | 'Partner' | 'Other' — the "Type" field in the UI
     source_type       = Column(String(20), nullable=False)   # 'url' | 'file'
-    subtype           = Column(String(20))                   # 'website' | 'blog' | 'linkedin' | 'other' (url sources only) — the "Source" field in the UI
+    subtype           = Column(String(20))                   # 'website' | 'blog' | 'linkedin' | 'study' | 'other' — the "Source" field in the UI (url and file sources alike)
     url               = Column(String(1000))
     file_url          = Column(String(500))                  # s3 ref
     file_name         = Column(String(255))

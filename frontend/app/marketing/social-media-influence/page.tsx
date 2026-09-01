@@ -7,6 +7,7 @@ import { socialInfluenceAPI } from '@/lib/api'
 
 const LANGUAGES = ['English', 'French', 'German', 'Spanish', 'Other']
 const CATEGORIES = ['Competitor', 'Solution Provider', 'Partner', 'Other']
+const SUBTYPE_LABEL: Record<string, string> = { website: 'Website', blog: 'Blog', linkedin: 'LinkedIn page', study: 'Study', other: 'Other' }
 
 const btn: React.CSSProperties = {
   padding: '9px 18px', border: 'none', borderRadius: '8px', cursor: 'pointer',
@@ -118,12 +119,13 @@ function SourcesTab({ canEdit }: { canEdit: boolean }) {
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div>
                   <div style={{ fontSize: '13px', fontWeight: '700', color: '#156082', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <span>{s.source_type === 'file' ? '📄' : s.subtype === 'linkedin' ? '🔗' : '🌐'} {s.name}</span>
+                    <span>{s.source_type === 'file' ? '📄' : s.subtype === 'linkedin' ? '🔗' : s.subtype === 'study' ? '🔬' : '🌐'} {s.name}</span>
                     {s.category && <span style={{ fontSize: '10px', fontWeight: '700', background: '#EFF6FF', color: '#2563EB', padding: '2px 8px', borderRadius: '10px' }}>{s.category}</span>}
                     {!s.active && <span style={{ fontSize: '10px', fontWeight: '700', background: '#F1F5F9', color: '#94A3B8', padding: '2px 8px', borderRadius: '10px' }}>Inactive</span>}
                   </div>
                   <div style={{ fontSize: '11px', color: '#94A3B8', marginTop: '2px' }}>
-                    {s.source_type === 'url' ? s.url : s.file_name} · {s.check_frequency}
+                    {s.source_type === 'url' ? s.url : s.file_name}
+                    {s.subtype && ` · ${SUBTYPE_LABEL[s.subtype] || s.subtype}`} · {s.check_frequency}
                     {s.language && ` · ${s.language}`}
                     {s.source_type === 'url' && ` · last checked ${fmtDate(s.last_checked_at)}`}
                   </div>
@@ -203,14 +205,14 @@ function SourceModal({ source, onClose, onSaved }: { source?: any | null; onClos
       if (isEdit) {
         if (replacementFile) await socialInfluenceAPI.replaceSourceFile(source.id, replacementFile)
         await socialInfluenceAPI.updateSource(source.id, {
-          name, category, description, language, active,
-          url: mode === 'url' ? url : undefined, subtype: mode === 'url' ? subtype : undefined,
-          check_frequency: frequency,
+          name, category, subtype, description, language, active,
+          url: mode === 'url' ? url : undefined,
+          check_frequency: mode === 'url' ? frequency : undefined,
         })
       } else if (mode === 'url') {
         await socialInfluenceAPI.createSource({ name, category, description, language, url, subtype, check_frequency: frequency, created_by_email: user?.email })
       } else if (file) {
-        await socialInfluenceAPI.uploadSource({ name, category, description, language, checkFrequency: frequency, file, createdByEmail: user?.email || '' })
+        await socialInfluenceAPI.uploadSource({ name, category, description, language, subtype, file, createdByEmail: user?.email || '' })
       }
       onSaved()
     } finally {
@@ -253,20 +255,21 @@ function SourceModal({ source, onClose, onSaved }: { source?: any | null; onClos
               {LANGUAGES.map(l => <option key={l} value={l}>{l}</option>)}
             </select>
           </div>
+          <div>
+            <label style={lbl}>Source</label>
+            <select style={inp} value={subtype} onChange={e => setSubtype(e.target.value)}>
+              <option value="website">Website</option>
+              <option value="blog">Blog</option>
+              <option value="linkedin">LinkedIn page</option>
+              <option value="study">Study</option>
+              <option value="other">Other</option>
+            </select>
+          </div>
           {mode === 'url' ? (
             <>
               <div>
                 <label style={lbl}>URL</label>
                 <input style={inp} value={url} onChange={e => setUrl(e.target.value)} placeholder="https://…" />
-              </div>
-              <div>
-                <label style={lbl}>Source</label>
-                <select style={inp} value={subtype} onChange={e => setSubtype(e.target.value)}>
-                  <option value="website">Website</option>
-                  <option value="blog">Blog</option>
-                  <option value="linkedin">LinkedIn page</option>
-                  <option value="other">Other</option>
-                </select>
               </div>
               <div>
                 <label style={lbl}>Re-check frequency</label>
