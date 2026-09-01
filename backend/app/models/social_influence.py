@@ -9,6 +9,8 @@ class InfluenceSource(Base):
     __tablename__ = "influence_sources"
     id                = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     name              = Column(String(255), nullable=False)
+    description       = Column(Text)
+    language          = Column(String(50))                   # free text, e.g. 'English' — same convention as marketing_email_templates.language
     source_type       = Column(String(20), nullable=False)   # 'url' | 'file'
     subtype           = Column(String(20))                   # 'website' | 'blog' | 'linkedin' | 'other' (url sources only)
     url               = Column(String(1000))

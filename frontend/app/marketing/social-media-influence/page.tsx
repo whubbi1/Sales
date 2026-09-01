@@ -5,6 +5,8 @@ import { TabNav } from '@/components/shared/RecordLayout'
 import { getStoredUser } from '@/lib/auth'
 import { socialInfluenceAPI } from '@/lib/api'
 
+const LANGUAGES = ['English', 'French', 'German', 'Spanish', 'Other']
+
 const btn: React.CSSProperties = {
   padding: '9px 18px', border: 'none', borderRadius: '8px', cursor: 'pointer',
   fontSize: '12px', fontWeight: '700', fontFamily: 'Montserrat, sans-serif',
@@ -118,8 +120,10 @@ function SourcesTab({ canEdit }: { canEdit: boolean }) {
                   </div>
                   <div style={{ fontSize: '11px', color: '#94A3B8', marginTop: '2px' }}>
                     {s.source_type === 'url' ? s.url : s.file_name} · {s.check_frequency}
+                    {s.language && ` · ${s.language}`}
                     {s.source_type === 'url' && ` · last checked ${fmtDate(s.last_checked_at)}`}
                   </div>
+                  {s.description && <div style={{ fontSize: '11px', color: '#64748B', marginTop: '2px' }}>{s.description}</div>}
                   {s.last_error && <div style={{ fontSize: '11px', color: '#DC2626', marginTop: '2px' }}>⚠️ {s.last_error}</div>}
                 </div>
                 <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
@@ -169,6 +173,8 @@ function SourcesTab({ canEdit }: { canEdit: boolean }) {
 function AddSourceModal({ onClose, onAdded }: { onClose: () => void; onAdded: () => void }) {
   const [mode, setMode] = useState<'url' | 'file'>('url')
   const [name, setName] = useState('')
+  const [description, setDescription] = useState('')
+  const [language, setLanguage] = useState('English')
   const [url, setUrl] = useState('')
   const [subtype, setSubtype] = useState('website')
   const [frequency, setFrequency] = useState('weekly')
@@ -180,9 +186,9 @@ function AddSourceModal({ onClose, onAdded }: { onClose: () => void; onAdded: ()
     setSaving(true)
     try {
       if (mode === 'url') {
-        await socialInfluenceAPI.createSource({ name, url, subtype, check_frequency: frequency, created_by_email: user?.email })
+        await socialInfluenceAPI.createSource({ name, description, language, url, subtype, check_frequency: frequency, created_by_email: user?.email })
       } else if (file) {
-        await socialInfluenceAPI.uploadSource(name, frequency, file, user?.email || '')
+        await socialInfluenceAPI.uploadSource({ name, description, language, checkFrequency: frequency, file, createdByEmail: user?.email || '' })
       }
       onAdded()
     } finally {
@@ -205,6 +211,17 @@ function AddSourceModal({ onClose, onAdded }: { onClose: () => void; onAdded: ()
           <div>
             <label style={lbl}>Name</label>
             <input style={inp} value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Company blog" />
+          </div>
+          <div>
+            <label style={lbl}>Description (optional)</label>
+            <textarea style={{ ...inp, minHeight: '50px', resize: 'vertical' as const }} value={description} onChange={e => setDescription(e.target.value)}
+              placeholder="What this source is / why it's useful for content generation" />
+          </div>
+          <div>
+            <label style={lbl}>Language</label>
+            <select style={inp} value={language} onChange={e => setLanguage(e.target.value)}>
+              {LANGUAGES.map(l => <option key={l} value={l}>{l}</option>)}
+            </select>
           </div>
           {mode === 'url' ? (
             <>

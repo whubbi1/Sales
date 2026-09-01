@@ -1976,6 +1976,11 @@ async def startup():
                 "ALTER TABLE marketing_marketplaces ADD COLUMN IF NOT EXISTS partner_id UUID REFERENCES partners(id) ON DELETE SET NULL",
                 "ALTER TABLE marketing_marketplaces ADD COLUMN IF NOT EXISTS rating INTEGER",
                 "ALTER TABLE marketing_marketplaces ADD COLUMN IF NOT EXISTS avg_job_requests INTEGER",
+
+                # Social Media Influence sources — description + language of the source material,
+                # added after the table already existed so create_all() alone won't add them.
+                "ALTER TABLE influence_sources ADD COLUMN IF NOT EXISTS description TEXT",
+                "ALTER TABLE influence_sources ADD COLUMN IF NOT EXISTS language VARCHAR(50)",
             ]
             for sql in sqls:
                 try:

@@ -181,12 +181,14 @@ export const socialInfluenceAPI = {
   deleteSource:  (id: string) => fetchAPI(`/marketing/influence-sources/${id}`, { method: 'DELETE' }),
   checkSource:   (id: string) => fetchAPI(`/marketing/influence-sources/${id}/check`, { method: 'POST' }),
   getSourceUpdates: (id: string) => fetchAPI(`/marketing/influence-sources/${id}/updates`),
-  uploadSource: async (name: string, checkFrequency: string, file: File, createdByEmail: string) => {
+  uploadSource: async (opts: { name: string; checkFrequency: string; file: File; createdByEmail: string; description?: string; language?: string }) => {
     const fd = new FormData()
-    fd.append('name', name)
-    fd.append('check_frequency', checkFrequency)
-    fd.append('created_by_email', createdByEmail)
-    fd.append('file', file)
+    fd.append('name', opts.name)
+    fd.append('check_frequency', opts.checkFrequency)
+    fd.append('created_by_email', opts.createdByEmail)
+    fd.append('description', opts.description || '')
+    fd.append('language', opts.language || '')
+    fd.append('file', opts.file)
     const res = await fetch(`${API_URL}/marketing/influence-sources/upload`, { method: 'POST', body: fd })
     if (!res.ok) { const err = await res.json().catch(() => ({})); throw new Error(err.detail || 'Upload failed') }
     return res.json()

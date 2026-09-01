@@ -77,10 +77,11 @@ async def create_influence_source(data: dict, db: AsyncSession = Depends(get_db)
         raise HTTPException(status_code=400, detail=f"check_frequency must be one of {sorted(CHECK_FREQUENCIES)}")
     source_id = str(uuid.uuid4())
     await db.execute(text("""
-        INSERT INTO influence_sources (id, name, source_type, subtype, url, check_frequency, active, created_by_email, created_at, updated_at)
-        VALUES (CAST(:id AS UUID), :name, 'url', :subtype, :url, :frequency, TRUE, :created_by_email, NOW(), NOW())
+        INSERT INTO influence_sources (id, name, description, language, source_type, subtype, url, check_frequency, active, created_by_email, created_at, updated_at)
+        VALUES (CAST(:id AS UUID), :name, :description, :language, 'url', :subtype, :url, :frequency, TRUE, :created_by_email, NOW(), NOW())
     """), {
-        "id": source_id, "name": data["name"], "subtype": subtype, "url": data["url"],
+        "id": source_id, "name": data["name"], "description": data.get("description") or None,
+        "language": data.get("language") or None, "subtype": subtype, "url": data["url"],
         "frequency": frequency, "created_by_email": data.get("created_by_email", ""),
     })
     await db.commit()
@@ -90,6 +91,7 @@ async def create_influence_source(data: dict, db: AsyncSession = Depends(get_db)
 @router.post("/influence-sources/upload")
 async def upload_influence_source(
     name: str = Form(...), check_frequency: str = Form("manual"),
+    description: str = Form(""), language: str = Form(""),
     file: UploadFile = File(...), created_by_email: str = Form(""),
     db: AsyncSession = Depends(get_db),
 ):
@@ -100,10 +102,11 @@ async def upload_influence_source(
     key = f"marketing/social-influence/{source_id}/{file.filename.replace(' ', '_')}"
     file_ref = await upload_to_s3(key, content, file.content_type or "application/octet-stream")
     await db.execute(text("""
-        INSERT INTO influence_sources (id, name, source_type, file_url, file_name, check_frequency, active, created_by_email, created_at, updated_at)
-        VALUES (CAST(:id AS UUID), :name, 'file', :file_url, :file_name, :frequency, TRUE, :created_by_email, NOW(), NOW())
+        INSERT INTO influence_sources (id, name, description, language, source_type, file_url, file_name, check_frequency, active, created_by_email, created_at, updated_at)
+        VALUES (CAST(:id AS UUID), :name, :description, :language, 'file', :file_url, :file_name, :frequency, TRUE, :created_by_email, NOW(), NOW())
     """), {
-        "id": source_id, "name": name, "file_url": file_ref, "file_name": file.filename,
+        "id": source_id, "name": name, "description": description or None, "language": language or None,
+        "file_url": file_ref, "file_name": file.filename,
         "frequency": check_frequency, "created_by_email": created_by_email,
     })
     await db.commit()
@@ -129,13 +132,16 @@ async def update_influence_source(source_id: str, data: dict, db: AsyncSession =
     await db.execute(text("""
         UPDATE influence_sources SET
             name = COALESCE(NULLIF(:name,''), name),
+            description = COALESCE(:description, description),
+            language = COALESCE(NULLIF(:language,''), language),
             url = COALESCE(NULLIF(:url,''), url),
             check_frequency = COALESCE(NULLIF(:frequency,''), check_frequency),
             active = COALESCE(:active, active),
             updated_at = NOW()
         WHERE id = CAST(:id AS UUID)
     """), {
-        "id": source_id, "name": data.get("name", ""), "url": data.get("url", ""),
+        "id": source_id, "name": data.get("name", ""), "description": data.get("description"),
+        "language": data.get("language", ""), "url": data.get("url", ""),
         "frequency": frequency, "active": data.get("active"),
     })
     await db.commit()
@@ -257,10 +263,22 @@ IMAGE_MEDIA_TYPES = {"image/png", "image/jpeg", "image/gif", "image/webp"}
 TEXT_MEDIA_TYPES = {"text/plain", "text/markdown", "text/csv"}
 
 
+def _source_meta_line(source: dict) -> str:
+    """Description/language the person added for this source, if any — passed to Claude so it
+    knows how to read the material (e.g. a presentation's language) without re-detecting it."""
+    parts = []
+    if source.get("description"):
+        parts.append(f"Description: {source['description']}")
+    if source.get("language"):
+        parts.append(f"Language: {source['language']}")
+    return ("\n" + "\n".join(parts)) if parts else ""
+
+
 async def _source_content_blocks(source: dict) -> list[dict]:
     """Build the Claude content block(s) representing one source's material."""
+    meta = _source_meta_line(source)
     if source["source_type"] == "url":
-        text_part = f"Source \"{source['name']}\" ({source['url']}):\n{source.get('last_summary') or '(not yet checked — no summary available)'}"
+        text_part = f"Source \"{source['name']}\" ({source['url']}):{meta}\n{source.get('last_summary') or '(not yet checked — no summary available)'}"
         return [{"type": "text", "text": text_part}]
 
     # file source — fetch bytes via the existing presign helper rather than adding a new
@@ -273,16 +291,17 @@ async def _source_content_blocks(source: dict) -> list[dict]:
     media_type = resp.headers.get("content-type", "application/octet-stream").split(";")[0]
     b64 = base64.b64encode(content).decode()
 
+    header = f"File \"{source['file_name']}\" (source \"{source['name']}\"):{meta}"
     if media_type in DOCUMENT_MEDIA_TYPES:
-        return [{"type": "document", "source": {"type": "base64", "media_type": media_type, "data": b64}}]
+        return [{"type": "text", "text": header}, {"type": "document", "source": {"type": "base64", "media_type": media_type, "data": b64}}]
     if media_type in IMAGE_MEDIA_TYPES:
-        return [{"type": "image", "source": {"type": "base64", "media_type": media_type, "data": b64}}]
+        return [{"type": "text", "text": header}, {"type": "image", "source": {"type": "base64", "media_type": media_type, "data": b64}}]
     if media_type in TEXT_MEDIA_TYPES:
         try:
-            return [{"type": "text", "text": f"File \"{source['file_name']}\":\n{content.decode('utf-8')}"}]
+            return [{"type": "text", "text": f"{header}\n{content.decode('utf-8')}"}]
         except UnicodeDecodeError:
             pass
-    return [{"type": "text", "text": f"(Additional file provided: \"{source['file_name']}\" — content type not directly readable, referenced by name only)"}]
+    return [{"type": "text", "text": f"(Additional file provided: \"{source['file_name']}\" — content type not directly readable, referenced by name only){meta}"}]
 
 
 @router.post("/social-posts/generate")
