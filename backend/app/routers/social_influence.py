@@ -129,19 +129,23 @@ async def update_influence_source(source_id: str, data: dict, db: AsyncSession =
     frequency = data.get("check_frequency", "")
     if frequency and frequency not in CHECK_FREQUENCIES:
         raise HTTPException(status_code=400, detail=f"check_frequency must be one of {sorted(CHECK_FREQUENCIES)}")
+    subtype = data.get("subtype", "")
+    if subtype and subtype not in URL_SUBTYPES:
+        raise HTTPException(status_code=400, detail=f"subtype must be one of {sorted(URL_SUBTYPES)}")
     await db.execute(text("""
         UPDATE influence_sources SET
             name = COALESCE(NULLIF(:name,''), name),
             description = COALESCE(:description, description),
             language = COALESCE(NULLIF(:language,''), language),
             url = COALESCE(NULLIF(:url,''), url),
+            subtype = COALESCE(NULLIF(:subtype,''), subtype),
             check_frequency = COALESCE(NULLIF(:frequency,''), check_frequency),
             active = COALESCE(:active, active),
             updated_at = NOW()
         WHERE id = CAST(:id AS UUID)
     """), {
         "id": source_id, "name": data.get("name", ""), "description": data.get("description"),
-        "language": data.get("language", ""), "url": data.get("url", ""),
+        "language": data.get("language", ""), "url": data.get("url", ""), "subtype": subtype,
         "frequency": frequency, "active": data.get("active"),
     })
     await db.commit()

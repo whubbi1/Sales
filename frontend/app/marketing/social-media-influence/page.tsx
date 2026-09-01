@@ -65,6 +65,7 @@ function SourcesTab({ canEdit }: { canEdit: boolean }) {
   const [sources, setSources] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [showAdd, setShowAdd] = useState(false)
+  const [editing, setEditing] = useState<any | null>(null)
   const [checking, setChecking] = useState<string | null>(null)
   const [expanded, setExpanded] = useState<string | null>(null)
   const [updates, setUpdates] = useState<any[]>([])
@@ -115,8 +116,9 @@ function SourcesTab({ canEdit }: { canEdit: boolean }) {
             <div key={s.id} style={{ borderTop: i === 0 ? 'none' : '1px solid #F1F5F9', padding: '14px 0' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div>
-                  <div style={{ fontSize: '13px', fontWeight: '700', color: '#156082' }}>
-                    {s.source_type === 'file' ? '📄' : s.subtype === 'linkedin' ? '🔗' : '🌐'} {s.name}
+                  <div style={{ fontSize: '13px', fontWeight: '700', color: '#156082', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span>{s.source_type === 'file' ? '📄' : s.subtype === 'linkedin' ? '🔗' : '🌐'} {s.name}</span>
+                    {!s.active && <span style={{ fontSize: '10px', fontWeight: '700', background: '#F1F5F9', color: '#94A3B8', padding: '2px 8px', borderRadius: '10px' }}>Inactive</span>}
                   </div>
                   <div style={{ fontSize: '11px', color: '#94A3B8', marginTop: '2px' }}>
                     {s.source_type === 'url' ? s.url : s.file_name} · {s.check_frequency}
@@ -139,6 +141,7 @@ function SourcesTab({ canEdit }: { canEdit: boolean }) {
                       )}
                     </>
                   )}
+                  {canEdit && <button onClick={() => setEditing(s)} style={{ ...btn, padding: '6px 12px', background: '#F1F5F9', color: '#64748B' }}>Edit</button>}
                   {canEdit && <button onClick={() => remove(s.id)} style={{ ...btn, padding: '6px 12px', background: '#FEF2F2', color: '#EF4444' }}>Delete</button>}
                 </div>
               </div>
@@ -165,19 +168,27 @@ function SourcesTab({ canEdit }: { canEdit: boolean }) {
         </div>
       )}
 
-      {showAdd && <AddSourceModal onClose={() => setShowAdd(false)} onAdded={() => { setShowAdd(false); load() }} />}
+      {(showAdd || editing) && (
+        <SourceModal
+          source={editing}
+          onClose={() => { setShowAdd(false); setEditing(null) }}
+          onSaved={() => { setShowAdd(false); setEditing(null); load() }}
+        />
+      )}
     </div>
   )
 }
 
-function AddSourceModal({ onClose, onAdded }: { onClose: () => void; onAdded: () => void }) {
-  const [mode, setMode] = useState<'url' | 'file'>('url')
-  const [name, setName] = useState('')
-  const [description, setDescription] = useState('')
-  const [language, setLanguage] = useState('English')
-  const [url, setUrl] = useState('')
-  const [subtype, setSubtype] = useState('website')
-  const [frequency, setFrequency] = useState('weekly')
+function SourceModal({ source, onClose, onSaved }: { source?: any | null; onClose: () => void; onSaved: () => void }) {
+  const isEdit = !!source
+  const [mode, setMode] = useState<'url' | 'file'>(source?.source_type || 'url')
+  const [name, setName] = useState(source?.name || '')
+  const [description, setDescription] = useState(source?.description || '')
+  const [language, setLanguage] = useState(source?.language || 'English')
+  const [url, setUrl] = useState(source?.url || '')
+  const [subtype, setSubtype] = useState(source?.subtype || 'website')
+  const [frequency, setFrequency] = useState(source?.check_frequency || 'weekly')
+  const [active, setActive] = useState(source?.active ?? true)
   const [file, setFile] = useState<File | null>(null)
   const [saving, setSaving] = useState(false)
 
@@ -185,12 +196,18 @@ function AddSourceModal({ onClose, onAdded }: { onClose: () => void; onAdded: ()
     const user = getStoredUser()
     setSaving(true)
     try {
-      if (mode === 'url') {
+      if (isEdit) {
+        await socialInfluenceAPI.updateSource(source.id, {
+          name, description, language, active,
+          url: mode === 'url' ? url : undefined, subtype: mode === 'url' ? subtype : undefined,
+          check_frequency: frequency,
+        })
+      } else if (mode === 'url') {
         await socialInfluenceAPI.createSource({ name, description, language, url, subtype, check_frequency: frequency, created_by_email: user?.email })
       } else if (file) {
         await socialInfluenceAPI.uploadSource({ name, description, language, checkFrequency: frequency, file, createdByEmail: user?.email || '' })
       }
-      onAdded()
+      onSaved()
     } finally {
       setSaving(false)
     }
@@ -200,14 +217,16 @@ function AddSourceModal({ onClose, onAdded }: { onClose: () => void; onAdded: ()
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
       <div style={{ background: 'white', borderRadius: '14px', width: '480px', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
         <div style={{ padding: '20px 24px', borderBottom: '1px solid #EDF2F7', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <h2 style={{ fontSize: '15px', fontWeight: '800', color: '#156082', margin: 0 }}>Add Source</h2>
+          <h2 style={{ fontSize: '15px', fontWeight: '800', color: '#156082', margin: 0 }}>{isEdit ? 'Edit Source' : 'Add Source'}</h2>
           <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: '20px', cursor: 'pointer', color: '#94A3B8' }}>×</button>
         </div>
         <div style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
-          <div style={{ display: 'flex', gap: '8px' }}>
-            <button onClick={() => setMode('url')} style={{ ...btn, flex: 1, background: mode === 'url' ? '#156082' : '#F1F5F9', color: mode === 'url' ? 'white' : '#64748B' }}>Website / Blog / LinkedIn URL</button>
-            <button onClick={() => setMode('file')} style={{ ...btn, flex: 1, background: mode === 'file' ? '#156082' : '#F1F5F9', color: mode === 'file' ? 'white' : '#64748B' }}>Upload file</button>
-          </div>
+          {!isEdit && (
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button onClick={() => setMode('url')} style={{ ...btn, flex: 1, background: mode === 'url' ? '#156082' : '#F1F5F9', color: mode === 'url' ? 'white' : '#64748B' }}>Website / Blog / LinkedIn URL</button>
+              <button onClick={() => setMode('file')} style={{ ...btn, flex: 1, background: mode === 'file' ? '#156082' : '#F1F5F9', color: mode === 'file' ? 'white' : '#64748B' }}>Upload file</button>
+            </div>
+          )}
           <div>
             <label style={lbl}>Name</label>
             <input style={inp} value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Company blog" />
@@ -247,17 +266,28 @@ function AddSourceModal({ onClose, onAdded }: { onClose: () => void; onAdded: ()
                 </select>
               </div>
             </>
+          ) : isEdit ? (
+            <div>
+              <label style={lbl}>File</label>
+              <div style={{ fontSize: '12px', color: '#64748B' }}>{source.file_name} <span style={{ color: '#94A3B8' }}>(replacing the file itself isn't supported yet — delete and re-add to swap it)</span></div>
+            </div>
           ) : (
             <div>
               <label style={lbl}>File</label>
               <input type="file" onChange={e => setFile(e.target.files?.[0] || null)} />
             </div>
           )}
+          {isEdit && (
+            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', color: '#3F3F3F', cursor: 'pointer' }}>
+              <input type="checkbox" checked={active} onChange={e => setActive(e.target.checked)} />
+              Active (used for monitoring / content generation)
+            </label>
+          )}
           <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
             <button onClick={onClose} style={{ ...btn, background: '#F1F5F9', color: '#64748B' }}>Cancel</button>
-            <button onClick={submit} disabled={saving || !name || (mode === 'url' ? !url : !file)}
+            <button onClick={submit} disabled={saving || !name || (mode === 'url' ? !url : (!isEdit && !file))}
               style={{ ...btn, background: saving ? '#94A3B8' : '#156082', color: 'white' }}>
-              {saving ? 'Saving…' : 'Add'}
+              {saving ? 'Saving…' : isEdit ? 'Save' : 'Add'}
             </button>
           </div>
         </div>
@@ -361,26 +391,12 @@ function ComposeTab({ canEdit }: { canEdit: boolean }) {
 function PostsTab({ canEdit }: { canEdit: boolean }) {
   const [posts, setPosts] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
-  const [updating, setUpdating] = useState<string | null>(null)
 
   const load = () => {
     setLoading(true)
     socialInfluenceAPI.listPosts().then(d => setPosts(d.posts || [])).finally(() => setLoading(false))
   }
   useEffect(load, [])
-
-  const markPosted = async (id: string) => {
-    setUpdating(id)
-    await socialInfluenceAPI.updatePost(id, { status: 'posted' }).catch(() => {})
-    setUpdating(null)
-    load()
-  }
-
-  const remove = async (id: string) => {
-    if (!confirm('Delete this post?')) return
-    await socialInfluenceAPI.deletePost(id)
-    load()
-  }
 
   if (loading) return <div style={{ textAlign: 'center', padding: '48px', color: '#45B6E4' }}>Loading…</div>
 
@@ -389,34 +405,81 @@ function PostsTab({ canEdit }: { canEdit: boolean }) {
       {posts.length === 0 ? (
         <div style={{ textAlign: 'center', padding: '32px', color: '#94A3B8' }}>No posts yet — generate one from the Compose tab.</div>
       ) : (
-        posts.map((p, i) => {
-          const c = STATUS_COLOR[p.status] || STATUS_COLOR.draft
-          return (
-            <div key={p.id} style={{ borderTop: i === 0 ? 'none' : '1px solid #F1F5F9', padding: '14px 0' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '10px' }}>
-                <div style={{ flex: 1 }}>
-                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '4px' }}>
-                    <span style={{ fontSize: '11px', fontWeight: '700', color: '#156082' }}>{p.platform === 'linkedin' ? 'LinkedIn' : 'X / Twitter'}</span>
-                    <span style={{ fontSize: '10px', fontWeight: '700', background: c.bg, color: c.text, padding: '2px 8px', borderRadius: '10px' }}>{p.status}</span>
-                    <span style={{ fontSize: '10px', color: '#94A3B8' }}>{fmtDate(p.created_at)}</span>
-                  </div>
-                  <div style={{ fontSize: '12px', color: '#3F3F3F', whiteSpace: 'pre-wrap' as const }}>{p.content}</div>
-                </div>
-                {canEdit && (
-                  <div style={{ display: 'flex', gap: '8px', flexShrink: 0 }}>
-                    {p.status !== 'posted' && (
-                      <button onClick={() => markPosted(p.id)} disabled={updating === p.id} style={{ ...btn, padding: '6px 12px', background: '#EFF6FF', color: '#2563EB' }}>
-                        {updating === p.id ? 'Saving…' : 'Mark as posted'}
-                      </button>
-                    )}
-                    <button onClick={() => remove(p.id)} style={{ ...btn, padding: '6px 12px', background: '#FEF2F2', color: '#EF4444' }}>Delete</button>
-                  </div>
-                )}
-              </div>
-            </div>
-          )
-        })
+        posts.map((p, i) => <PostRow key={p.id} post={p} first={i === 0} canEdit={canEdit} onChanged={load} />)
       )}
+    </div>
+  )
+}
+
+function PostRow({ post, first, canEdit, onChanged }: { post: any; first: boolean; canEdit: boolean; onChanged: () => void }) {
+  const [editing, setEditing] = useState(false)
+  const [content, setContent] = useState(post.content)
+  const [saving, setSaving] = useState(false)
+  const [updating, setUpdating] = useState(false)
+  const c = STATUS_COLOR[post.status] || STATUS_COLOR.draft
+
+  const saveEdit = async () => {
+    setSaving(true)
+    try {
+      await socialInfluenceAPI.updatePost(post.id, { content })
+      setEditing(false)
+      onChanged()
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const markPosted = async () => {
+    setUpdating(true)
+    await socialInfluenceAPI.updatePost(post.id, { status: 'posted' }).catch(() => {})
+    setUpdating(false)
+    onChanged()
+  }
+
+  const remove = async () => {
+    if (!confirm('Delete this post?')) return
+    await socialInfluenceAPI.deletePost(post.id)
+    onChanged()
+  }
+
+  return (
+    <div style={{ borderTop: first ? 'none' : '1px solid #F1F5F9', padding: '14px 0' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '10px' }}>
+        <div style={{ flex: 1 }}>
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '4px' }}>
+            <span style={{ fontSize: '11px', fontWeight: '700', color: '#156082' }}>{post.platform === 'linkedin' ? 'LinkedIn' : 'X / Twitter'}</span>
+            <span style={{ fontSize: '10px', fontWeight: '700', background: c.bg, color: c.text, padding: '2px 8px', borderRadius: '10px' }}>{post.status}</span>
+            <span style={{ fontSize: '10px', color: '#94A3B8' }}>{fmtDate(post.created_at)}</span>
+          </div>
+          {editing ? (
+            <textarea style={{ ...inp, minHeight: '100px', resize: 'vertical' as const }} value={content} onChange={e => setContent(e.target.value)} />
+          ) : (
+            <div style={{ fontSize: '12px', color: '#3F3F3F', whiteSpace: 'pre-wrap' as const }}>{post.content}</div>
+          )}
+        </div>
+        {canEdit && (
+          <div style={{ display: 'flex', gap: '8px', flexShrink: 0 }}>
+            {editing ? (
+              <>
+                <button onClick={() => { setEditing(false); setContent(post.content) }} style={{ ...btn, padding: '6px 12px', background: '#F1F5F9', color: '#64748B' }}>Cancel</button>
+                <button onClick={saveEdit} disabled={saving} style={{ ...btn, padding: '6px 12px', background: saving ? '#94A3B8' : '#156082', color: 'white' }}>
+                  {saving ? 'Saving…' : 'Save'}
+                </button>
+              </>
+            ) : (
+              <>
+                <button onClick={() => setEditing(true)} style={{ ...btn, padding: '6px 12px', background: '#F1F5F9', color: '#64748B' }}>Edit</button>
+                {post.status !== 'posted' && (
+                  <button onClick={markPosted} disabled={updating} style={{ ...btn, padding: '6px 12px', background: '#EFF6FF', color: '#2563EB' }}>
+                    {updating ? 'Saving…' : 'Mark as posted'}
+                  </button>
+                )}
+                <button onClick={remove} style={{ ...btn, padding: '6px 12px', background: '#FEF2F2', color: '#EF4444' }}>Delete</button>
+              </>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   )
 }
