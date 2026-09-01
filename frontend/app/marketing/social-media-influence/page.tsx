@@ -6,6 +6,7 @@ import { getStoredUser } from '@/lib/auth'
 import { socialInfluenceAPI } from '@/lib/api'
 
 const LANGUAGES = ['English', 'French', 'German', 'Spanish', 'Other']
+const CATEGORIES = ['Competitor', 'Solution Provider', 'Partner', 'Other']
 
 const btn: React.CSSProperties = {
   padding: '9px 18px', border: 'none', borderRadius: '8px', cursor: 'pointer',
@@ -118,6 +119,7 @@ function SourcesTab({ canEdit }: { canEdit: boolean }) {
                 <div>
                   <div style={{ fontSize: '13px', fontWeight: '700', color: '#156082', display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <span>{s.source_type === 'file' ? '📄' : s.subtype === 'linkedin' ? '🔗' : '🌐'} {s.name}</span>
+                    {s.category && <span style={{ fontSize: '10px', fontWeight: '700', background: '#EFF6FF', color: '#2563EB', padding: '2px 8px', borderRadius: '10px' }}>{s.category}</span>}
                     {!s.active && <span style={{ fontSize: '10px', fontWeight: '700', background: '#F1F5F9', color: '#94A3B8', padding: '2px 8px', borderRadius: '10px' }}>Inactive</span>}
                   </div>
                   <div style={{ fontSize: '11px', color: '#94A3B8', marginTop: '2px' }}>
@@ -183,6 +185,7 @@ function SourceModal({ source, onClose, onSaved }: { source?: any | null; onClos
   const isEdit = !!source
   const [mode, setMode] = useState<'url' | 'file'>(source?.source_type || 'url')
   const [name, setName] = useState(source?.name || '')
+  const [category, setCategory] = useState(source?.category || 'Other')
   const [description, setDescription] = useState(source?.description || '')
   const [language, setLanguage] = useState(source?.language || 'English')
   const [url, setUrl] = useState(source?.url || '')
@@ -190,6 +193,7 @@ function SourceModal({ source, onClose, onSaved }: { source?: any | null; onClos
   const [frequency, setFrequency] = useState(source?.check_frequency || 'weekly')
   const [active, setActive] = useState(source?.active ?? true)
   const [file, setFile] = useState<File | null>(null)
+  const [replacementFile, setReplacementFile] = useState<File | null>(null)
   const [saving, setSaving] = useState(false)
 
   const submit = async () => {
@@ -197,15 +201,16 @@ function SourceModal({ source, onClose, onSaved }: { source?: any | null; onClos
     setSaving(true)
     try {
       if (isEdit) {
+        if (replacementFile) await socialInfluenceAPI.replaceSourceFile(source.id, replacementFile)
         await socialInfluenceAPI.updateSource(source.id, {
-          name, description, language, active,
+          name, category, description, language, active,
           url: mode === 'url' ? url : undefined, subtype: mode === 'url' ? subtype : undefined,
           check_frequency: frequency,
         })
       } else if (mode === 'url') {
-        await socialInfluenceAPI.createSource({ name, description, language, url, subtype, check_frequency: frequency, created_by_email: user?.email })
+        await socialInfluenceAPI.createSource({ name, category, description, language, url, subtype, check_frequency: frequency, created_by_email: user?.email })
       } else if (file) {
-        await socialInfluenceAPI.uploadSource({ name, description, language, checkFrequency: frequency, file, createdByEmail: user?.email || '' })
+        await socialInfluenceAPI.uploadSource({ name, category, description, language, checkFrequency: frequency, file, createdByEmail: user?.email || '' })
       }
       onSaved()
     } finally {
@@ -232,6 +237,12 @@ function SourceModal({ source, onClose, onSaved }: { source?: any | null; onClos
             <input style={inp} value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Company blog" />
           </div>
           <div>
+            <label style={lbl}>Type</label>
+            <select style={inp} value={category} onChange={e => setCategory(e.target.value)}>
+              {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+          </div>
+          <div>
             <label style={lbl}>Description (optional)</label>
             <textarea style={{ ...inp, minHeight: '50px', resize: 'vertical' as const }} value={description} onChange={e => setDescription(e.target.value)}
               placeholder="What this source is / why it's useful for content generation" />
@@ -249,7 +260,7 @@ function SourceModal({ source, onClose, onSaved }: { source?: any | null; onClos
                 <input style={inp} value={url} onChange={e => setUrl(e.target.value)} placeholder="https://…" />
               </div>
               <div>
-                <label style={lbl}>Type</label>
+                <label style={lbl}>Source</label>
                 <select style={inp} value={subtype} onChange={e => setSubtype(e.target.value)}>
                   <option value="website">Website</option>
                   <option value="blog">Blog</option>
@@ -269,7 +280,10 @@ function SourceModal({ source, onClose, onSaved }: { source?: any | null; onClos
           ) : isEdit ? (
             <div>
               <label style={lbl}>File</label>
-              <div style={{ fontSize: '12px', color: '#64748B' }}>{source.file_name} <span style={{ color: '#94A3B8' }}>(replacing the file itself isn't supported yet — delete and re-add to swap it)</span></div>
+              <div style={{ fontSize: '12px', color: '#64748B', marginBottom: '6px' }}>
+                Current: {source.file_name}{replacementFile && <span style={{ color: '#156082', fontWeight: 700 }}> → {replacementFile.name}</span>}
+              </div>
+              <input type="file" onChange={e => setReplacementFile(e.target.files?.[0] || null)} />
             </div>
           ) : (
             <div>

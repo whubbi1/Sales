@@ -11,8 +11,9 @@ class InfluenceSource(Base):
     name              = Column(String(255), nullable=False)
     description       = Column(Text)
     language          = Column(String(50))                   # free text, e.g. 'English' — same convention as marketing_email_templates.language
+    category          = Column(String(30))                   # 'Competitor' | 'Solution Provider' | 'Partner' | 'Other' — the "Type" field in the UI
     source_type       = Column(String(20), nullable=False)   # 'url' | 'file'
-    subtype           = Column(String(20))                   # 'website' | 'blog' | 'linkedin' | 'other' (url sources only)
+    subtype           = Column(String(20))                   # 'website' | 'blog' | 'linkedin' | 'other' (url sources only) — the "Source" field in the UI
     url               = Column(String(1000))
     file_url          = Column(String(500))                  # s3 ref
     file_name         = Column(String(255))

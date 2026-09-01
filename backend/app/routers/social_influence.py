@@ -33,6 +33,7 @@ ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 GENERATION_MODEL = "claude-sonnet-5"
 
 URL_SUBTYPES = {"website", "blog", "linkedin", "other"}
+CATEGORIES = {"Competitor", "Solution Provider", "Partner", "Other"}
 CHECK_FREQUENCIES = {"manual", "daily", "weekly"}
 FREQUENCY_INTERVALS = {"daily": timedelta(days=1), "weekly": timedelta(days=7)}
 PLATFORMS = {"linkedin", "twitter"}
@@ -50,6 +51,11 @@ async def _presign_source(d: dict) -> dict:
     if (d.get("file_url") or "").startswith("s3://"):
         d["file_url"] = await s3_ref_to_presigned(d["file_url"])
     return d
+
+
+def _validate_category(category: str):
+    if category and category not in CATEGORIES:
+        raise HTTPException(status_code=400, detail=f"category must be one of {sorted(CATEGORIES)}")
 
 
 async def _get_source(db: AsyncSession, source_id: str) -> dict | None:
@@ -72,16 +78,18 @@ async def create_influence_source(data: dict, db: AsyncSession = Depends(get_db)
     subtype = data.get("subtype") or "other"
     if subtype not in URL_SUBTYPES:
         raise HTTPException(status_code=400, detail=f"subtype must be one of {sorted(URL_SUBTYPES)}")
+    category = data.get("category") or "Other"
+    _validate_category(category)
     frequency = data.get("check_frequency") or "manual"
     if frequency not in CHECK_FREQUENCIES:
         raise HTTPException(status_code=400, detail=f"check_frequency must be one of {sorted(CHECK_FREQUENCIES)}")
     source_id = str(uuid.uuid4())
     await db.execute(text("""
-        INSERT INTO influence_sources (id, name, description, language, source_type, subtype, url, check_frequency, active, created_by_email, created_at, updated_at)
-        VALUES (CAST(:id AS UUID), :name, :description, :language, 'url', :subtype, :url, :frequency, TRUE, :created_by_email, NOW(), NOW())
+        INSERT INTO influence_sources (id, name, description, language, category, source_type, subtype, url, check_frequency, active, created_by_email, created_at, updated_at)
+        VALUES (CAST(:id AS UUID), :name, :description, :language, :category, 'url', :subtype, :url, :frequency, TRUE, :created_by_email, NOW(), NOW())
     """), {
         "id": source_id, "name": data["name"], "description": data.get("description") or None,
-        "language": data.get("language") or None, "subtype": subtype, "url": data["url"],
+        "language": data.get("language") or None, "category": category, "subtype": subtype, "url": data["url"],
         "frequency": frequency, "created_by_email": data.get("created_by_email", ""),
     })
     await db.commit()
@@ -91,24 +99,42 @@ async def create_influence_source(data: dict, db: AsyncSession = Depends(get_db)
 @router.post("/influence-sources/upload")
 async def upload_influence_source(
     name: str = Form(...), check_frequency: str = Form("manual"),
-    description: str = Form(""), language: str = Form(""),
+    description: str = Form(""), language: str = Form(""), category: str = Form("Other"),
     file: UploadFile = File(...), created_by_email: str = Form(""),
     db: AsyncSession = Depends(get_db),
 ):
     if check_frequency not in CHECK_FREQUENCIES:
         raise HTTPException(status_code=400, detail=f"check_frequency must be one of {sorted(CHECK_FREQUENCIES)}")
+    _validate_category(category)
     content = await file.read()
     source_id = str(uuid.uuid4())
     key = f"marketing/social-influence/{source_id}/{file.filename.replace(' ', '_')}"
     file_ref = await upload_to_s3(key, content, file.content_type or "application/octet-stream")
     await db.execute(text("""
-        INSERT INTO influence_sources (id, name, description, language, source_type, file_url, file_name, check_frequency, active, created_by_email, created_at, updated_at)
-        VALUES (CAST(:id AS UUID), :name, :description, :language, 'file', :file_url, :file_name, :frequency, TRUE, :created_by_email, NOW(), NOW())
+        INSERT INTO influence_sources (id, name, description, language, category, source_type, file_url, file_name, check_frequency, active, created_by_email, created_at, updated_at)
+        VALUES (CAST(:id AS UUID), :name, :description, :language, :category, 'file', :file_url, :file_name, :frequency, TRUE, :created_by_email, NOW(), NOW())
     """), {
         "id": source_id, "name": name, "description": description or None, "language": language or None,
-        "file_url": file_ref, "file_name": file.filename,
+        "category": category or "Other", "file_url": file_ref, "file_name": file.filename,
         "frequency": check_frequency, "created_by_email": created_by_email,
     })
+    await db.commit()
+    return await _get_source(db, source_id)
+
+
+@router.post("/influence-sources/{source_id}/file")
+async def replace_influence_source_file(source_id: str, file: UploadFile = File(...), db: AsyncSession = Depends(get_db)):
+    existing = await _get_source(db, source_id)
+    if not existing:
+        raise HTTPException(status_code=404, detail="Source not found")
+    if existing["source_type"] != "file":
+        raise HTTPException(status_code=400, detail="Only file sources have a file to replace")
+    content = await file.read()
+    key = f"marketing/social-influence/{source_id}/{file.filename.replace(' ', '_')}"
+    file_ref = await upload_to_s3(key, content, file.content_type or "application/octet-stream")
+    await db.execute(text("""
+        UPDATE influence_sources SET file_url = :file_url, file_name = :file_name, updated_at = NOW() WHERE id = CAST(:id AS UUID)
+    """), {"id": source_id, "file_url": file_ref, "file_name": file.filename})
     await db.commit()
     return await _get_source(db, source_id)
 
@@ -132,11 +158,15 @@ async def update_influence_source(source_id: str, data: dict, db: AsyncSession =
     subtype = data.get("subtype", "")
     if subtype and subtype not in URL_SUBTYPES:
         raise HTTPException(status_code=400, detail=f"subtype must be one of {sorted(URL_SUBTYPES)}")
+    category = data.get("category", "")
+    if category:
+        _validate_category(category)
     await db.execute(text("""
         UPDATE influence_sources SET
             name = COALESCE(NULLIF(:name,''), name),
             description = COALESCE(:description, description),
             language = COALESCE(NULLIF(:language,''), language),
+            category = COALESCE(NULLIF(:category,''), category),
             url = COALESCE(NULLIF(:url,''), url),
             subtype = COALESCE(NULLIF(:subtype,''), subtype),
             check_frequency = COALESCE(NULLIF(:frequency,''), check_frequency),
@@ -145,7 +175,7 @@ async def update_influence_source(source_id: str, data: dict, db: AsyncSession =
         WHERE id = CAST(:id AS UUID)
     """), {
         "id": source_id, "name": data.get("name", ""), "description": data.get("description"),
-        "language": data.get("language", ""), "url": data.get("url", ""), "subtype": subtype,
+        "language": data.get("language", ""), "category": category, "url": data.get("url", ""), "subtype": subtype,
         "frequency": frequency, "active": data.get("active"),
     })
     await db.commit()
@@ -268,9 +298,12 @@ TEXT_MEDIA_TYPES = {"text/plain", "text/markdown", "text/csv"}
 
 
 def _source_meta_line(source: dict) -> str:
-    """Description/language the person added for this source, if any — passed to Claude so it
-    knows how to read the material (e.g. a presentation's language) without re-detecting it."""
+    """Description/language/category the person added for this source, if any — passed to
+    Claude so it knows how to read the material (e.g. a presentation's language, or that a
+    source is a competitor vs. a partner) without re-detecting it."""
     parts = []
+    if source.get("category"):
+        parts.append(f"Relationship: {source['category']}")
     if source.get("description"):
         parts.append(f"Description: {source['description']}")
     if source.get("language"):
