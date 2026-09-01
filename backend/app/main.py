@@ -1986,6 +1986,11 @@ async def startup():
             ]
             for sql in sqls:
                 try:
+                    # DDL (ALTER TABLE etc.) needs an exclusive lock — if something else is
+                    # holding a conflicting lock on the table, don't let it block app startup
+                    # (and the health check) for minutes; fail this one statement fast instead,
+                    # it'll just get picked up on a later restart once the lock is free.
+                    await session.execute(text("SET LOCAL lock_timeout = '5s'"))
                     await session.execute(text(sql))
                     await session.commit()
                     print(f"OK: {sql[:50]}")

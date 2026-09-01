@@ -213,7 +213,13 @@ def _summaries_differ(old: str | None, new: str) -> bool:
     return norm(old) != norm(new)
 
 
-async def _check_source(db: AsyncSession, source: dict) -> dict:
+async def _check_source(source: dict) -> dict:
+    """Runs the (slow, external) Claude web-search call with NO database session open —
+    each DB touch below opens its own short-lived session. Sharing one session/transaction
+    across a call that can take many seconds would hold a lock on influence_sources for that
+    whole time, which can block an unrelated ALTER TABLE (e.g. the next deploy's migration)
+    long enough to fail its health check — this is exactly what happened once already."""
+    from app.database import AsyncSessionLocal
     if source["source_type"] != "url":
         return source  # file sources are static — nothing to re-check
     prompt = (
@@ -225,22 +231,25 @@ async def _check_source(db: AsyncSession, source: dict) -> dict:
     try:
         summary = await claude_web_search(prompt)
         changed = _summaries_differ(source.get("last_summary"), summary)
-        await db.execute(text("""
-            UPDATE influence_sources SET last_summary = :summary, last_checked_at = NOW(), last_error = NULL, updated_at = NOW()
-            WHERE id = CAST(:id AS UUID)
-        """), {"id": source["id"], "summary": summary})
-        if changed:
+        async with AsyncSessionLocal() as db:
             await db.execute(text("""
-                INSERT INTO influence_source_updates (id, source_id, checked_at, summary)
-                VALUES (CAST(:id AS UUID), CAST(:sid AS UUID), NOW(), :summary)
-            """), {"id": str(uuid.uuid4()), "sid": source["id"], "summary": summary})
-        await db.commit()
+                UPDATE influence_sources SET last_summary = :summary, last_checked_at = NOW(), last_error = NULL, updated_at = NOW()
+                WHERE id = CAST(:id AS UUID)
+            """), {"id": source["id"], "summary": summary})
+            if changed:
+                await db.execute(text("""
+                    INSERT INTO influence_source_updates (id, source_id, checked_at, summary)
+                    VALUES (CAST(:id AS UUID), CAST(:sid AS UUID), NOW(), :summary)
+                """), {"id": str(uuid.uuid4()), "sid": source["id"], "summary": summary})
+            await db.commit()
     except Exception as e:
-        await db.execute(text("""
-            UPDATE influence_sources SET last_error = :err, last_checked_at = NOW(), updated_at = NOW() WHERE id = CAST(:id AS UUID)
-        """), {"id": source["id"], "err": str(e)[:500]})
-        await db.commit()
-    return await _get_source(db, source["id"])
+        async with AsyncSessionLocal() as db:
+            await db.execute(text("""
+                UPDATE influence_sources SET last_error = :err, last_checked_at = NOW(), updated_at = NOW() WHERE id = CAST(:id AS UUID)
+            """), {"id": source["id"], "err": str(e)[:500]})
+            await db.commit()
+    async with AsyncSessionLocal() as db:
+        return await _get_source(db, source["id"])
 
 
 @router.post("/influence-sources/{source_id}/check")
@@ -248,7 +257,7 @@ async def check_influence_source(source_id: str, db: AsyncSession = Depends(get_
     source = await _get_source(db, source_id)
     if not source:
         raise HTTPException(status_code=404, detail="Source not found")
-    return await _check_source(db, source)
+    return await _check_source(source)
 
 
 # ─── Periodic monitor — in-process background loop, started once at app startup ──
@@ -263,6 +272,8 @@ async def periodic_check_loop():
     from app.database import AsyncSessionLocal
     while True:
         try:
+            # This SELECT's session closes here, before any of the slow external calls below —
+            # see _check_source's docstring for why that matters.
             async with AsyncSessionLocal() as db:
                 r = await db.execute(text("""
                     SELECT * FROM influence_sources
@@ -277,14 +288,15 @@ async def periodic_check_loop():
                         due.append(s)
                     if len(due) >= MAX_SOURCES_PER_CYCLE:
                         break
-                sem = asyncio.Semaphore(CHECK_CONCURRENCY)
 
-                async def _bounded(s):
-                    async with sem:
-                        await _check_source(db, s)
+            sem = asyncio.Semaphore(CHECK_CONCURRENCY)
 
-                if due:
-                    await asyncio.gather(*[_bounded(s) for s in due])
+            async def _bounded(s):
+                async with sem:
+                    await _check_source(s)
+
+            if due:
+                await asyncio.gather(*[_bounded(s) for s in due])
         except Exception as e:
             print(f"[SocialInfluence] periodic_check_loop error: {e}")
         await asyncio.sleep(CHECK_LOOP_INTERVAL)
