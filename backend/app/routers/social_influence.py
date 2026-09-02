@@ -405,6 +405,32 @@ async def mailbox_disconnect(db: AsyncSession = Depends(get_db)):
     return {"status": "ok"}
 
 
+@router.get("/social-influence-mailbox/diagnose")
+async def diagnose_mailbox(address: str = None, db: AsyncSession = Depends(get_db)):
+    """Looks the given (or currently connected) mailbox address up directly via Graph's
+    app-only client-credentials token (same mechanism settings.py already uses for the WHUBBI
+    group lookup) to tell apart 'this address doesn't exist as a Graph user object' from other
+    failure modes, without needing the delegated mailbox connection to be healthy."""
+    from app.routers.settings import get_ms_token
+    if not address:
+        mailbox = await _get_mailbox(db)
+        if not mailbox:
+            raise HTTPException(status_code=404, detail="No mailbox connected and no address given")
+        address = mailbox["mailbox_address"]
+    token = await get_ms_token()
+    async with httpx.AsyncClient(timeout=15) as client:
+        resp = await client.get(
+            f"{GRAPH_BASE}/users/{address}",
+            headers={"Authorization": f"Bearer {token}"},
+            params={"$select": "id,mail,userPrincipalName,displayName,proxyAddresses"},
+        )
+    return {
+        "address_queried": address,
+        "status_code": resp.status_code,
+        "body": resp.json() if resp.content else None,
+    }
+
+
 def _safe_filename(name: str) -> str:
     return "".join(c if c.isalnum() or c in " ._-" else "_" for c in name)[:150] or "untitled"
 
