@@ -34,7 +34,7 @@ router = APIRouter()
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 GENERATION_MODEL = "claude-sonnet-5"
 
-SUBTYPES = {"website", "blog", "linkedin", "study", "email", "other"}  # the "Source" field — applies to url and file sources alike
+SUBTYPES = {"website", "blog", "linkedin", "study", "mailing", "other"}  # the "Source" field — applies to url and file sources alike
 CATEGORIES = {"Competitor", "Solution Provider", "Partner", "Other"}
 CHECK_FREQUENCIES = {"manual", "daily", "weekly"}
 FREQUENCY_INTERVALS = {"daily": timedelta(days=1), "weekly": timedelta(days=7)}
@@ -621,7 +621,7 @@ async def accept_pending_email(pending_id: str, data: dict, db: AsyncSession = D
         for s in sources_to_insert:
             await db2.execute(text("""
                 INSERT INTO influence_sources (id, name, description, category, source_type, subtype, file_url, file_name, check_frequency, active, created_by_email, created_at, updated_at)
-                VALUES (CAST(:id AS UUID), :name, :description, 'Other', 'file', 'email', :file_url, :file_name, 'manual', TRUE, :created_by_email, NOW(), NOW())
+                VALUES (CAST(:id AS UUID), :name, :description, 'Other', 'file', 'mailing', :file_url, :file_name, 'manual', TRUE, :created_by_email, NOW(), NOW())
             """), {**s, "created_by_email": pending["mailbox_address"]})
         await db2.execute(text("""
             UPDATE influence_pending_emails SET status = 'accepted', reviewed_by_email = :email, reviewed_at = NOW() WHERE id = CAST(:id AS UUID)

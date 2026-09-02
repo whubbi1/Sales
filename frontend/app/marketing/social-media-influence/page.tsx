@@ -8,7 +8,9 @@ import { socialInfluenceAPI } from '@/lib/api'
 
 const LANGUAGES = ['English', 'French', 'German', 'Spanish', 'Other']
 const CATEGORIES = ['Competitor', 'Solution Provider', 'Partner', 'Other']
-const SUBTYPE_LABEL: Record<string, string> = { website: 'Website', blog: 'Blog', linkedin: 'LinkedIn page', study: 'Study', email: 'Email', other: 'Other' }
+const SUBTYPE_ORDER = ['website', 'blog', 'linkedin', 'study', 'mailing', 'other']
+const SUBTYPE_LABEL: Record<string, string> = { website: 'Website', blog: 'Blog', linkedin: 'LinkedIn page', study: 'Study', mailing: 'Mailing', other: 'Other' }
+const SUBTYPE_ICON: Record<string, string> = { website: '🌐', blog: '📝', linkedin: '🔗', study: '🔬', mailing: '📧', other: '📄' }
 
 const btn: React.CSSProperties = {
   padding: '9px 18px', border: 'none', borderRadius: '8px', cursor: 'pointer',
@@ -144,61 +146,79 @@ function SourcesTab({ canEdit }: { canEdit: boolean }) {
         </div>
       ) : (
         <div style={card}>
-          {sources.map((s, i) => (
-            <div key={s.id} style={{ borderTop: i === 0 ? 'none' : '1px solid #F1F5F9', padding: '14px 0' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div>
-                  <div style={{ fontSize: '13px', fontWeight: '700', color: '#156082', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <span>{s.subtype === 'email' ? '📧' : s.source_type === 'file' ? '📄' : s.subtype === 'linkedin' ? '🔗' : s.subtype === 'study' ? '🔬' : '🌐'} {s.name}</span>
-                    {s.category && <span style={{ fontSize: '10px', fontWeight: '700', background: '#EFF6FF', color: '#2563EB', padding: '2px 8px', borderRadius: '10px' }}>{s.category}</span>}
-                    {!s.active && <span style={{ fontSize: '10px', fontWeight: '700', background: '#F1F5F9', color: '#94A3B8', padding: '2px 8px', borderRadius: '10px' }}>Inactive</span>}
-                  </div>
-                  <div style={{ fontSize: '11px', color: '#94A3B8', marginTop: '2px' }}>
-                    {s.source_type === 'url' ? s.url : s.file_name}
-                    {s.subtype && ` · ${SUBTYPE_LABEL[s.subtype] || s.subtype}`} · {s.check_frequency}
-                    {s.language && ` · ${s.language}`}
-                    {s.source_type === 'url' && ` · last checked ${fmtDate(s.last_checked_at)}`}
-                  </div>
-                  {s.description && <div style={{ fontSize: '11px', color: '#64748B', marginTop: '2px' }}>{s.description}</div>}
-                  {s.last_error && <div style={{ fontSize: '11px', color: '#DC2626', marginTop: '2px' }}>⚠️ {s.last_error}</div>}
+          {(() => {
+            const grouped: Record<string, any[]> = {}
+            sources.forEach(s => {
+              const key = SUBTYPE_ORDER.includes(s.subtype) ? s.subtype : 'other'
+              ;(grouped[key] = grouped[key] || []).push(s)
+            })
+            const groupEntries = SUBTYPE_ORDER.map(key => [key, grouped[key] || []] as [string, any[]]).filter(([, items]) => items.length > 0)
+            return groupEntries.map(([key, items], gi) => (
+              <div key={key} style={{ marginTop: gi === 0 ? 0 : '20px' }}>
+                <div style={{
+                  fontSize: '11px', fontWeight: '700', color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.03em',
+                  padding: gi === 0 ? '0 0 8px' : '16px 0 8px', borderTop: gi === 0 ? 'none' : '1px solid #F1F5F9',
+                }}>
+                  {SUBTYPE_ICON[key]} {SUBTYPE_LABEL[key] || key} ({items.length})
                 </div>
-                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                  {s.source_type === 'url' && (
-                    <>
-                      <button onClick={() => toggleExpand(s.id)} style={{ ...btn, padding: '6px 12px', background: '#F1F5F9', color: '#64748B' }}>
-                        {expanded === s.id ? 'Hide history' : 'History'}
-                      </button>
-                      {canEdit && (
-                        <button onClick={() => checkNow(s.id)} disabled={checking === s.id} style={{ ...btn, padding: '6px 12px', background: '#EFF6FF', color: '#2563EB' }}>
-                          {checking === s.id ? 'Checking…' : 'Check now'}
-                        </button>
-                      )}
-                    </>
-                  )}
-                  {canEdit && <button onClick={() => setEditing(s)} style={{ ...btn, padding: '6px 12px', background: '#F1F5F9', color: '#64748B' }}>Edit</button>}
-                  {canEdit && <button onClick={() => remove(s.id)} style={{ ...btn, padding: '6px 12px', background: '#FEF2F2', color: '#EF4444' }}>Delete</button>}
-                </div>
-              </div>
-              {expanded === s.id && (
-                <div style={{ marginTop: '10px', paddingLeft: '4px' }}>
-                  {s.last_summary && (
-                    <div style={{ fontSize: '11px', color: '#64748B', background: '#F8FAFC', padding: '10px 12px', borderRadius: '8px', marginBottom: '8px' }}>
-                      <b>Current summary:</b> {s.last_summary}
-                    </div>
-                  )}
-                  {updates.length === 0 ? (
-                    <div style={{ fontSize: '11px', color: '#94A3B8' }}>No changes detected yet.</div>
-                  ) : (
-                    updates.map((u: any) => (
-                      <div key={u.id} style={{ fontSize: '11px', color: '#64748B', padding: '6px 0', borderTop: '1px dashed #E2E8F0' }}>
-                        <span style={{ color: '#94A3B8' }}>{fmtDate(u.checked_at)}</span> — {u.summary}
+                {items.map((s, i) => (
+                  <div key={s.id} style={{ borderTop: i === 0 ? 'none' : '1px solid #F1F5F9', padding: '14px 0' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div>
+                        <div style={{ fontSize: '13px', fontWeight: '700', color: '#156082', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <span>{SUBTYPE_ICON[key]} {s.name}</span>
+                          {s.category && <span style={{ fontSize: '10px', fontWeight: '700', background: '#EFF6FF', color: '#2563EB', padding: '2px 8px', borderRadius: '10px' }}>{s.category}</span>}
+                          {!s.active && <span style={{ fontSize: '10px', fontWeight: '700', background: '#F1F5F9', color: '#94A3B8', padding: '2px 8px', borderRadius: '10px' }}>Inactive</span>}
+                        </div>
+                        <div style={{ fontSize: '11px', color: '#94A3B8', marginTop: '2px' }}>
+                          {s.source_type === 'url' ? s.url : s.file_name}
+                          {' · '}{s.check_frequency}
+                          {s.language && ` · ${s.language}`}
+                          {s.source_type === 'url' && ` · last checked ${fmtDate(s.last_checked_at)}`}
+                        </div>
+                        {s.description && <div style={{ fontSize: '11px', color: '#64748B', marginTop: '2px' }}>{s.description}</div>}
+                        {s.last_error && <div style={{ fontSize: '11px', color: '#DC2626', marginTop: '2px' }}>⚠️ {s.last_error}</div>}
                       </div>
-                    ))
-                  )}
-                </div>
-              )}
-            </div>
-          ))}
+                      <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                        {s.source_type === 'url' && (
+                          <>
+                            <button onClick={() => toggleExpand(s.id)} style={{ ...btn, padding: '6px 12px', background: '#F1F5F9', color: '#64748B' }}>
+                              {expanded === s.id ? 'Hide history' : 'History'}
+                            </button>
+                            {canEdit && (
+                              <button onClick={() => checkNow(s.id)} disabled={checking === s.id} style={{ ...btn, padding: '6px 12px', background: '#EFF6FF', color: '#2563EB' }}>
+                                {checking === s.id ? 'Checking…' : 'Check now'}
+                              </button>
+                            )}
+                          </>
+                        )}
+                        {canEdit && <button onClick={() => setEditing(s)} style={{ ...btn, padding: '6px 12px', background: '#F1F5F9', color: '#64748B' }}>Edit</button>}
+                        {canEdit && <button onClick={() => remove(s.id)} style={{ ...btn, padding: '6px 12px', background: '#FEF2F2', color: '#EF4444' }}>Delete</button>}
+                      </div>
+                    </div>
+                    {expanded === s.id && (
+                      <div style={{ marginTop: '10px', paddingLeft: '4px' }}>
+                        {s.last_summary && (
+                          <div style={{ fontSize: '11px', color: '#64748B', background: '#F8FAFC', padding: '10px 12px', borderRadius: '8px', marginBottom: '8px' }}>
+                            <b>Current summary:</b> {s.last_summary}
+                          </div>
+                        )}
+                        {updates.length === 0 ? (
+                          <div style={{ fontSize: '11px', color: '#94A3B8' }}>No changes detected yet.</div>
+                        ) : (
+                          updates.map((u: any) => (
+                            <div key={u.id} style={{ fontSize: '11px', color: '#64748B', padding: '6px 0', borderTop: '1px dashed #E2E8F0' }}>
+                              <span style={{ color: '#94A3B8' }}>{fmtDate(u.checked_at)}</span> — {u.summary}
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            ))
+          })()}
         </div>
       )}
 
@@ -358,6 +378,7 @@ function SourceModal({ source, onClose, onSaved }: { source?: any | null; onClos
               <option value="blog">Blog</option>
               <option value="linkedin">LinkedIn page</option>
               <option value="study">Study</option>
+              <option value="mailing">Mailing</option>
               <option value="other">Other</option>
             </select>
           </div>
