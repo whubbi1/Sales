@@ -1988,6 +1988,18 @@ async def startup():
                 "ALTER TABLE marketing_events ADD COLUMN IF NOT EXISTS estimated_budget NUMERIC(12,2)",
                 "ALTER TABLE marketing_events ADD COLUMN IF NOT EXISTS approved_budget NUMERIC(12,2)",
                 "ALTER TABLE marketing_events ADD COLUMN IF NOT EXISTS real_costs NUMERIC(12,2)",
+
+                # Budget block — itemized real costs, rolled up into marketing_events.real_costs
+                # (see _recompute_real_costs in marketing.py).
+                """CREATE TABLE IF NOT EXISTS marketing_event_costs (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    event_id UUID NOT NULL REFERENCES marketing_events(id) ON DELETE CASCADE,
+                    purchase_date DATE,
+                    supplier VARCHAR(255),
+                    amount NUMERIC(12,2) NOT NULL,
+                    currency VARCHAR(10) DEFAULT 'EUR',
+                    created_at TIMESTAMP DEFAULT NOW()
+                )""",
             ]
             for sql in sqls:
                 try:

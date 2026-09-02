@@ -15,6 +15,7 @@ router = APIRouter()
 
 EVENT_TYPES = {"webinar", "physical", "mailing", "other"}
 EVENT_STATUSES = {"To be planned", "Planned", "Under preparation", "Finished"}
+COST_CURRENCIES = {"EUR", "USD", "GBP", "CHF"}
 
 
 def _row(d: dict) -> dict:
@@ -157,10 +158,12 @@ async def get_event(event_id: str, db: AsyncSession = Depends(get_db)):
         JOIN contacts c ON c.id = ec.contact_id WHERE ec.event_id = CAST(:id AS UUID) ORDER BY c.first_name, c.last_name
     """), {"id": event_id})
     files = await db.execute(text("SELECT * FROM marketing_event_files WHERE event_id = CAST(:id AS UUID) ORDER BY created_at DESC"), {"id": event_id})
+    costs = await db.execute(text("SELECT * FROM marketing_event_costs WHERE event_id = CAST(:id AS UUID) ORDER BY purchase_date DESC NULLS LAST, created_at DESC"), {"id": event_id})
     event["contributors"] = [_row(dict(r._mapping)) for r in contributors.fetchall()]
     event["urls"] = [_row(dict(r._mapping)) for r in urls.fetchall()]
     event["partners"] = [_row(dict(r._mapping)) for r in partners.fetchall()]
     event["contacts"] = [_row(dict(r._mapping)) for r in contacts.fetchall()]
+    event["costs"] = [_row(dict(r._mapping)) for r in costs.fetchall()]
     event["files"] = []
     for f in files.fetchall():
         f = _row(dict(f._mapping))
@@ -214,7 +217,6 @@ async def update_event(event_id: str, data: dict, db: AsyncSession = Depends(get
             owner_name = COALESCE(:owner_name, owner_name),
             estimated_budget = COALESCE(:estimated_budget, estimated_budget),
             approved_budget = COALESCE(:approved_budget, approved_budget),
-            real_costs = COALESCE(:real_costs, real_costs),
             updated_at = NOW()
         WHERE id = CAST(:id AS UUID)
     """), {
@@ -223,7 +225,8 @@ async def update_event(event_id: str, data: dict, db: AsyncSession = Depends(get
         "description": data.get("description"), "event_type": event_type, "status": status, "location": data.get("location"),
         "owner_email": data.get("owner_email"), "owner_name": data.get("owner_name"),
         "estimated_budget": data.get("estimated_budget"), "approved_budget": data.get("approved_budget"),
-        "real_costs": data.get("real_costs"),
+        # real_costs is NOT editable here — it's the sum of marketing_event_costs, kept in
+        # sync by _recompute_real_costs() whenever a cost item is added/removed (below).
     })
     await db.commit()
     return await _get_event(db, event_id)
@@ -273,6 +276,53 @@ async def delete_event_file(event_id: str, file_id: str, db: AsyncSession = Depe
                       {"id": file_id, "eid": event_id})
     await db.commit()
     return {"status": "ok"}
+
+
+# ─── Budget — Real cost details (itemized), rolled up into marketing_events.real_costs ────
+# Amounts are summed as-is regardless of currency (no FX conversion) — currency is recorded
+# per line item for the record, the total assumes everyone entered the same currency.
+async def _recompute_real_costs(db: AsyncSession, event_id: str) -> float:
+    r = await db.execute(text("""
+        UPDATE marketing_events SET
+            real_costs = (SELECT COALESCE(SUM(amount), 0) FROM marketing_event_costs WHERE event_id = CAST(:id AS UUID)),
+            updated_at = NOW()
+        WHERE id = CAST(:id AS UUID)
+        RETURNING real_costs
+    """), {"id": event_id})
+    return float(r.scalar())
+
+
+@router.post("/events/{event_id}/costs")
+async def add_event_cost(event_id: str, data: dict, db: AsyncSession = Depends(get_db)):
+    event = await _get_event(db, event_id)
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found")
+    if data.get("amount") in (None, ""):
+        raise HTTPException(status_code=400, detail="amount is required")
+    currency = data.get("currency") or "EUR"
+    if currency not in COST_CURRENCIES:
+        raise HTTPException(status_code=400, detail=f"currency must be one of {sorted(COST_CURRENCIES)}")
+    cost_id = str(uuid.uuid4())
+    await db.execute(text("""
+        INSERT INTO marketing_event_costs (id, event_id, purchase_date, supplier, amount, currency, created_at)
+        VALUES (CAST(:id AS UUID), CAST(:eid AS UUID), CAST(NULLIF(:purchase_date,'') AS DATE), :supplier, :amount, :currency, NOW())
+    """), {
+        "id": cost_id, "eid": event_id, "purchase_date": data.get("purchase_date") or "",
+        "supplier": data.get("supplier") or "", "amount": data["amount"], "currency": currency,
+    })
+    real_costs = await _recompute_real_costs(db, event_id)
+    await db.commit()
+    r = await db.execute(text("SELECT * FROM marketing_event_costs WHERE id = CAST(:id AS UUID)"), {"id": cost_id})
+    return {"item": _row(dict(r.fetchone()._mapping)), "real_costs": real_costs}
+
+
+@router.delete("/events/{event_id}/costs/{cost_id}")
+async def delete_event_cost(event_id: str, cost_id: str, db: AsyncSession = Depends(get_db)):
+    await db.execute(text("DELETE FROM marketing_event_costs WHERE id = CAST(:id AS UUID) AND event_id = CAST(:eid AS UUID)"),
+                      {"id": cost_id, "eid": event_id})
+    real_costs = await _recompute_real_costs(db, event_id)
+    await db.commit()
+    return {"status": "ok", "real_costs": real_costs}
 
 
 # ─── Contributors ────────────────────────────────────────────────────────────────

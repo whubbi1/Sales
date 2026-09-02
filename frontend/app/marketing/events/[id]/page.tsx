@@ -195,6 +195,12 @@ function EventDetailContent() {
   const [showDelete, setShowDelete] = useState(false)
   const [deleteConfirm, setDeleteConfirm] = useState('')
   const [deleting, setDeleting] = useState(false)
+  const [showAddCost, setShowAddCost] = useState(false)
+  const [costDate, setCostDate] = useState('')
+  const [costSupplier, setCostSupplier] = useState('')
+  const [costAmount, setCostAmount] = useState('')
+  const [costCurrency, setCostCurrency] = useState('EUR')
+  const [addingCost, setAddingCost] = useState(false)
 
   const load = async () => {
     setLoading(true)
@@ -271,6 +277,23 @@ function EventDetailContent() {
   const removeFile = async (fileId: string) => {
     await marketingAPI.deleteEventFile(event.id, fileId)
     setEvent((prev: any) => ({ ...prev, files: (prev.files || []).filter((f: any) => f.id !== fileId) }))
+  }
+
+  const addCost = async () => {
+    if (!costAmount) return
+    setAddingCost(true)
+    try {
+      const { item, real_costs } = await marketingAPI.addEventCost(event.id, {
+        purchase_date: costDate || null, supplier: costSupplier.trim() || null, amount: Number(costAmount), currency: costCurrency,
+      })
+      setEvent((prev: any) => ({ ...prev, costs: [item, ...(prev.costs || [])], real_costs }))
+      setCostDate(''); setCostSupplier(''); setCostAmount(''); setCostCurrency('EUR'); setShowAddCost(false)
+    } catch (e: any) { setError(e.message) }
+    finally { setAddingCost(false) }
+  }
+  const removeCost = async (costId: string) => {
+    const { real_costs } = await marketingAPI.deleteEventCost(event.id, costId)
+    setEvent((prev: any) => ({ ...prev, costs: (prev.costs || []).filter((c: any) => c.id !== costId), real_costs }))
   }
 
   const linkPartner = async () => {
@@ -451,13 +474,62 @@ function EventDetailContent() {
           </div>
           <div>
             <div style={lbl}>Real Costs</div>
-            <EditableCell display={event.real_costs != null ? `€${Number(event.real_costs).toLocaleString()}` : null}
-              editing={editingField === 'real_costs'} canEdit={canEdit} onStartEdit={() => setEditingField('real_costs')}>
-              <input autoFocus type="number" style={inp} defaultValue={event.real_costs ?? ''}
-                onBlur={e => updateField({ real_costs: e.target.value === '' ? null : Number(e.target.value) })}
-                onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }} />
-            </EditableCell>
+            <div style={{ fontSize: '12px', color: '#3F3F3F', padding: '4px 6px' }} title="Sum of the cost details below">
+              {event.real_costs != null ? `€${Number(event.real_costs).toLocaleString()}` : <span style={{ color: '#94A3B8' }}>—</span>}
+            </div>
           </div>
+        </div>
+
+        <div style={{ marginTop: '16px', paddingTop: '16px', borderTop: '1px solid #F1F5F9' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+            <div style={lbl}>Real Cost Details ({(event.costs || []).length})</div>
+            {canEdit && !showAddCost && <button onClick={() => setShowAddCost(true)} style={{ ...btn, background: '#EFF6FF', color: '#156082' }}>+ Add Cost</button>}
+          </div>
+          {(event.costs || []).length === 0 && !showAddCost ? (
+            <p style={{ fontSize: '12px', color: '#94A3B8', margin: 0 }}>No cost details recorded yet.</p>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: showAddCost ? '10px' : 0 }}>
+              {(event.costs || []).map((c: any) => (
+                <div key={c.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', border: '1px solid #EDF2F7', borderRadius: '8px' }}>
+                  <span style={{ fontSize: '12px', color: '#3F3F3F' }}>
+                    <b style={{ color: '#156082' }}>{c.currency} {Number(c.amount).toLocaleString()}</b>
+                    {c.supplier ? ` · ${c.supplier}` : ''}{c.purchase_date ? ` · ${fmtDate(c.purchase_date)}` : ''}
+                  </span>
+                  {canEdit && <button onClick={() => removeCost(c.id)} style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#94A3B8', fontSize: '14px', padding: 0, lineHeight: 1 }}>×</button>}
+                </div>
+              ))}
+            </div>
+          )}
+          {showAddCost && (
+            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' as const, alignItems: 'flex-end' }}>
+              <div>
+                <div style={lbl}>Purchase Date</div>
+                <input type="date" style={inp} value={costDate} onChange={e => setCostDate(e.target.value)} />
+              </div>
+              <div style={{ flex: 1, minWidth: '140px' }}>
+                <div style={lbl}>Supplier</div>
+                <input style={{ ...inp, width: '100%', boxSizing: 'border-box' as const }} placeholder="Supplier name" value={costSupplier} onChange={e => setCostSupplier(e.target.value)} />
+              </div>
+              <div style={{ width: '110px' }}>
+                <div style={lbl}>Amount</div>
+                <input type="number" style={{ ...inp, width: '100%', boxSizing: 'border-box' as const }} placeholder="0.00" value={costAmount} onChange={e => setCostAmount(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') addCost() }} />
+              </div>
+              <div style={{ width: '90px' }}>
+                <div style={lbl}>Currency</div>
+                <select style={inp} value={costCurrency} onChange={e => setCostCurrency(e.target.value)}>
+                  <option value="EUR">EUR</option>
+                  <option value="USD">USD</option>
+                  <option value="GBP">GBP</option>
+                  <option value="CHF">CHF</option>
+                </select>
+              </div>
+              <button onClick={addCost} disabled={addingCost || !costAmount} style={{ ...btn, background: addingCost ? '#94A3B8' : '#156082', color: 'white' }}>
+                {addingCost ? 'Adding…' : 'Add'}
+              </button>
+              <button onClick={() => { setShowAddCost(false); setCostDate(''); setCostSupplier(''); setCostAmount(''); setCostCurrency('EUR') }} style={{ ...btn, background: '#F1F5F9', color: '#64748B' }}>Cancel</button>
+            </div>
+          )}
         </div>
       </div>
 

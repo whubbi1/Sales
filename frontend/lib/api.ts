@@ -140,6 +140,9 @@ export const marketingAPI = {
   },
   deleteEventFile: (id: string, fileId: string) => fetchAPI(`/marketing/events/${id}/files/${fileId}`, { method: 'DELETE' }),
 
+  addEventCost:    (id: string, d: any) => fetchAPI(`/marketing/events/${id}/costs`, { method: 'POST', body: JSON.stringify(d) }),
+  deleteEventCost: (id: string, costId: string) => fetchAPI(`/marketing/events/${id}/costs/${costId}`, { method: 'DELETE' }),
+
   linkPartner:   (id: string, partnerId: string) => fetchAPI(`/marketing/events/${id}/partners/${partnerId}`, { method: 'POST' }),
   unlinkPartner: (id: string, partnerId: string) => fetchAPI(`/marketing/events/${id}/partners/${partnerId}`, { method: 'DELETE' }),
   linkContact:   (id: string, contactId: string) => fetchAPI(`/marketing/events/${id}/contacts/${contactId}`, { method: 'POST' }),
