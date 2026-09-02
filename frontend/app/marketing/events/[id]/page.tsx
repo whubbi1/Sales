@@ -5,6 +5,7 @@ import { MarketingLayout, useMarketingPerm } from '@/components/MarketingLayout'
 import { marketingAPI, partnersAPI, contactsAPI } from '@/lib/api'
 import { getStoredUser } from '@/lib/auth'
 import { RichTextEditor } from '@/components/shared/RichTextEditor'
+import { EntityTasks } from '@/components/tasks/EntityTasks'
 
 const API = 'https://api.whubbi.wcomply.com'
 
@@ -451,6 +452,11 @@ function EventDetailContent() {
             <div style={{ fontSize: '11px', color: '#94A3B8' }}>Won Deals</div>
           </div>
         </div>
+      </div>
+
+      <div style={card}>
+        <div style={{ ...lbl, marginBottom: '10px' }}>Tasks</div>
+        <EntityTasks entityType="marketing_event" entityId={event.id} entityLabel={event.title} source="marketing" />
       </div>
 
       <div style={card}>

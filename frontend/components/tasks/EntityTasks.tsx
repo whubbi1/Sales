@@ -1,7 +1,8 @@
 'use client'
-// components/tasks/EntityTasks.tsx — generic "Tasks" tab for any Sales entity (Company,
-// Contact, ...), backed by the unified Task Manager (source='sales') so tasks created here
-// show up in /tasks and /task-manager, and vice versa. Mirrors the Opportunity/Lead pattern.
+// components/tasks/EntityTasks.tsx — generic "Tasks" section for any entity (Company,
+// Contact, Marketing Event, ...), backed by the unified Task Manager, so tasks created here
+// show up in /tasks and /task-manager, and vice versa. `source` tags which module a task came
+// from (defaults to 'sales' for the original Company/Contact/Opportunity/Lead callers).
 import { useState, useEffect } from 'react'
 import { taskManagerAPI } from '@/lib/api'
 import { getStoredUser } from '@/lib/auth'
@@ -15,8 +16,8 @@ const STATUS_COLOR: Record<string, { bg: string; color: string }> = {
 }
 const DONE_STATUSES = ['resolved', 'closed']
 
-export function EntityTasks({ entityType, entityId, entityLabel, onChange }: {
-  entityType: string; entityId: string; entityLabel?: string; onChange?: () => void
+export function EntityTasks({ entityType, entityId, entityLabel, source = 'sales', onChange }: {
+  entityType: string; entityId: string; entityLabel?: string; source?: string; onChange?: () => void
 }) {
   const [tasks, setTasks] = useState<any[]>([])
   const [showModal, setShowModal] = useState(false)
@@ -25,7 +26,7 @@ export function EntityTasks({ entityType, entityId, entityLabel, onChange }: {
   const userEmail = user?.email || ''
   const userName = user?.name || userEmail
 
-  const load = async () => setTasks((await taskManagerAPI.list({ entity_type: entityType, entity_id: entityId, source: 'sales' })).tasks || [])
+  const load = async () => setTasks((await taskManagerAPI.list({ entity_type: entityType, entity_id: entityId, source })).tasks || [])
   useEffect(() => { load() }, [entityType, entityId])
 
   const fmt = (d?: string) => d ? new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : undefined
@@ -71,7 +72,7 @@ export function EntityTasks({ entityType, entityId, entityLabel, onChange }: {
           entityType={entityType}
           entityId={entityId}
           entityLabel={entityLabel}
-          source="sales"
+          source={source}
           onClose={() => setShowModal(false)}
           onSave={() => { setShowModal(false); load(); onChange?.() }}
         />
