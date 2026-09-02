@@ -50,7 +50,7 @@ GRAPH_BASE = "https://graph.microsoft.com/v1.0"
 MS_AUTHORIZE_URL = f"https://login.microsoftonline.com/{MS_TENANT_ID}/oauth2/v2.0/authorize"
 MS_TOKEN_URL = f"https://login.microsoftonline.com/{MS_TENANT_ID}/oauth2/v2.0/token"
 MAILBOX_REDIRECT_URI = os.getenv("SOCIAL_INFLUENCE_MAILBOX_REDIRECT_URI", "https://api.whubbi.wcomply.com/marketing/social-influence-mailbox/callback")
-MAILBOX_SCOPES = "openid profile Mail.Read.Shared offline_access User.Read"
+MAILBOX_SCOPES = "openid profile Mail.ReadWrite.Shared offline_access User.Read"  # ReadWrite (not just Read) so Reject can delete the source message
 MAILBOX_SYNC_INTERVAL = 20 * 60       # wake ~every 20 minutes
 MAILBOX_SYNC_MAX_MESSAGES = 25        # bounded batch per cycle, same cost-cap philosophy as MAX_SOURCES_PER_CYCLE below
 
@@ -568,15 +568,43 @@ async def _get_pending_email(db: AsyncSession, pending_id: str) -> dict | None:
 
 @router.post("/social-influence-mailbox/pending/{pending_id}/reject")
 async def reject_pending_email(pending_id: str, data: dict, db: AsyncSession = Depends(get_db)):
+    """Rejecting also deletes the source message from the shared mailbox (Graph moves it to
+    Deleted Items — recoverable, not a hard delete) so rejected spam doesn't pile up in the
+    inbox and get re-staged. Same discipline as accept_pending_email: the slow Graph call runs
+    with no DB session open, then one fresh short session does the final write."""
     pending = await _get_pending_email(db, pending_id)
     if not pending:
         raise HTTPException(status_code=404, detail="Pending email not found")
     if pending["status"] != "pending":
         raise HTTPException(status_code=400, detail=f"Already {pending['status']}")
-    await db.execute(text("""
-        UPDATE influence_pending_emails SET status = 'rejected', reviewed_by_email = :email, reviewed_at = NOW() WHERE id = CAST(:id AS UUID)
-    """), {"id": pending_id, "email": data.get("reviewed_by_email", "")})
+
+    mailbox = await _get_mailbox(db)
+    access_token = None
+    if mailbox:
+        try:
+            access_token = await _get_valid_mailbox_token(db, mailbox)
+        except HTTPException as e:
+            print(f"[SocialInfluence] could not get a mailbox token to delete rejected message {pending['message_id']}: {e.detail}")
     await db.commit()
+
+    if mailbox and access_token:
+        try:
+            async with httpx.AsyncClient(timeout=15) as client:
+                resp = await client.delete(
+                    f"{GRAPH_BASE}/users/{mailbox['mailbox_address']}/messages/{pending['message_id']}",
+                    headers={"Authorization": f"Bearer {access_token}"},
+                )
+            if resp.status_code not in (204, 404):
+                resp.raise_for_status()
+        except Exception as e:
+            print(f"[SocialInfluence] failed to delete rejected message {pending['message_id']} from mailbox: {e}")
+
+    from app.database import AsyncSessionLocal
+    async with AsyncSessionLocal() as db2:
+        await db2.execute(text("""
+            UPDATE influence_pending_emails SET status = 'rejected', reviewed_by_email = :email, reviewed_at = NOW() WHERE id = CAST(:id AS UUID)
+        """), {"id": pending_id, "email": data.get("reviewed_by_email", "")})
+        await db2.commit()
     return {"status": "ok"}
 
 
