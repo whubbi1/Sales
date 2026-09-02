@@ -626,12 +626,26 @@ function ReviewTab({ canEdit }: { canEdit: boolean }) {
   const [loading, setLoading] = useState(true)
   const [viewing, setViewing] = useState<any | null>(null)
   const [actingId, setActingId] = useState<string | null>(null)
+  const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [bulkActing, setBulkActing] = useState(false)
 
   const load = () => {
     setLoading(true)
+    setSelected(new Set())
     socialInfluenceAPI.listPendingEmails().then(d => setPending(d.pending || [])).finally(() => setLoading(false))
   }
   useEffect(load, [])
+
+  const toggleSelect = (id: string) => {
+    setSelected(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id); else next.add(id)
+      return next
+    })
+  }
+  const toggleSelectAll = () => {
+    setSelected(prev => prev.size === pending.length ? new Set() : new Set(pending.map((p: any) => p.id)))
+  }
 
   const accept = async (id: string) => {
     const user = getStoredUser()
@@ -662,11 +676,45 @@ function ReviewTab({ canEdit }: { canEdit: boolean }) {
     }
   }
 
+  const bulkAct = async (action: 'accept' | 'reject') => {
+    const ids = Array.from(selected)
+    if (ids.length === 0) return
+    if (action === 'reject' && !confirm(`Reject ${ids.length} email${ids.length !== 1 ? 's' : ''}? They will be discarded and never imported.`)) return
+    const user = getStoredUser()
+    setBulkActing(true)
+    const failures: string[] = []
+    for (const id of ids) {
+      try {
+        if (action === 'accept') await socialInfluenceAPI.acceptPendingEmail(id, user?.email || '')
+        else await socialInfluenceAPI.rejectPendingEmail(id, user?.email || '')
+      } catch (e: any) {
+        const p = pending.find((x: any) => x.id === id)
+        failures.push(`${p?.subject || '(no subject)'}: ${e.message || 'failed'}`)
+      }
+    }
+    setBulkActing(false)
+    load()
+    if (failures.length > 0) alert(`${failures.length} of ${ids.length} failed:\n${failures.join('\n')}`)
+  }
+
   if (loading) return <div style={{ textAlign: 'center', padding: '48px', color: '#45B6E4' }}>Loading…</div>
 
   return (
     <div style={card}>
-      <div style={lbl}>Pending Review ({pending.length})</div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap' as const, gap: '8px' }}>
+        <div style={lbl}>Pending Review ({pending.length})</div>
+        {canEdit && selected.size > 0 && (
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+            <span style={{ fontSize: '11px', color: '#64748B' }}>{selected.size} selected</span>
+            <button onClick={() => bulkAct('accept')} disabled={bulkActing} style={{ ...btn, padding: '6px 12px', background: '#ECFDF5', color: '#059669' }}>
+              {bulkActing ? 'Working…' : `Accept selected (${selected.size})`}
+            </button>
+            <button onClick={() => bulkAct('reject')} disabled={bulkActing} style={{ ...btn, padding: '6px 12px', background: '#FEF2F2', color: '#EF4444' }}>
+              {bulkActing ? 'Working…' : `Reject selected (${selected.size})`}
+            </button>
+          </div>
+        )}
+      </div>
       <p style={{ fontSize: '11px', color: '#94A3B8', margin: '4px 0 14px' }}>
         Mail received in the Mailings Inbox waits here until accepted — nothing is imported as a source until you approve it.
       </p>
@@ -674,8 +722,17 @@ function ReviewTab({ canEdit }: { canEdit: boolean }) {
         <p style={{ fontSize: '12px', color: '#94A3B8', margin: 0 }}>Nothing waiting for review.</p>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+          {canEdit && (
+            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '11px', color: '#64748B', padding: '0 4px 2px', cursor: 'pointer' }}>
+              <input type="checkbox" checked={selected.size === pending.length} onChange={toggleSelectAll} disabled={bulkActing} />
+              Select all
+            </label>
+          )}
           {pending.map((p: any) => (
             <div key={p.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px', padding: '10px 12px', border: '1px solid #EDF2F7', borderRadius: '8px' }}>
+              {canEdit && (
+                <input type="checkbox" checked={selected.has(p.id)} onChange={() => toggleSelect(p.id)} disabled={bulkActing} style={{ flexShrink: 0 }} />
+              )}
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: '12px', fontWeight: '700', color: '#156082', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const }}>{p.subject || '(no subject)'}</div>
                 <div style={{ fontSize: '11px', color: '#94A3B8' }}>
@@ -687,10 +744,10 @@ function ReviewTab({ canEdit }: { canEdit: boolean }) {
                 <button onClick={() => setViewing(p)} style={{ ...btn, padding: '6px 12px', background: '#F1F5F9', color: '#64748B' }}>View</button>
                 {canEdit && (
                   <>
-                    <button onClick={() => accept(p.id)} disabled={actingId === p.id} style={{ ...btn, padding: '6px 12px', background: '#ECFDF5', color: '#059669' }}>
+                    <button onClick={() => accept(p.id)} disabled={actingId === p.id || bulkActing} style={{ ...btn, padding: '6px 12px', background: '#ECFDF5', color: '#059669' }}>
                       {actingId === p.id ? '…' : 'Accept'}
                     </button>
-                    <button onClick={() => reject(p.id)} disabled={actingId === p.id} style={{ ...btn, padding: '6px 12px', background: '#FEF2F2', color: '#EF4444' }}>Reject</button>
+                    <button onClick={() => reject(p.id)} disabled={actingId === p.id || bulkActing} style={{ ...btn, padding: '6px 12px', background: '#FEF2F2', color: '#EF4444' }}>Reject</button>
                   </>
                 )}
               </div>
