@@ -51,6 +51,29 @@ class SocialInfluenceMailbox(Base):
     connected_at             = Column(DateTime, default=datetime.utcnow)
 
 
+class InfluencePendingEmail(Base):
+    """One incoming Mailings Inbox message, held for human review before it's allowed to
+    become an influence_sources row — the anti-spam gate the mailbox sync loop stages into
+    instead of importing directly. Body is stored inline (so "View" always works even if the
+    message later disappears from the mailbox); attachments are metadata-only here (name/type/
+    size) — actual bytes are only fetched from Graph, and only uploaded to S3, on Accept."""
+    __tablename__ = "influence_pending_emails"
+    id                 = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    mailbox_address    = Column(String(255), nullable=False)
+    message_id         = Column(String(500), nullable=False)
+    subject            = Column(String(500))
+    sender_email       = Column(String(255))
+    sender_name        = Column(String(255))
+    received_at        = Column(DateTime)
+    body_content       = Column(Text)
+    body_content_type  = Column(String(20))            # 'html' | 'text'
+    attachments        = Column(JSONB, default=list)   # [{id, name, content_type, size}], inline ones already excluded
+    status             = Column(String(20), default='pending')  # 'pending' | 'accepted' | 'rejected'
+    reviewed_by_email  = Column(String(255))
+    reviewed_at        = Column(DateTime)
+    created_at         = Column(DateTime, default=datetime.utcnow)
+
+
 class SocialPost(Base):
     __tablename__ = "social_posts"
     id                = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)

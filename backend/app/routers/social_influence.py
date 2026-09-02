@@ -409,58 +409,52 @@ def _safe_filename(name: str) -> str:
     return "".join(c if c.isalnum() or c in " ._-" else "_" for c in name)[:150] or "untitled"
 
 
-async def _ingest_message(client: httpx.AsyncClient, headers: dict, mailbox_address: str, message: dict):
-    """Turns one Graph message into a file-type influence_source (subject + sender + body),
-    plus one more per real (non-inline) attachment — same S3 upload path as a manual upload,
-    so nothing downstream needs to know these came from email. No DB session held open across
-    the Graph HTTP calls below — see _check_source's docstring for why that matters."""
+def _parse_graph_datetime(value: str) -> datetime:
+    return datetime.strptime(value.split(".")[0].rstrip("Z"), "%Y-%m-%dT%H:%M:%S")
+
+
+async def _stage_pending_email(client: httpx.AsyncClient, headers: dict, mailbox_address: str, message: dict):
+    """Anti-spam gate: a new message becomes a influence_pending_emails row for a human to
+    Accept/Reject — it does NOT touch influence_sources or S3 yet. Attachments are recorded as
+    metadata only (no bytes fetched here) so staging stays cheap even for spam with large
+    attachments. No DB session held open across the Graph HTTP calls — see _check_source's
+    docstring for why that matters."""
     from app.database import AsyncSessionLocal
     subject = message.get("subject") or "(no subject)"
-    sender = ((message.get("from") or {}).get("emailAddress") or {}).get("address", "")
+    sender_field = (message.get("from") or {}).get("emailAddress") or {}
     received = message.get("receivedDateTime", "")
-    body = (message.get("body") or {}).get("content", "") or ""
-    text_blob = f"Subject: {subject}\nFrom: {sender}\nReceived: {received}\n\n{body}"
+    body = message.get("body") or {}
 
-    source_id = str(uuid.uuid4())
-    key = f"marketing/social-influence/{source_id}/{_safe_filename(subject)}.txt"
-    file_ref = await upload_to_s3(key, text_blob.encode("utf-8"), "text/plain")
+    attachments = []
+    if message.get("hasAttachments"):
+        try:
+            att_resp = await client.get(
+                f"{GRAPH_BASE}/users/{mailbox_address}/messages/{message['id']}/attachments",
+                headers=headers, params={"$select": "id,name,contentType,size,isInline,@odata.type"},
+            )
+            att_resp.raise_for_status()
+            attachments = [
+                {"id": a["id"], "name": a.get("name") or "attachment", "content_type": a.get("contentType") or "application/octet-stream", "size": a.get("size")}
+                for a in att_resp.json().get("value", [])
+                if not a.get("isInline") and a.get("@odata.type") == "#microsoft.graph.fileAttachment"
+            ]
+        except Exception as e:
+            print(f"[SocialInfluence] failed to fetch attachment metadata for message {message['id']}: {e}")
+
     async with AsyncSessionLocal() as db:
         await db.execute(text("""
-            INSERT INTO influence_sources (id, name, description, category, source_type, subtype, file_url, file_name, check_frequency, active, created_by_email, created_at, updated_at)
-            VALUES (CAST(:id AS UUID), :name, :description, 'Other', 'file', 'email', :file_url, :file_name, 'manual', TRUE, :created_by_email, NOW(), NOW())
+            INSERT INTO influence_pending_emails (id, mailbox_address, message_id, subject, sender_email, sender_name,
+                received_at, body_content, body_content_type, attachments, status, created_at)
+            VALUES (CAST(:id AS UUID), :mailbox, :message_id, :subject, :sender_email, :sender_name,
+                :received_at, :body_content, :body_content_type, CAST(:attachments AS JSONB), 'pending', NOW())
         """), {
-            "id": source_id, "name": subject[:255], "description": f"Received {received} via {mailbox_address}",
-            "file_url": file_ref, "file_name": f"{_safe_filename(subject)}.txt", "created_by_email": mailbox_address,
+            "id": str(uuid.uuid4()), "mailbox": mailbox_address, "message_id": message["id"], "subject": subject[:500],
+            "sender_email": sender_field.get("address", ""), "sender_name": sender_field.get("name", ""),
+            "received_at": _parse_graph_datetime(received) if received else None,
+            "body_content": body.get("content", ""), "body_content_type": body.get("contentType", "text"),
+            "attachments": json.dumps(attachments),
         })
         await db.commit()
-
-    if not message.get("hasAttachments"):
-        return
-    try:
-        att_resp = await client.get(f"{GRAPH_BASE}/users/{mailbox_address}/messages/{message['id']}/attachments", headers=headers)
-        att_resp.raise_for_status()
-        attachments = att_resp.json().get("value", [])
-    except Exception as e:
-        print(f"[SocialInfluence] failed to fetch attachments for message {message['id']}: {e}")
-        return
-
-    for att in attachments:
-        if att.get("isInline") or att.get("@odata.type") != "#microsoft.graph.fileAttachment":
-            continue  # skip embedded signature images etc. — only real file attachments become sources
-        att_id = str(uuid.uuid4())
-        att_name = att.get("name") or "attachment"
-        content_bytes = base64.b64decode(att["contentBytes"])
-        att_key = f"marketing/social-influence/{att_id}/{_safe_filename(att_name)}"
-        att_ref = await upload_to_s3(att_key, content_bytes, att.get("contentType") or "application/octet-stream")
-        async with AsyncSessionLocal() as db:
-            await db.execute(text("""
-                INSERT INTO influence_sources (id, name, description, category, source_type, subtype, file_url, file_name, check_frequency, active, created_by_email, created_at, updated_at)
-                VALUES (CAST(:id AS UUID), :name, :description, 'Other', 'file', 'email', :file_url, :file_name, 'manual', TRUE, :created_by_email, NOW(), NOW())
-            """), {
-                "id": att_id, "name": f"{att_name} ({subject[:200]})", "description": f"Attachment from \"{subject}\" received {received} via {mailbox_address}",
-                "file_url": att_ref, "file_name": att_name, "created_by_email": mailbox_address,
-            })
-            await db.commit()
 
 
 async def mailbox_sync_loop():
@@ -497,11 +491,10 @@ async def mailbox_sync_loop():
 
                         latest = since
                         for m in messages:
-                            await _ingest_message(client, headers, mailbox["mailbox_address"], m)
+                            await _stage_pending_email(client, headers, mailbox["mailbox_address"], m)
                             received = m.get("receivedDateTime")
                             if received:
-                                received_dt = datetime.strptime(received.split(".")[0].rstrip("Z"), "%Y-%m-%dT%H:%M:%S")
-                                latest = max(latest, received_dt)
+                                latest = max(latest, _parse_graph_datetime(received))
 
                     async with AsyncSessionLocal() as db:
                         await db.execute(text("""
@@ -517,6 +510,124 @@ async def mailbox_sync_loop():
             except Exception:
                 pass
         await asyncio.sleep(MAILBOX_SYNC_INTERVAL)
+
+
+def _normalize_pending(d: dict) -> dict:
+    # asyncpg can hand back a JSONB column as a raw string rather than an already-decoded
+    # list/dict for a plain text() query (same gotcha settings.py works around for
+    # legal_entities) — decode defensively rather than assume either shape.
+    attachments = d.get("attachments")
+    if isinstance(attachments, str):
+        try:
+            attachments = json.loads(attachments)
+        except (TypeError, ValueError):
+            attachments = []
+    d["attachments"] = attachments or []
+    return d
+
+
+@router.get("/social-influence-mailbox/pending")
+async def list_pending_emails(db: AsyncSession = Depends(get_db)):
+    r = await db.execute(text("""
+        SELECT * FROM influence_pending_emails WHERE status = 'pending' ORDER BY received_at DESC NULLS LAST, created_at DESC
+    """))
+    return {"pending": [_normalize_pending(_row(dict(row._mapping))) for row in r.fetchall()]}
+
+
+async def _get_pending_email(db: AsyncSession, pending_id: str) -> dict | None:
+    r = await db.execute(text("SELECT * FROM influence_pending_emails WHERE id = CAST(:id AS UUID)"), {"id": pending_id})
+    row = r.fetchone()
+    return _normalize_pending(_row(dict(row._mapping))) if row else None
+
+
+@router.post("/social-influence-mailbox/pending/{pending_id}/reject")
+async def reject_pending_email(pending_id: str, data: dict, db: AsyncSession = Depends(get_db)):
+    pending = await _get_pending_email(db, pending_id)
+    if not pending:
+        raise HTTPException(status_code=404, detail="Pending email not found")
+    if pending["status"] != "pending":
+        raise HTTPException(status_code=400, detail=f"Already {pending['status']}")
+    await db.execute(text("""
+        UPDATE influence_pending_emails SET status = 'rejected', reviewed_by_email = :email, reviewed_at = NOW() WHERE id = CAST(:id AS UUID)
+    """), {"id": pending_id, "email": data.get("reviewed_by_email", "")})
+    await db.commit()
+    return {"status": "ok"}
+
+
+@router.post("/social-influence-mailbox/pending/{pending_id}/accept")
+async def accept_pending_email(pending_id: str, data: dict, db: AsyncSession = Depends(get_db)):
+    """Only on Accept do we touch S3/influence_sources — attachments are re-fetched fresh from
+    Graph now (staging only kept metadata) so a rejected/never-reviewed email never costs a
+    single byte of attachment storage.
+
+    All the slow work (Graph fetches, S3 uploads) runs with NO database session open, then one
+    fresh short session does every INSERT/UPDATE at the end — same discipline as _check_source,
+    for the same reason: holding a session open across slow external calls can block an
+    unrelated ALTER TABLE (e.g. the next deploy's migration) long enough to fail its health
+    check, which happened once already."""
+    pending = await _get_pending_email(db, pending_id)
+    if not pending:
+        raise HTTPException(status_code=404, detail="Pending email not found")
+    if pending["status"] != "pending":
+        raise HTTPException(status_code=400, detail=f"Already {pending['status']}")
+
+    mailbox = await _get_mailbox(db)
+    if not mailbox:
+        raise HTTPException(status_code=400, detail="Mailings Inbox is not connected — cannot fetch attachments.")
+    access_token = await _get_valid_mailbox_token(db, mailbox)
+    # Done with the request-scoped session before the slow phase below — FastAPI's get_db()
+    # dependency only closes it after this function returns, so without this commit its
+    # transaction (from the SELECTs above) would otherwise stay open the whole time.
+    await db.commit()
+    headers = {"Authorization": f"Bearer {access_token}"}
+
+    subject = pending["subject"] or "(no subject)"
+    text_blob = (
+        f"Subject: {subject}\nFrom: {pending['sender_name']} <{pending['sender_email']}>\n"
+        f"Received: {pending['received_at']}\n\n{pending['body_content'] or ''}"
+    )
+    source_id = str(uuid.uuid4())
+    key = f"marketing/social-influence/{source_id}/{_safe_filename(subject)}.txt"
+    file_ref = await upload_to_s3(key, text_blob.encode("utf-8"), "text/plain")
+    sources_to_insert = [{
+        "id": source_id, "name": subject[:255], "description": f"Received {pending['received_at']} via {pending['mailbox_address']}",
+        "file_url": file_ref, "file_name": f"{_safe_filename(subject)}.txt",
+    }]
+
+    async with httpx.AsyncClient(timeout=30) as client:
+        for att in pending["attachments"]:
+            try:
+                att_resp = await client.get(
+                    f"{GRAPH_BASE}/users/{pending['mailbox_address']}/messages/{pending['message_id']}/attachments/{att['id']}",
+                    headers=headers,
+                )
+                att_resp.raise_for_status()
+                content_bytes = base64.b64decode(att_resp.json()["contentBytes"])
+            except Exception as e:
+                print(f"[SocialInfluence] failed to fetch attachment {att.get('id')} for pending email {pending_id}: {e}")
+                continue
+            att_id = str(uuid.uuid4())
+            att_name = att.get("name") or "attachment"
+            att_key = f"marketing/social-influence/{att_id}/{_safe_filename(att_name)}"
+            att_ref = await upload_to_s3(att_key, content_bytes, att.get("content_type") or "application/octet-stream")
+            sources_to_insert.append({
+                "id": att_id, "name": f"{att_name} ({subject[:200]})",
+                "description": f"Attachment from \"{subject}\" received {pending['received_at']} via {pending['mailbox_address']}",
+                "file_url": att_ref, "file_name": att_name,
+            })
+
+    from app.database import AsyncSessionLocal
+    async with AsyncSessionLocal() as db2:
+        for s in sources_to_insert:
+            await db2.execute(text("""
+                INSERT INTO influence_sources (id, name, description, category, source_type, subtype, file_url, file_name, check_frequency, active, created_by_email, created_at, updated_at)
+                VALUES (CAST(:id AS UUID), :name, :description, 'Other', 'file', 'email', :file_url, :file_name, 'manual', TRUE, :created_by_email, NOW(), NOW())
+            """), {**s, "created_by_email": pending["mailbox_address"]})
+        await db2.execute(text("""
+            UPDATE influence_pending_emails SET status = 'accepted', reviewed_by_email = :email, reviewed_at = NOW() WHERE id = CAST(:id AS UUID)
+        """), {"id": pending_id, "email": data.get("reviewed_by_email", "")})
+        await db2.commit()
+    return {"status": "ok", "source_id": source_id}
 
 
 # ─── Content generation ───────────────────────────────────────────────────────────

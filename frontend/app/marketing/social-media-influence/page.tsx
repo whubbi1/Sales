@@ -75,11 +75,12 @@ function SocialMediaInfluenceContent() {
         </div>
       )}
 
-      <TabNav tabs={['Sources', 'Compose', 'Posts']} active={tab} onChange={setTab} />
+      <TabNav tabs={['Sources', 'Compose', 'Posts', 'Review']} active={tab} onChange={setTab} />
 
       {tab === 'Sources' && <SourcesTab canEdit={canEdit} />}
       {tab === 'Compose' && <ComposeTab canEdit={canEdit} />}
       {tab === 'Posts' && <PostsTab canEdit={canEdit} />}
+      {tab === 'Review' && <ReviewTab canEdit={canEdit} />}
     </div>
   )
 }
@@ -589,6 +590,147 @@ function PostRow({ post, first, canEdit, onChanged }: { post: any; first: boolea
                 <button onClick={remove} style={{ ...btn, padding: '6px 12px', background: '#FEF2F2', color: '#EF4444' }}>Delete</button>
               </>
             )}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ─── Review ───────────────────────────────────────────────────────────────────
+// Anti-spam gate: incoming mail lands here first — nothing reaches the Sources list or the
+// LLM until a person Accepts it. Rejecting just discards it; nothing is ever imported.
+function ReviewTab({ canEdit }: { canEdit: boolean }) {
+  const [pending, setPending] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+  const [viewing, setViewing] = useState<any | null>(null)
+  const [actingId, setActingId] = useState<string | null>(null)
+
+  const load = () => {
+    setLoading(true)
+    socialInfluenceAPI.listPendingEmails().then(d => setPending(d.pending || [])).finally(() => setLoading(false))
+  }
+  useEffect(load, [])
+
+  const accept = async (id: string) => {
+    const user = getStoredUser()
+    setActingId(id)
+    try {
+      await socialInfluenceAPI.acceptPendingEmail(id, user?.email || '')
+      setViewing(null)
+      load()
+    } catch (e: any) {
+      alert(e.message || 'Failed to accept')
+    } finally {
+      setActingId(null)
+    }
+  }
+
+  const reject = async (id: string) => {
+    if (!confirm('Reject this email? It will be discarded and never imported.')) return
+    const user = getStoredUser()
+    setActingId(id)
+    try {
+      await socialInfluenceAPI.rejectPendingEmail(id, user?.email || '')
+      setViewing(null)
+      load()
+    } catch (e: any) {
+      alert(e.message || 'Failed to reject')
+    } finally {
+      setActingId(null)
+    }
+  }
+
+  if (loading) return <div style={{ textAlign: 'center', padding: '48px', color: '#45B6E4' }}>Loading…</div>
+
+  return (
+    <div style={card}>
+      <div style={lbl}>Pending Review ({pending.length})</div>
+      <p style={{ fontSize: '11px', color: '#94A3B8', margin: '4px 0 14px' }}>
+        Mail received in the Mailings Inbox waits here until accepted — nothing is imported as a source until you approve it.
+      </p>
+      {pending.length === 0 ? (
+        <p style={{ fontSize: '12px', color: '#94A3B8', margin: 0 }}>Nothing waiting for review.</p>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+          {pending.map((p: any) => (
+            <div key={p.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px', padding: '10px 12px', border: '1px solid #EDF2F7', borderRadius: '8px' }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: '12px', fontWeight: '700', color: '#156082', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const }}>{p.subject || '(no subject)'}</div>
+                <div style={{ fontSize: '11px', color: '#94A3B8' }}>
+                  {p.sender_name || p.sender_email}{p.sender_name && p.sender_email ? ` <${p.sender_email}>` : ''} · {fmtDate(p.received_at)}
+                  {(p.attachments || []).length > 0 && ` · ${p.attachments.length} attachment${p.attachments.length !== 1 ? 's' : ''}`}
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: '8px', flexShrink: 0 }}>
+                <button onClick={() => setViewing(p)} style={{ ...btn, padding: '6px 12px', background: '#F1F5F9', color: '#64748B' }}>View</button>
+                {canEdit && (
+                  <>
+                    <button onClick={() => accept(p.id)} disabled={actingId === p.id} style={{ ...btn, padding: '6px 12px', background: '#ECFDF5', color: '#059669' }}>
+                      {actingId === p.id ? '…' : 'Accept'}
+                    </button>
+                    <button onClick={() => reject(p.id)} disabled={actingId === p.id} style={{ ...btn, padding: '6px 12px', background: '#FEF2F2', color: '#EF4444' }}>Reject</button>
+                  </>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {viewing && (
+        <EmailPreviewModal
+          email={viewing}
+          canEdit={canEdit}
+          acting={actingId === viewing.id}
+          onAccept={() => accept(viewing.id)}
+          onReject={() => reject(viewing.id)}
+          onClose={() => setViewing(null)}
+        />
+      )}
+    </div>
+  )
+}
+
+function EmailPreviewModal({ email, canEdit, acting, onAccept, onReject, onClose }: {
+  email: any; canEdit: boolean; acting: boolean; onAccept: () => void; onReject: () => void; onClose: () => void
+}) {
+  const isHtml = (email.body_content_type || '').toLowerCase() === 'html'
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+      onClick={e => { if (e.target === e.currentTarget) onClose() }}>
+      <div style={{ background: 'white', borderRadius: '14px', width: '640px', maxWidth: '92vw', maxHeight: '88vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
+        <div style={{ padding: '18px 24px', borderBottom: '1px solid #EDF2F7', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexShrink: 0 }}>
+          <div>
+            <h2 style={{ fontSize: '15px', fontWeight: '800', color: '#156082', margin: '0 0 4px' }}>{email.subject || '(no subject)'}</h2>
+            <div style={{ fontSize: '11px', color: '#94A3B8' }}>
+              From {email.sender_name || email.sender_email}{email.sender_name && email.sender_email ? ` <${email.sender_email}>` : ''} · {fmtDate(email.received_at)}
+            </div>
+          </div>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: '20px', cursor: 'pointer', color: '#94A3B8' }}>×</button>
+        </div>
+        <div style={{ padding: '16px 24px', overflowY: 'auto', flex: 1 }}>
+          {(email.attachments || []).length > 0 && (
+            <div style={{ fontSize: '11px', color: '#64748B', background: '#F8FAFC', padding: '8px 12px', borderRadius: '8px', marginBottom: '12px' }}>
+              📎 {email.attachments.map((a: any) => a.name).join(', ')}
+            </div>
+          )}
+          {isHtml ? (
+            // Sandboxed with no allow-scripts/allow-same-origin — renders the visual layout
+            // but any embedded <script> or event-handler JS in the email simply cannot run.
+            <iframe sandbox="" srcDoc={email.body_content || ''} title="Email preview" style={{ width: '100%', height: '360px', border: '1px solid #E2E8F0', borderRadius: '8px', background: 'white' }} />
+          ) : (
+            <pre style={{ fontSize: '12px', color: '#3F3F3F', whiteSpace: 'pre-wrap' as const, wordBreak: 'break-word' as const, margin: 0, fontFamily: 'inherit' }}>
+              {email.body_content || '(empty)'}
+            </pre>
+          )}
+        </div>
+        {canEdit && (
+          <div style={{ padding: '14px 24px', borderTop: '1px solid #EDF2F7', display: 'flex', gap: '10px', justifyContent: 'flex-end', flexShrink: 0 }}>
+            <button onClick={onReject} disabled={acting} style={{ ...btn, background: '#FEF2F2', color: '#EF4444' }}>Reject</button>
+            <button onClick={onAccept} disabled={acting} style={{ ...btn, background: acting ? '#94A3B8' : '#156082', color: 'white' }}>
+              {acting ? 'Accepting…' : 'Accept & Import'}
+            </button>
           </div>
         )}
       </div>

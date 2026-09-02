@@ -213,6 +213,12 @@ export const socialInfluenceAPI = {
   getMailboxStatus: () => fetchAPI(`/marketing/social-influence-mailbox/status`),
   connectMailbox:   (mailbox: string, email: string) => fetchAPI(`/marketing/social-influence-mailbox/connect${qs({ mailbox, email })}`),
   disconnectMailbox: () => fetchAPI(`/marketing/social-influence-mailbox`, { method: 'DELETE' }),
+
+  listPendingEmails: () => fetchAPI(`/marketing/social-influence-mailbox/pending`),
+  acceptPendingEmail: (id: string, reviewedByEmail: string) =>
+    fetchAPI(`/marketing/social-influence-mailbox/pending/${id}/accept`, { method: 'POST', body: JSON.stringify({ reviewed_by_email: reviewedByEmail }) }),
+  rejectPendingEmail: (id: string, reviewedByEmail: string) =>
+    fetchAPI(`/marketing/social-influence-mailbox/pending/${id}/reject`, { method: 'POST', body: JSON.stringify({ reviewed_by_email: reviewedByEmail }) }),
 }
 
 // ─── Contacts ─────────────────────────────────────────────────────────────────
