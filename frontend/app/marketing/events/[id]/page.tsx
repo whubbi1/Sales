@@ -429,6 +429,39 @@ function EventDetailContent() {
       </div>
 
       <div style={card}>
+        <div style={lbl}>Budget</div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '14px', marginTop: '10px' }}>
+          <div>
+            <div style={lbl}>Estimated Budget</div>
+            <EditableCell display={event.estimated_budget != null ? `€${Number(event.estimated_budget).toLocaleString()}` : null}
+              editing={editingField === 'estimated_budget'} canEdit={canEdit} onStartEdit={() => setEditingField('estimated_budget')}>
+              <input autoFocus type="number" style={inp} defaultValue={event.estimated_budget ?? ''}
+                onBlur={e => updateField({ estimated_budget: e.target.value === '' ? null : Number(e.target.value) })}
+                onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }} />
+            </EditableCell>
+          </div>
+          <div>
+            <div style={lbl}>Approved Budget</div>
+            <EditableCell display={event.approved_budget != null ? `€${Number(event.approved_budget).toLocaleString()}` : null}
+              editing={editingField === 'approved_budget'} canEdit={canEdit} onStartEdit={() => setEditingField('approved_budget')}>
+              <input autoFocus type="number" style={inp} defaultValue={event.approved_budget ?? ''}
+                onBlur={e => updateField({ approved_budget: e.target.value === '' ? null : Number(e.target.value) })}
+                onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }} />
+            </EditableCell>
+          </div>
+          <div>
+            <div style={lbl}>Real Costs</div>
+            <EditableCell display={event.real_costs != null ? `€${Number(event.real_costs).toLocaleString()}` : null}
+              editing={editingField === 'real_costs'} canEdit={canEdit} onStartEdit={() => setEditingField('real_costs')}>
+              <input autoFocus type="number" style={inp} defaultValue={event.real_costs ?? ''}
+                onBlur={e => updateField({ real_costs: e.target.value === '' ? null : Number(e.target.value) })}
+                onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }} />
+            </EditableCell>
+          </div>
+        </div>
+      </div>
+
+      <div style={card}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
           <div style={lbl}>Contributors ({(event.contributors || []).length})</div>
         </div>

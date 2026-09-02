@@ -1983,6 +1983,11 @@ async def startup():
                 "ALTER TABLE influence_sources ADD COLUMN IF NOT EXISTS description TEXT",
                 "ALTER TABLE influence_sources ADD COLUMN IF NOT EXISTS language VARCHAR(50)",
                 "ALTER TABLE influence_sources ADD COLUMN IF NOT EXISTS category VARCHAR(30)",
+
+                # Marketing Events — Budget block (estimated/approved budget, real costs).
+                "ALTER TABLE marketing_events ADD COLUMN IF NOT EXISTS estimated_budget NUMERIC(12,2)",
+                "ALTER TABLE marketing_events ADD COLUMN IF NOT EXISTS approved_budget NUMERIC(12,2)",
+                "ALTER TABLE marketing_events ADD COLUMN IF NOT EXISTS real_costs NUMERIC(12,2)",
             ]
             for sql in sqls:
                 try:

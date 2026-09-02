@@ -212,6 +212,9 @@ async def update_event(event_id: str, data: dict, db: AsyncSession = Depends(get
             location = COALESCE(:location, location),
             owner_email = COALESCE(:owner_email, owner_email),
             owner_name = COALESCE(:owner_name, owner_name),
+            estimated_budget = COALESCE(:estimated_budget, estimated_budget),
+            approved_budget = COALESCE(:approved_budget, approved_budget),
+            real_costs = COALESCE(:real_costs, real_costs),
             updated_at = NOW()
         WHERE id = CAST(:id AS UUID)
     """), {
@@ -219,6 +222,8 @@ async def update_event(event_id: str, data: dict, db: AsyncSession = Depends(get
         "end_date": data.get("end_date", ""),
         "description": data.get("description"), "event_type": event_type, "status": status, "location": data.get("location"),
         "owner_email": data.get("owner_email"), "owner_name": data.get("owner_name"),
+        "estimated_budget": data.get("estimated_budget"), "approved_budget": data.get("approved_budget"),
+        "real_costs": data.get("real_costs"),
     })
     await db.commit()
     return await _get_event(db, event_id)
