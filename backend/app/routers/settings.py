@@ -108,7 +108,7 @@ async def get_whubbi_group_members() -> list | None:
             return None
         members = []
         url = f"https://graph.microsoft.com/v1.0/groups/{group_id}/transitiveMembers/microsoft.graph.user"
-        params = {"$select": "id,displayName,givenName,surname,mail,jobTitle,department", "$top": 999}
+        params = {"$select": "id,displayName,givenName,surname,mail,userPrincipalName,jobTitle,department", "$top": 999}
         async with httpx.AsyncClient(timeout=20) as client:
             while url:
                 resp = await client.get(url, params=params, headers={"Authorization": f"Bearer {token}"})
@@ -131,7 +131,7 @@ async def sync_user_from_ms(email: str, db: AsyncSession) -> dict:
         token = await get_ms_token()
 
         # Get user info
-        user_data = await graph_get(f"/users/{email}?$select=id,displayName,givenName,surname,jobTitle,department,mobilePhone,businessPhones,mail", token)
+        user_data = await graph_get(f"/users/{email}?$select=id,displayName,givenName,surname,jobTitle,department,mobilePhone,businessPhones,mail,userPrincipalName", token)
         if not user_data:
             return {"error": f"User {email} not found in Microsoft"}
 
@@ -167,7 +167,10 @@ async def sync_user_from_ms(email: str, db: AsyncSession) -> dict:
         roles = [g.get("displayName", "") for g in groups_data.get("value", []) if g.get("@odata.type") == "#microsoft.graph.directoryRole"]
 
         profile = {
-            "email": email,
+            # Prefer Graph's own mail/UPN over the identifier we were called with (same
+            # mail-can-be-empty fallback as get_whubbi_group_members above), so a stored
+            # profile stays consistent with what the live group listing shows for this person.
+            "email": user_data.get("mail") or user_data.get("userPrincipalName") or email,
             "first_name": user_data.get("givenName", ""),
             "last_name": user_data.get("surname", ""),
             "display_name": user_data.get("displayName", ""),
@@ -367,17 +370,23 @@ async def list_users(db: AsyncSession = Depends(get_db)):
     locations = await _main_location_by_email(db)
     members = await get_whubbi_group_members()
     if members is not None:
+        # Fall back to userPrincipalName when `mail` is unset — Azure AD only auto-populates
+        # `mail` for mailbox-enabled (Exchange-licensed) accounts, so a user with e.g. only
+        # Intune/Power Platform licenses can have a real, working UPN but no `mail` at all,
+        # and would otherwise be silently dropped here despite being a real group member.
+        def _email(u: dict) -> str:
+            return u.get("mail") or u.get("userPrincipalName") or ""
         users = [
             {
-                "email": u.get("mail", ""),
+                "email": _email(u),
                 "first_name": u.get("givenName", ""),
                 "last_name": u.get("surname", ""),
                 "display_name": u.get("displayName", ""),
                 "job_title": u.get("jobTitle", ""),
                 "department": u.get("department", ""),
-                **locations.get(u.get("mail", ""), {"main_location_id": None, "main_location_name": "All", "is_excluded": False}),
+                **locations.get(_email(u), {"main_location_id": None, "main_location_name": "All", "is_excluded": False}),
             }
-            for u in members if u.get("mail")
+            for u in members if _email(u)
         ]
         # Sort by first_name/last_name — every "select employee" dropdown across the app
         # displays "First Last", so sorting by last_name first left them looking unsorted.
