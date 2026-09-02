@@ -101,6 +101,17 @@ function SourcesTab({ canEdit }: { canEdit: boolean }) {
   const [checking, setChecking] = useState<string | null>(null)
   const [expanded, setExpanded] = useState<string | null>(null)
   const [updates, setUpdates] = useState<any[]>([])
+  const [openGroups, setOpenGroups] = useState<Set<string>>(new Set())
+  const [groupPage, setGroupPage] = useState<Record<string, number>>({})
+  const GROUP_PAGE_SIZE = 10
+
+  const toggleGroup = (key: string) => {
+    setOpenGroups(prev => {
+      const next = new Set(prev)
+      if (next.has(key)) next.delete(key); else next.add(key)
+      return next
+    })
+  }
 
   const load = () => {
     setLoading(true)
@@ -153,15 +164,25 @@ function SourcesTab({ canEdit }: { canEdit: boolean }) {
               ;(grouped[key] = grouped[key] || []).push(s)
             })
             const groupEntries = SUBTYPE_ORDER.map(key => [key, grouped[key] || []] as [string, any[]]).filter(([, items]) => items.length > 0)
-            return groupEntries.map(([key, items], gi) => (
+            return groupEntries.map(([key, items], gi) => {
+              const isOpen = openGroups.has(key)
+              const page = groupPage[key] || 0
+              const totalPages = Math.ceil(items.length / GROUP_PAGE_SIZE)
+              const pageItems = items.slice(page * GROUP_PAGE_SIZE, page * GROUP_PAGE_SIZE + GROUP_PAGE_SIZE)
+              return (
               <div key={key} style={{ marginTop: gi === 0 ? 0 : '20px' }}>
-                <div style={{
-                  fontSize: '11px', fontWeight: '700', color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.03em',
-                  padding: gi === 0 ? '0 0 8px' : '16px 0 8px', borderTop: gi === 0 ? 'none' : '1px solid #F1F5F9',
-                }}>
+                <div
+                  onClick={() => toggleGroup(key)}
+                  style={{
+                    fontSize: '11px', fontWeight: '700', color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.03em',
+                    padding: gi === 0 ? '0 0 8px' : '16px 0 8px', borderTop: gi === 0 ? 'none' : '1px solid #F1F5F9',
+                    cursor: 'pointer', userSelect: 'none' as const, display: 'flex', alignItems: 'center', gap: '6px',
+                  }}
+                >
+                  <span style={{ fontSize: '9px', display: 'inline-block', transform: isOpen ? 'rotate(90deg)' : 'none', transition: 'transform 0.1s' }}>▶</span>
                   {SUBTYPE_ICON[key]} {SUBTYPE_LABEL[key] || key} ({items.length})
                 </div>
-                {items.map((s, i) => (
+                {isOpen && pageItems.map((s, i) => (
                   <div key={s.id} style={{ borderTop: i === 0 ? 'none' : '1px solid #F1F5F9', padding: '14px 0' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <div>
@@ -216,8 +237,24 @@ function SourcesTab({ canEdit }: { canEdit: boolean }) {
                     )}
                   </div>
                 ))}
+                {isOpen && totalPages > 1 && (
+                  <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '12px', padding: '10px 0 2px' }}>
+                    <button
+                      onClick={() => setGroupPage(p => ({ ...p, [key]: Math.max(0, page - 1) }))}
+                      disabled={page === 0}
+                      style={{ ...btn, padding: '4px 12px', background: '#F1F5F9', color: '#64748B' }}
+                    >Previous</button>
+                    <span style={{ fontSize: '11px', color: '#94A3B8' }}>Page {page + 1} of {totalPages}</span>
+                    <button
+                      onClick={() => setGroupPage(p => ({ ...p, [key]: Math.min(totalPages - 1, page + 1) }))}
+                      disabled={page >= totalPages - 1}
+                      style={{ ...btn, padding: '4px 12px', background: '#F1F5F9', color: '#64748B' }}
+                    >Next</button>
+                  </div>
+                )}
               </div>
-            ))
+              )
+            })
           })()}
         </div>
       )}
