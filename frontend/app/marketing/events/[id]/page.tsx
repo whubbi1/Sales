@@ -196,6 +196,7 @@ function EventDetailContent() {
   const [deleteConfirm, setDeleteConfirm] = useState('')
   const [deleting, setDeleting] = useState(false)
   const [showAddCost, setShowAddCost] = useState(false)
+  const [costInvoiceNumber, setCostInvoiceNumber] = useState('')
   const [costDate, setCostDate] = useState('')
   const [costSupplier, setCostSupplier] = useState('')
   const [costAmount, setCostAmount] = useState('')
@@ -284,10 +285,11 @@ function EventDetailContent() {
     setAddingCost(true)
     try {
       const { item, real_costs } = await marketingAPI.addEventCost(event.id, {
-        purchase_date: costDate || null, supplier: costSupplier.trim() || null, amount: Number(costAmount), currency: costCurrency,
+        invoice_number: costInvoiceNumber.trim() || null, purchase_date: costDate || null,
+        supplier: costSupplier.trim() || null, amount: Number(costAmount), currency: costCurrency,
       })
       setEvent((prev: any) => ({ ...prev, costs: [item, ...(prev.costs || [])], real_costs }))
-      setCostDate(''); setCostSupplier(''); setCostAmount(''); setCostCurrency('EUR'); setShowAddCost(false)
+      setCostInvoiceNumber(''); setCostDate(''); setCostSupplier(''); setCostAmount(''); setCostCurrency('EUR'); setShowAddCost(false)
     } catch (e: any) { setError(e.message) }
     finally { setAddingCost(false) }
   }
@@ -492,8 +494,10 @@ function EventDetailContent() {
               {(event.costs || []).map((c: any) => (
                 <div key={c.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', border: '1px solid #EDF2F7', borderRadius: '8px' }}>
                   <span style={{ fontSize: '12px', color: '#3F3F3F' }}>
-                    <b style={{ color: '#156082' }}>{c.currency} {Number(c.amount).toLocaleString()}</b>
-                    {c.supplier ? ` · ${c.supplier}` : ''}{c.purchase_date ? ` · ${fmtDate(c.purchase_date)}` : ''}
+                    <b style={{ color: '#156082' }}>{c.invoice_number || 'No invoice #'}</b>
+                    {c.purchase_date ? ` · ${fmtDate(c.purchase_date)}` : ''}
+                    {c.supplier ? ` · ${c.supplier}` : ''}
+                    {` · ${c.currency} ${Number(c.amount).toLocaleString()}`}
                   </span>
                   {canEdit && <button onClick={() => removeCost(c.id)} style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#94A3B8', fontSize: '14px', padding: 0, lineHeight: 1 }}>×</button>}
                 </div>
@@ -502,6 +506,10 @@ function EventDetailContent() {
           )}
           {showAddCost && (
             <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' as const, alignItems: 'flex-end' }}>
+              <div style={{ width: '130px' }}>
+                <div style={lbl}>Invoice Number</div>
+                <input style={{ ...inp, width: '100%', boxSizing: 'border-box' as const }} placeholder="INV-0001" value={costInvoiceNumber} onChange={e => setCostInvoiceNumber(e.target.value)} />
+              </div>
               <div>
                 <div style={lbl}>Purchase Date</div>
                 <input type="date" style={inp} value={costDate} onChange={e => setCostDate(e.target.value)} />
@@ -527,7 +535,7 @@ function EventDetailContent() {
               <button onClick={addCost} disabled={addingCost || !costAmount} style={{ ...btn, background: addingCost ? '#94A3B8' : '#156082', color: 'white' }}>
                 {addingCost ? 'Adding…' : 'Add'}
               </button>
-              <button onClick={() => { setShowAddCost(false); setCostDate(''); setCostSupplier(''); setCostAmount(''); setCostCurrency('EUR') }} style={{ ...btn, background: '#F1F5F9', color: '#64748B' }}>Cancel</button>
+              <button onClick={() => { setShowAddCost(false); setCostInvoiceNumber(''); setCostDate(''); setCostSupplier(''); setCostAmount(''); setCostCurrency('EUR') }} style={{ ...btn, background: '#F1F5F9', color: '#64748B' }}>Cancel</button>
             </div>
           )}
         </div>

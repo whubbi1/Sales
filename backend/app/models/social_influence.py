@@ -35,6 +35,22 @@ class InfluenceSourceUpdate(Base):
     summary     = Column(Text)
 
 
+class SocialInfluenceMailbox(Base):
+    """Singleton — one shared mailbox whose incoming mail is auto-ingested as sources.
+    Independent of outlook_connections (which is per-WHUBBI-user for the general Outlook
+    integration) — this is a dedicated delegated-OAuth connection scoped just to this feature."""
+    __tablename__ = "social_influence_mailbox"
+    id                       = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    mailbox_address          = Column(String(255), nullable=False)
+    access_token_encrypted   = Column(Text)
+    refresh_token_encrypted  = Column(Text)
+    token_expires_at         = Column(DateTime)
+    last_synced_at           = Column(DateTime)
+    last_error               = Column(String(500))
+    connected_by_email       = Column(String(255))
+    connected_at             = Column(DateTime, default=datetime.utcnow)
+
+
 class SocialPost(Base):
     __tablename__ = "social_posts"
     id                = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)

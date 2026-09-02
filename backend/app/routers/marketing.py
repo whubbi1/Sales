@@ -304,10 +304,11 @@ async def add_event_cost(event_id: str, data: dict, db: AsyncSession = Depends(g
         raise HTTPException(status_code=400, detail=f"currency must be one of {sorted(COST_CURRENCIES)}")
     cost_id = str(uuid.uuid4())
     await db.execute(text("""
-        INSERT INTO marketing_event_costs (id, event_id, purchase_date, supplier, amount, currency, created_at)
-        VALUES (CAST(:id AS UUID), CAST(:eid AS UUID), CAST(NULLIF(:purchase_date,'') AS DATE), :supplier, :amount, :currency, NOW())
+        INSERT INTO marketing_event_costs (id, event_id, invoice_number, purchase_date, supplier, amount, currency, created_at)
+        VALUES (CAST(:id AS UUID), CAST(:eid AS UUID), :invoice_number, CAST(NULLIF(:purchase_date,'') AS DATE), :supplier, :amount, :currency, NOW())
     """), {
-        "id": cost_id, "eid": event_id, "purchase_date": data.get("purchase_date") or "",
+        "id": cost_id, "eid": event_id, "invoice_number": data.get("invoice_number") or None,
+        "purchase_date": data.get("purchase_date") or "",
         "supplier": data.get("supplier") or "", "amount": data["amount"], "currency": currency,
     })
     real_costs = await _recompute_real_costs(db, event_id)

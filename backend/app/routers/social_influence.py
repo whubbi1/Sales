@@ -26,18 +26,33 @@ from sqlalchemy import text
 from app.database import get_db
 from app.routers.hr import upload_to_s3, s3_ref_to_presigned
 from app.routers.companies import claude_web_search
+from app.routers.outlook import FRONTEND_BASE_URL
+from app.services.token_crypto import encrypt, decrypt, encrypt_state, decrypt_state
 
 router = APIRouter()
 
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 GENERATION_MODEL = "claude-sonnet-5"
 
-SUBTYPES = {"website", "blog", "linkedin", "study", "other"}  # the "Source" field — applies to url and file sources alike
+SUBTYPES = {"website", "blog", "linkedin", "study", "email", "other"}  # the "Source" field — applies to url and file sources alike
 CATEGORIES = {"Competitor", "Solution Provider", "Partner", "Other"}
 CHECK_FREQUENCIES = {"manual", "daily", "weekly"}
 FREQUENCY_INTERVALS = {"daily": timedelta(days=1), "weekly": timedelta(days=7)}
 PLATFORMS = {"linkedin", "twitter"}
 POST_STATUSES = {"draft", "approved", "posted"}
+
+# ─── Mailings Inbox — dedicated shared mailbox, separate Azure AD OAuth app registration
+# usage from the general per-user Outlook integration (app/routers/outlook.py) ────────────
+MS_TENANT_ID     = os.getenv("MS_TENANT_ID", "")
+MS_CLIENT_ID     = os.getenv("MS_CLIENT_ID", "")
+MS_CLIENT_SECRET = os.getenv("MS_CLIENT_SECRET", "")
+GRAPH_BASE = "https://graph.microsoft.com/v1.0"
+MS_AUTHORIZE_URL = f"https://login.microsoftonline.com/{MS_TENANT_ID}/oauth2/v2.0/authorize"
+MS_TOKEN_URL = f"https://login.microsoftonline.com/{MS_TENANT_ID}/oauth2/v2.0/token"
+MAILBOX_REDIRECT_URI = os.getenv("SOCIAL_INFLUENCE_MAILBOX_REDIRECT_URI", "https://api.whubbi.wcomply.com/marketing/social-influence-mailbox/callback")
+MAILBOX_SCOPES = "openid profile Mail.Read.Shared offline_access User.Read"
+MAILBOX_SYNC_INTERVAL = 20 * 60       # wake ~every 20 minutes
+MAILBOX_SYNC_MAX_MESSAGES = 25        # bounded batch per cycle, same cost-cap philosophy as MAX_SOURCES_PER_CYCLE below
 
 
 def _row(d: dict) -> dict:
@@ -300,6 +315,208 @@ async def periodic_check_loop():
         except Exception as e:
             print(f"[SocialInfluence] periodic_check_loop error: {e}")
         await asyncio.sleep(CHECK_LOOP_INTERVAL)
+
+
+# ─── Mailings Inbox — a dedicated shared mailbox, connected via delegated OAuth (mirrors
+# app/routers/outlook.py's mechanics exactly), whose incoming mail is periodically pulled and
+# turned into ordinary file-type influence_sources (body text + real attachments) — nothing
+# downstream (generation, the Sources list, editing) needs to know these came from email. ────
+async def _get_mailbox(db: AsyncSession) -> dict | None:
+    r = await db.execute(text("SELECT * FROM social_influence_mailbox LIMIT 1"))
+    row = r.fetchone()
+    return _row(dict(row._mapping)) if row else None
+
+
+async def _store_mailbox_tokens(db: AsyncSession, mailbox_address: str, access_token: str, refresh_token: str, expires_in: int, connected_by_email: str):
+    expires_at = datetime.utcnow() + timedelta(seconds=expires_in)
+    await db.execute(text("DELETE FROM social_influence_mailbox"))
+    await db.execute(text("""
+        INSERT INTO social_influence_mailbox (id, mailbox_address, access_token_encrypted, refresh_token_encrypted, token_expires_at, connected_by_email, connected_at)
+        VALUES (CAST(:id AS UUID), :mailbox, :at, :rt, :exp, :email, NOW())
+    """), {
+        "id": str(uuid.uuid4()), "mailbox": mailbox_address, "at": encrypt(access_token),
+        "rt": encrypt(refresh_token), "exp": expires_at, "email": connected_by_email,
+    })
+    await db.commit()
+
+
+async def _get_valid_mailbox_token(db: AsyncSession, mailbox: dict) -> str:
+    if mailbox["token_expires_at"] and datetime.utcnow() < mailbox["token_expires_at"] - timedelta(minutes=2):
+        return decrypt(mailbox["access_token_encrypted"])
+    from app.services.outlook import get_access_token as ms_refresh_token
+    try:
+        refreshed = await ms_refresh_token(decrypt(mailbox["refresh_token_encrypted"]))
+    except httpx.HTTPStatusError:
+        raise HTTPException(status_code=401, detail="The Mailings Inbox connection has expired or was revoked — please reconnect it.")
+    await _store_mailbox_tokens(db, mailbox["mailbox_address"], refreshed["access_token"], refreshed["refresh_token"], refreshed["expires_in"], mailbox.get("connected_by_email", ""))
+    return refreshed["access_token"]
+
+
+@router.get("/social-influence-mailbox/status")
+async def mailbox_status(db: AsyncSession = Depends(get_db)):
+    mailbox = await _get_mailbox(db)
+    if not mailbox:
+        return {"connected": False}
+    return {
+        "connected": True, "mailbox_address": mailbox["mailbox_address"],
+        "last_synced_at": mailbox["last_synced_at"], "last_error": mailbox["last_error"],
+    }
+
+
+@router.get("/social-influence-mailbox/connect")
+async def mailbox_connect(mailbox: str, email: str):
+    if not MS_CLIENT_ID:
+        raise HTTPException(status_code=500, detail="MS_CLIENT_ID not configured")
+    state = encrypt_state({"mailbox": mailbox, "email": email, "nonce": str(uuid.uuid4())})
+    params = {
+        "client_id": MS_CLIENT_ID, "response_type": "code", "redirect_uri": MAILBOX_REDIRECT_URI,
+        "response_mode": "query", "scope": MAILBOX_SCOPES, "state": state,
+    }
+    return {"auth_url": f"{MS_AUTHORIZE_URL}?{httpx.QueryParams(params)}"}
+
+
+@router.get("/social-influence-mailbox/callback")
+async def mailbox_callback(code: str = None, state: str = None, error: str = None, db: AsyncSession = Depends(get_db)):
+    from fastapi.responses import RedirectResponse
+    return_url = f"{FRONTEND_BASE_URL}/marketing/social-media-influence?tab=Sources"
+    if error or not code or not state:
+        return RedirectResponse(f"{return_url}&mailbox_error={error or 'missing_code'}")
+    payload = decrypt_state(state)
+    if not payload or not payload.get("mailbox"):
+        return RedirectResponse(f"{return_url}&mailbox_error=invalid_state")
+
+    async with httpx.AsyncClient() as client:
+        token_resp = await client.post(MS_TOKEN_URL, data={
+            "grant_type": "authorization_code", "client_id": MS_CLIENT_ID, "client_secret": MS_CLIENT_SECRET,
+            "code": code, "redirect_uri": MAILBOX_REDIRECT_URI, "scope": MAILBOX_SCOPES,
+        })
+        if token_resp.status_code != 200:
+            return RedirectResponse(f"{return_url}&mailbox_error=token_exchange_failed")
+        tokens = token_resp.json()
+
+    await _store_mailbox_tokens(db, payload["mailbox"], tokens["access_token"], tokens["refresh_token"], tokens.get("expires_in", 3600), payload.get("email", ""))
+    return RedirectResponse(f"{return_url}&mailbox_connected=1")
+
+
+@router.delete("/social-influence-mailbox")
+async def mailbox_disconnect(db: AsyncSession = Depends(get_db)):
+    await db.execute(text("DELETE FROM social_influence_mailbox"))
+    await db.commit()
+    return {"status": "ok"}
+
+
+def _safe_filename(name: str) -> str:
+    return "".join(c if c.isalnum() or c in " ._-" else "_" for c in name)[:150] or "untitled"
+
+
+async def _ingest_message(client: httpx.AsyncClient, headers: dict, mailbox_address: str, message: dict):
+    """Turns one Graph message into a file-type influence_source (subject + sender + body),
+    plus one more per real (non-inline) attachment — same S3 upload path as a manual upload,
+    so nothing downstream needs to know these came from email. No DB session held open across
+    the Graph HTTP calls below — see _check_source's docstring for why that matters."""
+    from app.database import AsyncSessionLocal
+    subject = message.get("subject") or "(no subject)"
+    sender = ((message.get("from") or {}).get("emailAddress") or {}).get("address", "")
+    received = message.get("receivedDateTime", "")
+    body = (message.get("body") or {}).get("content", "") or ""
+    text_blob = f"Subject: {subject}\nFrom: {sender}\nReceived: {received}\n\n{body}"
+
+    source_id = str(uuid.uuid4())
+    key = f"marketing/social-influence/{source_id}/{_safe_filename(subject)}.txt"
+    file_ref = await upload_to_s3(key, text_blob.encode("utf-8"), "text/plain")
+    async with AsyncSessionLocal() as db:
+        await db.execute(text("""
+            INSERT INTO influence_sources (id, name, description, category, source_type, subtype, file_url, file_name, check_frequency, active, created_by_email, created_at, updated_at)
+            VALUES (CAST(:id AS UUID), :name, :description, 'Other', 'file', 'email', :file_url, :file_name, 'manual', TRUE, :created_by_email, NOW(), NOW())
+        """), {
+            "id": source_id, "name": subject[:255], "description": f"Received {received} via {mailbox_address}",
+            "file_url": file_ref, "file_name": f"{_safe_filename(subject)}.txt", "created_by_email": mailbox_address,
+        })
+        await db.commit()
+
+    if not message.get("hasAttachments"):
+        return
+    try:
+        att_resp = await client.get(f"{GRAPH_BASE}/users/{mailbox_address}/messages/{message['id']}/attachments", headers=headers)
+        att_resp.raise_for_status()
+        attachments = att_resp.json().get("value", [])
+    except Exception as e:
+        print(f"[SocialInfluence] failed to fetch attachments for message {message['id']}: {e}")
+        return
+
+    for att in attachments:
+        if att.get("isInline") or att.get("@odata.type") != "#microsoft.graph.fileAttachment":
+            continue  # skip embedded signature images etc. — only real file attachments become sources
+        att_id = str(uuid.uuid4())
+        att_name = att.get("name") or "attachment"
+        content_bytes = base64.b64decode(att["contentBytes"])
+        att_key = f"marketing/social-influence/{att_id}/{_safe_filename(att_name)}"
+        att_ref = await upload_to_s3(att_key, content_bytes, att.get("contentType") or "application/octet-stream")
+        async with AsyncSessionLocal() as db:
+            await db.execute(text("""
+                INSERT INTO influence_sources (id, name, description, category, source_type, subtype, file_url, file_name, check_frequency, active, created_by_email, created_at, updated_at)
+                VALUES (CAST(:id AS UUID), :name, :description, 'Other', 'file', 'email', :file_url, :file_name, 'manual', TRUE, :created_by_email, NOW(), NOW())
+            """), {
+                "id": att_id, "name": f"{att_name} ({subject[:200]})", "description": f"Attachment from \"{subject}\" received {received} via {mailbox_address}",
+                "file_url": att_ref, "file_name": att_name, "created_by_email": mailbox_address,
+            })
+            await db.commit()
+
+
+async def mailbox_sync_loop():
+    from app.database import AsyncSessionLocal
+    while True:
+        try:
+            async with AsyncSessionLocal() as db:
+                mailbox = await _get_mailbox(db)
+            if mailbox:
+                access_token = None
+                async with AsyncSessionLocal() as db:
+                    try:
+                        access_token = await _get_valid_mailbox_token(db, mailbox)
+                    except HTTPException as e:
+                        await db.execute(text("UPDATE social_influence_mailbox SET last_error = :err WHERE id = CAST(:id AS UUID)"),
+                                          {"id": mailbox["id"], "err": str(e.detail)[:500]})
+                        await db.commit()
+
+                if access_token:
+                    since = mailbox["last_synced_at"] or (datetime.utcnow() - timedelta(days=1))
+                    headers = {"Authorization": f"Bearer {access_token}"}
+                    async with httpx.AsyncClient(timeout=30) as client:
+                        resp = await client.get(
+                            f"{GRAPH_BASE}/users/{mailbox['mailbox_address']}/mailFolders/Inbox/messages",
+                            headers=headers,
+                            params={
+                                "$filter": f"receivedDateTime gt {since.strftime('%Y-%m-%dT%H:%M:%SZ')}",
+                                "$orderby": "receivedDateTime asc", "$top": MAILBOX_SYNC_MAX_MESSAGES,
+                                "$select": "id,subject,body,from,receivedDateTime,hasAttachments",
+                            },
+                        )
+                        resp.raise_for_status()
+                        messages = resp.json().get("value", [])
+
+                        latest = since
+                        for m in messages:
+                            await _ingest_message(client, headers, mailbox["mailbox_address"], m)
+                            received = m.get("receivedDateTime")
+                            if received:
+                                received_dt = datetime.strptime(received.split(".")[0].rstrip("Z"), "%Y-%m-%dT%H:%M:%S")
+                                latest = max(latest, received_dt)
+
+                    async with AsyncSessionLocal() as db:
+                        await db.execute(text("""
+                            UPDATE social_influence_mailbox SET last_synced_at = :ts, last_error = NULL WHERE id = CAST(:id AS UUID)
+                        """), {"id": mailbox["id"], "ts": latest})
+                        await db.commit()
+        except Exception as e:
+            print(f"[SocialInfluence] mailbox_sync_loop error: {e}")
+            try:
+                async with AsyncSessionLocal() as db:
+                    await db.execute(text("UPDATE social_influence_mailbox SET last_error = :err WHERE id IS NOT NULL"), {"err": str(e)[:500]})
+                    await db.commit()
+            except Exception:
+                pass
+        await asyncio.sleep(MAILBOX_SYNC_INTERVAL)
 
 
 # ─── Content generation ───────────────────────────────────────────────────────────

@@ -1,5 +1,6 @@
 'use client'
-import { useEffect, useState } from 'react'
+import { Suspense, useEffect, useState } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { MarketingLayout, useMarketingPerm } from '@/components/MarketingLayout'
 import { TabNav } from '@/components/shared/RecordLayout'
 import { getStoredUser } from '@/lib/auth'
@@ -7,7 +8,7 @@ import { socialInfluenceAPI } from '@/lib/api'
 
 const LANGUAGES = ['English', 'French', 'German', 'Spanish', 'Other']
 const CATEGORIES = ['Competitor', 'Solution Provider', 'Partner', 'Other']
-const SUBTYPE_LABEL: Record<string, string> = { website: 'Website', blog: 'Blog', linkedin: 'LinkedIn page', study: 'Study', other: 'Other' }
+const SUBTYPE_LABEL: Record<string, string> = { website: 'Website', blog: 'Blog', linkedin: 'LinkedIn page', study: 'Study', email: 'Email', other: 'Other' }
 
 const btn: React.CSSProperties = {
   padding: '9px 18px', border: 'none', borderRadius: '8px', cursor: 'pointer',
@@ -32,12 +33,27 @@ const STATUS_COLOR: Record<string, { bg: string; text: string }> = {
 }
 
 export default function SocialMediaInfluencePage() {
-  return <MarketingLayout><SocialMediaInfluenceContent /></MarketingLayout>
+  return (
+    <MarketingLayout>
+      <Suspense fallback={<div style={{ padding: '48px', textAlign: 'center', color: '#45B6E4' }}>Loading…</div>}>
+        <SocialMediaInfluenceContent />
+      </Suspense>
+    </MarketingLayout>
+  )
 }
 
 function SocialMediaInfluenceContent() {
   const { canEdit } = useMarketingPerm('social_media_influence')
-  const [tab, setTab] = useState('Sources')
+  const router = useRouter()
+  const params = useSearchParams()
+  const [tab, setTab] = useState(params.get('tab') || 'Sources')
+  const [notice, setNotice] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
+
+  useEffect(() => {
+    if (params.get('mailbox_connected')) setNotice({ type: 'success', text: 'Mailings Inbox connected successfully.' })
+    else if (params.get('mailbox_error')) setNotice({ type: 'error', text: `Mailbox connection failed: ${params.get('mailbox_error')}` })
+    if (params.get('mailbox_connected') || params.get('mailbox_error')) router.replace('/marketing/social-media-influence?tab=Sources')
+  }, [params])
 
   return (
     <div style={{ padding: '28px 32px', maxWidth: '980px' }}>
@@ -47,6 +63,17 @@ function SocialMediaInfluenceContent() {
           Monitor information sources and generate on-brand LinkedIn/X post drafts with Claude.
         </p>
       </div>
+
+      {notice && (
+        <div style={{
+          background: notice.type === 'success' ? '#F0FDF4' : '#FEF2F2',
+          border: `1px solid ${notice.type === 'success' ? '#BBF7D0' : '#FECACA'}`,
+          color: notice.type === 'success' ? '#166534' : '#DC2626',
+          borderRadius: '10px', padding: '12px 16px', marginBottom: '20px', fontSize: '12px', fontWeight: '600',
+        }}>
+          {notice.text}
+        </div>
+      )}
 
       <TabNav tabs={['Sources', 'Compose', 'Posts']} active={tab} onChange={setTab} />
 
@@ -102,6 +129,8 @@ function SourcesTab({ canEdit }: { canEdit: boolean }) {
 
   return (
     <div>
+      <MailboxCard canEdit={canEdit} />
+
       {canEdit && (
         <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '14px' }}>
           <button onClick={() => setShowAdd(true)} style={{ ...btn, background: '#156082', color: 'white' }}>+ Add source</button>
@@ -119,7 +148,7 @@ function SourcesTab({ canEdit }: { canEdit: boolean }) {
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div>
                   <div style={{ fontSize: '13px', fontWeight: '700', color: '#156082', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <span>{s.source_type === 'file' ? '📄' : s.subtype === 'linkedin' ? '🔗' : s.subtype === 'study' ? '🔬' : '🌐'} {s.name}</span>
+                    <span>{s.subtype === 'email' ? '📧' : s.source_type === 'file' ? '📄' : s.subtype === 'linkedin' ? '🔗' : s.subtype === 'study' ? '🔬' : '🌐'} {s.name}</span>
                     {s.category && <span style={{ fontSize: '10px', fontWeight: '700', background: '#EFF6FF', color: '#2563EB', padding: '2px 8px', borderRadius: '10px' }}>{s.category}</span>}
                     {!s.active && <span style={{ fontSize: '10px', fontWeight: '700', background: '#F1F5F9', color: '#94A3B8', padding: '2px 8px', borderRadius: '10px' }}>Inactive</span>}
                   </div>
@@ -179,6 +208,72 @@ function SourcesTab({ canEdit }: { canEdit: boolean }) {
           onSaved={() => { setShowAdd(false); setEditing(null); load() }}
         />
       )}
+    </div>
+  )
+}
+
+function MailboxCard({ canEdit }: { canEdit: boolean }) {
+  const [status, setStatus] = useState<any>(null)
+  const [loading, setLoading] = useState(true)
+  const [mailboxInput, setMailboxInput] = useState('')
+  const [connecting, setConnecting] = useState(false)
+
+  const load = () => {
+    setLoading(true)
+    socialInfluenceAPI.getMailboxStatus().then(setStatus).catch(() => setStatus({ connected: false })).finally(() => setLoading(false))
+  }
+  useEffect(load, [])
+
+  const connect = async () => {
+    if (!mailboxInput.trim()) return
+    const user = getStoredUser()
+    setConnecting(true)
+    try {
+      const { auth_url } = await socialInfluenceAPI.connectMailbox(mailboxInput.trim(), user?.email || '')
+      window.location.href = auth_url
+    } finally {
+      setConnecting(false)
+    }
+  }
+
+  const disconnect = async () => {
+    if (!confirm('Disconnect the Mailings Inbox? New mail will stop being turned into sources until it\'s reconnected.')) return
+    await socialInfluenceAPI.disconnectMailbox()
+    load()
+  }
+
+  if (loading) return null
+
+  return (
+    <div style={{ ...card, background: '#F8FAFC' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '14px', flexWrap: 'wrap' as const }}>
+        <div>
+          <div style={lbl}>Mailings Inbox</div>
+          {status?.connected ? (
+            <>
+              <div style={{ fontSize: '12px', fontWeight: '700', color: '#156082' }}>📧 {status.mailbox_address}</div>
+              <div style={{ fontSize: '11px', color: '#94A3B8', marginTop: '2px' }}>
+                {status.last_synced_at ? `Last synced ${fmtDate(status.last_synced_at)}` : 'Not synced yet — first check runs shortly'}
+              </div>
+              {status.last_error && <div style={{ fontSize: '11px', color: '#DC2626', marginTop: '2px' }}>⚠️ {status.last_error}</div>}
+            </>
+          ) : (
+            <div style={{ fontSize: '11px', color: '#94A3B8' }}>Not connected — mail sent to a dedicated inbox can be auto-ingested as sources here.</div>
+          )}
+        </div>
+        {canEdit && (
+          status?.connected ? (
+            <button onClick={disconnect} style={{ ...btn, background: '#FEF2F2', color: '#EF4444' }}>Disconnect</button>
+          ) : (
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <input style={{ ...inp, width: '220px' }} placeholder="mailbox@wcomply.com" value={mailboxInput} onChange={e => setMailboxInput(e.target.value)} />
+              <button onClick={connect} disabled={connecting || !mailboxInput.trim()} style={{ ...btn, background: connecting ? '#94A3B8' : '#156082', color: 'white', whiteSpace: 'nowrap' as const }}>
+                {connecting ? 'Redirecting…' : 'Connect'}
+              </button>
+            </div>
+          )
+        )}
+      </div>
     </div>
   )
 }

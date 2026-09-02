@@ -1994,12 +1994,14 @@ async def startup():
                 """CREATE TABLE IF NOT EXISTS marketing_event_costs (
                     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                     event_id UUID NOT NULL REFERENCES marketing_events(id) ON DELETE CASCADE,
+                    invoice_number VARCHAR(100),
                     purchase_date DATE,
                     supplier VARCHAR(255),
                     amount NUMERIC(12,2) NOT NULL,
                     currency VARCHAR(10) DEFAULT 'EUR',
                     created_at TIMESTAMP DEFAULT NOW()
                 )""",
+                "ALTER TABLE marketing_event_costs ADD COLUMN IF NOT EXISTS invoice_number VARCHAR(100)",
             ]
             for sql in sqls:
                 try:
@@ -2232,4 +2234,18 @@ try:
 except Exception as e:
     import traceback
     print(f"✗ ROUTER FAILED [SocialInfluence monitor]: {e}")
+    traceback.print_exc()
+
+try:
+    from app.routers.social_influence import mailbox_sync_loop as _social_influence_mailbox_sync_loop
+
+    @app.on_event("startup")
+    async def _start_social_influence_mailbox_sync():
+        import asyncio
+        asyncio.create_task(_social_influence_mailbox_sync_loop())
+
+    print("✓ SocialInfluence mailbox sync")
+except Exception as e:
+    import traceback
+    print(f"✗ ROUTER FAILED [SocialInfluence mailbox sync]: {e}")
     traceback.print_exc()

@@ -209,6 +209,10 @@ export const socialInfluenceAPI = {
   generatePost: (d: any) => fetchAPI(`/marketing/social-posts/generate`, { method: 'POST', body: JSON.stringify(d) }),
   updatePost:  (id: string, d: any) => fetchAPI(`/marketing/social-posts/${id}`, { method: 'PUT', body: JSON.stringify(d) }),
   deletePost:  (id: string) => fetchAPI(`/marketing/social-posts/${id}`, { method: 'DELETE' }),
+
+  getMailboxStatus: () => fetchAPI(`/marketing/social-influence-mailbox/status`),
+  connectMailbox:   (mailbox: string, email: string) => fetchAPI(`/marketing/social-influence-mailbox/connect${qs({ mailbox, email })}`),
+  disconnectMailbox: () => fetchAPI(`/marketing/social-influence-mailbox`, { method: 'DELETE' }),
 }
 
 // ─── Contacts ─────────────────────────────────────────────────────────────────
