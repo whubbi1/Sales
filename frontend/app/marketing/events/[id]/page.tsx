@@ -511,7 +511,7 @@ function EventDetailContent() {
                 <input style={{ ...inp, width: '100%', boxSizing: 'border-box' as const }} placeholder="Supplier name" value={costSupplier} onChange={e => setCostSupplier(e.target.value)} />
               </div>
               <div style={{ width: '110px' }}>
-                <div style={lbl}>Amount</div>
+                <div style={lbl}>Amount without Tax</div>
                 <input type="number" style={{ ...inp, width: '100%', boxSizing: 'border-box' as const }} placeholder="0.00" value={costAmount} onChange={e => setCostAmount(e.target.value)}
                   onKeyDown={e => { if (e.key === 'Enter') addCost() }} />
               </div>
