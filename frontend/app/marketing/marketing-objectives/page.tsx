@@ -202,6 +202,10 @@ function SetupCard({ setup, entities, canEdit, onUpdate, onDelete }: {
         )}
       </div>
       <div style={{ marginBottom: '14px' }}>
+        <div style={lbl}>Target customers</div>
+        <EditableField value={setup.target_customers} canEdit={canEdit} multiline placeholder="e.g. Industries, company size, or specific target customer profiles" onSave={saveField('target_customers')} />
+      </div>
+      <div style={{ marginBottom: '14px' }}>
         <div style={lbl}>Target audience at our customers</div>
         <EditableField value={setup.target_audience} canEdit={canEdit} multiline placeholder="e.g. Compliance officers, HR directors, CISOs" onSave={saveField('target_audience')} />
       </div>
@@ -224,16 +228,16 @@ function SetupCard({ setup, entities, canEdit, onUpdate, onDelete }: {
   )
 }
 
-export default function MarketingSetupPage() {
-  return <MarketingLayout><MarketingSetupContent /></MarketingLayout>
+export default function MarketingObjectivesPage() {
+  return <MarketingLayout><MarketingObjectivesContent /></MarketingLayout>
 }
 
 // useMarketingPerm reads MarketingPermContext, which MarketingLayout only provides to its
 // children — calling it in the same component that renders <MarketingLayout> would read the
 // context from outside the Provider (always the default/null value, so canEdit would be stuck
 // false forever). Must live in a component actually rendered as MarketingLayout's child.
-function MarketingSetupContent() {
-  const { canEdit } = useMarketingPerm('marketing_setup')
+function MarketingObjectivesContent() {
+  const { canEdit } = useMarketingPerm('marketing_objectives')
   const [setups, setSetups] = useState<any[]>([])
   const [entities, setEntities] = useState<Entity[]>([])
   const [loading, setLoading] = useState(true)
@@ -258,7 +262,7 @@ function MarketingSetupContent() {
     setCreating(true)
     setListError('')
     try {
-      const created = await marketingSetupAPI.create({ name: 'New Marketing Setup', created_by_email: user?.email || '' })
+      const created = await marketingSetupAPI.create({ name: 'New Marketing Objectives', created_by_email: user?.email || '' })
       setSetups(prev => [...prev, created])
     } catch (e: any) {
       setListError(e.message || 'Failed to create')
@@ -274,7 +278,7 @@ function MarketingSetupContent() {
   }
 
   const removeSetup = async (id: string) => {
-    if (!confirm('Delete this marketing setup?')) return
+    if (!confirm('Delete these marketing objectives?')) return
     await marketingSetupAPI.delete(id)
     setSetups(prev => prev.filter(s => s.id !== id))
   }
@@ -282,10 +286,10 @@ function MarketingSetupContent() {
   return (
     <>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '18px' }}>
-        <h1 style={{ fontSize: '20px', fontWeight: '800', color: '#156082', margin: 0 }}>📋 Marketing Setup</h1>
+        <h1 style={{ fontSize: '20px', fontWeight: '800', color: '#156082', margin: 0 }}>📋 Marketing Objectives</h1>
         {canEdit && (
           <button onClick={addSetup} disabled={creating} style={{ ...btn, background: creating ? '#94A3B8' : '#156082', color: 'white' }}>
-            {creating ? 'Adding…' : '+ Add Marketing Setup'}
+            {creating ? 'Adding…' : '+ Add Marketing Objectives'}
           </button>
         )}
       </div>
@@ -300,7 +304,7 @@ function MarketingSetupContent() {
         <div style={{ textAlign: 'center', padding: '48px', color: '#45B6E4' }}>Loading…</div>
       ) : setups.length === 0 ? (
         <div style={{ ...card, textAlign: 'center', padding: '48px', color: '#94A3B8' }}>
-          No marketing setups yet — add one to start.
+          No marketing objectives yet — add one to start.
         </div>
       ) : (
         setups.map((s: any) => (

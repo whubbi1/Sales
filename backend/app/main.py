@@ -2017,6 +2017,10 @@ async def startup():
                 # created by models/competitor_analysis.py). The old singleton table only ever
                 # held placeholder/test content — safe to drop outright, no migration needed.
                 "DROP TABLE IF EXISTS company_marketing_setup",
+
+                # Marketing Objectives (renamed from Marketing Setup) — new field for target
+                # customer information, alongside the existing target_audience field.
+                "ALTER TABLE marketing_setups ADD COLUMN IF NOT EXISTS target_customers TEXT",
             ]
             for sql in sqls:
                 try:

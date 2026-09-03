@@ -94,15 +94,16 @@ async def create_marketing_setup(data: dict, db: AsyncSession = Depends(get_db))
     setup_id = str(uuid.uuid4())
     await db.execute(text("""
         INSERT INTO marketing_setups (id, name, description, services, target_countries,
-            target_audience, marketing_objectives, all_entities, entity_ids, entity_names,
+            target_audience, target_customers, marketing_objectives, all_entities, entity_ids, entity_names,
             created_by_email, updated_by_email, updated_at, created_at)
         VALUES (CAST(:id AS UUID), :name, :description, :services, CAST(:target_countries AS JSONB),
-            :target_audience, :marketing_objectives, :all_entities, CAST(:entity_ids AS JSONB),
+            :target_audience, :target_customers, :marketing_objectives, :all_entities, CAST(:entity_ids AS JSONB),
             CAST(:entity_names AS JSONB), :email, :email, NOW(), NOW())
     """), {
         "id": setup_id, "name": name, "description": data.get("description", ""),
         "services": data.get("services", ""), "target_countries": json.dumps(data.get("target_countries") or []),
-        "target_audience": data.get("target_audience", ""), "marketing_objectives": data.get("marketing_objectives", ""),
+        "target_audience": data.get("target_audience", ""), "target_customers": data.get("target_customers", ""),
+        "marketing_objectives": data.get("marketing_objectives", ""),
         "email": data.get("created_by_email", ""), **_entity_assignment_params(data),
     })
     await db.commit()
@@ -124,7 +125,7 @@ async def update_marketing_setup(setup_id: str, data: dict, db: AsyncSession = D
 
     set_parts = []
     params: dict = {}
-    for k in ("name", "description", "services", "target_audience", "marketing_objectives"):
+    for k in ("name", "description", "services", "target_audience", "target_customers", "marketing_objectives"):
         if k in data:
             set_parts.append(f"{k} = :{k}")
             params[k] = data[k]
@@ -159,14 +160,17 @@ async def _marketing_setups_context(db: AsyncSession) -> str:
     suggestions here) — not scoped per-entity/country, since a prompt hint doesn't need that
     precision and matching setups to a suggestion's target country would add real complexity for
     little benefit."""
-    r = await db.execute(text("SELECT name, description, services, target_audience FROM marketing_setups ORDER BY name LIMIT 5"))
+    r = await db.execute(text("SELECT name, description, services, target_audience, target_customers FROM marketing_setups ORDER BY name LIMIT 5"))
     rows = r.fetchall()
     if not rows:
         return ""
     parts = []
     for row in rows:
         d = dict(row._mapping)
-        parts.append(f"- {d['name']}: {d.get('description') or ''} Services: {d.get('services') or ''} Target audience: {d.get('target_audience') or ''}")
+        parts.append(
+            f"- {d['name']}: {d.get('description') or ''} Services: {d.get('services') or ''} "
+            f"Target audience: {d.get('target_audience') or ''} Target customers: {d.get('target_customers') or ''}"
+        )
     return "Our company's marketing setups:\n" + "\n".join(parts) + "\n"
 
 

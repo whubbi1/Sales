@@ -19,6 +19,7 @@ class MarketingSetup(Base):
     services              = Column(Text)
     target_countries      = Column(JSONB, default=list)
     target_audience       = Column(Text)
+    target_customers      = Column(Text)
     marketing_objectives  = Column(Text)
     all_entities          = Column(Boolean, default=False)
     entity_ids            = Column(JSONB, default=list)   # legal_entities.id values
