@@ -221,6 +221,22 @@ export const socialInfluenceAPI = {
     fetchAPI(`/marketing/social-influence-mailbox/pending/${id}/reject`, { method: 'POST', body: JSON.stringify({ reviewed_by_email: reviewedByEmail }) }),
 }
 
+// ─── Competitor Analysis ────────────────────────────────────────────────────────
+export const competitorAPI = {
+  listCompetitors:  () => fetchAPI(`/marketing/competitors`),
+  getCompetitor:    (id: string) => fetchAPI(`/marketing/competitors/${id}`),
+  createCompetitor: (d: any) => fetchAPI(`/marketing/competitors`, { method: 'POST', body: JSON.stringify(d) }),
+  updateCompetitor: (id: string, d: any) => fetchAPI(`/marketing/competitors/${id}`, { method: 'PUT', body: JSON.stringify(d) }),
+  deleteCompetitor: (id: string) => fetchAPI(`/marketing/competitors/${id}`, { method: 'DELETE' }),
+  suggestCompetitors: (countries: string[]) => fetchAPI(`/marketing/competitors/suggest`, { method: 'POST', body: JSON.stringify({ countries }) }),
+  analyzeCompetitor: (id: string) => fetchAPI(`/marketing/competitors/${id}/analyze`, { method: 'POST' }),
+}
+
+export const companySetupAPI = {
+  get: () => fetchAPI(`/marketing/company-setup`),
+  update: (d: any) => fetchAPI(`/marketing/company-setup`, { method: 'PUT', body: JSON.stringify(d) }),
+}
+
 // ─── Contacts ─────────────────────────────────────────────────────────────────
 export const contactsAPI = {
   list:   (p?: any) => fetchAPI(`/contacts/${qs(p)}`),
