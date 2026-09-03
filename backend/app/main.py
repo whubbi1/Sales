@@ -2002,6 +2002,15 @@ async def startup():
                     created_at TIMESTAMP DEFAULT NOW()
                 )""",
                 "ALTER TABLE marketing_event_costs ADD COLUMN IF NOT EXISTS invoice_number VARCHAR(100)",
+
+                # One-off cleanup for a mailbox_sync_loop cursor bug (fixed in social_influence.py)
+                # that kept re-staging the same message every sync cycle — collapse any duplicates
+                # already sitting in influence_pending_emails down to one row each. No-op once run.
+                """DELETE FROM influence_pending_emails a
+                   USING influence_pending_emails b
+                   WHERE a.mailbox_address = b.mailbox_address
+                     AND a.message_id = b.message_id
+                     AND (a.created_at, a.ctid) > (b.created_at, b.ctid)""",
             ]
             for sql in sqls:
                 try:

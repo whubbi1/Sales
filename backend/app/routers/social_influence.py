@@ -468,6 +468,15 @@ async def _stage_pending_email(client: httpx.AsyncClient, headers: dict, mailbox
             print(f"[SocialInfluence] failed to fetch attachment metadata for message {message['id']}: {e}")
 
     async with AsyncSessionLocal() as db:
+        # Idempotency guard: a message can legitimately be re-fetched (e.g. a reconnect resets
+        # last_synced_at to a fresh 1-day lookback), and this is also a safety net against the
+        # sync-cursor edge case fixed alongside this — skip re-staging a message this mailbox has
+        # already staged, whatever its current review status.
+        existing = await db.execute(text("""
+            SELECT 1 FROM influence_pending_emails WHERE mailbox_address = :mailbox AND message_id = :message_id LIMIT 1
+        """), {"mailbox": mailbox_address, "message_id": message["id"]})
+        if existing.fetchone():
+            return
         await db.execute(text("""
             INSERT INTO influence_pending_emails (id, mailbox_address, message_id, subject, sender_email, sender_name,
                 received_at, body_content, body_content_type, attachments, status, created_at)
@@ -522,10 +531,19 @@ async def mailbox_sync_loop():
                             if received:
                                 latest = max(latest, _parse_graph_datetime(received))
 
+                    # _parse_graph_datetime truncates sub-second precision, so `latest` can equal
+                    # (or round down below) the actual receivedDateTime of the newest message just
+                    # processed. Saving it as-is would leave that message matching next cycle's
+                    # `gt {since}` filter again (its real timestamp still has a fractional part
+                    # greater than the truncated cutoff), re-staging the same mail forever. Bump
+                    # one whole second past it — the granularity we lost — so the next cycle's
+                    # filter cleanly excludes everything already processed this cycle.
+                    next_since = latest + timedelta(seconds=1) if latest > since else latest
+
                     async with AsyncSessionLocal() as db:
                         await db.execute(text("""
                             UPDATE social_influence_mailbox SET last_synced_at = :ts, last_error = NULL WHERE id = CAST(:id AS UUID)
-                        """), {"id": mailbox["id"], "ts": latest})
+                        """), {"id": mailbox["id"], "ts": next_since})
                         await db.commit()
         except Exception as e:
             print(f"[SocialInfluence] mailbox_sync_loop error: {e}")
