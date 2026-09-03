@@ -7,12 +7,12 @@ import { EasyAccessMenu } from '@/components/shared/EasyAccessMenu'
 const API = 'https://api.whubbi.wcomply.com'
 
 const NAV = [
+  { href: '/marketing/marketing-setup',      icon: '📋', label: 'Marketing Setup' },
   { href: '/marketing/events',               icon: '🎪', label: 'Events' },
   { href: '/marketing/templates',            icon: '✉️', label: 'Template Emails' },
   { href: '/marketing/marketplaces',         icon: '🛒', label: 'Marketplaces' },
   { href: '/marketing/company-website',      icon: '🌐', label: 'Company Website' },
   { href: '/marketing/competitor-analysis',  icon: '🔬', label: 'Competitor Analysis' },
-  { href: '/marketing/company-setup',        icon: '🏢', label: 'Company Marketing Setup' },
   { href: '/marketing/social-marketing',     icon: '📱', label: 'Social Marketing' },
   { href: '/marketing/social-media-influence', icon: '🚀', label: 'Social Media Influence' },
   { href: '/marketing/marketing-plan',       icon: '🗺️', label: 'Marketing Plan' },

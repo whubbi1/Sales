@@ -2011,6 +2011,12 @@ async def startup():
                    WHERE a.mailbox_address = b.mailbox_address
                      AND a.message_id = b.message_id
                      AND (a.created_at, a.ctid) > (b.created_at, b.ctid)""",
+
+                # Marketing Setup was reworked from a single company-wide record into a list of
+                # setups, each assignable to one or more legal entities (marketing_setups table,
+                # created by models/competitor_analysis.py). The old singleton table only ever
+                # held placeholder/test content — safe to drop outright, no migration needed.
+                "DROP TABLE IF EXISTS company_marketing_setup",
             ]
             for sql in sqls:
                 try:

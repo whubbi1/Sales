@@ -1,7 +1,10 @@
 # backend/app/routers/competitor_analysis.py
-# Competitor Analysis + Company Marketing Setup. Mirrors social_influence.py's conventions:
+# Competitor Analysis + Marketing Setup. Mirrors existing conventions elsewhere in the codebase:
 #   - claude_web_search() (app/routers/companies.py) does all the AI web-research work.
-#   - Company Marketing Setup is a singleton record, same idiom as social_influence_mailbox.
+#   - Marketing Setup's assignment to one or more legal entities uses the same
+#     all_entities/entity_ids/entity_names JSONB idiom legal.py's legal_templates already uses,
+#     rather than a junction table — entity_ids holds legal_entities.id values (owned by
+#     legal.py), entity_names is a denormalized display copy kept in sync at write time.
 #   - AI-suggested competitors are ephemeral (never touch the DB) until the user Adds one —
 #     unlike the Mailings Inbox, regenerating a suggestion is cheap, so no staging table needed.
 #   - The slow claude_web_search call for /analyze never runs with a DB session open (see
@@ -43,48 +46,113 @@ def _parse_claude_json(text_result: str):
     return json.loads(cleaned)
 
 
-# ─── Company Marketing Setup (singleton) ───────────────────────────────────────────────────
-@router.get("/company-setup")
-async def get_company_setup(db: AsyncSession = Depends(get_db)):
-    r = await db.execute(text("SELECT * FROM company_marketing_setup LIMIT 1"))
-    row = r.fetchone()
-    if not row:
-        return {
-            "description": "", "services": "", "target_countries": [],
-            "target_audience": "", "marketing_objectives": "", "updated_at": None,
-        }
-    d = _row(dict(row._mapping))
+# ─── Marketing Setup (one or more records, each scoped to legal entities) ──────────────────
+def _normalize_setup(d: dict) -> dict:
+    d = _row(d)
     d["target_countries"] = _normalize_jsonb_list(d.get("target_countries"))
+    d["entity_ids"] = _normalize_jsonb_list(d.get("entity_ids"))
+    d["entity_names"] = _normalize_jsonb_list(d.get("entity_names"))
     return d
 
 
-@router.put("/company-setup")
-async def update_company_setup(data: dict, db: AsyncSession = Depends(get_db)):
-    r = await db.execute(text("SELECT id FROM company_marketing_setup LIMIT 1"))
-    existing = r.fetchone()
-    params = {
+async def _get_marketing_setup(db: AsyncSession, setup_id: str) -> dict | None:
+    r = await db.execute(text("SELECT * FROM marketing_setups WHERE id = CAST(:id AS UUID)"), {"id": setup_id})
+    row = r.fetchone()
+    return _normalize_setup(dict(row._mapping)) if row else None
+
+
+@router.get("/marketing-setups")
+async def list_marketing_setups(db: AsyncSession = Depends(get_db)):
+    r = await db.execute(text("SELECT * FROM marketing_setups ORDER BY name"))
+    return {"setups": [_normalize_setup(dict(row._mapping)) for row in r.fetchall()]}
+
+
+@router.get("/marketing-setups/{setup_id}")
+async def get_marketing_setup(setup_id: str, db: AsyncSession = Depends(get_db)):
+    setup = await _get_marketing_setup(db, setup_id)
+    if not setup:
+        raise HTTPException(status_code=404, detail="Marketing setup not found")
+    return setup
+
+
+def _entity_assignment_params(data: dict) -> dict:
+    all_entities = data.get("all_entities")
+    if all_entities is None:
+        all_entities = not data.get("entity_ids")
+    return {
+        "all_entities": bool(all_entities),
+        "entity_ids": json.dumps(data.get("entity_ids") or []),
+        "entity_names": json.dumps(data.get("entity_names") or []),
+    }
+
+
+@router.post("/marketing-setups")
+async def create_marketing_setup(data: dict, db: AsyncSession = Depends(get_db)):
+    name = (data.get("name") or "").strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="name is required")
+    setup_id = str(uuid.uuid4())
+    await db.execute(text("""
+        INSERT INTO marketing_setups (id, name, description, services, target_countries,
+            target_audience, marketing_objectives, all_entities, entity_ids, entity_names,
+            created_by_email, updated_by_email, updated_at, created_at)
+        VALUES (CAST(:id AS UUID), :name, :description, :services, CAST(:target_countries AS JSONB),
+            :target_audience, :marketing_objectives, :all_entities, CAST(:entity_ids AS JSONB),
+            CAST(:entity_names AS JSONB), :email, :email, NOW(), NOW())
+    """), {
+        "id": setup_id, "name": name, "description": data.get("description", ""),
+        "services": data.get("services", ""), "target_countries": json.dumps(data.get("target_countries") or []),
+        "target_audience": data.get("target_audience", ""), "marketing_objectives": data.get("marketing_objectives", ""),
+        "email": data.get("created_by_email", ""), **_entity_assignment_params(data),
+    })
+    await db.commit()
+    return await _get_marketing_setup(db, setup_id)
+
+
+@router.put("/marketing-setups/{setup_id}")
+async def update_marketing_setup(setup_id: str, data: dict, db: AsyncSession = Depends(get_db)):
+    existing = await _get_marketing_setup(db, setup_id)
+    if not existing:
+        raise HTTPException(status_code=404, detail="Marketing setup not found")
+    await db.execute(text("""
+        UPDATE marketing_setups SET name = :name, description = :description, services = :services,
+            target_countries = CAST(:target_countries AS JSONB), target_audience = :target_audience,
+            marketing_objectives = :marketing_objectives, all_entities = :all_entities,
+            entity_ids = CAST(:entity_ids AS JSONB), entity_names = CAST(:entity_names AS JSONB),
+            updated_by_email = :email, updated_at = NOW()
+        WHERE id = CAST(:id AS UUID)
+    """), {
+        "id": setup_id, "name": (data.get("name") or existing["name"]).strip(),
         "description": data.get("description", ""), "services": data.get("services", ""),
         "target_countries": json.dumps(data.get("target_countries") or []),
-        "target_audience": data.get("target_audience", ""),
-        "marketing_objectives": data.get("marketing_objectives", ""),
-        "email": data.get("updated_by_email", ""),
-    }
-    if existing:
-        await db.execute(text("""
-            UPDATE company_marketing_setup SET description = :description, services = :services,
-                target_countries = CAST(:target_countries AS JSONB), target_audience = :target_audience,
-                marketing_objectives = :marketing_objectives, updated_by_email = :email, updated_at = NOW()
-            WHERE id = :id
-        """), {**params, "id": existing.id})
-    else:
-        await db.execute(text("""
-            INSERT INTO company_marketing_setup (id, description, services, target_countries,
-                target_audience, marketing_objectives, updated_by_email, updated_at, created_at)
-            VALUES (gen_random_uuid(), :description, :services, CAST(:target_countries AS JSONB),
-                :target_audience, :marketing_objectives, :email, NOW(), NOW())
-        """), params)
+        "target_audience": data.get("target_audience", ""), "marketing_objectives": data.get("marketing_objectives", ""),
+        "email": data.get("updated_by_email", ""), **_entity_assignment_params(data),
+    })
     await db.commit()
-    return await get_company_setup(db)
+    return await _get_marketing_setup(db, setup_id)
+
+
+@router.delete("/marketing-setups/{setup_id}")
+async def delete_marketing_setup(setup_id: str, db: AsyncSession = Depends(get_db)):
+    await db.execute(text("DELETE FROM marketing_setups WHERE id = CAST(:id AS UUID)"), {"id": setup_id})
+    await db.commit()
+    return {"status": "ok"}
+
+
+async def _marketing_setups_context(db: AsyncSession) -> str:
+    """Aggregates all marketing setups into one short grounding block for AI prompts (competitor
+    suggestions here) — not scoped per-entity/country, since a prompt hint doesn't need that
+    precision and matching setups to a suggestion's target country would add real complexity for
+    little benefit."""
+    r = await db.execute(text("SELECT name, description, services, target_audience FROM marketing_setups ORDER BY name LIMIT 5"))
+    rows = r.fetchall()
+    if not rows:
+        return ""
+    parts = []
+    for row in rows:
+        d = dict(row._mapping)
+        parts.append(f"- {d['name']}: {d.get('description') or ''} Services: {d.get('services') or ''} Target audience: {d.get('target_audience') or ''}")
+    return "Our company's marketing setups:\n" + "\n".join(parts) + "\n"
 
 
 # ─── Competitors ────────────────────────────────────────────────────────────────────────────
@@ -171,14 +239,8 @@ async def suggest_competitors(data: dict, db: AsyncSession = Depends(get_db)):
     if not countries:
         raise HTTPException(status_code=400, detail="At least one country is required")
 
-    setup = await get_company_setup(db)
-    if setup.get("description") or setup.get("services"):
-        context = (
-            f"Our company: {setup.get('description') or ''}\n"
-            f"Our services: {setup.get('services') or ''}\n"
-            f"Our target audience: {setup.get('target_audience') or ''}\n"
-        )
-    else:
+    context = await _marketing_setups_context(db)
+    if not context:
         context = "Our company is a SaaS platform for HR, compliance (GRC), sales, legal and operations management.\n"
 
     suggestions = []

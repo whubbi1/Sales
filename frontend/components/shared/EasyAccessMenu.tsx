@@ -32,10 +32,10 @@ const REGISTRY: ModuleGroup[] = [
     { label: 'CV Database', href: '/cv-database' },
   ] },
   { module: 'Marketing', icon: '📣', items: [
+    { label: 'Marketing Setup', href: '/marketing/marketing-setup', moduleKey: 'marketing', subKey: 'marketing_setup' },
     { label: 'Events', href: '/marketing/events', moduleKey: 'marketing', subKey: 'events' },
     { label: 'Company Website', href: '/marketing/company-website', moduleKey: 'marketing', subKey: 'company_website' },
     { label: 'Competitor Analysis', href: '/marketing/competitor-analysis', moduleKey: 'marketing', subKey: 'competitor_analysis' },
-    { label: 'Company Marketing Setup', href: '/marketing/company-setup', moduleKey: 'marketing', subKey: 'company_marketing_setup' },
     { label: 'Social Marketing', href: '/marketing/social-marketing', moduleKey: 'marketing', subKey: 'social_marketing' },
     { label: 'Social Media Influence', href: '/marketing/social-media-influence', moduleKey: 'marketing', subKey: 'social_media_influence' },
     { label: 'Marketing Plan', href: '/marketing/marketing-plan', moduleKey: 'marketing', subKey: 'marketing_plan' },

@@ -232,9 +232,12 @@ export const competitorAPI = {
   analyzeCompetitor: (id: string) => fetchAPI(`/marketing/competitors/${id}/analyze`, { method: 'POST' }),
 }
 
-export const companySetupAPI = {
-  get: () => fetchAPI(`/marketing/company-setup`),
-  update: (d: any) => fetchAPI(`/marketing/company-setup`, { method: 'PUT', body: JSON.stringify(d) }),
+export const marketingSetupAPI = {
+  list:   () => fetchAPI(`/marketing/marketing-setups`),
+  get:    (id: string) => fetchAPI(`/marketing/marketing-setups/${id}`),
+  create: (d: any) => fetchAPI(`/marketing/marketing-setups`, { method: 'POST', body: JSON.stringify(d) }),
+  update: (id: string, d: any) => fetchAPI(`/marketing/marketing-setups/${id}`, { method: 'PUT', body: JSON.stringify(d) }),
+  delete: (id: string) => fetchAPI(`/marketing/marketing-setups/${id}`, { method: 'DELETE' }),
 }
 
 // ─── Contacts ─────────────────────────────────────────────────────────────────
@@ -261,6 +264,7 @@ export const contactsAPI = {
 // ─── Legal module org entities (Operational Teams / Sales Entities) ───────────
 export const legalAPI = {
   getOrgEntities: (category: 'operational_team' | 'sales_entity') => fetchAPI(`/legal/org-entities?category=${category}&active_only=true`),
+  listEntities: (activeOnly = true) => fetchAPI(`/legal/entities${qs({ active_only: activeOnly ? 'true' : 'false' })}`),
 }
 
 // ─── Opportunities ────────────────────────────────────────────────────────────

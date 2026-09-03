@@ -5,17 +5,25 @@ from sqlalchemy.dialects.postgresql import UUID, JSONB
 from app.database import Base
 
 
-class CompanyMarketingSetup(Base):
-    """Singleton — one shared record describing the company for marketing purposes. Used both
-    as a reference page for the team and as grounding context fed into the competitor-suggestion
-    prompts in competitor_analysis.py."""
-    __tablename__ = "company_marketing_setup"
+class MarketingSetup(Base):
+    """A marketing setup: description, services, target markets/audience/objectives, scoped to
+    one or more real legal entities (legal_entities table, owned by legal.py) — one company can
+    have several (e.g. one per region). Same all_entities/entity_ids/entity_names JSONB idiom
+    legal.py's legal_templates already uses for this exact kind of assignment, rather than a
+    junction table. Also used as grounding context fed into the competitor-suggestion prompts in
+    this file."""
+    __tablename__ = "marketing_setups"
     id                    = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name                  = Column(String(255), nullable=False)
     description           = Column(Text)
     services              = Column(Text)
     target_countries      = Column(JSONB, default=list)
     target_audience       = Column(Text)
     marketing_objectives  = Column(Text)
+    all_entities          = Column(Boolean, default=False)
+    entity_ids            = Column(JSONB, default=list)   # legal_entities.id values
+    entity_names          = Column(JSONB, default=list)   # denormalized display copy
+    created_by_email      = Column(String(255))
     updated_by_email      = Column(String(255))
     updated_at            = Column(DateTime, default=datetime.utcnow)
     created_at            = Column(DateTime, default=datetime.utcnow)
