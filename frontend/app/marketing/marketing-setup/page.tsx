@@ -72,41 +72,30 @@ function EntityChecklist({ allEntities, selectedIds, entities, onToggleAll, onTo
   )
 }
 
-const EMPTY_FORM = {
-  name: '', description: '', services: '', target_countries: [] as string[], target_audience: '',
-  marketing_objectives: '', all_entities: true, entity_ids: [] as string[], entity_names: [] as string[],
-}
-
-function SetupModal({ setup, entities, onClose, onSaved }: { setup?: any | null; entities: Entity[]; onClose: () => void; onSaved: () => void }) {
-  const [form, setForm] = useState(setup ? {
-    name: setup.name || '', description: setup.description || '', services: setup.services || '',
-    target_countries: setup.target_countries || [], target_audience: setup.target_audience || '',
-    marketing_objectives: setup.marketing_objectives || '', all_entities: setup.all_entities !== false,
-    entity_ids: setup.entity_ids || [], entity_names: setup.entity_names || [],
-  } : EMPTY_FORM)
+// Click-to-edit field, saved on blur (Enter for single-line). Used for every free-text field on
+// a setup card so the whole profile is editable in place — no modal.
+function EditableField({ value, canEdit, multiline, placeholder, onSave, style }: {
+  value: string; canEdit: boolean; multiline?: boolean; placeholder?: string; onSave: (v: string) => Promise<void>; style?: React.CSSProperties
+}) {
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState(value || '')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
-  const toggleAllEntities = () => setForm(f => ({ ...f, all_entities: !f.all_entities, entity_ids: [], entity_names: [] }))
-  const toggleEntity = (id: string) => setForm(f => {
-    const has = f.entity_ids.includes(id)
-    const ids = has ? f.entity_ids.filter((x: string) => x !== id) : [...f.entity_ids, id]
-    const names = entities.filter(e => ids.includes(e.id)).map(e => e.legal_name)
-    return { ...f, entity_ids: ids, entity_names: names }
-  })
+  const start = () => {
+    if (!canEdit) return
+    setDraft(value || '')
+    setError('')
+    setEditing(true)
+  }
 
-  const save = async () => {
-    if (!form.name.trim()) { setError('Name is required'); return }
-    const user = getStoredUser()
+  const commit = async () => {
+    if (draft === (value || '')) { setEditing(false); return }
     setSaving(true)
     setError('')
     try {
-      if (setup) {
-        await marketingSetupAPI.update(setup.id, { ...form, updated_by_email: user?.email || '' })
-      } else {
-        await marketingSetupAPI.create({ ...form, created_by_email: user?.email || '' })
-      }
-      onSaved()
+      await onSave(draft)
+      setEditing(false)
     } catch (e: any) {
       setError(e.message || 'Failed to save')
     } finally {
@@ -114,51 +103,123 @@ function SetupModal({ setup, entities, onClose, onSaved }: { setup?: any | null;
     }
   }
 
-  return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-      onClick={e => { if (e.target === e.currentTarget) onClose() }}>
-      <div style={{ background: 'white', borderRadius: '14px', width: '640px', maxWidth: '92vw', maxHeight: '88vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
-        <div style={{ padding: '18px 24px', borderBottom: '1px solid #EDF2F7', flexShrink: 0 }}>
-          <h2 style={{ fontSize: '15px', fontWeight: '800', color: '#156082', margin: 0 }}>{setup ? 'Edit Marketing Setup' : 'New Marketing Setup'}</h2>
-        </div>
-        <div style={{ padding: '18px 24px', overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: '14px' }}>
-          <div>
-            <div style={lbl}>Name</div>
-            <input style={inp} value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} placeholder="e.g. France Setup" />
-          </div>
-          <div>
-            <div style={lbl}>Company description</div>
-            <textarea style={{ ...inp, minHeight: '70px', resize: 'vertical' as const }} value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} placeholder="What does the company do?" />
-          </div>
-          <div>
-            <div style={lbl}>Services we propose</div>
-            <textarea style={{ ...inp, minHeight: '70px', resize: 'vertical' as const }} value={form.services} onChange={e => setForm({ ...form, services: e.target.value })} placeholder="Products and services offered" />
-          </div>
-          <div>
-            <div style={lbl}>Target countries</div>
-            <TagInput tags={form.target_countries} onChange={t => setForm({ ...form, target_countries: t })} placeholder="Country, e.g. France" />
-          </div>
-          <div>
-            <div style={lbl}>Target audience at our customers</div>
-            <textarea style={{ ...inp, minHeight: '60px', resize: 'vertical' as const }} value={form.target_audience} onChange={e => setForm({ ...form, target_audience: e.target.value })} placeholder="e.g. Compliance officers, HR directors, CISOs" />
-          </div>
-          <div>
-            <div style={lbl}>Marketing objectives</div>
-            <textarea style={{ ...inp, minHeight: '60px', resize: 'vertical' as const }} value={form.marketing_objectives} onChange={e => setForm({ ...form, marketing_objectives: e.target.value })} placeholder="What are we trying to achieve?" />
-          </div>
-          <div>
-            <div style={lbl}>Applies to</div>
-            <EntityChecklist allEntities={form.all_entities} selectedIds={form.entity_ids} entities={entities} onToggleAll={toggleAllEntities} onToggleEntity={toggleEntity} />
-          </div>
-          {error && <div style={{ fontSize: '11px', color: '#DC2626' }}>⚠️ {error}</div>}
-        </div>
-        <div style={{ padding: '14px 24px', borderTop: '1px solid #EDF2F7', display: 'flex', gap: '10px', justifyContent: 'flex-end', flexShrink: 0 }}>
-          <button onClick={onClose} style={{ ...btn, background: '#F1F5F9', color: '#64748B' }}>Cancel</button>
-          <button onClick={save} disabled={saving} style={{ ...btn, background: saving ? '#94A3B8' : '#156082', color: 'white' }}>
-            {saving ? 'Saving…' : 'Save'}
-          </button>
-        </div>
+  if (editing) {
+    return (
+      <div>
+        {multiline ? (
+          <textarea autoFocus style={{ ...inp, minHeight: '70px', resize: 'vertical' as const }} value={draft} onChange={e => setDraft(e.target.value)} onBlur={commit} placeholder={placeholder} />
+        ) : (
+          <input autoFocus style={inp} value={draft} onChange={e => setDraft(e.target.value)} onBlur={commit} onKeyDown={e => e.key === 'Enter' && commit()} placeholder={placeholder} />
+        )}
+        {saving && <div style={{ fontSize: '11px', color: '#94A3B8', marginTop: '4px' }}>Saving…</div>}
+        {error && <div style={{ fontSize: '11px', color: '#DC2626', marginTop: '4px' }}>⚠️ {error}</div>}
       </div>
+    )
+  }
+  return (
+    <div onClick={start} title={canEdit ? 'Click to edit' : undefined}
+      style={{ fontSize: '12px', color: value ? '#3F3F3F' : '#94A3B8', cursor: canEdit ? 'pointer' : 'default', padding: '4px 6px', margin: '-4px -6px', borderRadius: '5px', minHeight: '18px', whiteSpace: 'pre-wrap' as const, ...style }}
+      onMouseEnter={e => canEdit && (e.currentTarget.style.background = '#F1F5F9')}
+      onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
+      {value || placeholder || '—'}
+    </div>
+  )
+}
+
+function SetupCard({ setup, entities, canEdit, onUpdate, onDelete }: {
+  setup: any; entities: Entity[]; canEdit: boolean
+  onUpdate: (fields: Record<string, any>) => Promise<void>
+  onDelete: () => void
+}) {
+  const [error, setError] = useState('')
+
+  const saveField = (field: string) => async (value: string) => {
+    await onUpdate({ [field]: value })
+  }
+
+  const toggleAllEntities = async () => {
+    setError('')
+    try {
+      await onUpdate({ all_entities: !setup.all_entities, entity_ids: [], entity_names: [] })
+    } catch (e: any) {
+      setError(e.message || 'Failed to save')
+    }
+  }
+
+  const toggleEntity = async (id: string) => {
+    setError('')
+    const has = (setup.entity_ids || []).includes(id)
+    const ids = has ? setup.entity_ids.filter((x: string) => x !== id) : [...(setup.entity_ids || []), id]
+    const names = entities.filter(e => ids.includes(e.id)).map(e => e.legal_name)
+    try {
+      await onUpdate({ entity_ids: ids, entity_names: names })
+    } catch (e: any) {
+      setError(e.message || 'Failed to save')
+    }
+  }
+
+  const updateCountries = async (t: string[]) => {
+    setError('')
+    try {
+      await onUpdate({ target_countries: t })
+    } catch (e: any) {
+      setError(e.message || 'Failed to save')
+    }
+  }
+
+  return (
+    <div style={card}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '14px' }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <EditableField value={setup.name} canEdit={canEdit} placeholder="Setup name" onSave={saveField('name')} style={{ fontSize: '15px', fontWeight: '800', color: '#156082' }} />
+        </div>
+        {canEdit && (
+          <button onClick={onDelete} style={{ ...btn, padding: '6px 12px', background: '#FEF2F2', color: '#EF4444', flexShrink: 0 }}>Delete</button>
+        )}
+      </div>
+      <div style={{ fontSize: '11px', color: '#94A3B8', margin: '2px 0 14px' }}>Last updated {fmtDate(setup.updated_at)}</div>
+
+      <div style={{ marginBottom: '14px' }}>
+        <div style={lbl}>Company description</div>
+        <EditableField value={setup.description} canEdit={canEdit} multiline placeholder="What does the company do?" onSave={saveField('description')} />
+      </div>
+      <div style={{ marginBottom: '14px' }}>
+        <div style={lbl}>Services we propose</div>
+        <EditableField value={setup.services} canEdit={canEdit} multiline placeholder="Products and services offered" onSave={saveField('services')} />
+      </div>
+      <div style={{ marginBottom: '14px' }}>
+        <div style={lbl}>Target countries</div>
+        {canEdit ? (
+          <TagInput tags={setup.target_countries || []} onChange={updateCountries} placeholder="Country, e.g. France" />
+        ) : (setup.target_countries || []).length === 0 ? (
+          <span style={{ fontSize: '12px', color: '#94A3B8' }}>—</span>
+        ) : (
+          <div style={{ display: 'flex', flexWrap: 'wrap' as const, gap: '6px' }}>
+            {setup.target_countries.map((c: string) => (
+              <span key={c} style={{ fontSize: '11px', fontWeight: '700', background: '#EFF6FF', color: '#2563EB', padding: '4px 10px', borderRadius: '12px' }}>{c}</span>
+            ))}
+          </div>
+        )}
+      </div>
+      <div style={{ marginBottom: '14px' }}>
+        <div style={lbl}>Target audience at our customers</div>
+        <EditableField value={setup.target_audience} canEdit={canEdit} multiline placeholder="e.g. Compliance officers, HR directors, CISOs" onSave={saveField('target_audience')} />
+      </div>
+      <div style={{ marginBottom: '14px' }}>
+        <div style={lbl}>Marketing objectives</div>
+        <EditableField value={setup.marketing_objectives} canEdit={canEdit} multiline placeholder="What are we trying to achieve?" onSave={saveField('marketing_objectives')} />
+      </div>
+      <div>
+        <div style={lbl}>Applies to</div>
+        {canEdit ? (
+          <EntityChecklist allEntities={setup.all_entities} selectedIds={setup.entity_ids || []} entities={entities} onToggleAll={toggleAllEntities} onToggleEntity={toggleEntity} />
+        ) : (
+          <div style={{ fontSize: '12px', color: '#3F3F3F' }}>
+            {setup.all_entities ? 'All Legal Entities' : (setup.entity_names || []).length > 0 ? setup.entity_names.join(', ') : '—'}
+          </div>
+        )}
+      </div>
+      {error && <div style={{ fontSize: '11px', color: '#DC2626', marginTop: '10px' }}>⚠️ {error}</div>}
     </div>
   )
 }
@@ -176,9 +237,8 @@ function MarketingSetupContent() {
   const [setups, setSetups] = useState<any[]>([])
   const [entities, setEntities] = useState<Entity[]>([])
   const [loading, setLoading] = useState(true)
-  const [showAdd, setShowAdd] = useState(false)
-  const [editing, setEditing] = useState<any | null>(null)
   const [listError, setListError] = useState('')
+  const [creating, setCreating] = useState(false)
 
   const load = () => {
     setLoading(true)
@@ -193,10 +253,30 @@ function MarketingSetupContent() {
     legalAPI.listEntities(true).then(d => setEntities(d.entities || [])).catch(() => setEntities([]))
   }, [])
 
-  const remove = async (id: string) => {
+  const addSetup = async () => {
+    const user = getStoredUser()
+    setCreating(true)
+    setListError('')
+    try {
+      const created = await marketingSetupAPI.create({ name: 'New Marketing Setup', created_by_email: user?.email || '' })
+      setSetups(prev => [...prev, created])
+    } catch (e: any) {
+      setListError(e.message || 'Failed to create')
+    } finally {
+      setCreating(false)
+    }
+  }
+
+  const updateSetup = async (id: string, fields: Record<string, any>) => {
+    const user = getStoredUser()
+    const updated = await marketingSetupAPI.update(id, { ...fields, updated_by_email: user?.email || '' })
+    setSetups(prev => prev.map(s => s.id === id ? updated : s))
+  }
+
+  const removeSetup = async (id: string) => {
     if (!confirm('Delete this marketing setup?')) return
     await marketingSetupAPI.delete(id)
-    load()
+    setSetups(prev => prev.filter(s => s.id !== id))
   }
 
   return (
@@ -204,12 +284,14 @@ function MarketingSetupContent() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '18px' }}>
         <h1 style={{ fontSize: '20px', fontWeight: '800', color: '#156082', margin: 0 }}>📋 Marketing Setup</h1>
         {canEdit && (
-          <button onClick={() => setShowAdd(true)} style={{ ...btn, background: '#156082', color: 'white' }}>+ Add Marketing Setup</button>
+          <button onClick={addSetup} disabled={creating} style={{ ...btn, background: creating ? '#94A3B8' : '#156082', color: 'white' }}>
+            {creating ? 'Adding…' : '+ Add Marketing Setup'}
+          </button>
         )}
       </div>
 
       <p style={{ fontSize: '11px', color: '#94A3B8', margin: '0 0 16px' }}>
-        Describe the company, its services, target markets and objectives for one or more legal entities — used across the module, including to ground the competitor suggestions in Competitor Analysis.
+        Describe the company, its services, target markets and objectives for one or more legal entities — used across the module, including to ground the competitor suggestions in Competitor Analysis. Click any field below to edit it.
       </p>
 
       {listError && <div style={{ ...card, color: '#DC2626', fontSize: '12px' }}>⚠️ {listError}</div>}
@@ -222,41 +304,15 @@ function MarketingSetupContent() {
         </div>
       ) : (
         setups.map((s: any) => (
-          <div key={s.id} style={card}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '14px' }}>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: '14px', fontWeight: '800', color: '#156082' }}>{s.name}</div>
-                <div style={{ fontSize: '11px', color: '#94A3B8', marginTop: '2px' }}>
-                  {s.all_entities ? 'All Legal Entities' : (s.entity_names || []).length > 0 ? (s.entity_names || []).join(', ') : 'No legal entities assigned'}
-                  {' · '}Last updated {fmtDate(s.updated_at)}
-                </div>
-                {s.description && <p style={{ fontSize: '12px', color: '#3F3F3F', margin: '10px 0 0' }}>{s.description}</p>}
-                {(s.target_countries || []).length > 0 && (
-                  <div style={{ display: 'flex', flexWrap: 'wrap' as const, gap: '6px', marginTop: '10px' }}>
-                    {s.target_countries.map((c: string) => (
-                      <span key={c} style={{ fontSize: '10px', fontWeight: '700', background: '#EFF6FF', color: '#2563EB', padding: '3px 8px', borderRadius: '10px' }}>{c}</span>
-                    ))}
-                  </div>
-                )}
-              </div>
-              {canEdit && (
-                <div style={{ display: 'flex', gap: '8px', flexShrink: 0 }}>
-                  <button onClick={() => setEditing(s)} style={{ ...btn, padding: '6px 12px', background: '#F1F5F9', color: '#64748B' }}>Edit</button>
-                  <button onClick={() => remove(s.id)} style={{ ...btn, padding: '6px 12px', background: '#FEF2F2', color: '#EF4444' }}>Delete</button>
-                </div>
-              )}
-            </div>
-          </div>
+          <SetupCard
+            key={s.id}
+            setup={s}
+            entities={entities}
+            canEdit={canEdit}
+            onUpdate={fields => updateSetup(s.id, fields)}
+            onDelete={() => removeSetup(s.id)}
+          />
         ))
-      )}
-
-      {(showAdd || editing) && (
-        <SetupModal
-          setup={editing}
-          entities={entities}
-          onClose={() => { setShowAdd(false); setEditing(null) }}
-          onSaved={() => { setShowAdd(false); setEditing(null); load() }}
-        />
       )}
     </>
   )

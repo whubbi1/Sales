@@ -111,23 +111,38 @@ async def create_marketing_setup(data: dict, db: AsyncSession = Depends(get_db))
 
 @router.put("/marketing-setups/{setup_id}")
 async def update_marketing_setup(setup_id: str, data: dict, db: AsyncSession = Depends(get_db)):
+    """Partial update — only fields present in `data` are touched, same pattern as
+    update_competitor. Needed because the frontend now edits one field at a time inline; sending
+    every other field back as its old value on every keystroke-save would be brittle, and
+    treating a missing field as "clear it" (the old behavior here) would silently wipe the rest
+    of the record on any single-field edit."""
     existing = await _get_marketing_setup(db, setup_id)
     if not existing:
         raise HTTPException(status_code=404, detail="Marketing setup not found")
-    await db.execute(text("""
-        UPDATE marketing_setups SET name = :name, description = :description, services = :services,
-            target_countries = CAST(:target_countries AS JSONB), target_audience = :target_audience,
-            marketing_objectives = :marketing_objectives, all_entities = :all_entities,
-            entity_ids = CAST(:entity_ids AS JSONB), entity_names = CAST(:entity_names AS JSONB),
-            updated_by_email = :email, updated_at = NOW()
+    if "name" in data and not (data.get("name") or "").strip():
+        raise HTTPException(status_code=400, detail="name cannot be empty")
+
+    set_parts = []
+    params: dict = {}
+    for k in ("name", "description", "services", "target_audience", "marketing_objectives"):
+        if k in data:
+            set_parts.append(f"{k} = :{k}")
+            params[k] = data[k]
+    if "target_countries" in data:
+        set_parts.append("target_countries = CAST(:target_countries AS JSONB)")
+        params["target_countries"] = json.dumps(data["target_countries"] or [])
+    if "all_entities" in data or "entity_ids" in data:
+        set_parts += ["all_entities = :all_entities", "entity_ids = CAST(:entity_ids AS JSONB)", "entity_names = CAST(:entity_names AS JSONB)"]
+        params.update(_entity_assignment_params(data))
+    if not set_parts:
+        return existing
+
+    params["id"] = setup_id
+    params["email"] = data.get("updated_by_email", "")
+    await db.execute(text(f"""
+        UPDATE marketing_setups SET {", ".join(set_parts)}, updated_by_email = :email, updated_at = NOW()
         WHERE id = CAST(:id AS UUID)
-    """), {
-        "id": setup_id, "name": (data.get("name") or existing["name"]).strip(),
-        "description": data.get("description", ""), "services": data.get("services", ""),
-        "target_countries": json.dumps(data.get("target_countries") or []),
-        "target_audience": data.get("target_audience", ""), "marketing_objectives": data.get("marketing_objectives", ""),
-        "email": data.get("updated_by_email", ""), **_entity_assignment_params(data),
-    })
+    """), params)
     await db.commit()
     return await _get_marketing_setup(db, setup_id)
 
