@@ -182,6 +182,7 @@ async def suggest_competitors(data: dict, db: AsyncSession = Depends(get_db)):
         context = "Our company is a SaaS platform for HR, compliance (GRC), sales, legal and operations management.\n"
 
     suggestions = []
+    last_error = None
     for country in countries:
         prompt = (
             f"{context}\n"
@@ -203,8 +204,14 @@ async def suggest_competitors(data: dict, db: AsyncSession = Depends(get_db)):
                         "linkedin_url": item.get("linkedin_url"), "why": item.get("why"),
                         "country": country,
                     })
-        except (json.JSONDecodeError, ValueError, HTTPException):
-            continue  # one country's research failing shouldn't block the others
+        except (json.JSONDecodeError, ValueError, HTTPException) as e:
+            # one country's research failing shouldn't block the others, but if every single
+            # one fails it's not "no competitors found" — surface the real error instead of
+            # silently returning an empty list that looks identical to a genuine empty result.
+            last_error = getattr(e, "detail", None) or str(e)
+            continue
+    if not suggestions and last_error:
+        raise HTTPException(status_code=502, detail=f"Competitor research failed: {last_error}")
     return {"suggestions": suggestions}
 
 
