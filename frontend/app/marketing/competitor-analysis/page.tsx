@@ -44,20 +44,89 @@ function TagInput({ tags, onChange, placeholder }: { tags: string[]; onChange: (
   )
 }
 
+function AddCompetitorModal({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }) {
+  const [name, setName] = useState('')
+  const [website, setWebsite] = useState('')
+  const [linkedinUrl, setLinkedinUrl] = useState('')
+  const [countries, setCountries] = useState<string[]>([])
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+
+  const save = async () => {
+    if (!name.trim()) { setError('Name is required'); return }
+    const user = getStoredUser()
+    setSaving(true)
+    setError('')
+    try {
+      await competitorAPI.createCompetitor({
+        name, website, linkedin_url: linkedinUrl, countries, source: 'manual', created_by_email: user?.email || '',
+      })
+      onSaved()
+    } catch (e: any) {
+      setError(e.message || 'Failed to save')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+      onClick={e => { if (e.target === e.currentTarget) onClose() }}>
+      <div style={{ background: 'white', borderRadius: '14px', width: '480px', maxWidth: '92vw', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
+        <div style={{ padding: '18px 24px', borderBottom: '1px solid #EDF2F7' }}>
+          <h2 style={{ fontSize: '15px', fontWeight: '800', color: '#156082', margin: 0 }}>Add Competitor</h2>
+        </div>
+        <div style={{ padding: '18px 24px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+          <div>
+            <div style={lbl}>Name</div>
+            <input style={{ ...inp, width: '100%', boxSizing: 'border-box' as const }} value={name} onChange={e => setName(e.target.value)} placeholder="Company name" />
+          </div>
+          <div>
+            <div style={lbl}>Website</div>
+            <input style={{ ...inp, width: '100%', boxSizing: 'border-box' as const }} value={website} onChange={e => setWebsite(e.target.value)} placeholder="https://..." />
+          </div>
+          <div>
+            <div style={lbl}>LinkedIn</div>
+            <input style={{ ...inp, width: '100%', boxSizing: 'border-box' as const }} value={linkedinUrl} onChange={e => setLinkedinUrl(e.target.value)} placeholder="https://linkedin.com/company/..." />
+          </div>
+          <div>
+            <div style={lbl}>Countries</div>
+            <TagInput tags={countries} onChange={setCountries} placeholder="Country, e.g. France" />
+          </div>
+          {error && <div style={{ fontSize: '11px', color: '#DC2626' }}>⚠️ {error}</div>}
+        </div>
+        <div style={{ padding: '14px 24px', borderTop: '1px solid #EDF2F7', display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+          <button onClick={onClose} style={{ ...btn, padding: '9px 18px', background: '#F1F5F9', color: '#64748B' }}>Cancel</button>
+          <button onClick={save} disabled={saving} style={{ ...btn, padding: '9px 18px', background: saving ? '#94A3B8' : '#156082', color: 'white' }}>
+            {saving ? 'Saving…' : 'Save'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function CompetitorAnalysisPage() {
   const { canEdit } = useMarketingPerm('competitor_analysis')
   const router = useRouter()
   const [competitors, setCompetitors] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
+  const [listError, setListError] = useState('')
   const [countries, setCountries] = useState<string[]>([])
   const [suggesting, setSuggesting] = useState(false)
   const [suggestions, setSuggestions] = useState<any[]>([])
   const [suggestError, setSuggestError] = useState('')
+  const [addError, setAddError] = useState('')
   const [analyzingId, setAnalyzingId] = useState<string | null>(null)
+  const [showAdd, setShowAdd] = useState(false)
 
   const load = () => {
     setLoading(true)
-    competitorAPI.listCompetitors().then(d => setCompetitors(d.competitors || [])).finally(() => setLoading(false))
+    setListError('')
+    competitorAPI.listCompetitors()
+      .then(d => setCompetitors(d.competitors || []))
+      .catch(e => setListError(e.message || 'Failed to load'))
+      .finally(() => setLoading(false))
   }
   useEffect(load, [])
 
@@ -77,12 +146,17 @@ export default function CompetitorAnalysisPage() {
 
   const addSuggestion = async (s: any) => {
     const user = getStoredUser()
-    await competitorAPI.createCompetitor({
-      name: s.name, website: s.website, linkedin_url: s.linkedin_url,
-      countries: [s.country], source: 'ai_suggested', created_by_email: user?.email || '',
-    })
-    setSuggestions(prev => prev.filter(x => x !== s))
-    load()
+    setAddError('')
+    try {
+      await competitorAPI.createCompetitor({
+        name: s.name, website: s.website, linkedin_url: s.linkedin_url,
+        countries: [s.country], source: 'ai_suggested', created_by_email: user?.email || '',
+      })
+      setSuggestions(prev => prev.filter(x => x !== s))
+      load()
+    } catch (e: any) {
+      setAddError(e.message || 'Failed to add competitor')
+    }
   }
 
   const dismissSuggestion = (s: any) => setSuggestions(prev => prev.filter(x => x !== s))
@@ -96,21 +170,30 @@ export default function CompetitorAnalysisPage() {
 
   const remove = async (id: string) => {
     if (!confirm('Delete this competitor? Its analysis will be lost.')) return
-    await competitorAPI.deleteCompetitor(id)
-    load()
+    try {
+      await competitorAPI.deleteCompetitor(id)
+      load()
+    } catch (e: any) {
+      alert(e.message || 'Failed to delete')
+    }
   }
 
   return (
     <MarketingLayout>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '18px' }}>
         <h1 style={{ fontSize: '20px', fontWeight: '800', color: '#156082', margin: 0 }}>🔬 Competitor Analysis</h1>
+        {canEdit && (
+          <button onClick={() => setShowAdd(true)} style={{ ...btn, padding: '9px 18px', background: '#156082', color: 'white' }}>+ Add Competitor</button>
+        )}
       </div>
+
+      {listError && <div style={{ ...card, color: '#DC2626', fontSize: '12px' }}>⚠️ {listError}</div>}
 
       {canEdit && (
         <div style={card}>
           <div style={lbl}>Suggest competitors</div>
           <p style={{ fontSize: '11px', color: '#94A3B8', margin: '0 0 12px' }}>
-            Add the countries you want to research, and Whubbi will search the web and propose real competitors operating there.
+            Add the countries you want to research, and Whubbi will search the web and propose real competitors operating there. Prefer to add one yourself? Use "+ Add Competitor" above instead.
           </p>
           <TagInput tags={countries} onChange={setCountries} placeholder="Country, e.g. France" />
           <div style={{ marginTop: '12px' }}>
@@ -119,6 +202,7 @@ export default function CompetitorAnalysisPage() {
             </button>
           </div>
           {suggestError && <div style={{ fontSize: '11px', color: '#DC2626', marginTop: '8px' }}>⚠️ {suggestError}</div>}
+          {addError && <div style={{ fontSize: '11px', color: '#DC2626', marginTop: '8px' }}>⚠️ {addError}</div>}
 
           {suggestions.length > 0 && (
             <div style={{ marginTop: '16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
@@ -178,6 +262,10 @@ export default function CompetitorAnalysisPage() {
             ))}
           </div>
         </div>
+      )}
+
+      {showAdd && (
+        <AddCompetitorModal onClose={() => setShowAdd(false)} onSaved={() => { setShowAdd(false); load() }} />
       )}
     </MarketingLayout>
   )
