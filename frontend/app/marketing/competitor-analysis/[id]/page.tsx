@@ -26,6 +26,14 @@ function EditableCell({ display, editing, canEdit, onStartEdit, children }: any)
 }
 
 export default function CompetitorDetailPage() {
+  return <MarketingLayout><CompetitorDetailContent /></MarketingLayout>
+}
+
+// useMarketingPerm reads MarketingPermContext, which MarketingLayout only provides to its
+// children — calling it in the same component that renders <MarketingLayout> would read the
+// context from outside the Provider (always the default/null value, so canEdit would be stuck
+// false forever). Must live in a component actually rendered as MarketingLayout's child.
+function CompetitorDetailContent() {
   const { id } = useParams()
   const router = useRouter()
   const { canEdit } = useMarketingPerm('competitor_analysis')
@@ -34,6 +42,7 @@ export default function CompetitorDetailPage() {
   const [editingField, setEditingField] = useState<string | null>(null)
   const [draft, setDraft] = useState<any>({})
   const [analyzing, setAnalyzing] = useState(false)
+  const [saveError, setSaveError] = useState('')
 
   const load = () => {
     setLoading(true)
@@ -44,15 +53,20 @@ export default function CompetitorDetailPage() {
   const startEdit = (field: string, value: any) => {
     setEditingField(field)
     setDraft({ [field]: value })
+    setSaveError('')
   }
 
   const save = async (field: string) => {
     const value = field === 'countries'
       ? String(draft[field] || '').split(',').map((s: string) => s.trim()).filter(Boolean)
       : draft[field]
-    const updated = await competitorAPI.updateCompetitor(id as string, { [field]: value })
-    setCompetitor(updated)
-    setEditingField(null)
+    try {
+      const updated = await competitorAPI.updateCompetitor(id as string, { [field]: value })
+      setCompetitor(updated)
+      setEditingField(null)
+    } catch (e: any) {
+      setSaveError(e.message || 'Failed to save')
+    }
   }
 
   const analyze = async () => {
@@ -63,12 +77,13 @@ export default function CompetitorDetailPage() {
   }
 
   if (loading || !competitor) {
-    return <MarketingLayout><div style={{ textAlign: 'center', padding: '48px', color: '#45B6E4' }}>Loading…</div></MarketingLayout>
+    return <div style={{ textAlign: 'center', padding: '48px', color: '#45B6E4' }}>Loading…</div>
   }
 
   return (
-    <MarketingLayout>
+    <>
       <button onClick={() => router.push('/marketing/competitor-analysis')} style={{ background: 'none', border: 'none', color: '#45B6E4', fontSize: '12px', fontWeight: '700', cursor: 'pointer', padding: 0, marginBottom: '14px' }}>← Back to Competitor Analysis</button>
+      {saveError && <div style={{ fontSize: '11px', color: '#DC2626', marginBottom: '10px' }}>⚠️ {saveError}</div>}
 
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
         <h1 style={{ fontSize: '20px', fontWeight: '800', color: '#156082', margin: 0 }}>{competitor.name}</h1>
@@ -156,6 +171,6 @@ export default function CompetitorDetailPage() {
           <p style={{ fontSize: '12px', color: '#3F3F3F', margin: '8px 0 0', whiteSpace: 'pre-wrap' as const }}>{competitor.analysis_notes}</p>
         </div>
       )}
-    </MarketingLayout>
+    </>
   )
 }

@@ -107,6 +107,14 @@ function AddCompetitorModal({ onClose, onSaved }: { onClose: () => void; onSaved
 }
 
 export default function CompetitorAnalysisPage() {
+  return <MarketingLayout><CompetitorAnalysisContent /></MarketingLayout>
+}
+
+// useMarketingPerm reads MarketingPermContext, which MarketingLayout only provides to its
+// children — calling it in the same component that renders <MarketingLayout> would read the
+// context from outside the Provider (always the default/null value, so canEdit would be stuck
+// false forever). Must live in a component actually rendered as MarketingLayout's child.
+function CompetitorAnalysisContent() {
   const { canEdit } = useMarketingPerm('competitor_analysis')
   const router = useRouter()
   const [competitors, setCompetitors] = useState<any[]>([])
@@ -179,7 +187,7 @@ export default function CompetitorAnalysisPage() {
   }
 
   return (
-    <MarketingLayout>
+    <>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '18px' }}>
         <h1 style={{ fontSize: '20px', fontWeight: '800', color: '#156082', margin: 0 }}>🔬 Competitor Analysis</h1>
         {canEdit && (
@@ -267,6 +275,6 @@ export default function CompetitorAnalysisPage() {
       {showAdd && (
         <AddCompetitorModal onClose={() => setShowAdd(false)} onSaved={() => { setShowAdd(false); load() }} />
       )}
-    </MarketingLayout>
+    </>
   )
 }

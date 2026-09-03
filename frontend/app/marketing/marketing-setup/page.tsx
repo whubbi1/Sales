@@ -164,6 +164,14 @@ function SetupModal({ setup, entities, onClose, onSaved }: { setup?: any | null;
 }
 
 export default function MarketingSetupPage() {
+  return <MarketingLayout><MarketingSetupContent /></MarketingLayout>
+}
+
+// useMarketingPerm reads MarketingPermContext, which MarketingLayout only provides to its
+// children — calling it in the same component that renders <MarketingLayout> would read the
+// context from outside the Provider (always the default/null value, so canEdit would be stuck
+// false forever). Must live in a component actually rendered as MarketingLayout's child.
+function MarketingSetupContent() {
   const { canEdit } = useMarketingPerm('marketing_setup')
   const [setups, setSetups] = useState<any[]>([])
   const [entities, setEntities] = useState<Entity[]>([])
@@ -192,7 +200,7 @@ export default function MarketingSetupPage() {
   }
 
   return (
-    <MarketingLayout>
+    <>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '18px' }}>
         <h1 style={{ fontSize: '20px', fontWeight: '800', color: '#156082', margin: 0 }}>📋 Marketing Setup</h1>
         {canEdit && (
@@ -250,6 +258,6 @@ export default function MarketingSetupPage() {
           onSaved={() => { setShowAdd(false); setEditing(null); load() }}
         />
       )}
-    </MarketingLayout>
+    </>
   )
 }
