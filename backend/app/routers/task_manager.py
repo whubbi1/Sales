@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
 from app.database import get_db
+from app.authz import require_permission
 from datetime import datetime
 import uuid
 
@@ -152,6 +153,7 @@ async def list_tasks(
     email: str = None, scope: str = "company", source: str = None, status_filter: str = None,
     entity_type: str = None, entity_id: str = None, include_subtasks: bool = False,
     db: AsyncSession = Depends(get_db),
+    _: str = Depends(require_permission("tasks", "manager", "view")),
 ):
     where = ["1=1"]
     params = {}
@@ -185,7 +187,7 @@ async def list_tasks(
 
 
 @router.post("/tasks")
-async def create_task(data: dict, db: AsyncSession = Depends(get_db)):
+async def create_task(data: dict, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("tasks", "manager", "edit"))):
     owner_email = data.get("owner_email", "")
     if not data.get("title") or not owner_email:
         raise HTTPException(status_code=400, detail="title and owner_email are required")
@@ -224,7 +226,7 @@ async def create_task(data: dict, db: AsyncSession = Depends(get_db)):
 
 
 @router.post("/tasks/{parent_id}/subtasks")
-async def create_subtask(parent_id: str, data: dict, db: AsyncSession = Depends(get_db)):
+async def create_subtask(parent_id: str, data: dict, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("tasks", "manager", "edit"))):
     parent = await _get_task(db, parent_id)
     if not parent:
         raise HTTPException(status_code=404, detail="Parent task not found")
@@ -262,7 +264,7 @@ async def create_subtask(parent_id: str, data: dict, db: AsyncSession = Depends(
 
 
 @router.get("/tasks/{task_id}")
-async def get_task(task_id: str, db: AsyncSession = Depends(get_db)):
+async def get_task(task_id: str, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("tasks", "manager", "view"))):
     task = await _get_task(db, task_id)
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
@@ -280,7 +282,7 @@ async def get_task(task_id: str, db: AsyncSession = Depends(get_db)):
 
 
 @router.put("/tasks/{task_id}")
-async def update_task(task_id: str, data: dict, db: AsyncSession = Depends(get_db)):
+async def update_task(task_id: str, data: dict, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("tasks", "manager", "edit"))):
     task = await _get_task(db, task_id)
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
@@ -314,12 +316,12 @@ async def update_task(task_id: str, data: dict, db: AsyncSession = Depends(get_d
 
 
 @router.put("/tasks/{task_id}/status")
-async def update_task_status(task_id: str, data: dict, db: AsyncSession = Depends(get_db)):
+async def update_task_status(task_id: str, data: dict, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("tasks", "manager", "edit"))):
     return await set_task_status_internal(db, task_id, data.get("acting_email", ""), data.get("status", ""), data.get("acting_name", ""))
 
 
 @router.post("/tasks/{task_id}/reassign")
-async def reassign_task(task_id: str, data: dict, db: AsyncSession = Depends(get_db)):
+async def reassign_task(task_id: str, data: dict, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("tasks", "manager", "edit"))):
     return await reassign_task_internal(
         db, task_id, data.get("acting_email", ""),
         data.get("new_assignee_email", ""), data.get("new_assignee_name", ""),
@@ -327,7 +329,7 @@ async def reassign_task(task_id: str, data: dict, db: AsyncSession = Depends(get
 
 
 @router.post("/tasks/{task_id}/transfer-owner")
-async def transfer_owner(task_id: str, data: dict, db: AsyncSession = Depends(get_db)):
+async def transfer_owner(task_id: str, data: dict, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("tasks", "manager", "edit"))):
     return await transfer_owner_internal(
         db, task_id, data.get("acting_email", ""),
         data.get("new_owner_email", ""), data.get("new_owner_name", ""),
@@ -335,7 +337,7 @@ async def transfer_owner(task_id: str, data: dict, db: AsyncSession = Depends(ge
 
 
 @router.delete("/tasks/{task_id}")
-async def delete_task(task_id: str, acting_email: str = "", db: AsyncSession = Depends(get_db)):
+async def delete_task(task_id: str, acting_email: str = "", db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("tasks", "manager", "edit"))):
     task = await _get_task(db, task_id)
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
@@ -348,7 +350,7 @@ async def delete_task(task_id: str, acting_email: str = "", db: AsyncSession = D
 
 # ─── Watchers ───────────────────────────────────────────────────────────────────
 @router.post("/tasks/{task_id}/watchers")
-async def add_watcher(task_id: str, data: dict, db: AsyncSession = Depends(get_db)):
+async def add_watcher(task_id: str, data: dict, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("tasks", "manager", "edit"))):
     task = await _get_task(db, task_id)
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
@@ -365,7 +367,7 @@ async def add_watcher(task_id: str, data: dict, db: AsyncSession = Depends(get_d
 
 
 @router.delete("/tasks/{task_id}/watchers/{watcher_email}")
-async def remove_watcher(task_id: str, watcher_email: str, acting_email: str = "", db: AsyncSession = Depends(get_db)):
+async def remove_watcher(task_id: str, watcher_email: str, acting_email: str = "", db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("tasks", "manager", "edit"))):
     task = await _get_task(db, task_id)
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
@@ -379,13 +381,13 @@ async def remove_watcher(task_id: str, watcher_email: str, acting_email: str = "
 
 # ─── Comments ───────────────────────────────────────────────────────────────────
 @router.get("/tasks/{task_id}/comments")
-async def list_comments(task_id: str, db: AsyncSession = Depends(get_db)):
+async def list_comments(task_id: str, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("tasks", "manager", "view"))):
     r = await db.execute(text("SELECT * FROM task_comments WHERE task_id = CAST(:id AS UUID) ORDER BY created_at ASC"), {"id": task_id})
     return {"comments": [_row(dict(row._mapping)) for row in r.fetchall()]}
 
 
 @router.post("/tasks/{task_id}/comments")
-async def add_comment(task_id: str, data: dict, db: AsyncSession = Depends(get_db)):
+async def add_comment(task_id: str, data: dict, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("tasks", "manager", "edit"))):
     await _log_comment(db, task_id, data.get("content", ""), data.get("author_email", ""), data.get("author_name", ""), "web")
     await db.execute(text("UPDATE tasks SET updated_at = NOW() WHERE id = CAST(:id AS UUID)"), {"id": task_id})
     await db.commit()
@@ -394,13 +396,13 @@ async def add_comment(task_id: str, data: dict, db: AsyncSession = Depends(get_d
 
 # ─── Links & Files ──────────────────────────────────────────────────────────────
 @router.get("/tasks/{task_id}/links")
-async def list_links(task_id: str, db: AsyncSession = Depends(get_db)):
+async def list_links(task_id: str, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("tasks", "manager", "view"))):
     r = await db.execute(text("SELECT * FROM task_links WHERE task_id = CAST(:id AS UUID) ORDER BY created_at ASC"), {"id": task_id})
     return {"links": [_row(dict(row._mapping)) for row in r.fetchall()]}
 
 
 @router.post("/tasks/{task_id}/links")
-async def add_link(task_id: str, data: dict, db: AsyncSession = Depends(get_db)):
+async def add_link(task_id: str, data: dict, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("tasks", "manager", "edit"))):
     if not data.get("label") or not data.get("url"):
         raise HTTPException(status_code=400, detail="label and url are required")
     link_id = str(uuid.uuid4())
@@ -413,7 +415,7 @@ async def add_link(task_id: str, data: dict, db: AsyncSession = Depends(get_db))
 
 
 @router.delete("/tasks/{task_id}/links/{link_id}")
-async def delete_link(task_id: str, link_id: str, db: AsyncSession = Depends(get_db)):
+async def delete_link(task_id: str, link_id: str, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("tasks", "manager", "edit"))):
     await db.execute(text("DELETE FROM task_links WHERE id = CAST(:id AS UUID) AND task_id = CAST(:tid AS UUID)"), {"id": link_id, "tid": task_id})
     await db.commit()
     return {"status": "ok"}

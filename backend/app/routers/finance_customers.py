@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
 from app.database import get_db
+from app.authz import require_permission
 from app.services.ids import next_internal_id
 from app.routers.hr import upload_to_s3, s3_ref_to_presigned
 from datetime import date
@@ -77,7 +78,7 @@ async def _attach_contacts_and_links(db: AsyncSession, contracts: list):
 
 # ─── Contracts ───────────────────────────────────────────────────────────────────
 @router.get("/customer-contracts")
-async def list_customer_contracts(search: str = None, company_id: str = None, project_id: str = None, db: AsyncSession = Depends(get_db)):
+async def list_customer_contracts(search: str = None, company_id: str = None, project_id: str = None, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("finance", "customers", "view"))):
     where, params = [], {}
     if search:
         where.append("c.contract_name ILIKE :q")
@@ -94,7 +95,7 @@ async def list_customer_contracts(search: str = None, company_id: str = None, pr
 
 
 @router.post("/customer-contracts")
-async def create_customer_contract(data: dict, db: AsyncSession = Depends(get_db)):
+async def create_customer_contract(data: dict, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("finance", "customers", "edit"))):
     if not data.get("company_id"):
         raise HTTPException(status_code=400, detail="company_id is required")
     contract_type = data.get("contract_type") or ""
@@ -142,7 +143,7 @@ async def create_customer_contract(data: dict, db: AsyncSession = Depends(get_db
 
 
 @router.get("/customer-contracts/{contract_id}")
-async def get_customer_contract(contract_id: str, db: AsyncSession = Depends(get_db)):
+async def get_customer_contract(contract_id: str, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("finance", "customers", "view"))):
     r = await db.execute(text(f"{_CONTRACT_SELECT} WHERE c.id = CAST(:id AS UUID)"), {"id": contract_id})
     row = r.fetchone()
     if not row:
@@ -153,7 +154,7 @@ async def get_customer_contract(contract_id: str, db: AsyncSession = Depends(get
 
 
 @router.put("/customer-contracts/{contract_id}")
-async def update_customer_contract(contract_id: str, data: dict, db: AsyncSession = Depends(get_db)):
+async def update_customer_contract(contract_id: str, data: dict, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("finance", "customers", "edit"))):
     existing = await get_customer_contract(contract_id, db)
     contract_type = data.get("contract_type", existing.get("contract_type")) or ""
     if contract_type and contract_type not in CONTRACT_TYPES:
@@ -191,7 +192,7 @@ async def update_customer_contract(contract_id: str, data: dict, db: AsyncSessio
 
 
 @router.delete("/customer-contracts/{contract_id}")
-async def delete_customer_contract(contract_id: str, db: AsyncSession = Depends(get_db)):
+async def delete_customer_contract(contract_id: str, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("finance", "customers", "edit"))):
     await db.execute(text("DELETE FROM finance_customer_contracts WHERE id = CAST(:id AS UUID)"), {"id": contract_id})
     await db.commit()
     return {"status": "deleted"}
@@ -199,7 +200,7 @@ async def delete_customer_contract(contract_id: str, db: AsyncSession = Depends(
 
 # ─── Contacts (many-to-many) ─────────────────────────────────────────────────────
 @router.post("/customer-contracts/{contract_id}/contacts/{contact_id}")
-async def link_contract_contact(contract_id: str, contact_id: str, db: AsyncSession = Depends(get_db)):
+async def link_contract_contact(contract_id: str, contact_id: str, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("finance", "customers", "edit"))):
     await db.execute(text("""
         INSERT INTO finance_customer_contract_contacts (contract_id, contact_id)
         VALUES (CAST(:cid AS UUID), CAST(:ctid AS UUID)) ON CONFLICT DO NOTHING
@@ -209,7 +210,7 @@ async def link_contract_contact(contract_id: str, contact_id: str, db: AsyncSess
 
 
 @router.delete("/customer-contracts/{contract_id}/contacts/{contact_id}")
-async def unlink_contract_contact(contract_id: str, contact_id: str, db: AsyncSession = Depends(get_db)):
+async def unlink_contract_contact(contract_id: str, contact_id: str, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("finance", "customers", "edit"))):
     await db.execute(text("""
         DELETE FROM finance_customer_contract_contacts WHERE contract_id = CAST(:cid AS UUID) AND contact_id = CAST(:ctid AS UUID)
     """), {"cid": contract_id, "ctid": contact_id})
@@ -219,7 +220,7 @@ async def unlink_contract_contact(contract_id: str, contact_id: str, db: AsyncSe
 
 # ─── Invoicing platform links ────────────────────────────────────────────────────
 @router.post("/customer-contracts/{contract_id}/links")
-async def add_contract_link(contract_id: str, data: dict, db: AsyncSession = Depends(get_db)):
+async def add_contract_link(contract_id: str, data: dict, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("finance", "customers", "edit"))):
     if not data.get("label") or not data.get("url"):
         raise HTTPException(status_code=400, detail="label and url are required")
     link_id = str(uuid.uuid4())
@@ -232,7 +233,7 @@ async def add_contract_link(contract_id: str, data: dict, db: AsyncSession = Dep
 
 
 @router.delete("/customer-contracts/{contract_id}/links/{link_id}")
-async def delete_contract_link(contract_id: str, link_id: str, db: AsyncSession = Depends(get_db)):
+async def delete_contract_link(contract_id: str, link_id: str, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("finance", "customers", "edit"))):
     await db.execute(text("""
         DELETE FROM finance_customer_contract_links WHERE id = CAST(:id AS UUID) AND contract_id = CAST(:cid AS UUID)
     """), {"id": link_id, "cid": contract_id})
@@ -242,7 +243,7 @@ async def delete_contract_link(contract_id: str, link_id: str, db: AsyncSession 
 
 # ─── Signed contract / invoicing documentation (S3-backed single-file fields) ──
 @router.post("/customer-contracts/{contract_id}/signed-contract")
-async def upload_signed_contract(contract_id: str, file: UploadFile = File(...), db: AsyncSession = Depends(get_db)):
+async def upload_signed_contract(contract_id: str, file: UploadFile = File(...), db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("finance", "customers", "edit"))):
     content = await file.read()
     key = f"finance/customer-contracts/{contract_id}/signed/{file.filename.replace(' ', '_')}"
     file_url = await upload_to_s3(key, content, file.content_type or "application/octet-stream")
@@ -253,7 +254,7 @@ async def upload_signed_contract(contract_id: str, file: UploadFile = File(...),
 
 
 @router.post("/customer-contracts/{contract_id}/invoicing-documentation")
-async def upload_invoicing_documentation(contract_id: str, file: UploadFile = File(...), db: AsyncSession = Depends(get_db)):
+async def upload_invoicing_documentation(contract_id: str, file: UploadFile = File(...), db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("finance", "customers", "edit"))):
     content = await file.read()
     key = f"finance/customer-contracts/{contract_id}/invoicing-doc/{file.filename.replace(' ', '_')}"
     file_url = await upload_to_s3(key, content, file.content_type or "application/octet-stream")

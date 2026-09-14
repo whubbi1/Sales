@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, UploadFile, File, Form, BackgroundTasks
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
 from app.database import get_db
+from app.authz import require_permission, require_self_or_permission, get_current_user_email, require_authenticated
 import uuid, os, asyncio, json, httpx
 import boto3
 
@@ -55,12 +56,14 @@ def _stringify_ids(d: dict) -> dict:
 
 # ─── Trainings performed (self-service) ────────────────────────────────────────
 @router.get("/trainings/{email}")
-async def list_trainings(email: str, db: AsyncSession = Depends(get_db)):
+async def list_trainings(email: str, db: AsyncSession = Depends(get_db), caller: str = Depends(get_current_user_email)):
+    await require_self_or_permission(email, caller, "training", "manager", db, "view")
     r = await db.execute(text("SELECT * FROM trainings WHERE user_email = :email ORDER BY training_date DESC"), {"email": email})
     return {"trainings": await _with_file_url(r.fetchall())}
 
 @router.post("/trainings/{email}")
-async def create_training(email: str, data: dict, db: AsyncSession = Depends(get_db)):
+async def create_training(email: str, data: dict, db: AsyncSession = Depends(get_db), caller: str = Depends(get_current_user_email)):
+    await require_self_or_permission(email, caller, "training", "manager", db, "edit")
     tid = str(uuid.uuid4())
     await db.execute(text("""
         INSERT INTO trainings (id, user_email, training_date, name, description, created_at, updated_at)
@@ -70,7 +73,8 @@ async def create_training(email: str, data: dict, db: AsyncSession = Depends(get
     return {"status": "ok", "id": tid}
 
 @router.put("/trainings/{email}/{tid}")
-async def update_training(email: str, tid: str, data: dict, db: AsyncSession = Depends(get_db)):
+async def update_training(email: str, tid: str, data: dict, db: AsyncSession = Depends(get_db), caller: str = Depends(get_current_user_email)):
+    await require_self_or_permission(email, caller, "training", "manager", db, "edit")
     await db.execute(text("""
         UPDATE trainings SET
             training_date = CAST(NULLIF(:training_date,'') AS DATE),
@@ -83,7 +87,8 @@ async def update_training(email: str, tid: str, data: dict, db: AsyncSession = D
     return {"status": "ok"}
 
 @router.post("/trainings/{email}/{tid}/upload")
-async def upload_training_file(email: str, tid: str, file: UploadFile = File(...), db: AsyncSession = Depends(get_db)):
+async def upload_training_file(email: str, tid: str, file: UploadFile = File(...), db: AsyncSession = Depends(get_db), caller: str = Depends(get_current_user_email)):
+    await require_self_or_permission(email, caller, "training", "manager", db, "edit")
     content = await file.read()
     safe_fn = file.filename.replace(" ", "_")
     key = f"hr/training/{email}/{tid}/{safe_fn}"
@@ -94,19 +99,22 @@ async def upload_training_file(email: str, tid: str, file: UploadFile = File(...
     return {"status": "ok", "file_url": await s3_ref_to_presigned(s3_ref)}
 
 @router.delete("/trainings/{email}/{tid}")
-async def delete_training(email: str, tid: str, db: AsyncSession = Depends(get_db)):
+async def delete_training(email: str, tid: str, db: AsyncSession = Depends(get_db), caller: str = Depends(get_current_user_email)):
+    await require_self_or_permission(email, caller, "training", "manager", db, "edit")
     await db.execute(text("DELETE FROM trainings WHERE id = CAST(:id AS UUID) AND user_email = :email"), {"id": tid, "email": email})
     await db.commit()
     return {"status": "ok"}
 
 # ─── Certifications (self-service) ─────────────────────────────────────────────
 @router.get("/certifications/{email}")
-async def list_certifications(email: str, db: AsyncSession = Depends(get_db)):
+async def list_certifications(email: str, db: AsyncSession = Depends(get_db), caller: str = Depends(get_current_user_email)):
+    await require_self_or_permission(email, caller, "training", "manager", db, "view")
     r = await db.execute(text("SELECT * FROM certifications WHERE user_email = :email ORDER BY cert_date DESC"), {"email": email})
     return {"certifications": await _with_file_url(r.fetchall())}
 
 @router.post("/certifications/{email}")
-async def create_certification(email: str, data: dict, db: AsyncSession = Depends(get_db)):
+async def create_certification(email: str, data: dict, db: AsyncSession = Depends(get_db), caller: str = Depends(get_current_user_email)):
+    await require_self_or_permission(email, caller, "training", "manager", db, "edit")
     cid = str(uuid.uuid4())
     await db.execute(text("""
         INSERT INTO certifications (id, user_email, cert_date, name, description, created_at, updated_at)
@@ -116,7 +124,8 @@ async def create_certification(email: str, data: dict, db: AsyncSession = Depend
     return {"status": "ok", "id": cid}
 
 @router.put("/certifications/{email}/{cid}")
-async def update_certification(email: str, cid: str, data: dict, db: AsyncSession = Depends(get_db)):
+async def update_certification(email: str, cid: str, data: dict, db: AsyncSession = Depends(get_db), caller: str = Depends(get_current_user_email)):
+    await require_self_or_permission(email, caller, "training", "manager", db, "edit")
     await db.execute(text("""
         UPDATE certifications SET
             cert_date = CAST(NULLIF(:cert_date,'') AS DATE),
@@ -129,7 +138,8 @@ async def update_certification(email: str, cid: str, data: dict, db: AsyncSessio
     return {"status": "ok"}
 
 @router.post("/certifications/{email}/{cid}/upload")
-async def upload_certification_file(email: str, cid: str, file: UploadFile = File(...), db: AsyncSession = Depends(get_db)):
+async def upload_certification_file(email: str, cid: str, file: UploadFile = File(...), db: AsyncSession = Depends(get_db), caller: str = Depends(get_current_user_email)):
+    await require_self_or_permission(email, caller, "training", "manager", db, "edit")
     content = await file.read()
     safe_fn = file.filename.replace(" ", "_")
     key = f"hr/certifications/{email}/{cid}/{safe_fn}"
@@ -140,7 +150,8 @@ async def upload_certification_file(email: str, cid: str, file: UploadFile = Fil
     return {"status": "ok", "file_url": await s3_ref_to_presigned(s3_ref)}
 
 @router.delete("/certifications/{email}/{cid}")
-async def delete_certification(email: str, cid: str, db: AsyncSession = Depends(get_db)):
+async def delete_certification(email: str, cid: str, db: AsyncSession = Depends(get_db), caller: str = Depends(get_current_user_email)):
+    await require_self_or_permission(email, caller, "training", "manager", db, "edit")
     await db.execute(text("DELETE FROM certifications WHERE id = CAST(:id AS UUID) AND user_email = :email"), {"id": cid, "email": email})
     await db.commit()
     return {"status": "ok"}
@@ -157,12 +168,12 @@ async def get_meta():
             "training_languages": TRAINING_LANGUAGES, "expertise_levels": EXPERTISE_LEVELS}
 
 @router.get("/catalog")
-async def list_catalog(db: AsyncSession = Depends(get_db)):
+async def list_catalog(db: AsyncSession = Depends(get_db), _: str = Depends(require_authenticated)):
     r = await db.execute(text("SELECT * FROM training_catalog ORDER BY created_at DESC"))
     return {"catalog": [_stringify_ids(dict(row._mapping)) for row in r.fetchall()]}
 
 @router.post("/catalog")
-async def create_catalog_item(data: dict, db: AsyncSession = Depends(get_db)):
+async def create_catalog_item(data: dict, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("training", "manager", "edit"))):
     cid = str(uuid.uuid4())
     await db.execute(text("""
         INSERT INTO training_catalog (id, training_type, company, title, description, duration, material_link, languages, expertise_level, created_at, updated_at)
@@ -182,7 +193,7 @@ async def create_catalog_item(data: dict, db: AsyncSession = Depends(get_db)):
     return {"status": "ok", "id": cid}
 
 @router.put("/catalog/{cid}")
-async def update_catalog_item(cid: str, data: dict, db: AsyncSession = Depends(get_db)):
+async def update_catalog_item(cid: str, data: dict, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("training", "manager", "edit"))):
     params = {
         "id": cid,
         "training_type": data.get("training_type", ""),
@@ -213,14 +224,14 @@ async def update_catalog_item(cid: str, data: dict, db: AsyncSession = Depends(g
     return {"status": "ok"}
 
 @router.delete("/catalog/{cid}")
-async def delete_catalog_item(cid: str, db: AsyncSession = Depends(get_db)):
+async def delete_catalog_item(cid: str, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("training", "manager", "edit"))):
     await db.execute(text("DELETE FROM training_catalog WHERE id = CAST(:id AS UUID)"), {"id": cid})
     await db.commit()
     return {"status": "ok"}
 
 # ─── Training Plans (function-based bundles of catalog trainings) ─────────────
 @router.get("/plans")
-async def list_plans(db: AsyncSession = Depends(get_db)):
+async def list_plans(db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("training", "manager", "view"))):
     r = await db.execute(text("SELECT * FROM training_plans ORDER BY created_at DESC"))
     plans = [_stringify_ids(dict(row._mapping)) for row in r.fetchall()]
     for p in plans:
@@ -234,7 +245,7 @@ async def list_plans(db: AsyncSession = Depends(get_db)):
     return {"plans": plans}
 
 @router.post("/plans")
-async def create_plan(data: dict, db: AsyncSession = Depends(get_db)):
+async def create_plan(data: dict, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("training", "manager", "edit"))):
     pid = str(uuid.uuid4())
     await db.execute(text("""
         INSERT INTO training_plans (id, training_function, description, created_at, updated_at)
@@ -249,7 +260,7 @@ async def create_plan(data: dict, db: AsyncSession = Depends(get_db)):
     return {"status": "ok", "id": pid}
 
 @router.put("/plans/{pid}")
-async def update_plan(pid: str, data: dict, db: AsyncSession = Depends(get_db)):
+async def update_plan(pid: str, data: dict, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("training", "manager", "edit"))):
     await db.execute(text("""
         UPDATE training_plans SET
             training_function = COALESCE(NULLIF(:training_function,''), training_function),
@@ -261,14 +272,14 @@ async def update_plan(pid: str, data: dict, db: AsyncSession = Depends(get_db)):
     return {"status": "ok"}
 
 @router.delete("/plans/{pid}")
-async def delete_plan(pid: str, db: AsyncSession = Depends(get_db)):
+async def delete_plan(pid: str, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("training", "manager", "edit"))):
     await db.execute(text("DELETE FROM training_plan_items WHERE plan_id = CAST(:id AS UUID)"), {"id": pid})
     await db.execute(text("DELETE FROM training_plans WHERE id = CAST(:id AS UUID)"), {"id": pid})
     await db.commit()
     return {"status": "ok"}
 
 @router.post("/plans/{pid}/items")
-async def add_plan_item(pid: str, data: dict, db: AsyncSession = Depends(get_db)):
+async def add_plan_item(pid: str, data: dict, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("training", "manager", "edit"))):
     await db.execute(text("""
         INSERT INTO training_plan_items (id, plan_id, catalog_id, sequence, created_at)
         VALUES (gen_random_uuid(), CAST(:pid AS UUID), CAST(:cid AS UUID), :sequence, NOW())
@@ -277,14 +288,14 @@ async def add_plan_item(pid: str, data: dict, db: AsyncSession = Depends(get_db)
     return {"status": "ok"}
 
 @router.put("/plans/{pid}/items/{item_id}")
-async def update_plan_item(pid: str, item_id: str, data: dict, db: AsyncSession = Depends(get_db)):
+async def update_plan_item(pid: str, item_id: str, data: dict, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("training", "manager", "edit"))):
     await db.execute(text("UPDATE training_plan_items SET sequence = :sequence WHERE id = CAST(:id AS UUID) AND plan_id = CAST(:pid AS UUID)"),
                       {"id": item_id, "pid": pid, "sequence": data.get("sequence", 0)})
     await db.commit()
     return {"status": "ok"}
 
 @router.delete("/plans/{pid}/items/{item_id}")
-async def remove_plan_item(pid: str, item_id: str, db: AsyncSession = Depends(get_db)):
+async def remove_plan_item(pid: str, item_id: str, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("training", "manager", "edit"))):
     await db.execute(text("DELETE FROM training_plan_items WHERE id = CAST(:id AS UUID) AND plan_id = CAST(:pid AS UUID)"), {"id": item_id, "pid": pid})
     await db.commit()
     return {"status": "ok"}
@@ -321,7 +332,8 @@ async def _renew_due_recurring(db: AsyncSession):
         await db.commit()
 
 @router.get("/assignments/{email}")
-async def list_my_assignments(email: str, db: AsyncSession = Depends(get_db)):
+async def list_my_assignments(email: str, db: AsyncSession = Depends(get_db), caller: str = Depends(get_current_user_email)):
+    await require_self_or_permission(email, caller, "training", "manager", db, "view")
     await _renew_due_recurring(db)
     r = await db.execute(text("SELECT * FROM training_assignments WHERE user_email = :email ORDER BY due_date ASC NULLS LAST"), {"email": email})
     return {"assignments": [_stringify_ids(dict(row._mapping)) for row in r.fetchall()]}
@@ -333,7 +345,9 @@ async def complete_assignment(
     description: str = Form(""),
     file: UploadFile = File(None),
     db: AsyncSession = Depends(get_db),
+    caller: str = Depends(get_current_user_email),
 ):
+    await require_self_or_permission(email, caller, "training", "manager", db, "edit")
     r = await db.execute(text("SELECT * FROM training_assignments WHERE id = CAST(:id AS UUID) AND user_email = :email"), {"id": aid, "email": email})
     assignment = r.fetchone()
     if not assignment:
@@ -366,7 +380,7 @@ async def complete_assignment(
     return {"status": "ok", "training_id": tid}
 
 @router.get("/assignments")
-async def list_all_assignments(status: str = None, user_email: str = None, catalog_id: str = None, db: AsyncSession = Depends(get_db)):
+async def list_all_assignments(status: str = None, user_email: str = None, catalog_id: str = None, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("training", "manager", "view"))):
     await _renew_due_recurring(db)
     where, params = ["1=1"], {}
     if status:
@@ -451,7 +465,7 @@ async def _notify_assignments(assignments_by_email: dict):
         await _notify_email_assignment(email, trainings)
 
 @router.post("/assignments")
-async def create_assignments(data: dict, background_tasks: BackgroundTasks, db: AsyncSession = Depends(get_db)):
+async def create_assignments(data: dict, background_tasks: BackgroundTasks, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("training", "manager", "edit"))):
     emails = data.get("user_emails") or []
     due_date = data.get("due_date", "")
     recurrence = data.get("recurrence") or None
@@ -502,14 +516,14 @@ async def create_assignments(data: dict, background_tasks: BackgroundTasks, db: 
     return {"status": "ok", "created": created}
 
 @router.delete("/assignments/{aid}")
-async def delete_assignment(aid: str, db: AsyncSession = Depends(get_db)):
+async def delete_assignment(aid: str, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("training", "manager", "edit"))):
     await db.execute(text("DELETE FROM training_assignments WHERE id = CAST(:id AS UUID)"), {"id": aid})
     await db.commit()
     return {"status": "ok"}
 
 # ─── Execution / follow-up reporting ────────────────────────────────────────────
 @router.get("/overview")
-async def training_overview(db: AsyncSession = Depends(get_db)):
+async def training_overview(db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("training", "manager", "view"))):
     await _renew_due_recurring(db)
     # Reuse the same live-directory-with-DB-fallback source /settings/users uses,
     # so employees who've never synced their profile still show up here.
@@ -547,7 +561,7 @@ async def training_overview(db: AsyncSession = Depends(get_db)):
     return {"users": result}
 
 @router.get("/overview/training/{catalog_id}")
-async def training_overview_by_training(catalog_id: str, db: AsyncSession = Depends(get_db)):
+async def training_overview_by_training(catalog_id: str, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("training", "manager", "view"))):
     await _renew_due_recurring(db)
     from app.routers.settings import list_users as _list_users
     users_resp = await _list_users(db)
@@ -567,7 +581,7 @@ async def training_overview_by_training(catalog_id: str, db: AsyncSession = Depe
 
 # ─── Dashboard stats ─────────────────────────────────────────────────────────
 @router.get("/dashboard-stats")
-async def training_dashboard_stats(db: AsyncSession = Depends(get_db)):
+async def training_dashboard_stats(db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("training", "manager", "view"))):
     await _renew_due_recurring(db)
     assigned_r = await db.execute(text("SELECT COUNT(*) AS c FROM training_assignments WHERE status = 'assigned'"))
     assigned_count = assigned_r.fetchone().c

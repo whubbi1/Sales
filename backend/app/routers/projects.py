@@ -8,6 +8,7 @@ from uuid import UUID
 from datetime import datetime
 
 from app.database import get_db
+from app.authz import require_permission
 from app.models.project import (
     Project, ProjectComment, ProjectDocument, ProjectActivityLog, ProjectExpense, ProjectDeliverable,
     ProjectStaffingTask, ProjectStaffingAllocation, ProjectStaffingRole,
@@ -192,7 +193,8 @@ async def _maybe_create_project(db: AsyncSession, opp: Opportunity):
 @router.get("/", response_model=List[ProjectResponse])
 async def list_projects(
     skip: int = 0, limit: int = 500, search: str = None, is_internal: bool = None,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    _: str = Depends(require_permission("operations", "projects", "view")),
 ):
     query = select(Project)
     if is_internal is not None:
@@ -210,7 +212,7 @@ async def list_projects(
 
 
 @router.post("/internal", response_model=ProjectResponse, status_code=status.HTTP_201_CREATED)
-async def create_internal_project(data: ProjectCreate, db: AsyncSession = Depends(get_db)):
+async def create_internal_project(data: ProjectCreate, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("operations", "internal_projects", "edit"))):
     project_number = await next_internal_id(db, 'project_number_seq', 'PRJ')
     proj = Project(
         project_number=project_number,
@@ -229,7 +231,7 @@ async def create_internal_project(data: ProjectCreate, db: AsyncSession = Depend
 
 
 @router.get("/{project_id}", response_model=ProjectResponse)
-async def get_project(project_id: UUID, db: AsyncSession = Depends(get_db)):
+async def get_project(project_id: UUID, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("operations", "projects", "view"))):
     r = await db.execute(select(Project).where(Project.id == project_id))
     proj = r.scalar_one_or_none()
     if not proj:
@@ -239,7 +241,7 @@ async def get_project(project_id: UUID, db: AsyncSession = Depends(get_db)):
 
 
 @router.put("/{project_id}", response_model=ProjectResponse)
-async def update_project(project_id: UUID, data: ProjectUpdate, db: AsyncSession = Depends(get_db)):
+async def update_project(project_id: UUID, data: ProjectUpdate, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("operations", "projects", "edit"))):
     r = await db.execute(select(Project).where(Project.id == project_id))
     proj = r.scalar_one_or_none()
     if not proj:
@@ -271,7 +273,7 @@ async def update_project(project_id: UUID, data: ProjectUpdate, db: AsyncSession
 
 
 @router.delete("/{project_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_project(project_id: UUID, db: AsyncSession = Depends(get_db)):
+async def delete_project(project_id: UUID, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("operations", "projects", "edit"))):
     r = await db.execute(select(Project).where(Project.id == project_id))
     proj = r.scalar_one_or_none()
     if not proj:
@@ -282,19 +284,19 @@ async def delete_project(project_id: UUID, db: AsyncSession = Depends(get_db)):
 
 # ─── Activity log ───────────────────────────────────────────────────────────────
 @router.get("/{project_id}/activity-log", response_model=List[ProjectActivityLogResponse])
-async def list_activity_log(project_id: UUID, db: AsyncSession = Depends(get_db)):
+async def list_activity_log(project_id: UUID, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("operations", "projects", "view"))):
     r = await db.execute(select(ProjectActivityLog).where(ProjectActivityLog.project_id == project_id).order_by(ProjectActivityLog.changed_at.desc()))
     return r.scalars().all()
 
 
 # ─── Comments ───────────────────────────────────────────────────────────────────
 @router.get("/{project_id}/comments/", response_model=List[ProjectCommentResponse])
-async def list_project_comments(project_id: UUID, db: AsyncSession = Depends(get_db)):
+async def list_project_comments(project_id: UUID, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("operations", "projects", "view"))):
     r = await db.execute(select(ProjectComment).where(ProjectComment.project_id == project_id).order_by(ProjectComment.created_at.desc()))
     return r.scalars().all()
 
 @router.post("/{project_id}/comments/", response_model=ProjectCommentResponse, status_code=status.HTTP_201_CREATED)
-async def add_project_comment(project_id: UUID, data: ProjectCommentCreate, db: AsyncSession = Depends(get_db)):
+async def add_project_comment(project_id: UUID, data: ProjectCommentCreate, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("operations", "projects", "edit"))):
     row = ProjectComment(project_id=project_id, **data.model_dump())
     db.add(row)
     await db.commit()
@@ -302,7 +304,7 @@ async def add_project_comment(project_id: UUID, data: ProjectCommentCreate, db: 
     return row
 
 @router.delete("/{project_id}/comments/{comment_id}/", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_project_comment(project_id: UUID, comment_id: UUID, db: AsyncSession = Depends(get_db)):
+async def delete_project_comment(project_id: UUID, comment_id: UUID, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("operations", "projects", "edit"))):
     r = await db.execute(select(ProjectComment).where(ProjectComment.id == comment_id, ProjectComment.project_id == project_id))
     row = r.scalar_one_or_none()
     if not row:
@@ -313,12 +315,12 @@ async def delete_project_comment(project_id: UUID, comment_id: UUID, db: AsyncSe
 
 # ─── Expenses ───────────────────────────────────────────────────────────────────
 @router.get("/{project_id}/expenses/", response_model=List[ProjectExpenseResponse])
-async def list_project_expenses(project_id: UUID, db: AsyncSession = Depends(get_db)):
+async def list_project_expenses(project_id: UUID, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("operations", "projects", "view"))):
     r = await db.execute(select(ProjectExpense).where(ProjectExpense.project_id == project_id).order_by(ProjectExpense.expense_date.desc()))
     return r.scalars().all()
 
 @router.post("/{project_id}/expenses/", response_model=ProjectExpenseResponse, status_code=status.HTTP_201_CREATED)
-async def add_project_expense(project_id: UUID, data: ProjectExpenseCreate, db: AsyncSession = Depends(get_db)):
+async def add_project_expense(project_id: UUID, data: ProjectExpenseCreate, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("operations", "projects", "edit"))):
     row = ProjectExpense(project_id=project_id, **data.model_dump())
     db.add(row)
     await db.commit()
@@ -326,7 +328,7 @@ async def add_project_expense(project_id: UUID, data: ProjectExpenseCreate, db: 
     return row
 
 @router.delete("/{project_id}/expenses/{expense_id}/", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_project_expense(project_id: UUID, expense_id: UUID, db: AsyncSession = Depends(get_db)):
+async def delete_project_expense(project_id: UUID, expense_id: UUID, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("operations", "projects", "edit"))):
     r = await db.execute(select(ProjectExpense).where(ProjectExpense.id == expense_id, ProjectExpense.project_id == project_id))
     row = r.scalar_one_or_none()
     if not row:
@@ -347,12 +349,12 @@ def _validate_deliverable_amount(amount_type: str, fixed_amount, percentage):
         raise HTTPException(status_code=400, detail="percentage is required when amount_type is 'percentage'")
 
 @router.get("/{project_id}/deliverables/", response_model=List[ProjectDeliverableResponse])
-async def list_project_deliverables(project_id: UUID, db: AsyncSession = Depends(get_db)):
+async def list_project_deliverables(project_id: UUID, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("operations", "projects", "view"))):
     r = await db.execute(select(ProjectDeliverable).where(ProjectDeliverable.project_id == project_id).order_by(ProjectDeliverable.due_date.nullslast(), ProjectDeliverable.created_at))
     return r.scalars().all()
 
 @router.post("/{project_id}/deliverables/", response_model=ProjectDeliverableResponse, status_code=status.HTTP_201_CREATED)
-async def add_project_deliverable(project_id: UUID, data: ProjectDeliverableCreate, db: AsyncSession = Depends(get_db)):
+async def add_project_deliverable(project_id: UUID, data: ProjectDeliverableCreate, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("operations", "projects", "edit"))):
     _validate_deliverable_amount(data.amount_type, data.fixed_amount, data.percentage)
     row = ProjectDeliverable(project_id=project_id, **data.model_dump())
     db.add(row)
@@ -361,7 +363,7 @@ async def add_project_deliverable(project_id: UUID, data: ProjectDeliverableCrea
     return row
 
 @router.put("/{project_id}/deliverables/{deliverable_id}/", response_model=ProjectDeliverableResponse)
-async def update_project_deliverable(project_id: UUID, deliverable_id: UUID, data: ProjectDeliverableUpdate, db: AsyncSession = Depends(get_db)):
+async def update_project_deliverable(project_id: UUID, deliverable_id: UUID, data: ProjectDeliverableUpdate, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("operations", "projects", "edit"))):
     r = await db.execute(select(ProjectDeliverable).where(ProjectDeliverable.id == deliverable_id, ProjectDeliverable.project_id == project_id))
     row = r.scalar_one_or_none()
     if not row:
@@ -378,7 +380,7 @@ async def update_project_deliverable(project_id: UUID, deliverable_id: UUID, dat
     return row
 
 @router.delete("/{project_id}/deliverables/{deliverable_id}/", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_project_deliverable(project_id: UUID, deliverable_id: UUID, db: AsyncSession = Depends(get_db)):
+async def delete_project_deliverable(project_id: UUID, deliverable_id: UUID, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("operations", "projects", "edit"))):
     r = await db.execute(select(ProjectDeliverable).where(ProjectDeliverable.id == deliverable_id, ProjectDeliverable.project_id == project_id))
     row = r.scalar_one_or_none()
     if not row:
@@ -389,7 +391,7 @@ async def delete_project_deliverable(project_id: UUID, deliverable_id: UUID, db:
 
 # ─── Contacts (many-to-many) — mirrors marketing_event_contacts ────────────────
 @router.get("/{project_id}/contacts")
-async def list_project_contacts(project_id: UUID, db: AsyncSession = Depends(get_db)):
+async def list_project_contacts(project_id: UUID, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("operations", "projects", "view"))):
     r = await db.execute(text("""
         SELECT c.id, c.first_name, c.last_name, c.email FROM project_contacts pc
         JOIN contacts c ON c.id = pc.contact_id WHERE pc.project_id = :pid ORDER BY c.first_name, c.last_name
@@ -397,7 +399,7 @@ async def list_project_contacts(project_id: UUID, db: AsyncSession = Depends(get
     return [dict(row._mapping) for row in r.fetchall()]
 
 @router.post("/{project_id}/contacts/{contact_id}")
-async def link_project_contact(project_id: UUID, contact_id: UUID, db: AsyncSession = Depends(get_db)):
+async def link_project_contact(project_id: UUID, contact_id: UUID, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("operations", "projects", "edit"))):
     await db.execute(text("""
         INSERT INTO project_contacts (project_id, contact_id) VALUES (:pid, :cid) ON CONFLICT DO NOTHING
     """), {"pid": str(project_id), "cid": str(contact_id)})
@@ -405,7 +407,7 @@ async def link_project_contact(project_id: UUID, contact_id: UUID, db: AsyncSess
     return {"status": "ok"}
 
 @router.delete("/{project_id}/contacts/{contact_id}")
-async def unlink_project_contact(project_id: UUID, contact_id: UUID, db: AsyncSession = Depends(get_db)):
+async def unlink_project_contact(project_id: UUID, contact_id: UUID, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("operations", "projects", "edit"))):
     await db.execute(text("DELETE FROM project_contacts WHERE project_id = :pid AND contact_id = :cid"), {"pid": str(project_id), "cid": str(contact_id)})
     await db.commit()
     return {"status": "ok"}
@@ -413,7 +415,7 @@ async def unlink_project_contact(project_id: UUID, contact_id: UUID, db: AsyncSe
 
 # ─── Documents (sales vs project) ───────────────────────────────────────────────
 @router.get("/{project_id}/documents/", response_model=List[ProjectDocumentResponse])
-async def list_project_documents(project_id: UUID, category: str = None, db: AsyncSession = Depends(get_db)):
+async def list_project_documents(project_id: UUID, category: str = None, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("operations", "projects", "view"))):
     q = select(ProjectDocument).where(ProjectDocument.project_id == project_id)
     if category:
         q = q.where(ProjectDocument.category == category)
@@ -422,7 +424,7 @@ async def list_project_documents(project_id: UUID, category: str = None, db: Asy
     return r.scalars().all()
 
 @router.post("/{project_id}/documents/", response_model=ProjectDocumentResponse, status_code=status.HTTP_201_CREATED)
-async def add_project_document(project_id: UUID, data: ProjectDocumentCreate, db: AsyncSession = Depends(get_db)):
+async def add_project_document(project_id: UUID, data: ProjectDocumentCreate, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("operations", "projects", "edit"))):
     row = ProjectDocument(project_id=project_id, **data.model_dump())
     db.add(row)
     await db.commit()
@@ -430,7 +432,7 @@ async def add_project_document(project_id: UUID, data: ProjectDocumentCreate, db
     return row
 
 @router.delete("/{project_id}/documents/{document_id}/", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_project_document(project_id: UUID, document_id: UUID, db: AsyncSession = Depends(get_db)):
+async def delete_project_document(project_id: UUID, document_id: UUID, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("operations", "projects", "edit"))):
     r = await db.execute(select(ProjectDocument).where(ProjectDocument.id == document_id, ProjectDocument.project_id == project_id))
     row = r.scalar_one_or_none()
     if not row:
@@ -443,7 +445,7 @@ async def delete_project_document(project_id: UUID, document_id: UUID, db: Async
 # Scoped per plan_type, same as tasks — Initial keeps its own frozen role set separate
 # from Current's, which can be freely edited from here on.
 @router.get("/{project_id}/staffing-roles", response_model=List[ProjectStaffingRoleResponse])
-async def list_project_staffing_roles(project_id: UUID, plan_type: str = None, db: AsyncSession = Depends(get_db)):
+async def list_project_staffing_roles(project_id: UUID, plan_type: str = None, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("operations", "staffing", "view"))):
     q = select(ProjectStaffingRole).where(ProjectStaffingRole.project_id == project_id)
     if plan_type:
         q = q.where(ProjectStaffingRole.plan_type == plan_type)
@@ -453,7 +455,7 @@ async def list_project_staffing_roles(project_id: UUID, plan_type: str = None, d
 
 
 @router.post("/{project_id}/staffing-roles", response_model=ProjectStaffingRoleResponse, status_code=status.HTTP_201_CREATED)
-async def create_project_staffing_role(project_id: UUID, data: ProjectStaffingRoleCreate, db: AsyncSession = Depends(get_db)):
+async def create_project_staffing_role(project_id: UUID, data: ProjectStaffingRoleCreate, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("operations", "staffing", "edit"))):
     if data.plan_type == 'initial':
         raise HTTPException(status_code=400, detail="The initial plan is a frozen baseline and cannot be added to directly.")
     role = ProjectStaffingRole(project_id=project_id, **data.model_dump())
@@ -464,7 +466,7 @@ async def create_project_staffing_role(project_id: UUID, data: ProjectStaffingRo
 
 
 @router.put("/{project_id}/staffing-roles/{role_id}", response_model=ProjectStaffingRoleResponse)
-async def update_project_staffing_role(project_id: UUID, role_id: UUID, data: ProjectStaffingRoleUpdate, db: AsyncSession = Depends(get_db)):
+async def update_project_staffing_role(project_id: UUID, role_id: UUID, data: ProjectStaffingRoleUpdate, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("operations", "staffing", "edit"))):
     r = await db.execute(select(ProjectStaffingRole).where(ProjectStaffingRole.id == role_id, ProjectStaffingRole.project_id == project_id))
     role = r.scalar_one_or_none()
     if not role:
@@ -479,7 +481,7 @@ async def update_project_staffing_role(project_id: UUID, role_id: UUID, data: Pr
 
 
 @router.delete("/{project_id}/staffing-roles/{role_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_project_staffing_role(project_id: UUID, role_id: UUID, db: AsyncSession = Depends(get_db)):
+async def delete_project_staffing_role(project_id: UUID, role_id: UUID, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("operations", "staffing", "edit"))):
     r = await db.execute(select(ProjectStaffingRole).where(ProjectStaffingRole.id == role_id, ProjectStaffingRole.project_id == project_id))
     role = r.scalar_one_or_none()
     if not role:
@@ -492,7 +494,7 @@ async def delete_project_staffing_role(project_id: UUID, role_id: UUID, db: Asyn
 
 # ─── Staffing plan (Initial frozen baseline + Current editable) ────────────────
 @router.get("/{project_id}/staffing", response_model=List[ProjectStaffingTaskResponse])
-async def list_project_staffing(project_id: UUID, plan_type: str = None, db: AsyncSession = Depends(get_db)):
+async def list_project_staffing(project_id: UUID, plan_type: str = None, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("operations", "staffing", "view"))):
     q = select(ProjectStaffingTask).options(selectinload(ProjectStaffingTask.allocations), selectinload(ProjectStaffingTask.role)).where(ProjectStaffingTask.project_id == project_id)
     if plan_type:
         q = q.where(ProjectStaffingTask.plan_type == plan_type)
@@ -501,7 +503,7 @@ async def list_project_staffing(project_id: UUID, plan_type: str = None, db: Asy
     return r.scalars().all()
 
 @router.post("/{project_id}/staffing", response_model=ProjectStaffingTaskResponse, status_code=status.HTTP_201_CREATED)
-async def add_project_staffing(project_id: UUID, data: ProjectStaffingTaskCreate, db: AsyncSession = Depends(get_db)):
+async def add_project_staffing(project_id: UUID, data: ProjectStaffingTaskCreate, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("operations", "staffing", "edit"))):
     if data.plan_type == 'initial':
         raise HTTPException(status_code=400, detail="The initial plan is a frozen baseline and cannot be added to directly.")
     row = ProjectStaffingTask(project_id=project_id, **data.model_dump())
@@ -514,7 +516,7 @@ async def add_project_staffing(project_id: UUID, data: ProjectStaffingTaskCreate
     return r.scalar_one()
 
 @router.put("/{project_id}/staffing/{task_id}", response_model=ProjectStaffingTaskResponse)
-async def update_project_staffing(project_id: UUID, task_id: UUID, data: ProjectStaffingTaskUpdate, db: AsyncSession = Depends(get_db)):
+async def update_project_staffing(project_id: UUID, task_id: UUID, data: ProjectStaffingTaskUpdate, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("operations", "staffing", "edit"))):
     r = await db.execute(select(ProjectStaffingTask).options(selectinload(ProjectStaffingTask.allocations), selectinload(ProjectStaffingTask.role))
                           .where(ProjectStaffingTask.id == task_id, ProjectStaffingTask.project_id == project_id))
     row = r.scalar_one_or_none()
@@ -531,7 +533,7 @@ async def update_project_staffing(project_id: UUID, task_id: UUID, data: Project
     return r.scalar_one()
 
 @router.delete("/{project_id}/staffing/{task_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_project_staffing(project_id: UUID, task_id: UUID, db: AsyncSession = Depends(get_db)):
+async def delete_project_staffing(project_id: UUID, task_id: UUID, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("operations", "staffing", "edit"))):
     r = await db.execute(select(ProjectStaffingTask).where(ProjectStaffingTask.id == task_id, ProjectStaffingTask.project_id == project_id))
     row = r.scalar_one_or_none()
     if not row:
@@ -542,7 +544,7 @@ async def delete_project_staffing(project_id: UUID, task_id: UUID, db: AsyncSess
     await db.commit()
 
 @router.put("/{project_id}/staffing/{task_id}/allocations", response_model=ProjectStaffingTaskResponse)
-async def set_project_staffing_allocations(project_id: UUID, task_id: UUID, data: ProjectStaffingAllocationsSet, db: AsyncSession = Depends(get_db)):
+async def set_project_staffing_allocations(project_id: UUID, task_id: UUID, data: ProjectStaffingAllocationsSet, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("operations", "staffing", "edit"))):
     r = await db.execute(select(ProjectStaffingTask).options(selectinload(ProjectStaffingTask.allocations), selectinload(ProjectStaffingTask.role))
                           .where(ProjectStaffingTask.id == task_id, ProjectStaffingTask.project_id == project_id))
     row = r.scalar_one_or_none()
@@ -558,7 +560,7 @@ async def set_project_staffing_allocations(project_id: UUID, task_id: UUID, data
 
 # ─── Actuals (rolled up live from timesheet entries, converting hours -> days) ──
 @router.get("/{project_id}/staffing/actuals")
-async def get_staffing_actuals(project_id: UUID, db: AsyncSession = Depends(get_db)):
+async def get_staffing_actuals(project_id: UUID, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("operations", "staffing", "view"))):
     r = await db.execute(select(TimesheetEntry).where(TimesheetEntry.project_id == project_id))
     entries = r.scalars().all()
     by_resource = {}
@@ -575,7 +577,7 @@ async def get_staffing_actuals(project_id: UUID, db: AsyncSession = Depends(get_
 
 # ─── Basic staffing (mirrors Opportunity's /staffing/ endpoints in opportunities.py) ────
 @router.get("/{project_id}/staffing-basic/", response_model=List[ProjectStaffingBasicResponse])
-async def list_project_staffing_basic(project_id: UUID, db: AsyncSession = Depends(get_db)):
+async def list_project_staffing_basic(project_id: UUID, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("operations", "staffing", "view"))):
     r = await db.execute(
         select(ProjectStaffingBasic).options(selectinload(ProjectStaffingBasic.months))
         .where(ProjectStaffingBasic.project_id == project_id).order_by(ProjectStaffingBasic.created_at)
@@ -583,7 +585,7 @@ async def list_project_staffing_basic(project_id: UUID, db: AsyncSession = Depen
     return r.scalars().all()
 
 @router.post("/{project_id}/staffing-basic/", response_model=ProjectStaffingBasicResponse, status_code=status.HTTP_201_CREATED)
-async def add_project_staffing_basic(project_id: UUID, data: ProjectStaffingBasicCreate, db: AsyncSession = Depends(get_db)):
+async def add_project_staffing_basic(project_id: UUID, data: ProjectStaffingBasicCreate, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("operations", "staffing", "edit"))):
     row = ProjectStaffingBasic(project_id=project_id, **data.model_dump())
     db.add(row)
     await db.commit()
@@ -591,7 +593,7 @@ async def add_project_staffing_basic(project_id: UUID, data: ProjectStaffingBasi
     return r.scalar_one()
 
 @router.put("/{project_id}/staffing-basic/{staffing_id}/", response_model=ProjectStaffingBasicResponse)
-async def update_project_staffing_basic(project_id: UUID, staffing_id: UUID, data: ProjectStaffingBasicUpdate, db: AsyncSession = Depends(get_db)):
+async def update_project_staffing_basic(project_id: UUID, staffing_id: UUID, data: ProjectStaffingBasicUpdate, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("operations", "staffing", "edit"))):
     r = await db.execute(select(ProjectStaffingBasic).options(selectinload(ProjectStaffingBasic.months))
                           .where(ProjectStaffingBasic.id == staffing_id, ProjectStaffingBasic.project_id == project_id))
     row = r.scalar_one_or_none()
@@ -604,7 +606,7 @@ async def update_project_staffing_basic(project_id: UUID, staffing_id: UUID, dat
     return r.scalar_one()
 
 @router.delete("/{project_id}/staffing-basic/{staffing_id}/", status_code=status.HTTP_204_NO_CONTENT)
-async def remove_project_staffing_basic(project_id: UUID, staffing_id: UUID, db: AsyncSession = Depends(get_db)):
+async def remove_project_staffing_basic(project_id: UUID, staffing_id: UUID, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("operations", "staffing", "edit"))):
     r = await db.execute(select(ProjectStaffingBasic).where(ProjectStaffingBasic.id == staffing_id, ProjectStaffingBasic.project_id == project_id))
     row = r.scalar_one_or_none()
     if not row:
@@ -613,7 +615,7 @@ async def remove_project_staffing_basic(project_id: UUID, staffing_id: UUID, db:
     await db.commit()
 
 @router.put("/{project_id}/staffing-basic/{staffing_id}/months", response_model=ProjectStaffingBasicResponse)
-async def set_project_staffing_basic_months(project_id: UUID, staffing_id: UUID, data: ProjectStaffingBasicMonthsUpdate, db: AsyncSession = Depends(get_db)):
+async def set_project_staffing_basic_months(project_id: UUID, staffing_id: UUID, data: ProjectStaffingBasicMonthsUpdate, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("operations", "staffing", "edit"))):
     r = await db.execute(select(ProjectStaffingBasic).options(selectinload(ProjectStaffingBasic.months))
                           .where(ProjectStaffingBasic.id == staffing_id, ProjectStaffingBasic.project_id == project_id))
     row = r.scalar_one_or_none()

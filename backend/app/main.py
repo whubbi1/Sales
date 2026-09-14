@@ -2037,9 +2037,25 @@ async def startup():
                     print(f"Skip: {str(e)[:60]}")
 
             try:
+                # De-dupe first: the unique index below fails to create (silently, previously)
+                # if duplicate (user_email,module,submodule) rows already exist from before this
+                # constraint existed. Keep only the most recently updated row per key so both the
+                # index creation and every ON CONFLICT upsert against it (settings.py, the
+                # permissions backfill script) are reliable.
+                await session.execute(text("""
+                    DELETE FROM whubbi_permissions
+                    WHERE id NOT IN (
+                        SELECT DISTINCT ON (user_email, module, submodule) id
+                        FROM whubbi_permissions
+                        ORDER BY user_email, module, submodule,
+                                 updated_at DESC NULLS LAST, created_at DESC NULLS LAST, id DESC
+                    )
+                """))
                 await session.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS idx_whubbi_perm ON whubbi_permissions(user_email,module,submodule)"))
                 await session.commit()
-            except Exception: pass
+            except Exception as e:
+                await session.rollback()
+                print(f"WARNING: could not de-dupe/create idx_whubbi_perm — permission upserts may be unreliable: {str(e)[:200]}")
 
             r = await session.execute(text("SELECT COUNT(*) FROM monitored_urls"))
             if r.scalar() == 0:

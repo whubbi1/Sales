@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect, useRef } from 'react'
 import { useRouter, useParams } from 'next/navigation'
-import { HRLayout } from '@/components/HRLayout'
+import { HRLayout, useHRPerm } from '@/components/HRLayout'
 
 const API = 'https://api.whubbi.wcomply.com'
 const FLAG: Record<string,string> = { france:'🇫🇷', portugal:'🇵🇹', czech_republic:'🇨🇿', romania:'🇷🇴', spain:'🇪🇸' }
@@ -20,7 +20,7 @@ const DOC_TYPES = [
 ]
 const DOC_ICON: Record<string,string> = Object.fromEntries(DOC_TYPES.map(d=>[d.value, d.icon]))
 
-function InlineField({ label, value, onSave, type='text', href, displayAs }: any) {
+function InlineField({ label, value, onSave, type='text', href, displayAs, readOnly }: any) {
   const [editing, setEditing] = useState(false)
   const [val, setVal] = useState(value ?? '')
   const [saving, setSaving] = useState(false)
@@ -46,9 +46,9 @@ function InlineField({ label, value, onSave, type='text', href, displayAs }: any
           onKeyDown={e => e.key === 'Enter' && commit()}
           style={{ fontSize:'12px', fontWeight:'600', border:'1px solid #45B6E4', borderRadius:'5px', padding:'3px 7px', outline:'none', fontFamily:'Montserrat, sans-serif', width:'100%', boxSizing:'border-box' as const }}/>
       ) : (
-        <div onClick={() => setEditing(true)}
-          style={{ fontSize:'12px', fontWeight:'600', color:'#3F3F3F', cursor:'text', padding:'3px 4px', borderRadius:'4px', minHeight:'20px', width:'100%' }}
-          onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.background = '#F0F9FF'; (e.currentTarget as HTMLDivElement).style.outline = '1px dashed #CBD5E1' }}
+        <div onClick={() => !readOnly && setEditing(true)}
+          style={{ fontSize:'12px', fontWeight:'600', color:'#3F3F3F', cursor: readOnly ? 'default' : 'text', padding:'3px 4px', borderRadius:'4px', minHeight:'20px', width:'100%' }}
+          onMouseEnter={e => { if (readOnly) return; (e.currentTarget as HTMLDivElement).style.background = '#F0F9FF'; (e.currentTarget as HTMLDivElement).style.outline = '1px dashed #CBD5E1' }}
           onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.background = 'transparent'; (e.currentTarget as HTMLDivElement).style.outline = 'none' }}>
           {displayAs || (value ? (href ? <a href={href} target="_blank" onClick={e=>e.stopPropagation()} style={{ color:'#156082', textDecoration:'none' }}>{value}</a> : String(value)) : <span style={{ color:'#CBD5E1' }}>—</span>)}
         </div>
@@ -90,6 +90,7 @@ function DeleteModal({ name, onConfirm, onCancel, deleting }: any) {
 
 export default function FreelancerDetail() {
   const router = useRouter()
+  const { canEdit } = useHRPerm('freelancers')
   const { id } = useParams() as { id: string }
   const [profile, setProfile] = useState<any>(null)
   const [loading, setLoading] = useState(true)
@@ -240,13 +241,13 @@ export default function FreelancerDetail() {
               </div>
               <div>
                 <div style={{ display:'flex', gap:'6px', alignItems:'center', flexWrap:'wrap' }}>
-                  <InlineField label="" value={profile.first_name} onSave={(v:string)=>patchField('first_name',v)}
+                  <InlineField label="" value={profile.first_name} readOnly={!canEdit} onSave={(v:string)=>patchField('first_name',v)}
                     displayAs={<span style={{ fontSize:'18px', fontWeight:'800', color:'#156082' }}>{profile.first_name}</span>}/>
-                  <InlineField label="" value={profile.last_name} onSave={(v:string)=>patchField('last_name',v)}
+                  <InlineField label="" value={profile.last_name} readOnly={!canEdit} onSave={(v:string)=>patchField('last_name',v)}
                     displayAs={<span style={{ fontSize:'18px', fontWeight:'800', color:'#156082' }}>{profile.last_name}</span>}/>
                   {autoSaving && <span style={{ fontSize:'10px', color:'#94A3B8' }}>saving…</span>}
                 </div>
-                <InlineField label="" value={profile.current_title} onSave={(v:string)=>patchField('current_title',v)}
+                <InlineField label="" value={profile.current_title} readOnly={!canEdit} onSave={(v:string)=>patchField('current_title',v)}
                   displayAs={<span style={{ fontSize:'13px', color:'#45B6E4' }}>{profile.current_title||'Click to add title'} · {FLAG[profile.country]||'🌍'} {profile.country}</span>}/>
               </div>
             </div>
@@ -254,34 +255,36 @@ export default function FreelancerDetail() {
               {profile.cv_sharepoint_url && (
                 <a href={profile.cv_sharepoint_url} target="_blank" style={{ padding:'7px 14px', background:'#EFF6FF', color:'#156082', borderRadius:'8px', fontSize:'12px', fontWeight:'700', textDecoration:'none' }}>📄 View CV</a>
               )}
-              <button onClick={() => setShowDelete(true)}
-                style={{ padding:'7px 14px', background:'#FEF2F2', color:'#DC2626', border:'1px solid #FECACA', borderRadius:'8px', fontSize:'12px', fontWeight:'700', cursor:'pointer', fontFamily:'Montserrat, sans-serif' }}>
-                🗑 Delete
-              </button>
+              {canEdit && (
+                <button onClick={() => setShowDelete(true)}
+                  style={{ padding:'7px 14px', background:'#FEF2F2', color:'#DC2626', border:'1px solid #FECACA', borderRadius:'8px', fontSize:'12px', fontWeight:'700', cursor:'pointer', fontFamily:'Montserrat, sans-serif' }}>
+                  🗑 Delete
+                </button>
+              )}
             </div>
           </div>
 
           {/* Contact grid */}
           <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(160px, 1fr))', gap:'14px', paddingBottom:'16px', borderBottom:'1px solid #F1F5F9', marginBottom:'16px' }}>
-            <InlineField label="Email" value={profile.email} onSave={(v:string)=>patchField('email',v)} href={profile.email?`mailto:${profile.email}`:undefined}/>
-            <InlineField label="Phone" value={profile.phone} onSave={(v:string)=>patchField('phone',v)} href={profile.phone?`tel:${profile.phone}`:undefined}/>
-            <InlineField label="LinkedIn" value={profile.linkedin_url} onSave={(v:string)=>patchField('linkedin_url',v)}
+            <InlineField label="Email" value={profile.email} readOnly={!canEdit} onSave={(v:string)=>patchField('email',v)} href={profile.email?`mailto:${profile.email}`:undefined}/>
+            <InlineField label="Phone" value={profile.phone} readOnly={!canEdit} onSave={(v:string)=>patchField('phone',v)} href={profile.phone?`tel:${profile.phone}`:undefined}/>
+            <InlineField label="LinkedIn" value={profile.linkedin_url} readOnly={!canEdit} onSave={(v:string)=>patchField('linkedin_url',v)}
               displayAs={profile.linkedin_url ? <a href={profile.linkedin_url} target="_blank" onClick={e=>e.stopPropagation()} style={{ fontSize:'12px', fontWeight:'600', color:'#156082', textDecoration:'none' }}>Profile ↗</a> : <span style={{ color:'#CBD5E1', fontSize:'12px' }}>—</span>}/>
-            <InlineField label="Experience (yrs)" value={profile.years_experience} onSave={(v:number)=>patchField('years_experience',v)} type="number"
+            <InlineField label="Experience (yrs)" value={profile.years_experience} readOnly={!canEdit} onSave={(v:number)=>patchField('years_experience',v)} type="number"
               displayAs={<span style={{ fontSize:'12px', fontWeight:'600', color:'#3F3F3F' }}>{profile.years_experience||0} years</span>}/>
-            <InlineField label="Daily Rate (€)" value={profile.daily_rate} onSave={(v:number)=>patchField('daily_rate',v)} type="number"
+            <InlineField label="Daily Rate (€)" value={profile.daily_rate} readOnly={!canEdit} onSave={(v:number)=>patchField('daily_rate',v)} type="number"
               displayAs={<span style={{ fontSize:'12px', fontWeight:'600', color:'#3F3F3F' }}>{profile.daily_rate ? `${profile.daily_rate}€/day` : '—'}</span>}/>
             <div>
               <div style={{ fontSize:'10px', fontWeight:'700', textTransform:'uppercase', letterSpacing:'0.07em', color:'#45B6E4', marginBottom:'3px' }}>Availability Date</div>
-              <input type="date"
+              <input type="date" disabled={!canEdit}
                 value={profile.availability_date ? profile.availability_date.split('T')[0] : ''}
                 onChange={e => patchField('availability_date', e.target.value || null)}
-                style={{ fontSize:'12px', fontWeight:'600', border:'1px solid #EDF2F7', borderRadius:'5px', padding:'3px 7px', outline:'none', fontFamily:'Montserrat, sans-serif', width:'100%', boxSizing:'border-box' as const, color:'#3F3F3F', cursor:'pointer', background:'white' }}/>
+                style={{ fontSize:'12px', fontWeight:'600', border:'1px solid #EDF2F7', borderRadius:'5px', padding:'3px 7px', outline:'none', fontFamily:'Montserrat, sans-serif', width:'100%', boxSizing:'border-box' as const, color:'#3F3F3F', cursor: canEdit ? 'pointer' : 'default', background: canEdit ? 'white' : '#F8FAFC' }}/>
             </div>
             <div>
               <div style={{ fontSize:'10px', fontWeight:'700', textTransform:'uppercase', letterSpacing:'0.07em', color:'#45B6E4', marginBottom:'3px' }}>Country</div>
-              <select value={profile.country||'france'} onChange={e=>patchField('country',e.target.value)}
-                style={{ fontSize:'12px', fontWeight:'600', border:'1px solid #EDF2F7', borderRadius:'6px', padding:'3px 7px', outline:'none', fontFamily:'Montserrat, sans-serif', color:'#3F3F3F', background:'white', cursor:'pointer', width:'100%' }}>
+              <select value={profile.country||'france'} disabled={!canEdit} onChange={e=>patchField('country',e.target.value)}
+                style={{ fontSize:'12px', fontWeight:'600', border:'1px solid #EDF2F7', borderRadius:'6px', padding:'3px 7px', outline:'none', fontFamily:'Montserrat, sans-serif', color:'#3F3F3F', background: canEdit ? 'white' : '#F8FAFC', cursor: canEdit ? 'pointer' : 'default', width:'100%' }}>
                 {COUNTRIES.map(c=><option key={c} value={c}>{FLAG[c]} {c}</option>)}
               </select>
             </div>
@@ -293,17 +296,17 @@ export default function FreelancerDetail() {
             <div style={{ display:'flex', gap:'5px', flexWrap:'wrap', alignItems:'center' }}>
               {(profile.skills||[]).map((s:string, i:number) => (
                 <span key={i} style={{ background:'#EFF6FF', color:'#156082', padding:'3px 8px', borderRadius:'12px', fontSize:'11px', fontWeight:'600', display:'flex', alignItems:'center', gap:'3px' }}>
-                  {s}<span onClick={()=>removeSkill(i)} style={{ cursor:'pointer', fontSize:'13px', lineHeight:'1', opacity:0.6 }}>×</span>
+                  {s}{canEdit && <span onClick={()=>removeSkill(i)} style={{ cursor:'pointer', fontSize:'13px', lineHeight:'1', opacity:0.6 }}>×</span>}
                 </span>
               ))}
-              {addingSkill ? (
+              {canEdit && (addingSkill ? (
                 <input value={skillInput} onChange={e=>setSkillInput(e.target.value)} autoFocus
                   onBlur={()=>{ if(skillInput.trim()) addSkill(); else setAddingSkill(false) }}
                   onKeyDown={e=>{ if(e.key==='Enter') addSkill(); if(e.key==='Escape'){setAddingSkill(false);setSkillInput('')} }}
                   placeholder="skill…" style={{ padding:'3px 8px', border:'1.5px solid #156082', borderRadius:'12px', fontSize:'11px', outline:'none', fontFamily:'Montserrat, sans-serif', width:'90px' }}/>
               ) : (
                 <span onClick={()=>setAddingSkill(true)} style={{ padding:'3px 10px', borderRadius:'12px', fontSize:'11px', fontWeight:'600', color:'#156082', background:'white', cursor:'pointer', border:'1.5px dashed #156082' }}>+ Add</span>
-              )}
+              ))}
             </div>
           </div>
         </div>
@@ -356,12 +359,12 @@ export default function FreelancerDetail() {
                   </button>
                 ))}
               </div>
-              <textarea value={comment.content} onChange={e=>setComment(c=>({...c,content:e.target.value}))}
+              <textarea value={comment.content} onChange={e=>setComment(c=>({...c,content:e.target.value}))} disabled={!canEdit}
                 placeholder="Add a note, call log, or interview feedback…"
-                style={{ width:'100%', padding:'10px', border:'1.5px solid #EDF2F7', borderRadius:'8px', fontFamily:'Montserrat, sans-serif', fontSize:'12px', resize:'vertical', minHeight:'70px', outline:'none', boxSizing:'border-box' as const }}/>
+                style={{ width:'100%', padding:'10px', border:'1.5px solid #EDF2F7', borderRadius:'8px', fontFamily:'Montserrat, sans-serif', fontSize:'12px', resize:'vertical', minHeight:'70px', outline:'none', boxSizing:'border-box' as const, background: canEdit ? 'white' : '#F8FAFC' }}/>
               <div style={{ display:'flex', justifyContent:'flex-end', marginTop:'8px' }}>
-                <button onClick={addComment} disabled={!comment.content.trim()}
-                  style={{ padding:'7px 16px', background:comment.content.trim()?'#156082':'#F1F5F9', color:comment.content.trim()?'white':'#45B6E4', border:'none', borderRadius:'8px', fontSize:'12px', fontWeight:'700', cursor:comment.content.trim()?'pointer':'not-allowed', fontFamily:'Montserrat, sans-serif' }}>
+                <button onClick={addComment} disabled={!canEdit || !comment.content.trim()}
+                  style={{ padding:'7px 16px', background:canEdit && comment.content.trim()?'#156082':'#F1F5F9', color:canEdit && comment.content.trim()?'white':'#45B6E4', border:'none', borderRadius:'8px', fontSize:'12px', fontWeight:'700', cursor:canEdit && comment.content.trim()?'pointer':'not-allowed', fontFamily:'Montserrat, sans-serif' }}>
                   Add Note
                 </button>
               </div>
@@ -388,10 +391,12 @@ export default function FreelancerDetail() {
           <div style={{ background:'white', borderRadius:'12px', border:'1px solid #EDF2F7', overflow:'hidden', boxShadow:'0 1px 3px rgba(0,0,0,0.06)' }}>
             <div style={{ padding:'14px 20px', borderBottom:'1px solid #F1F5F9', background:'#FAFBFC', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
               <span style={{ fontSize:'10px', fontWeight:'700', textTransform:'uppercase', letterSpacing:'0.07em', color:'#45B6E4' }}>Documents · S3</span>
-              <button onClick={() => { setShowUploadModal(true); setPendingFile(null); setUploadDocType('other'); setUploadError('') }}
-                style={{ padding:'6px 14px', background:'#156082', color:'white', border:'none', borderRadius:'7px', fontSize:'11px', fontWeight:'700', cursor:'pointer', fontFamily:'Montserrat, sans-serif' }}>
-                + Add document
-              </button>
+              {canEdit && (
+                <button onClick={() => { setShowUploadModal(true); setPendingFile(null); setUploadDocType('other'); setUploadError('') }}
+                  style={{ padding:'6px 14px', background:'#156082', color:'white', border:'none', borderRadius:'7px', fontSize:'11px', fontWeight:'700', cursor:'pointer', fontFamily:'Montserrat, sans-serif' }}>
+                  + Add document
+                </button>
+              )}
             </div>
 
             {/* CV row */}
@@ -415,10 +420,12 @@ export default function FreelancerDetail() {
                     Open ↗
                   </a>
                 )}
-                <button onClick={() => cvRef.current?.click()}
-                  style={{ padding:'4px 10px', background:'#F1F5F9', color:'#45B6E4', border:'none', borderRadius:'6px', fontSize:'11px', fontWeight:'700', cursor:'pointer', fontFamily:'Montserrat, sans-serif' }}>
-                  {cvExtracting ? '⏳' : profile.cv_sharepoint_url ? 'Replace' : 'Upload'}
-                </button>
+                {canEdit && (
+                  <button onClick={() => cvRef.current?.click()}
+                    style={{ padding:'4px 10px', background:'#F1F5F9', color:'#45B6E4', border:'none', borderRadius:'6px', fontSize:'11px', fontWeight:'700', cursor:'pointer', fontFamily:'Montserrat, sans-serif' }}>
+                    {cvExtracting ? '⏳' : profile.cv_sharepoint_url ? 'Replace' : 'Upload'}
+                  </button>
+                )}
               </div>
               <input ref={cvRef} type="file" accept=".pdf,.doc,.docx,.odt,.rtf" style={{ display:'none' }}
                 onChange={e => e.target.files?.[0] && handleCvUpload(e.target.files[0])}/>
@@ -440,10 +447,12 @@ export default function FreelancerDetail() {
                     style={{ padding:'4px 10px', background:'#EFF6FF', color:'#156082', borderRadius:'6px', fontSize:'11px', fontWeight:'700', textDecoration:'none' }}>
                     Open ↗
                   </a>
-                  <button onClick={() => deleteDocument(doc.id)}
-                    style={{ padding:'4px 8px', background:'#FEF2F2', color:'#DC2626', border:'none', borderRadius:'6px', fontSize:'11px', fontWeight:'700', cursor:'pointer', fontFamily:'Montserrat, sans-serif' }}>
-                    ×
-                  </button>
+                  {canEdit && (
+                    <button onClick={() => deleteDocument(doc.id)}
+                      style={{ padding:'4px 8px', background:'#FEF2F2', color:'#DC2626', border:'none', borderRadius:'6px', fontSize:'11px', fontWeight:'700', cursor:'pointer', fontFamily:'Montserrat, sans-serif' }}>
+                      ×
+                    </button>
+                  )}
                 </div>
               </div>
             ))}

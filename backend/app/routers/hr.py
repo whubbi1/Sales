@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, B
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
 from app.database import get_db
+from app.authz import require_permission
 from datetime import datetime
 import uuid, os, base64, json, httpx, secrets, asyncio
 import boto3
@@ -356,7 +357,7 @@ async def hr_dashboard(db: AsyncSession = Depends(get_db)):
 
 # ─── Upload & Extract CV ────────────────────────────────────────────────────────
 @router.post("/cv/extract")
-async def extract_cv(file: UploadFile = File(...)):
+async def extract_cv(file: UploadFile = File(...), _: str = Depends(require_permission("hr", "recrutement", "edit"))):
     content = await file.read()
     try:
         extracted = await extract_cv_with_claude(content, file.filename)
@@ -366,7 +367,7 @@ async def extract_cv(file: UploadFile = File(...)):
         return {"extracted": {}, "error": str(e), "filename": file.filename}
 
 @router.post("/cv/upload/{profile_id}")
-async def upload_cv(profile_id: str, file: UploadFile = File(...), db: AsyncSession = Depends(get_db)):
+async def upload_cv(profile_id: str, file: UploadFile = File(...), db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("hr", "recrutement", "edit"))):
     content = await file.read()
 
     row = await db.execute(
@@ -398,7 +399,7 @@ async def upload_cv(profile_id: str, file: UploadFile = File(...), db: AsyncSess
     return {"status": "ok", "sharepoint_url": url}
 
 @router.get("/recruitment/{profile_id}/documents")
-async def get_profile_documents(profile_id: str, db: AsyncSession = Depends(get_db)):
+async def get_profile_documents(profile_id: str, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("hr", "recrutement", "view"))):
     rows = await db.execute(text("""
         SELECT id, filename, sharepoint_url, doc_type, uploaded_at
         FROM hr_profile_documents WHERE profile_id = CAST(:id AS UUID)
@@ -409,7 +410,7 @@ async def get_profile_documents(profile_id: str, db: AsyncSession = Depends(get_
     return {"documents": docs}
 
 @router.post("/recruitment/{profile_id}/documents")
-async def upload_profile_document(profile_id: str, file: UploadFile = File(...), db: AsyncSession = Depends(get_db)):
+async def upload_profile_document(profile_id: str, file: UploadFile = File(...), db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("hr", "recrutement", "edit"))):
     content = await file.read()
     token = await get_ms_token()
     row = await db.execute(
@@ -433,7 +434,7 @@ async def upload_profile_document(profile_id: str, file: UploadFile = File(...),
 
 # ─── Freelancers ────────────────────────────────────────────────────────────────
 @router.get("/freelancers")
-async def list_freelancers(db: AsyncSession = Depends(get_db)):
+async def list_freelancers(db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("hr", "freelancers", "view"))):
     result = await db.execute(text("""
         SELECT p.*, COUNT(pr.id) as project_count
         FROM hr_profiles p
@@ -450,7 +451,7 @@ async def list_freelancers(db: AsyncSession = Depends(get_db)):
     return {"freelancers": profiles}
 
 @router.get("/freelancers/{profile_id}")
-async def get_freelancer(profile_id: str, db: AsyncSession = Depends(get_db)):
+async def get_freelancer(profile_id: str, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("hr", "freelancers", "view"))):
     p = await db.execute(text("SELECT * FROM hr_profiles WHERE id=CAST(:id AS UUID) AND profile_type='freelancer'"), {"id": profile_id})
     row = p.fetchone()
     if not row: raise HTTPException(404, "Not found")
@@ -476,7 +477,7 @@ async def get_freelancer(profile_id: str, db: AsyncSession = Depends(get_db)):
     return profile
 
 @router.post("/freelancers")
-async def create_freelancer(data: dict, db: AsyncSession = Depends(get_db)):
+async def create_freelancer(data: dict, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("hr", "freelancers", "edit"))):
     pid = str(uuid.uuid4())
     await db.execute(text("""
         INSERT INTO hr_profiles (id, profile_type, first_name, last_name, email, phone, linkedin_url,
@@ -516,7 +517,7 @@ async def create_freelancer(data: dict, db: AsyncSession = Depends(get_db)):
     return {"status": "ok", "id": pid}
 
 @router.put("/freelancers/{profile_id}")
-async def update_freelancer(profile_id: str, data: dict, db: AsyncSession = Depends(get_db)):
+async def update_freelancer(profile_id: str, data: dict, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("hr", "freelancers", "edit"))):
     dr = data.get("daily_rate")
     daily_rate = int(dr) if dr not in (None, "") else None
     ye = data.get("years_experience")
@@ -556,7 +557,7 @@ async def update_freelancer(profile_id: str, data: dict, db: AsyncSession = Depe
     return {"status": "ok"}
 
 @router.delete("/freelancers/{profile_id}")
-async def delete_freelancer(profile_id: str, db: AsyncSession = Depends(get_db)):
+async def delete_freelancer(profile_id: str, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("hr", "freelancers", "edit"))):
     row = await db.execute(text("SELECT first_name, last_name FROM hr_profiles WHERE id=CAST(:id AS UUID)"), {"id": profile_id})
     profile = row.fetchone()
     await db.execute(text("DELETE FROM hr_profile_documents WHERE profile_id=CAST(:id AS UUID)"), {"id": profile_id})
@@ -575,7 +576,7 @@ async def delete_freelancer(profile_id: str, db: AsyncSession = Depends(get_db))
     return {"status": "ok"}
 
 @router.post("/freelancers/{profile_id}/comments")
-async def add_freelancer_comment(profile_id: str, data: dict, db: AsyncSession = Depends(get_db)):
+async def add_freelancer_comment(profile_id: str, data: dict, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("hr", "freelancers", "edit"))):
     await db.execute(text("""
         INSERT INTO hr_comments (id, profile_id, author_email, author_name, content, comment_type, created_at)
         VALUES (gen_random_uuid(), CAST(:pid AS UUID), :author_email, :author_name, :content, :comment_type, NOW())
@@ -586,7 +587,7 @@ async def add_freelancer_comment(profile_id: str, data: dict, db: AsyncSession =
     return {"status": "ok"}
 
 @router.get("/freelancers/{profile_id}/documents")
-async def get_freelancer_documents(profile_id: str, db: AsyncSession = Depends(get_db)):
+async def get_freelancer_documents(profile_id: str, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("hr", "freelancers", "view"))):
     rows = await db.execute(text("""
         SELECT id, filename, sharepoint_url, doc_type, uploaded_at
         FROM hr_profile_documents WHERE profile_id=CAST(:id AS UUID) ORDER BY uploaded_at DESC
@@ -601,6 +602,7 @@ async def upload_freelancer_document(
     file: UploadFile = File(...),
     doc_type: str = Form("other"),
     db: AsyncSession = Depends(get_db),
+    _: str = Depends(require_permission("hr", "freelancers", "edit")),
 ):
     content = await file.read()
     safe_fn = file.filename.replace(" ", "_")
@@ -619,7 +621,7 @@ async def upload_freelancer_document(
     return {"status": "ok", "url": presigned}
 
 @router.delete("/freelancers/{profile_id}/documents/{doc_id}")
-async def delete_freelancer_document(profile_id: str, doc_id: str, db: AsyncSession = Depends(get_db)):
+async def delete_freelancer_document(profile_id: str, doc_id: str, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("hr", "freelancers", "edit"))):
     row = await db.execute(text(
         "SELECT sharepoint_url FROM hr_profile_documents WHERE id=CAST(:id AS UUID) AND profile_id=CAST(:pid AS UUID)"
     ), {"id": doc_id, "pid": profile_id})
@@ -640,7 +642,7 @@ async def delete_freelancer_document(profile_id: str, doc_id: str, db: AsyncSess
 RECRUITMENT_STATUSES = ["new","screening","interview_1","interview_2","technical_test","offer","hired","rejected","on_hold"]
 
 @router.get("/recruitment")
-async def list_internal(status: str = None, db: AsyncSession = Depends(get_db)):
+async def list_internal(status: str = None, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("hr", "recrutement", "view"))):
     where = "WHERE p.profile_type='internal'"
     if status: where += f" AND p.recruitment_status='{status}'"
     result = await db.execute(text(f"""
@@ -662,7 +664,7 @@ async def list_internal(status: str = None, db: AsyncSession = Depends(get_db)):
     return {"candidates": profiles, "statuses": RECRUITMENT_STATUSES}
 
 @router.get("/recruitment/{profile_id}")
-async def get_candidate(profile_id: str, db: AsyncSession = Depends(get_db)):
+async def get_candidate(profile_id: str, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("hr", "recrutement", "view"))):
     p = await db.execute(text("""
         SELECT hp.*, jp.title as job_position_title
         FROM hr_profiles hp
@@ -688,7 +690,7 @@ async def get_candidate(profile_id: str, db: AsyncSession = Depends(get_db)):
     return profile
 
 @router.post("/recruitment")
-async def create_candidate(data: dict, db: AsyncSession = Depends(get_db)):
+async def create_candidate(data: dict, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("hr", "recrutement", "edit"))):
     pid = str(uuid.uuid4())
     await db.execute(text("""
         INSERT INTO hr_profiles (id, profile_type, first_name, last_name, email, phone, linkedin_url,
@@ -730,7 +732,7 @@ _STATUS_LABELS = {
 }
 
 @router.put("/recruitment/{profile_id}/status")
-async def update_status(profile_id: str, data: dict, db: AsyncSession = Depends(get_db)):
+async def update_status(profile_id: str, data: dict, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("hr", "recrutement", "edit"))):
     status = data["status"]
     await db.execute(text("UPDATE hr_profiles SET recruitment_status=:status, updated_at=NOW() WHERE id=CAST(:id AS UUID)"),
                      {"status": status, "id": profile_id})
@@ -742,7 +744,7 @@ async def update_status(profile_id: str, data: dict, db: AsyncSession = Depends(
     return {"status": "ok"}
 
 @router.put("/recruitment/{profile_id}")
-async def update_candidate(profile_id: str, data: dict, db: AsyncSession = Depends(get_db)):
+async def update_candidate(profile_id: str, data: dict, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("hr", "recrutement", "edit"))):
     jid = data.get("job_position_id")
     await db.execute(text("""
         UPDATE hr_profiles SET
@@ -778,7 +780,7 @@ async def update_candidate(profile_id: str, data: dict, db: AsyncSession = Depen
     return {"status": "ok"}
 
 @router.post("/recruitment/{profile_id}/comments")
-async def add_comment(profile_id: str, data: dict, db: AsyncSession = Depends(get_db)):
+async def add_comment(profile_id: str, data: dict, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("hr", "recrutement", "edit"))):
     await db.execute(text("""
         INSERT INTO hr_comments (id, profile_id, author_email, author_name, content, comment_type, created_at)
         VALUES (gen_random_uuid(), CAST(:pid AS UUID), :author_email, :author_name, :content, :comment_type, NOW())
@@ -790,7 +792,7 @@ async def add_comment(profile_id: str, data: dict, db: AsyncSession = Depends(ge
 
 # ─── Proposals ──────────────────────────────────────────────────────────────────
 @router.post("/recruitment/{profile_id}/proposals")
-async def create_proposal(profile_id: str, data: dict, db: AsyncSession = Depends(get_db)):
+async def create_proposal(profile_id: str, data: dict, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("hr", "recrutement", "edit"))):
     proposal_id = str(uuid.uuid4())
     onboarding_token = secrets.token_urlsafe(32)
     country = data.get("country","france").lower().replace(" ","_")
@@ -815,7 +817,7 @@ async def create_proposal(profile_id: str, data: dict, db: AsyncSession = Depend
     return {"status": "ok", "id": proposal_id, "onboarding_token": onboarding_token}
 
 @router.get("/proposals/{proposal_id}/preview")
-async def preview_proposal(proposal_id: str, db: AsyncSession = Depends(get_db)):
+async def preview_proposal(proposal_id: str, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("hr", "recrutement", "view"))):
     p = await db.execute(text("""
         SELECT pr.*, prof.first_name, prof.last_name, prof.email
         FROM hr_proposals pr JOIN hr_profiles prof ON prof.id = pr.profile_id
@@ -840,7 +842,7 @@ async def preview_proposal(proposal_id: str, db: AsyncSession = Depends(get_db))
     }
 
 @router.post("/proposals/{proposal_id}/send")
-async def send_proposal(proposal_id: str, db: AsyncSession = Depends(get_db)):
+async def send_proposal(proposal_id: str, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("hr", "recrutement", "edit"))):
     """Send proposal via DocuSign"""
     preview = await preview_proposal(proposal_id, db)
     d = preview["proposal"]
@@ -955,12 +957,12 @@ def _parse_job(j: dict) -> dict:
     return j
 
 @router.get("/jobs")
-async def list_jobs(db: AsyncSession = Depends(get_db)):
+async def list_jobs(db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("hr", "jobs", "view"))):
     result = await db.execute(text("SELECT * FROM hr_job_descriptions ORDER BY created_at DESC"))
     return {"jobs": [_parse_job(dict(r._mapping)) for r in result.fetchall()]}
 
 @router.post("/jobs")
-async def create_job(data: dict, db: AsyncSession = Depends(get_db)):
+async def create_job(data: dict, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("hr", "jobs", "edit"))):
     job_id = str(uuid.uuid4())
     await db.execute(text("""
         INSERT INTO hr_job_descriptions (id, title, department, location, contract_type, status,
@@ -983,7 +985,7 @@ async def create_job(data: dict, db: AsyncSession = Depends(get_db)):
     return {"status": "ok", "id": job_id}
 
 @router.put("/jobs/{job_id}")
-async def update_job(job_id: str, data: dict, db: AsyncSession = Depends(get_db)):
+async def update_job(job_id: str, data: dict, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("hr", "jobs", "edit"))):
     await db.execute(text("""
         UPDATE hr_job_descriptions SET
             title=COALESCE(:title, title),
@@ -1009,13 +1011,13 @@ async def update_job(job_id: str, data: dict, db: AsyncSession = Depends(get_db)
     return {"status": "ok"}
 
 @router.delete("/jobs/{job_id}")
-async def delete_job(job_id: str, db: AsyncSession = Depends(get_db)):
+async def delete_job(job_id: str, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("hr", "jobs", "edit"))):
     await db.execute(text("DELETE FROM hr_job_descriptions WHERE id=CAST(:id AS UUID)"), {"id": job_id})
     await db.commit()
     return {"status": "ok"}
 
 @router.get("/jobs/{job_id}/export")
-async def export_job(job_id: str, format: str = "pdf", db: AsyncSession = Depends(get_db)):
+async def export_job(job_id: str, format: str = "pdf", db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("hr", "jobs", "view"))):
     from fastapi.responses import StreamingResponse
     from io import BytesIO
     result = await db.execute(text("SELECT * FROM hr_job_descriptions WHERE id=CAST(:id AS UUID)"), {"id": job_id})
@@ -1167,13 +1169,13 @@ def _generate_docx(job: dict, company_desc: str) -> bytes:
 
 # ─── Company Settings ─────────────────────────────────────────────────────────
 @router.get("/settings/company-description")
-async def get_company_description(db: AsyncSession = Depends(get_db)):
+async def get_company_description(db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("hr", "admin", "view"))):
     result = await db.execute(text("SELECT value FROM hr_settings WHERE key='company_description'"))
     row = result.fetchone()
     return {"description": row[0] if row else ""}
 
 @router.put("/settings/company-description")
-async def update_company_description(data: dict, db: AsyncSession = Depends(get_db)):
+async def update_company_description(data: dict, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("hr", "admin", "edit"))):
     await db.execute(text("""
         INSERT INTO hr_settings (key, value, updated_at) VALUES ('company_description', :val, NOW())
         ON CONFLICT (key) DO UPDATE SET value=:val, updated_at=NOW()
@@ -1223,7 +1225,7 @@ async def send_interview_emails(profile_id: str, candidate: dict, interviewers: 
 
 
 @router.post("/recruitment/{profile_id}/assign-interview")
-async def assign_interview(profile_id: str, data: dict, background_tasks: BackgroundTasks, db: AsyncSession = Depends(get_db)):
+async def assign_interview(profile_id: str, data: dict, background_tasks: BackgroundTasks, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("hr", "recrutement", "edit"))):
     interviewers = data.get("interviewers", [])  # [{email, name}]
     assigned_by = data.get("assigned_by", "")
     assigned_by_name = data.get("assigned_by_name", assigned_by or "Unknown")
@@ -1255,7 +1257,7 @@ async def assign_interview(profile_id: str, data: dict, background_tasks: Backgr
 
 
 @router.get("/recruitment/{profile_id}/interviewers")
-async def get_interviewers(profile_id: str, db: AsyncSession = Depends(get_db)):
+async def get_interviewers(profile_id: str, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("hr", "recrutement", "view"))):
     result = await db.execute(text("""
         SELECT * FROM hr_interview_assignments WHERE profile_id=CAST(:pid AS UUID) ORDER BY assigned_at DESC
     """), {"pid": profile_id})
@@ -1303,7 +1305,7 @@ async def send_interview_request_email(profile_id: str, candidate: dict, assigne
 
 
 @router.post("/recruitment/{profile_id}/request-interview")
-async def request_interview(profile_id: str, data: dict, background_tasks: BackgroundTasks, db: AsyncSession = Depends(get_db)):
+async def request_interview(profile_id: str, data: dict, background_tasks: BackgroundTasks, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("hr", "recrutement", "edit"))):
     assignee = {"email": data.get("assigned_to_email", ""), "name": data.get("assigned_to_name", "")}
     due_date = data.get("due_date", "") or ""
     message = data.get("message", "")
@@ -1329,7 +1331,7 @@ async def request_interview(profile_id: str, data: dict, background_tasks: Backg
 
 
 @router.post("/recruitment/{profile_id}/interview-results")
-async def save_interview_results(profile_id: str, data: dict, db: AsyncSession = Depends(get_db)):
+async def save_interview_results(profile_id: str, data: dict, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("hr", "recrutement", "edit"))):
     import json as _json
     interviewer_email = data.get("interviewer_email", "")
     interviewer_name = data.get("interviewer_name", "")
@@ -1357,7 +1359,7 @@ async def save_interview_results(profile_id: str, data: dict, db: AsyncSession =
 
 
 @router.get("/recruitment/{profile_id}/interview-results")
-async def get_interview_results(profile_id: str, db: AsyncSession = Depends(get_db)):
+async def get_interview_results(profile_id: str, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("hr", "recrutement", "view"))):
     result = await db.execute(text("""
         SELECT id, profile_id, interviewer_email, interviewer_name, interview_date, questions, skill_ratings, recommendation, notes, created_at
         FROM hr_interview_results WHERE profile_id=CAST(:pid AS UUID) ORDER BY created_at DESC
@@ -1375,7 +1377,7 @@ async def get_interview_results(profile_id: str, db: AsyncSession = Depends(get_
 # ─── Job Positions ──────────────────────────────────────────────────────────────
 
 @router.get("/positions")
-async def list_positions(db: AsyncSession = Depends(get_db)):
+async def list_positions(db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("hr", "positions", "view"))):
     result = await db.execute(text("""
         SELECT jp.id, jp.title, jp.country, jp.status, jp.job_description_id, jp.created_at,
                jd.title as jd_title,
@@ -1401,7 +1403,7 @@ async def list_positions(db: AsyncSession = Depends(get_db)):
 
 
 @router.post("/positions")
-async def create_position(data: dict, db: AsyncSession = Depends(get_db)):
+async def create_position(data: dict, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("hr", "positions", "edit"))):
     pos_id = str(uuid.uuid4())
     jd_id  = data.get("job_description_id") or None
     base   = {"id": pos_id, "title": data.get("title",""), "country": data.get("country","france"),
@@ -1421,7 +1423,7 @@ async def create_position(data: dict, db: AsyncSession = Depends(get_db)):
 
 
 @router.put("/positions/{position_id}")
-async def update_position(position_id: str, data: dict, db: AsyncSession = Depends(get_db)):
+async def update_position(position_id: str, data: dict, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("hr", "positions", "edit"))):
     fields = ["updated_at = NOW()"]
     params: dict = {"id": position_id}
     if data.get("title") is not None:
@@ -1442,7 +1444,7 @@ async def update_position(position_id: str, data: dict, db: AsyncSession = Depen
 
 
 @router.delete("/positions/{position_id}")
-async def delete_position(position_id: str, db: AsyncSession = Depends(get_db)):
+async def delete_position(position_id: str, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("hr", "positions", "edit"))):
     await db.execute(text("DELETE FROM hr_job_positions WHERE id = CAST(:id AS UUID)"), {"id": position_id})
     await db.commit()
     return {"status": "ok"}
@@ -1572,7 +1574,7 @@ async def get_chat_group_members(module: str, db: AsyncSession = Depends(get_db)
 
 
 @router.post("/chat/send")
-async def send_chat_message(data: dict, background_tasks: BackgroundTasks, db: AsyncSession = Depends(get_db)):
+async def send_chat_message(data: dict, background_tasks: BackgroundTasks, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("hr", "chat", "edit"))):
     message = data.get("message", "")
     recipients = data.get("recipients", [])
     sender_email = data.get("sender_email", HR_SENDER_EMAIL)
@@ -1594,7 +1596,7 @@ async def send_chat_message(data: dict, background_tasks: BackgroundTasks, db: A
 
 
 @router.post("/chat/schedule")
-async def schedule_chat_message(data: dict, db: AsyncSession = Depends(get_db)):
+async def schedule_chat_message(data: dict, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("hr", "chat", "edit"))):
     msg_id = str(uuid.uuid4())
     scheduled_at = data.get("scheduled_at")
     await db.execute(text("""
@@ -1620,7 +1622,7 @@ async def schedule_chat_message(data: dict, db: AsyncSession = Depends(get_db)):
 
 
 @router.get("/chat/history")
-async def get_chat_history(status: str = "", db: AsyncSession = Depends(get_db)):
+async def get_chat_history(status: str = "", db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("hr", "chat", "view"))):
     where = "WHERE status = :status" if status else ""
     result = await db.execute(text(f"""
         SELECT id, sender_email, sender_name, message, recipients, status, schedule_type,
@@ -1640,7 +1642,7 @@ async def get_chat_history(status: str = "", db: AsyncSession = Depends(get_db))
 
 
 @router.delete("/chat/scheduled/{msg_id}")
-async def cancel_scheduled_message(msg_id: str, db: AsyncSession = Depends(get_db)):
+async def cancel_scheduled_message(msg_id: str, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("hr", "chat", "edit"))):
     await db.execute(text("""
         UPDATE hr_chat_messages SET status='cancelled'
         WHERE id=CAST(:id AS UUID) AND status='scheduled'
@@ -1680,7 +1682,7 @@ async def process_due_scheduled(db: AsyncSession = Depends(get_db)):
 # ─── HR Admin Cockpit ─────────────────────────────────────────────────────────────
 
 @router.get("/admin/interview-skills")
-async def list_interview_skills(country: str = "global", db: AsyncSession = Depends(get_db)):
+async def list_interview_skills(country: str = "global", db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("hr", "admin", "view"))):
     result = await db.execute(text("""
         SELECT id, skill_name, country, sort_order, created_at
         FROM hr_interview_skills
@@ -1697,7 +1699,7 @@ async def list_interview_skills(country: str = "global", db: AsyncSession = Depe
 
 
 @router.post("/admin/interview-skills")
-async def add_interview_skill(data: dict, db: AsyncSession = Depends(get_db)):
+async def add_interview_skill(data: dict, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("hr", "admin", "edit"))):
     skill_id = str(uuid.uuid4())
     await db.execute(text("""
         INSERT INTO hr_interview_skills (id, skill_name, country, sort_order, created_by, created_at)
@@ -1714,14 +1716,14 @@ async def add_interview_skill(data: dict, db: AsyncSession = Depends(get_db)):
 
 
 @router.delete("/admin/interview-skills/{skill_id}")
-async def delete_interview_skill(skill_id: str, db: AsyncSession = Depends(get_db)):
+async def delete_interview_skill(skill_id: str, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("hr", "admin", "edit"))):
     await db.execute(text("DELETE FROM hr_interview_skills WHERE id=CAST(:id AS UUID)"), {"id": skill_id})
     await db.commit()
     return {"status": "ok"}
 
 
 @router.get("/admin/interview-questions")
-async def list_interview_questions(country: str = "global", db: AsyncSession = Depends(get_db)):
+async def list_interview_questions(country: str = "global", db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("hr", "admin", "view"))):
     result = await db.execute(text("""
         SELECT id, question_text, country, sort_order, created_at
         FROM hr_interview_questions
@@ -1738,7 +1740,7 @@ async def list_interview_questions(country: str = "global", db: AsyncSession = D
 
 
 @router.post("/admin/interview-questions")
-async def add_interview_question(data: dict, db: AsyncSession = Depends(get_db)):
+async def add_interview_question(data: dict, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("hr", "admin", "edit"))):
     q_id = str(uuid.uuid4())
     await db.execute(text("""
         INSERT INTO hr_interview_questions (id, question_text, country, sort_order, created_by, created_at)
@@ -1755,7 +1757,7 @@ async def add_interview_question(data: dict, db: AsyncSession = Depends(get_db))
 
 
 @router.delete("/admin/interview-questions/{question_id}")
-async def delete_interview_question(question_id: str, db: AsyncSession = Depends(get_db)):
+async def delete_interview_question(question_id: str, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("hr", "admin", "edit"))):
     await db.execute(text("DELETE FROM hr_interview_questions WHERE id=CAST(:id AS UUID)"), {"id": question_id})
     await db.commit()
     return {"status": "ok"}

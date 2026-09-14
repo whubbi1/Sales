@@ -207,7 +207,7 @@ function EditableLocations({ item, locations, editing, onStartEdit, onSave }: an
 
 function ApplicationsContent() {
   const router = useRouter()
-  const { canEdit } = useITPerm()
+  const { canEdit } = useITPerm('assets')
   const [applications, setApplications] = useState<any[]>([])
   const [users, setUsers] = useState<any[]>([])
   const [locations, setLocations] = useState<any[]>([])

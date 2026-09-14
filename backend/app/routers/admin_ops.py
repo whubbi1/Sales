@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
 from app.database import get_db
+from app.authz import require_permission
 import boto3, os, uuid
 from datetime import datetime, timedelta
 
@@ -81,7 +82,7 @@ async def seed_jobs(db: AsyncSession):
 
 # ─── Backup ───────────────────────────────────────────────────────────────────
 @router.get("/backup/overview")
-async def get_backup_overview(db: AsyncSession = Depends(get_db)):
+async def get_backup_overview(db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("admin", "monitoring", "view"))):
     await seed_jobs(db)
 
     # Get latest backup per application
@@ -138,7 +139,7 @@ async def get_backup_overview(db: AsyncSession = Depends(get_db)):
 
 
 @router.post("/backup/trigger")
-async def trigger_backup(data: dict, db: AsyncSession = Depends(get_db)):
+async def trigger_backup(data: dict, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("admin", "monitoring", "edit"))):
     """Trigger WHUBBI DB backup via ECS task."""
     try:
         ecs = boto3.client("ecs", region_name=AWS_REGION)
@@ -167,7 +168,7 @@ async def trigger_backup(data: dict, db: AsyncSession = Depends(get_db)):
 
 
 @router.put("/backup/record")
-async def update_backup_record(data: dict, db: AsyncSession = Depends(get_db)):
+async def update_backup_record(data: dict, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("admin", "monitoring", "edit"))):
     """Update backup status manually for external apps."""
     await db.execute(text("""
         INSERT INTO backup_records (id,application,backup_type,status,backup_date,size_mb,location,notes,created_by,created_at)
@@ -189,7 +190,7 @@ async def update_backup_record(data: dict, db: AsyncSession = Depends(get_db)):
 
 # ─── Background Jobs ──────────────────────────────────────────────────────────
 @router.get("/jobs")
-async def list_jobs(db: AsyncSession = Depends(get_db)):
+async def list_jobs(db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("admin", "monitoring", "view"))):
     await seed_jobs(db)
     result = await db.execute(text("SELECT * FROM background_jobs ORDER BY job_id"))
     jobs = [dict(r._mapping) for r in result.fetchall()]
@@ -197,7 +198,7 @@ async def list_jobs(db: AsyncSession = Depends(get_db)):
 
 
 @router.get("/jobs/{job_id}")
-async def get_job(job_id: str, db: AsyncSession = Depends(get_db)):
+async def get_job(job_id: str, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("admin", "monitoring", "view"))):
     result = await db.execute(text("SELECT * FROM background_jobs WHERE job_id = :jid"), {"jid": job_id})
     job = result.fetchone()
     if not job:
@@ -215,7 +216,7 @@ async def get_job(job_id: str, db: AsyncSession = Depends(get_db)):
 
 
 @router.post("/jobs")
-async def create_job(data: dict, db: AsyncSession = Depends(get_db)):
+async def create_job(data: dict, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("admin", "monitoring", "edit"))):
     # Auto-generate job_id
     count = await db.execute(text("SELECT COUNT(*) FROM background_jobs"))
     n = count.scalar() + 1
@@ -241,7 +242,7 @@ async def create_job(data: dict, db: AsyncSession = Depends(get_db)):
 
 
 @router.put("/jobs/{job_id}")
-async def update_job(job_id: str, data: dict, db: AsyncSession = Depends(get_db)):
+async def update_job(job_id: str, data: dict, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("admin", "monitoring", "edit"))):
     await db.execute(text("""
         UPDATE background_jobs SET
             status = COALESCE(:status, status),
@@ -256,7 +257,7 @@ async def update_job(job_id: str, data: dict, db: AsyncSession = Depends(get_db)
 
 
 @router.get("/backup/app/{slug}")
-async def get_backup_app_detail(slug: str, db: AsyncSession = Depends(get_db)):
+async def get_backup_app_detail(slug: str, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("admin", "monitoring", "view"))):
     app = SLUG_TO_APP.get(slug)
     if not app:
         return {"error": "Not found"}
@@ -285,7 +286,7 @@ async def get_backup_app_detail(slug: str, db: AsyncSession = Depends(get_db)):
 
 
 @router.put("/backup/app/{slug}")
-async def update_backup_app_detail(slug: str, data: dict, db: AsyncSession = Depends(get_db)):
+async def update_backup_app_detail(slug: str, data: dict, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("admin", "monitoring", "edit"))):
     app = SLUG_TO_APP.get(slug)
     if not app:
         return {"error": "Not found"}
@@ -327,7 +328,9 @@ async def update_backup_app_detail(slug: str, data: dict, db: AsyncSession = Dep
 
 @router.post("/jobs/{job_id}/executions")
 async def log_execution(job_id: str, data: dict, db: AsyncSession = Depends(get_db)):
-    """Log a job execution result."""
+    """Log a job execution result. Called by the background job runner itself
+    (an external script, not a logged-in WHUBBI user) — no X-User-Email header
+    is available, so this stays ungated like HR's onboarding-token routes."""
     await db.execute(text("""
         INSERT INTO job_executions (id,job_id,status,started_at,ended_at,duration_ms,output,error,triggered_by)
         VALUES (gen_random_uuid(),:job_id,:status,

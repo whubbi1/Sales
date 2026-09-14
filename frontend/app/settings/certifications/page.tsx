@@ -2,6 +2,7 @@
 import { useState, useEffect, useRef } from 'react'
 import ProfileLayout from '@/components/ProfileLayout'
 import { getStoredUser } from '@/lib/auth'
+import { apiFetch } from '@/lib/apiClient'
 
 const API = 'https://api.whubbi.wcomply.com'
 
@@ -90,13 +91,13 @@ export default function CertificationsPage() {
 
   const load = async (email: string) => {
     setLoading(true)
-    const d = await fetch(`${API}/training/certifications/${encodeURIComponent(email)}`).then(r => r.json()).catch(() => ({ certifications: [] }))
+    const d = await apiFetch(`/training/certifications/${encodeURIComponent(email)}`).then(r => r.json()).catch(() => ({ certifications: [] }))
     setCertifications(d.certifications || [])
     setLoading(false)
   }
 
   const addCert = async (form: any) => {
-    await fetch(`${API}/training/certifications/${encodeURIComponent(email)}`, {
+    await apiFetch(`/training/certifications/${encodeURIComponent(email)}`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form),
     })
     setShowAdd(false)
@@ -104,7 +105,7 @@ export default function CertificationsPage() {
   }
 
   const patchCert = async (c: any, fields: any) => {
-    await fetch(`${API}/training/certifications/${encodeURIComponent(email)}/${c.id}`, {
+    await apiFetch(`/training/certifications/${encodeURIComponent(email)}/${c.id}`, {
       method: 'PUT', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ cert_date: c.cert_date, name: c.name, description: c.description, ...fields }),
     })
@@ -114,14 +115,14 @@ export default function CertificationsPage() {
 
   const deleteCert = async (c: any) => {
     if (!confirm(`Delete "${c.name}"?`)) return
-    await fetch(`${API}/training/certifications/${encodeURIComponent(email)}/${c.id}`, { method: 'DELETE' })
+    await apiFetch(`/training/certifications/${encodeURIComponent(email)}/${c.id}`, { method: 'DELETE' })
     load(email)
   }
 
   const uploadFile = async (c: any, file: File) => {
     const fd = new FormData()
     fd.append('file', file)
-    await fetch(`${API}/training/certifications/${encodeURIComponent(email)}/${c.id}/upload`, { method: 'POST', body: fd })
+    await apiFetch(`/training/certifications/${encodeURIComponent(email)}/${c.id}/upload`, { method: 'POST', body: fd })
     load(email)
   }
 

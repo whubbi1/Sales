@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
 from app.database import get_db
+from app.authz import require_permission
 from app.routers.hr import upload_to_s3, s3_ref_to_presigned
 from datetime import datetime
 import uuid, os, json, httpx
@@ -96,7 +97,7 @@ async def extract_ropa_with_claude(content: bytes, filename: str, content_type: 
 
 
 @router.post("/ropa/extract")
-async def extract_ropa(file: UploadFile = File(...)):
+async def extract_ropa(file: UploadFile = File(...), _: str = Depends(require_permission("grc", "ropa", "edit"))):
     content = await file.read()
     try:
         extracted = await extract_ropa_with_claude(content, file.filename, file.content_type or "")
@@ -108,7 +109,7 @@ async def extract_ropa(file: UploadFile = File(...)):
 
 # ─── Records ─────────────────────────────────────────────────────────────────────
 @router.get("/ropa")
-async def list_records(db: AsyncSession = Depends(get_db)):
+async def list_records(db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("grc", "ropa", "view"))):
     r = await db.execute(text("""
         SELECT r.*,
                (SELECT COUNT(*) FROM tasks t WHERE t.entity_type='ropa_record' AND t.entity_id=r.id) AS tasks_total,
@@ -120,7 +121,7 @@ async def list_records(db: AsyncSession = Depends(get_db)):
 
 
 @router.post("/ropa")
-async def create_record(data: dict, db: AsyncSession = Depends(get_db)):
+async def create_record(data: dict, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("grc", "ropa", "edit"))):
     if not data.get("name"):
         raise HTTPException(status_code=400, detail="name is required")
     record_id = str(uuid.uuid4())
@@ -156,7 +157,7 @@ async def create_record(data: dict, db: AsyncSession = Depends(get_db)):
 
 
 @router.get("/ropa/{ropa_id}")
-async def get_record(ropa_id: str, db: AsyncSession = Depends(get_db)):
+async def get_record(ropa_id: str, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("grc", "ropa", "view"))):
     record = await _get_record(db, ropa_id)
     if not record:
         raise HTTPException(status_code=404, detail="ROPA record not found")
@@ -166,7 +167,7 @@ async def get_record(ropa_id: str, db: AsyncSession = Depends(get_db)):
 
 
 @router.put("/ropa/{ropa_id}")
-async def update_record(ropa_id: str, data: dict, db: AsyncSession = Depends(get_db)):
+async def update_record(ropa_id: str, data: dict, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("grc", "ropa", "edit"))):
     record = await _get_record(db, ropa_id)
     if not record:
         raise HTTPException(status_code=404, detail="ROPA record not found")
@@ -181,7 +182,7 @@ async def update_record(ropa_id: str, data: dict, db: AsyncSession = Depends(get
 
 
 @router.delete("/ropa/{ropa_id}")
-async def delete_record(ropa_id: str, db: AsyncSession = Depends(get_db)):
+async def delete_record(ropa_id: str, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("grc", "ropa", "edit"))):
     await db.execute(text("DELETE FROM ropa_records WHERE id = CAST(:id AS UUID)"), {"id": ropa_id})
     await db.commit()
     return {"status": "ok"}
@@ -189,13 +190,13 @@ async def delete_record(ropa_id: str, db: AsyncSession = Depends(get_db)):
 
 # ─── Comments ────────────────────────────────────────────────────────────────────
 @router.get("/ropa/{ropa_id}/comments/")
-async def list_comments(ropa_id: str, db: AsyncSession = Depends(get_db)):
+async def list_comments(ropa_id: str, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("grc", "ropa", "view"))):
     r = await db.execute(text("SELECT * FROM ropa_comments WHERE ropa_id = CAST(:id AS UUID) ORDER BY created_at ASC"), {"id": ropa_id})
     return {"comments": [_row(dict(row._mapping)) for row in r.fetchall()]}
 
 
 @router.post("/ropa/{ropa_id}/comments/")
-async def add_comment(ropa_id: str, data: dict, db: AsyncSession = Depends(get_db)):
+async def add_comment(ropa_id: str, data: dict, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("grc", "ropa", "edit"))):
     if not data.get("comment"):
         raise HTTPException(status_code=400, detail="comment is required")
     comment_id = str(uuid.uuid4())
@@ -208,7 +209,7 @@ async def add_comment(ropa_id: str, data: dict, db: AsyncSession = Depends(get_d
 
 
 @router.delete("/ropa/{ropa_id}/comments/{comment_id}")
-async def delete_comment(ropa_id: str, comment_id: str, db: AsyncSession = Depends(get_db)):
+async def delete_comment(ropa_id: str, comment_id: str, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("grc", "ropa", "edit"))):
     await db.execute(text("DELETE FROM ropa_comments WHERE id = CAST(:id AS UUID) AND ropa_id = CAST(:rid AS UUID)"), {"id": comment_id, "rid": ropa_id})
     await db.commit()
     return {"status": "ok"}
@@ -216,7 +217,7 @@ async def delete_comment(ropa_id: str, comment_id: str, db: AsyncSession = Depen
 
 # ─── Files (S3-backed attachments) ──────────────────────────────────────────────
 @router.get("/ropa/{ropa_id}/files")
-async def list_files(ropa_id: str, db: AsyncSession = Depends(get_db)):
+async def list_files(ropa_id: str, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("grc", "ropa", "view"))):
     r = await db.execute(text("SELECT * FROM ropa_files WHERE ropa_id = CAST(:id AS UUID) ORDER BY uploaded_at DESC"), {"id": ropa_id})
     files = [_row(dict(row._mapping)) for row in r.fetchall()]
     for f in files:
@@ -226,7 +227,7 @@ async def list_files(ropa_id: str, db: AsyncSession = Depends(get_db)):
 
 
 @router.post("/ropa/{ropa_id}/files")
-async def upload_file(ropa_id: str, file: UploadFile = File(...), uploaded_by_email: str = Form(""), db: AsyncSession = Depends(get_db)):
+async def upload_file(ropa_id: str, file: UploadFile = File(...), uploaded_by_email: str = Form(""), db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("grc", "ropa", "edit"))):
     content = await file.read()
     safe_fn = file.filename.replace(" ", "_")
     key = f"grc/ropa/{ropa_id}/{safe_fn}"
@@ -241,7 +242,7 @@ async def upload_file(ropa_id: str, file: UploadFile = File(...), uploaded_by_em
 
 
 @router.delete("/ropa/{ropa_id}/files/{file_id}")
-async def delete_file(ropa_id: str, file_id: str, db: AsyncSession = Depends(get_db)):
+async def delete_file(ropa_id: str, file_id: str, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("grc", "ropa", "edit"))):
     await db.execute(text("DELETE FROM ropa_files WHERE id = CAST(:id AS UUID) AND ropa_id = CAST(:rid AS UUID)"), {"id": file_id, "rid": ropa_id})
     await db.commit()
     return {"status": "ok"}
@@ -249,13 +250,13 @@ async def delete_file(ropa_id: str, file_id: str, db: AsyncSession = Depends(get
 
 # ─── Revision History ───────────────────────────────────────────────────────────
 @router.get("/ropa/{ropa_id}/revisions/")
-async def list_revisions(ropa_id: str, db: AsyncSession = Depends(get_db)):
+async def list_revisions(ropa_id: str, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("grc", "ropa", "view"))):
     r = await db.execute(text("SELECT * FROM ropa_revisions WHERE ropa_id = CAST(:id AS UUID) ORDER BY revision_date DESC"), {"id": ropa_id})
     return {"revisions": [_row(dict(row._mapping)) for row in r.fetchall()]}
 
 
 @router.post("/ropa/{ropa_id}/revisions/")
-async def add_revision(ropa_id: str, data: dict, db: AsyncSession = Depends(get_db)):
+async def add_revision(ropa_id: str, data: dict, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("grc", "ropa", "edit"))):
     if not data.get("content") or not data.get("revision_date"):
         raise HTTPException(status_code=400, detail="revision_date and content are required")
     try:
@@ -275,7 +276,7 @@ async def add_revision(ropa_id: str, data: dict, db: AsyncSession = Depends(get_
 
 
 @router.delete("/ropa/{ropa_id}/revisions/{revision_id}")
-async def delete_revision(ropa_id: str, revision_id: str, db: AsyncSession = Depends(get_db)):
+async def delete_revision(ropa_id: str, revision_id: str, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("grc", "ropa", "edit"))):
     await db.execute(text("DELETE FROM ropa_revisions WHERE id = CAST(:id AS UUID) AND ropa_id = CAST(:rid AS UUID)"), {"id": revision_id, "rid": ropa_id})
     await db.commit()
     return {"status": "ok"}

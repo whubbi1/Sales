@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { HRLayout } from '@/components/HRLayout'
+import { HRLayout, useHRPerm } from '@/components/HRLayout'
 
 const API = 'https://api.whubbi.wcomply.com'
 const FLAG: Record<string,string> = { france:'🇫🇷', portugal:'🇵🇹', czech_republic:'🇨🇿', romania:'🇷🇴', spain:'🇪🇸' }
@@ -18,6 +18,7 @@ const STAGE_COLORS: Record<string,string> = {
 const EMPTY_FORM = { title:'', country:'france', job_description_id:'', status:'open' }
 
 export default function JobPositionsPage() {
+  const { canEdit } = useHRPerm('positions')
   const router = useRouter()
   const [positions, setPositions] = useState<any[]>([])
   const [jobs, setJobs] = useState<any[]>([])
@@ -104,10 +105,12 @@ export default function JobPositionsPage() {
             <h1 style={{ fontSize:'20px', fontWeight:'800', color:'#156082', marginBottom:'4px' }}>💼 Job Positions</h1>
             <p style={{ fontSize:'12px', color:'#45B6E4' }}>Open roles per country · assign candidates · track pipeline</p>
           </div>
-          <button onClick={openCreate}
-            style={{ background:'#156082', color:'white', border:'none', padding:'9px 18px', borderRadius:'8px', fontSize:'12px', fontWeight:'700', cursor:'pointer', fontFamily:'Montserrat, sans-serif', flexShrink:0 }}>
-            + New Position
-          </button>
+          {canEdit && (
+            <button onClick={openCreate}
+              style={{ background:'#156082', color:'white', border:'none', padding:'9px 18px', borderRadius:'8px', fontSize:'12px', fontWeight:'700', cursor:'pointer', fontFamily:'Montserrat, sans-serif', flexShrink:0 }}>
+              + New Position
+            </button>
+          )}
         </div>
 
         {/* Stats */}
@@ -153,7 +156,7 @@ export default function JobPositionsPage() {
             <div style={{ fontSize:'32px', marginBottom:'12px' }}>💼</div>
             <div style={{ fontSize:'14px', fontWeight:'700', color:'#156082', marginBottom:'6px' }}>No positions yet</div>
             <div style={{ fontSize:'12px', color:'#45B6E4', marginBottom:'16px' }}>Create your first open position to start tracking candidates.</div>
-            <button onClick={openCreate} style={{ background:'#156082', color:'white', border:'none', padding:'9px 18px', borderRadius:'8px', fontSize:'12px', fontWeight:'700', cursor:'pointer', fontFamily:'Montserrat, sans-serif' }}>+ New Position</button>
+            {canEdit && <button onClick={openCreate} style={{ background:'#156082', color:'white', border:'none', padding:'9px 18px', borderRadius:'8px', fontSize:'12px', fontWeight:'700', cursor:'pointer', fontFamily:'Montserrat, sans-serif' }}>+ New Position</button>}
           </div>
         )}
 
@@ -216,14 +219,18 @@ export default function JobPositionsPage() {
                             style={{ padding:'6px 12px', background:'#EFF6FF', color:'#156082', border:'none', borderRadius:'7px', fontSize:'11px', fontWeight:'700', cursor:'pointer', fontFamily:'Montserrat, sans-serif' }}>
                             👥 Candidates
                           </button>
-                          <button onClick={() => openEdit(p)}
-                            style={{ padding:'6px 12px', background:'#F1F5F9', color:'#45B6E4', border:'none', borderRadius:'7px', fontSize:'11px', fontWeight:'700', cursor:'pointer', fontFamily:'Montserrat, sans-serif' }}>
-                            ✏️ Edit
-                          </button>
-                          <button onClick={() => deletePos(p.id)}
-                            style={{ padding:'6px 10px', background:'#FEF2F2', color:'#DC2626', border:'none', borderRadius:'7px', fontSize:'11px', fontWeight:'700', cursor:'pointer', fontFamily:'Montserrat, sans-serif' }}>
-                            ×
-                          </button>
+                          {canEdit && (
+                            <button onClick={() => openEdit(p)}
+                              style={{ padding:'6px 12px', background:'#F1F5F9', color:'#45B6E4', border:'none', borderRadius:'7px', fontSize:'11px', fontWeight:'700', cursor:'pointer', fontFamily:'Montserrat, sans-serif' }}>
+                              ✏️ Edit
+                            </button>
+                          )}
+                          {canEdit && (
+                            <button onClick={() => deletePos(p.id)}
+                              style={{ padding:'6px 10px', background:'#FEF2F2', color:'#DC2626', border:'none', borderRadius:'7px', fontSize:'11px', fontWeight:'700', cursor:'pointer', fontFamily:'Montserrat, sans-serif' }}>
+                              ×
+                            </button>
+                          )}
                         </div>
                       </div>
                     </div>

@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
 from app.database import get_db
+from app.authz import require_permission
 import uuid
 import json
 
@@ -26,7 +27,8 @@ async def list_equipments(
     equipment_type: str = None,
     assigned_email: str = None,
     search: str = None,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    _: str = Depends(require_permission("it", "assets", "view")),
 ):
     where = ["1=1"]
     params = {}
@@ -49,7 +51,7 @@ async def list_equipments(
     return {"equipments": result}
 
 @router.get("/equipments/{eid}")
-async def get_equipment(eid: str, db: AsyncSession = Depends(get_db)):
+async def get_equipment(eid: str, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("it", "assets", "view"))):
     r = await db.execute(text("SELECT * FROM it_equipment WHERE id = CAST(:id AS UUID)"), {"id": eid})
     row = r.fetchone()
     if not row:
@@ -57,7 +59,7 @@ async def get_equipment(eid: str, db: AsyncSession = Depends(get_db)):
     return _stringify_row(dict(row._mapping))
 
 @router.post("/equipments")
-async def create_equipment(data: dict, db: AsyncSession = Depends(get_db)):
+async def create_equipment(data: dict, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("it", "assets", "edit"))):
     eq_id = str(uuid.uuid4())
     await db.execute(text("""
         INSERT INTO it_equipment
@@ -95,7 +97,7 @@ async def create_equipment(data: dict, db: AsyncSession = Depends(get_db)):
     return {"status": "ok", "id": eq_id}
 
 @router.put("/equipments/{eid}")
-async def update_equipment(eid: str, data: dict, db: AsyncSession = Depends(get_db)):
+async def update_equipment(eid: str, data: dict, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("it", "assets", "edit"))):
     await db.execute(text("""
         UPDATE it_equipment SET
             equipment_type           = COALESCE(NULLIF(:equipment_type,''), equipment_type),
@@ -135,14 +137,14 @@ async def update_equipment(eid: str, data: dict, db: AsyncSession = Depends(get_
     return {"status": "ok"}
 
 @router.delete("/equipments/{eid}")
-async def delete_equipment(eid: str, db: AsyncSession = Depends(get_db)):
+async def delete_equipment(eid: str, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("it", "assets", "edit"))):
     await db.execute(text("DELETE FROM it_equipment WHERE id = CAST(:id AS UUID)"), {"id": eid})
     await db.commit()
     return {"status": "ok"}
 
 # ─── Software ─────────────────────────────────────────────────────────────────
 @router.get("/software")
-async def list_software(search: str = None, db: AsyncSession = Depends(get_db)):
+async def list_software(search: str = None, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("it", "assets", "view"))):
     where = ["1=1"]
     params = {}
     if search:
@@ -158,7 +160,7 @@ async def list_software(search: str = None, db: AsyncSession = Depends(get_db)):
     return {"software": result}
 
 @router.get("/software/{sid}")
-async def get_software_item(sid: str, db: AsyncSession = Depends(get_db)):
+async def get_software_item(sid: str, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("it", "assets", "view"))):
     r = await db.execute(text("SELECT * FROM it_software WHERE id = CAST(:id AS UUID)"), {"id": sid})
     row = r.fetchone()
     if not row:
@@ -166,7 +168,7 @@ async def get_software_item(sid: str, db: AsyncSession = Depends(get_db)):
     return _stringify_row(dict(row._mapping))
 
 @router.post("/software")
-async def create_software(data: dict, db: AsyncSession = Depends(get_db)):
+async def create_software(data: dict, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("it", "assets", "edit"))):
     sid = str(uuid.uuid4())
     await db.execute(text("""
         INSERT INTO it_software
@@ -190,7 +192,7 @@ async def create_software(data: dict, db: AsyncSession = Depends(get_db)):
     return {"status": "ok", "id": sid}
 
 @router.put("/software/{sid}")
-async def update_software(sid: str, data: dict, db: AsyncSession = Depends(get_db)):
+async def update_software(sid: str, data: dict, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("it", "assets", "edit"))):
     await db.execute(text("""
         UPDATE it_software SET
             name         = COALESCE(NULLIF(:name,''), name),
@@ -218,14 +220,14 @@ async def update_software(sid: str, data: dict, db: AsyncSession = Depends(get_d
     return {"status": "ok"}
 
 @router.delete("/software/{sid}")
-async def delete_software(sid: str, db: AsyncSession = Depends(get_db)):
+async def delete_software(sid: str, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("it", "assets", "edit"))):
     await db.execute(text("DELETE FROM it_software WHERE id = CAST(:id AS UUID)"), {"id": sid})
     await db.commit()
     return {"status": "ok"}
 
 # ─── Applications ───────────────────────────────────────────────────────────────
 @router.get("/applications")
-async def list_applications(search: str = None, db: AsyncSession = Depends(get_db)):
+async def list_applications(search: str = None, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("it", "assets", "view"))):
     where = ["1=1"]
     params = {}
     if search:
@@ -241,7 +243,7 @@ async def list_applications(search: str = None, db: AsyncSession = Depends(get_d
     return {"applications": result}
 
 @router.get("/applications/{aid}")
-async def get_application(aid: str, db: AsyncSession = Depends(get_db)):
+async def get_application(aid: str, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("it", "assets", "view"))):
     r = await db.execute(text("SELECT * FROM it_applications WHERE id = CAST(:id AS UUID)"), {"id": aid})
     row = r.fetchone()
     if not row:
@@ -249,7 +251,7 @@ async def get_application(aid: str, db: AsyncSession = Depends(get_db)):
     return _stringify_row(dict(row._mapping))
 
 @router.post("/applications")
-async def create_application(data: dict, db: AsyncSession = Depends(get_db)):
+async def create_application(data: dict, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("it", "assets", "edit"))):
     aid = str(uuid.uuid4())
     all_locations = data.get("all_locations")
     if all_locations is None:
@@ -277,7 +279,7 @@ async def create_application(data: dict, db: AsyncSession = Depends(get_db)):
     return {"status": "ok", "id": aid}
 
 @router.put("/applications/{aid}")
-async def update_application(aid: str, data: dict, db: AsyncSession = Depends(get_db)):
+async def update_application(aid: str, data: dict, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("it", "assets", "edit"))):
     all_locations = data.get("all_locations")
     if all_locations is None:
         all_locations = not data.get("location_ids")
@@ -310,21 +312,21 @@ async def update_application(aid: str, data: dict, db: AsyncSession = Depends(ge
     return {"status": "ok"}
 
 @router.delete("/applications/{aid}")
-async def delete_application(aid: str, db: AsyncSession = Depends(get_db)):
+async def delete_application(aid: str, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("it", "assets", "edit"))):
     await db.execute(text("DELETE FROM it_applications WHERE id = CAST(:id AS UUID)"), {"id": aid})
     await db.commit()
     return {"status": "ok"}
 
 # ─── Application submodules (used by the Development module to scope a test plan) ──
 @router.get("/applications/{aid}/submodules")
-async def list_application_submodules(aid: str, db: AsyncSession = Depends(get_db)):
+async def list_application_submodules(aid: str, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("it", "assets", "view"))):
     r = await db.execute(text("""
         SELECT * FROM it_application_submodules WHERE application_id = CAST(:aid AS UUID) ORDER BY name
     """), {"aid": aid})
     return {"submodules": [_stringify_row(dict(row._mapping)) for row in r.fetchall()]}
 
 @router.post("/applications/{aid}/submodules")
-async def create_application_submodule(aid: str, data: dict, db: AsyncSession = Depends(get_db)):
+async def create_application_submodule(aid: str, data: dict, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("it", "assets", "edit"))):
     sid = str(uuid.uuid4())
     await db.execute(text("""
         INSERT INTO it_application_submodules (id, application_id, name, description, created_at, updated_at)
@@ -334,7 +336,7 @@ async def create_application_submodule(aid: str, data: dict, db: AsyncSession = 
     return {"status": "ok", "id": sid}
 
 @router.put("/applications/{aid}/submodules/{sid}")
-async def update_application_submodule(aid: str, sid: str, data: dict, db: AsyncSession = Depends(get_db)):
+async def update_application_submodule(aid: str, sid: str, data: dict, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("it", "assets", "edit"))):
     await db.execute(text("""
         UPDATE it_application_submodules SET
             name = COALESCE(NULLIF(:name,''), name),
@@ -346,7 +348,7 @@ async def update_application_submodule(aid: str, sid: str, data: dict, db: Async
     return {"status": "ok"}
 
 @router.delete("/applications/{aid}/submodules/{sid}")
-async def delete_application_submodule(aid: str, sid: str, db: AsyncSession = Depends(get_db)):
+async def delete_application_submodule(aid: str, sid: str, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("it", "assets", "edit"))):
     await db.execute(text("""
         DELETE FROM it_application_submodules WHERE id = CAST(:id AS UUID) AND application_id = CAST(:aid AS UUID)
     """), {"id": sid, "aid": aid})
@@ -355,14 +357,14 @@ async def delete_application_submodule(aid: str, sid: str, db: AsyncSession = De
 
 # ─── Application environments (Definition/Hosting/Name/URL) ───────────────────
 @router.get("/applications/{aid}/environments")
-async def list_application_environments(aid: str, db: AsyncSession = Depends(get_db)):
+async def list_application_environments(aid: str, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("it", "assets", "view"))):
     r = await db.execute(text("""
         SELECT * FROM it_application_environments WHERE application_id = CAST(:aid AS UUID) ORDER BY name
     """), {"aid": aid})
     return {"environments": [_stringify_row(dict(row._mapping)) for row in r.fetchall()]}
 
 @router.post("/applications/{aid}/environments")
-async def create_application_environment(aid: str, data: dict, db: AsyncSession = Depends(get_db)):
+async def create_application_environment(aid: str, data: dict, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("it", "assets", "edit"))):
     eid = str(uuid.uuid4())
     await db.execute(text("""
         INSERT INTO it_application_environments (id, application_id, definition, hosting_name, name, url, created_at, updated_at)
@@ -373,7 +375,7 @@ async def create_application_environment(aid: str, data: dict, db: AsyncSession 
     return {"status": "ok", "id": eid}
 
 @router.put("/applications/{aid}/environments/{eid}")
-async def update_application_environment(aid: str, eid: str, data: dict, db: AsyncSession = Depends(get_db)):
+async def update_application_environment(aid: str, eid: str, data: dict, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("it", "assets", "edit"))):
     await db.execute(text("""
         UPDATE it_application_environments SET
             definition = COALESCE(NULLIF(:definition,''), definition),
@@ -388,7 +390,7 @@ async def update_application_environment(aid: str, eid: str, data: dict, db: Asy
     return {"status": "ok"}
 
 @router.delete("/applications/{aid}/environments/{eid}")
-async def delete_application_environment(aid: str, eid: str, db: AsyncSession = Depends(get_db)):
+async def delete_application_environment(aid: str, eid: str, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("it", "assets", "edit"))):
     await db.execute(text("""
         DELETE FROM it_application_environments WHERE id = CAST(:id AS UUID) AND application_id = CAST(:aid AS UUID)
     """), {"id": eid, "aid": aid})
@@ -397,14 +399,14 @@ async def delete_application_environment(aid: str, eid: str, db: AsyncSession = 
 
 # ─── Application links (free-form documents/resources, each with a description) ─
 @router.get("/applications/{aid}/links")
-async def list_application_links(aid: str, db: AsyncSession = Depends(get_db)):
+async def list_application_links(aid: str, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("it", "assets", "view"))):
     r = await db.execute(text("""
         SELECT * FROM it_application_links WHERE application_id = CAST(:aid AS UUID) ORDER BY created_at DESC
     """), {"aid": aid})
     return {"links": [_stringify_row(dict(row._mapping)) for row in r.fetchall()]}
 
 @router.post("/applications/{aid}/links")
-async def create_application_link(aid: str, data: dict, db: AsyncSession = Depends(get_db)):
+async def create_application_link(aid: str, data: dict, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("it", "assets", "edit"))):
     if not data.get("url"):
         raise HTTPException(status_code=400, detail="url is required")
     lid = str(uuid.uuid4())
@@ -416,7 +418,7 @@ async def create_application_link(aid: str, data: dict, db: AsyncSession = Depen
     return {"status": "ok", "id": lid}
 
 @router.put("/applications/{aid}/links/{lid}")
-async def update_application_link(aid: str, lid: str, data: dict, db: AsyncSession = Depends(get_db)):
+async def update_application_link(aid: str, lid: str, data: dict, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("it", "assets", "edit"))):
     await db.execute(text("""
         UPDATE it_application_links SET
             url = COALESCE(NULLIF(:url,''), url),
@@ -428,7 +430,7 @@ async def update_application_link(aid: str, lid: str, data: dict, db: AsyncSessi
     return {"status": "ok"}
 
 @router.delete("/applications/{aid}/links/{lid}")
-async def delete_application_link(aid: str, lid: str, db: AsyncSession = Depends(get_db)):
+async def delete_application_link(aid: str, lid: str, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("it", "assets", "edit"))):
     await db.execute(text("""
         DELETE FROM it_application_links WHERE id = CAST(:id AS UUID) AND application_id = CAST(:aid AS UUID)
     """), {"id": lid, "aid": aid})
@@ -437,7 +439,7 @@ async def delete_application_link(aid: str, lid: str, db: AsyncSession = Depends
 
 # ─── Saved report views (Equipment / Software / Application) ──────────────────
 @router.get("/report-views")
-async def list_report_views(module: str, user_email: str, db: AsyncSession = Depends(get_db)):
+async def list_report_views(module: str, user_email: str, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("it", "assets", "view"))):
     r = await db.execute(text("""
         SELECT * FROM it_report_views
         WHERE module = :module AND user_email = :user_email
@@ -447,7 +449,7 @@ async def list_report_views(module: str, user_email: str, db: AsyncSession = Dep
     return {"views": result}
 
 @router.post("/report-views")
-async def create_report_view(data: dict, db: AsyncSession = Depends(get_db)):
+async def create_report_view(data: dict, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("it", "assets", "view"))):
     vid = str(uuid.uuid4())
     await db.execute(text("""
         INSERT INTO it_report_views
@@ -470,7 +472,7 @@ async def create_report_view(data: dict, db: AsyncSession = Depends(get_db)):
     return {"status": "ok", "id": vid}
 
 @router.put("/report-views/{vid}")
-async def update_report_view(vid: str, data: dict, db: AsyncSession = Depends(get_db)):
+async def update_report_view(vid: str, data: dict, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("it", "assets", "view"))):
     await db.execute(text("""
         UPDATE it_report_views SET
             name          = COALESCE(NULLIF(:name,''), name),
@@ -494,7 +496,7 @@ async def update_report_view(vid: str, data: dict, db: AsyncSession = Depends(ge
     return {"status": "ok"}
 
 @router.delete("/report-views/{vid}")
-async def delete_report_view(vid: str, db: AsyncSession = Depends(get_db)):
+async def delete_report_view(vid: str, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("it", "assets", "view"))):
     await db.execute(text("DELETE FROM it_report_views WHERE id = CAST(:id AS UUID)"), {"id": vid})
     await db.commit()
     return {"status": "ok"}

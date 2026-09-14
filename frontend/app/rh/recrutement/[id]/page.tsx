@@ -2,7 +2,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import { getStoredUser } from '@/lib/auth'
-import { HRLayout } from '@/components/HRLayout'
+import { HRLayout, useHRPerm } from '@/components/HRLayout'
 
 const API = 'https://api.whubbi.wcomply.com'
 const FLAG: Record<string,string> = { france:'🇫🇷', portugal:'🇵🇹', czech_republic:'🇨🇿', romania:'🇷🇴', spain:'🇪🇸' }
@@ -401,6 +401,7 @@ function InterviewResultsModal({ candidateName, candidateSkills, candidateCountr
 
 export default function CandidateDetail() {
   const router = useRouter()
+  const { canEdit } = useHRPerm('recrutement')
   const { id } = useParams() as { id: string }
   const [profile, setProfile] = useState<any>(null)
   const [loading, setLoading] = useState(true)
@@ -606,10 +607,12 @@ export default function CandidateDetail() {
                   displayAs={<span style={{ fontSize:'13px', color:'#45B6E4' }}>{profile.current_title||'Click to add title'} · {FLAG[profile.country]||'🌍'} {profile.country}</span>}/>
               </div>
             </div>
-            <div style={{ display:'flex', gap:'8px', flexShrink:0 }}>
-              <button onClick={() => setShowRequestInterview(true)} style={{ padding:'7px 14px', background:'#7C3AED', color:'white', border:'none', borderRadius:'8px', fontSize:'12px', fontWeight:'700', cursor:'pointer', fontFamily:'Montserrat, sans-serif' }}>🗓 Request Interview</button>
-              <button onClick={() => setShowProposal(true)} style={{ padding:'7px 14px', background:'#059669', color:'white', border:'none', borderRadius:'8px', fontSize:'12px', fontWeight:'700', cursor:'pointer', fontFamily:'Montserrat, sans-serif' }}>📄 Send Proposal</button>
-            </div>
+            {canEdit && (
+              <div style={{ display:'flex', gap:'8px', flexShrink:0 }}>
+                <button onClick={() => setShowRequestInterview(true)} style={{ padding:'7px 14px', background:'#7C3AED', color:'white', border:'none', borderRadius:'8px', fontSize:'12px', fontWeight:'700', cursor:'pointer', fontFamily:'Montserrat, sans-serif' }}>🗓 Request Interview</button>
+                <button onClick={() => setShowProposal(true)} style={{ padding:'7px 14px', background:'#059669', color:'white', border:'none', borderRadius:'8px', fontSize:'12px', fontWeight:'700', cursor:'pointer', fontFamily:'Montserrat, sans-serif' }}>📄 Send Proposal</button>
+              </div>
+            )}
           </div>
 
           {/* Contact fields */}
@@ -665,8 +668,8 @@ export default function CandidateDetail() {
                 const isActive = profile.recruitment_status === s
                 const terminalColor = STATUS_TERMINAL_COLOR[s]
                 return (
-                  <button key={s} onClick={() => updateStatus(s)}
-                    style={{ padding:'5px 14px', borderRadius:'20px', border:'none', cursor:'pointer', fontSize:'10px', fontWeight:'700', fontFamily:'Montserrat, sans-serif', transition:'all 0.15s',
+                  <button key={s} onClick={() => canEdit && updateStatus(s)} disabled={!canEdit}
+                    style={{ padding:'5px 14px', borderRadius:'20px', border:'none', cursor: canEdit ? 'pointer' : 'default', fontSize:'10px', fontWeight:'700', fontFamily:'Montserrat, sans-serif', transition:'all 0.15s',
                       background: isActive ? (terminalColor || '#156082') : '#F1F5F9',
                       color: isActive ? 'white' : '#94A3B8' }}>
                     {STATUS_LABEL[s]}{s==='interview_1'&&' 🎤'}
@@ -683,10 +686,12 @@ export default function CandidateDetail() {
                     {iv.interviewer_name || iv.interviewer_email}
                   </span>
                 ))}
-                <button onClick={()=>setShowInterviewModal(true)}
-                  style={{ background:'none', border:'1px solid #CBD5E1', color:'#45B6E4', padding:'2px 8px', borderRadius:'8px', fontSize:'10px', fontWeight:'600', cursor:'pointer', fontFamily:'Montserrat, sans-serif' }}>
-                  + Add more
-                </button>
+                {canEdit && (
+                  <button onClick={()=>setShowInterviewModal(true)}
+                    style={{ background:'none', border:'1px solid #CBD5E1', color:'#45B6E4', padding:'2px 8px', borderRadius:'8px', fontSize:'10px', fontWeight:'600', cursor:'pointer', fontFamily:'Montserrat, sans-serif' }}>
+                    + Add more
+                  </button>
+                )}
               </div>
             )}
           </div>
@@ -778,8 +783,8 @@ export default function CandidateDetail() {
                 placeholder="Add a follow-up note, call log, or interview feedback..."
                 style={{ width:'100%', padding:'10px', border:'1.5px solid #EDF2F7', borderRadius:'8px', fontFamily:'Montserrat, sans-serif', fontSize:'12px', resize:'vertical', minHeight:'70px', outline:'none', boxSizing:'border-box' as const }}/>
               <div style={{ display:'flex', justifyContent:'flex-end', marginTop:'8px' }}>
-                <button onClick={addComment} disabled={!comment.content.trim()}
-                  style={{ padding:'7px 16px', background:comment.content.trim()?'#156082':'#F1F5F9', color:comment.content.trim()?'white':'#45B6E4', border:'none', borderRadius:'8px', fontSize:'12px', fontWeight:'700', cursor:comment.content.trim()?'pointer':'not-allowed', fontFamily:'Montserrat, sans-serif' }}>
+                <button onClick={addComment} disabled={!canEdit || !comment.content.trim()}
+                  style={{ padding:'7px 16px', background:canEdit && comment.content.trim()?'#156082':'#F1F5F9', color:canEdit && comment.content.trim()?'white':'#45B6E4', border:'none', borderRadius:'8px', fontSize:'12px', fontWeight:'700', cursor:canEdit && comment.content.trim()?'pointer':'not-allowed', fontFamily:'Montserrat, sans-serif' }}>
                   Add Follow-up
                 </button>
               </div>
@@ -804,7 +809,7 @@ export default function CandidateDetail() {
         {/* Proposals tab */}
         {activeTab === 'proposal' && (
           <div>
-            {(profile.proposals||[]).length===0&&<div style={{ background:'white', borderRadius:'12px', border:'1px solid #EDF2F7', padding:'48px', textAlign:'center', color:'#45B6E4', fontSize:'13px' }}>No proposals sent yet.<br/><button onClick={()=>setShowProposal(true)} style={{ marginTop:'12px', background:'#059669', color:'white', border:'none', padding:'8px 18px', borderRadius:'8px', fontSize:'12px', fontWeight:'700', cursor:'pointer', fontFamily:'Montserrat, sans-serif' }}>Create First Proposal</button></div>}
+            {(profile.proposals||[]).length===0&&<div style={{ background:'white', borderRadius:'12px', border:'1px solid #EDF2F7', padding:'48px', textAlign:'center', color:'#45B6E4', fontSize:'13px' }}>No proposals sent yet.<br/>{canEdit && <button onClick={()=>setShowProposal(true)} style={{ marginTop:'12px', background:'#059669', color:'white', border:'none', padding:'8px 18px', borderRadius:'8px', fontSize:'12px', fontWeight:'700', cursor:'pointer', fontFamily:'Montserrat, sans-serif' }}>Create First Proposal</button>}</div>}
             {(profile.proposals||[]).map((p:any)=>(
               <div key={p.id} style={{ background:'white', borderRadius:'12px', border:'1px solid #EDF2F7', padding:'18px', marginBottom:'10px', boxShadow:'0 1px 3px rgba(0,0,0,0.06)' }}>
                 <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', flexWrap:'wrap', gap:'8px' }}>
@@ -826,18 +831,20 @@ export default function CandidateDetail() {
           <div>
             <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'14px' }}>
               <span style={{ fontSize:'12px', color:'#94A3B8' }}>{interviewResultsList.length} result{interviewResultsList.length!==1?'s':''} recorded</span>
-              <button onClick={() => setShowInterviewResults(true)}
-                style={{ padding:'7px 16px', background:'#156082', color:'white', border:'none', borderRadius:'8px', fontSize:'12px', fontWeight:'700', cursor:'pointer', fontFamily:'Montserrat, sans-serif' }}>
-                📋 Enter Interview Results
-              </button>
+              {canEdit && (
+                <button onClick={() => setShowInterviewResults(true)}
+                  style={{ padding:'7px 16px', background:'#156082', color:'white', border:'none', borderRadius:'8px', fontSize:'12px', fontWeight:'700', cursor:'pointer', fontFamily:'Montserrat, sans-serif' }}>
+                  📋 Enter Interview Results
+                </button>
+              )}
             </div>
             {interviewResultsList.length === 0 && (
               <div style={{ background:'white', borderRadius:'12px', border:'1px solid #EDF2F7', padding:'48px', textAlign:'center', color:'#45B6E4', fontSize:'13px' }}>
                 No interview results recorded yet.<br/>
-                <button onClick={() => setShowInterviewResults(true)}
+                {canEdit && <button onClick={() => setShowInterviewResults(true)}
                   style={{ marginTop:'12px', background:'#156082', color:'white', border:'none', padding:'8px 18px', borderRadius:'8px', fontSize:'12px', fontWeight:'700', cursor:'pointer', fontFamily:'Montserrat, sans-serif' }}>
                   Record First Interview
-                </button>
+                </button>}
               </div>
             )}
             {interviewResultsList.map((res: any) => {

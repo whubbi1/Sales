@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, Request, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
 from app.database import get_db
+from app.authz import require_permission
 import httpx, os, json, hmac, hashlib
 from datetime import datetime
 
@@ -293,7 +294,7 @@ async def teams_webhook(request: Request, db: AsyncSession = Depends(get_db)):
 
 # ─── Sync Teams messages manually ─────────────────────────────────────────────
 @router.post("/tickets/{tid}/teams/sync")
-async def sync_teams_messages(tid: str, db: AsyncSession = Depends(get_db)):
+async def sync_teams_messages(tid: str, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("helpdesk", "tickets", "edit"))):
     """Manually sync Teams chat messages to ticket comments."""
     try:
         t = await db.execute(text("SELECT teams_chat_id, ticket_number FROM tickets WHERE id = CAST(:id AS UUID)"), {"id": tid})
@@ -345,7 +346,7 @@ async def sync_teams_messages(tid: str, db: AsyncSession = Depends(get_db)):
 
 # ─── Get Teams chat link ───────────────────────────────────────────────────────
 @router.get("/tickets/{tid}/teams")
-async def get_teams_info(tid: str, db: AsyncSession = Depends(get_db)):
+async def get_teams_info(tid: str, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("helpdesk", "tickets", "view"))):
     t = await db.execute(text("SELECT teams_chat_id, ticket_number, title FROM tickets WHERE id = CAST(:id AS UUID)"), {"id": tid})
     row = t.fetchone()
     if not row or not row.teams_chat_id:

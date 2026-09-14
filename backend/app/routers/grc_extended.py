@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
 from app.database import get_db
+from app.authz import require_permission
 import uuid, json, os
 
 router = APIRouter()
@@ -25,7 +26,7 @@ FRAMEWORK_META = {
 
 # ─── Frameworks ────────────────────────────────────────────────────────────────
 @router.get("/frameworks")
-async def list_frameworks(db: AsyncSession = Depends(get_db)):
+async def list_frameworks(db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("grc", "compliance", "view"))):
     result = await db.execute(text("""
         SELECT f.id, f.name, f.description, f.category, f.version, f.color, f.active,
                COUNT(r.id) as total_requirements,
@@ -43,7 +44,7 @@ async def list_frameworks(db: AsyncSession = Depends(get_db)):
     return {"frameworks": rows}
 
 @router.get("/frameworks/{fw_id}/requirements")
-async def get_framework_requirements(fw_id: str, db: AsyncSession = Depends(get_db)):
+async def get_framework_requirements(fw_id: str, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("grc", "compliance", "view"))):
     fw = await db.execute(text("SELECT * FROM grc_frameworks WHERE id=CAST(:id AS UUID)"), {"id": fw_id})
     fw_row = fw.fetchone()
     if not fw_row: raise HTTPException(404)
@@ -63,7 +64,7 @@ async def get_framework_requirements(fw_id: str, db: AsyncSession = Depends(get_
     return {"framework": dict(fw_row._mapping) | {"id": str(fw_row.id)}, "requirements": requirements}
 
 @router.post("/frameworks/{fw_id}/requirements")
-async def add_requirement(fw_id: str, data: dict, db: AsyncSession = Depends(get_db)):
+async def add_requirement(fw_id: str, data: dict, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("grc", "compliance", "edit"))):
     req_id = str(uuid.uuid4())
     await db.execute(text("""
         INSERT INTO grc_requirements (id, framework_id, document_id, requirement_text, reference_code, status, evidence, owner_email, created_at, updated_at)
@@ -81,7 +82,7 @@ async def add_requirement(fw_id: str, data: dict, db: AsyncSession = Depends(get
     return {"status": "ok", "id": req_id}
 
 @router.put("/requirements/{req_id}")
-async def update_requirement(req_id: str, data: dict, db: AsyncSession = Depends(get_db)):
+async def update_requirement(req_id: str, data: dict, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("grc", "compliance", "edit"))):
     await db.execute(text("""
         UPDATE grc_requirements SET
             requirement_text = COALESCE(:text, requirement_text),
@@ -103,7 +104,7 @@ async def update_requirement(req_id: str, data: dict, db: AsyncSession = Depends
     return {"status": "ok"}
 
 @router.delete("/requirements/{req_id}")
-async def delete_requirement(req_id: str, db: AsyncSession = Depends(get_db)):
+async def delete_requirement(req_id: str, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("grc", "compliance", "edit"))):
     await db.execute(text("DELETE FROM grc_requirement_mappings WHERE source_req_id=CAST(:id AS UUID) OR target_req_id=CAST(:id AS UUID)"), {"id": req_id})
     await db.execute(text("DELETE FROM grc_requirements WHERE id=CAST(:id AS UUID)"), {"id": req_id})
     await db.commit()
@@ -111,7 +112,7 @@ async def delete_requirement(req_id: str, db: AsyncSession = Depends(get_db)):
 
 # ─── Documents ─────────────────────────────────────────────────────────────────
 @router.get("/documents")
-async def list_documents(db: AsyncSession = Depends(get_db)):
+async def list_documents(db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("grc", "compliance", "view"))):
     result = await db.execute(text("""
         SELECT d.id, d.name, COUNT(r.id) as requirement_count
         FROM grc_documents d
@@ -123,7 +124,7 @@ async def list_documents(db: AsyncSession = Depends(get_db)):
     return {"documents": docs}
 
 @router.get("/documents/{doc_id}/requirements")
-async def get_document_requirements(doc_id: str, db: AsyncSession = Depends(get_db)):
+async def get_document_requirements(doc_id: str, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("grc", "compliance", "view"))):
     result = await db.execute(text("""
         SELECT r.*, f.name as framework_name, f.color as framework_color
         FROM grc_requirements r
@@ -139,7 +140,7 @@ async def get_document_requirements(doc_id: str, db: AsyncSession = Depends(get_
 
 # ─── Mapping ───────────────────────────────────────────────────────────────────
 @router.get("/mapping")
-async def get_mapping(db: AsyncSession = Depends(get_db)):
+async def get_mapping(db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("grc", "compliance", "view"))):
     """Get full cross-framework mapping matrix"""
     result = await db.execute(text("""
         SELECT m.id, m.source_req_id, m.target_req_id, m.mapping_type, m.notes,
@@ -165,7 +166,7 @@ async def get_mapping(db: AsyncSession = Depends(get_db)):
     return {"mappings": mappings}
 
 @router.get("/mapping/document/{doc_id}")
-async def get_document_mapping(doc_id: str, db: AsyncSession = Depends(get_db)):
+async def get_document_mapping(doc_id: str, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("grc", "compliance", "view"))):
     """Get all framework mappings for a specific document"""
     result = await db.execute(text("""
         SELECT f.name as framework_name, f.color, f.version,
@@ -180,7 +181,7 @@ async def get_document_mapping(doc_id: str, db: AsyncSession = Depends(get_db)):
     return {"frameworks": rows}
 
 @router.post("/mapping")
-async def create_mapping(data: dict, db: AsyncSession = Depends(get_db)):
+async def create_mapping(data: dict, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("grc", "compliance", "edit"))):
     mapping_id = str(uuid.uuid4())
     await db.execute(text("""
         INSERT INTO grc_requirement_mappings (id, source_req_id, target_req_id, mapping_type, notes, created_at)
@@ -198,14 +199,14 @@ async def create_mapping(data: dict, db: AsyncSession = Depends(get_db)):
     return {"status": "ok", "id": mapping_id}
 
 @router.delete("/mapping/{mapping_id}")
-async def delete_mapping(mapping_id: str, db: AsyncSession = Depends(get_db)):
+async def delete_mapping(mapping_id: str, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("grc", "compliance", "edit"))):
     await db.execute(text("DELETE FROM grc_requirement_mappings WHERE id=CAST(:id AS UUID)"), {"id": mapping_id})
     await db.commit()
     return {"status": "ok"}
 
 # ─── Seeder ────────────────────────────────────────────────────────────────────
 @router.post("/seed")
-async def seed_frameworks(db: AsyncSession = Depends(get_db)):
+async def seed_frameworks(db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("grc", "compliance", "edit"))):
     """Seed all 14 frameworks + 67 documents + requirements from Excel mapping"""
     import openpyxl
 

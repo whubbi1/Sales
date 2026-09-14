@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
 from app.database import get_db
+from app.authz import require_permission
 import uuid, json
 from datetime import datetime, timedelta
 
@@ -52,7 +53,8 @@ async def create_audit_log(data: dict, db: AsyncSession = Depends(get_db)):
 async def get_audit_logs(
     table_name: str = "", module: str = "", action: str = "",
     changed_by: str = "", limit: int = 100, offset: int = 0,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    _: str = Depends(require_permission("admin", "monitoring", "view")),
 ):
     conditions = []
     params: dict = {"limit": limit, "offset": offset}
@@ -82,7 +84,7 @@ async def get_audit_logs(
 
 # ─── Retention settings ────────────────────────────────────────────────────────
 @router.get("/audit/retention")
-async def get_retention(db: AsyncSession = Depends(get_db)):
+async def get_retention(db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("admin", "monitoring", "view"))):
     await seed_retention(db)
     result = await db.execute(text("SELECT * FROM log_retention_settings ORDER BY module, table_name"))
     rows = [dict(r._mapping) for r in result.fetchall()]
@@ -92,7 +94,7 @@ async def get_retention(db: AsyncSession = Depends(get_db)):
     return {"settings": rows}
 
 @router.put("/audit/retention/{table_name}")
-async def update_retention(table_name: str, data: dict, db: AsyncSession = Depends(get_db)):
+async def update_retention(table_name: str, data: dict, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("admin", "monitoring", "edit"))):
     await db.execute(text("""
         INSERT INTO log_retention_settings (id, table_name, module, retention_days, updated_by, updated_at)
         VALUES (gen_random_uuid(), :tbl, :mod, :days, :by, NOW())
@@ -108,7 +110,7 @@ async def update_retention(table_name: str, data: dict, db: AsyncSession = Depen
 
 # ─── Cleanup old logs ──────────────────────────────────────────────────────────
 @router.post("/audit/cleanup")
-async def cleanup_logs(data: dict = {}, db: AsyncSession = Depends(get_db)):
+async def cleanup_logs(data: dict = {}, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("admin", "monitoring", "edit"))):
     """Delete audit_logs entries older than their configured retention period."""
     result = await db.execute(text("SELECT table_name, retention_days FROM log_retention_settings"))
     settings = {r[0]: r[1] for r in result.fetchall()}

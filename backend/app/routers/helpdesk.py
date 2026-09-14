@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
 from app.database import get_db
+from app.authz import require_permission
 from datetime import datetime, timedelta
 import uuid, httpx, os
 
@@ -72,7 +73,7 @@ async def get_ms_user(email: str) -> dict:
 
 
 @router.get("/dashboard")
-async def dashboard(db: AsyncSession = Depends(get_db)):
+async def dashboard(db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("helpdesk", "tickets", "view"))):
     await seed(db)
     status_r = await db.execute(text("SELECT status, COUNT(*) as c FROM tickets GROUP BY status"))
     by_status = {r.status: r.c for r in status_r.fetchall()}
@@ -100,7 +101,8 @@ async def dashboard(db: AsyncSession = Depends(get_db)):
 async def list_tickets(status:str=None,priority:str=None,group_id:str=None,
                        assignee_email:str=None,requester_email:str=None,search:str=None,
                        ticket_type:str=None,
-                       limit:int=50,offset:int=0,db:AsyncSession=Depends(get_db)):
+                       limit:int=50,offset:int=0,db:AsyncSession=Depends(get_db),
+                       _: str = Depends(require_permission("helpdesk", "tickets", "view"))):
     where,params=["1=1"],{"limit":limit,"offset":offset}
     if status:   where.append("t.status=:status");    params["status"]=status
     if priority: where.append("t.priority=:priority"); params["priority"]=priority
@@ -130,7 +132,7 @@ async def list_tickets(status:str=None,priority:str=None,group_id:str=None,
 
 
 @router.get("/tickets/{tid}")
-async def get_ticket(tid:str,db:AsyncSession=Depends(get_db)):
+async def get_ticket(tid:str,db:AsyncSession=Depends(get_db), _: str = Depends(require_permission("helpdesk", "tickets", "view"))):
     t=await db.execute(text("""
         SELECT t.*,c.name as category_name,c.color as category_color,c.icon as category_icon,
                sc.name as subcategory_name,g.name as group_name,
@@ -147,7 +149,7 @@ async def get_ticket(tid:str,db:AsyncSession=Depends(get_db)):
 
 
 @router.post("/tickets")
-async def create_ticket(data:dict,db:AsyncSession=Depends(get_db)):
+async def create_ticket(data:dict,db:AsyncSession=Depends(get_db), _: str = Depends(require_permission("helpdesk", "tickets", "edit"))):
     tid=str(uuid.uuid4())
     req_email=data.get("requester_email","")
     req_name=data.get("requester_name","")
@@ -211,7 +213,7 @@ async def create_ticket(data:dict,db:AsyncSession=Depends(get_db)):
 
 
 @router.put("/tickets/{tid}")
-async def update_ticket(tid:str,data:dict,db:AsyncSession=Depends(get_db)):
+async def update_ticket(tid:str,data:dict,db:AsyncSession=Depends(get_db), _: str = Depends(require_permission("helpdesk", "tickets", "edit"))):
     # Get current state before update
     current=await db.execute(text("""
         SELECT t.requester_email,t.assignee_email,t.ticket_number,t.title,
@@ -269,7 +271,7 @@ async def update_ticket(tid:str,data:dict,db:AsyncSession=Depends(get_db)):
 
 
 @router.post("/tickets/{tid}/comments")
-async def add_comment(tid:str,data:dict,db:AsyncSession=Depends(get_db)):
+async def add_comment(tid:str,data:dict,db:AsyncSession=Depends(get_db), _: str = Depends(require_permission("helpdesk", "tickets", "edit"))):
     await db.execute(text("INSERT INTO ticket_comments (id,ticket_id,author_email,author_name,content,is_internal,created_at) VALUES (gen_random_uuid(),CAST(:tid AS uuid),:email,:name,:content,:internal,NOW())"),
                      {"tid":tid,"email":data.get("author_email"),"name":data.get("author_name"),"content":data.get("content"),"internal":data.get("is_internal",False)})
     await db.execute(text("UPDATE tickets SET updated_at=NOW() WHERE id=CAST(:id AS uuid)"),{"id":tid})
@@ -278,7 +280,7 @@ async def add_comment(tid:str,data:dict,db:AsyncSession=Depends(get_db)):
 
 
 @router.get("/categories")
-async def get_categories(db:AsyncSession=Depends(get_db)):
+async def get_categories(db:AsyncSession=Depends(get_db), _: str = Depends(require_permission("helpdesk", "tickets", "view"))):
     await seed(db)
     r=await db.execute(text("""
         SELECT c.*,g.name as group_name,
@@ -296,7 +298,7 @@ async def get_categories(db:AsyncSession=Depends(get_db)):
 
 
 @router.post("/categories")
-async def create_category(data:dict,db:AsyncSession=Depends(get_db)):
+async def create_category(data:dict,db:AsyncSession=Depends(get_db), _: str = Depends(require_permission("helpdesk", "admin_cockpit", "edit"))):
     await db.execute(text("INSERT INTO ticket_categories (id,name,description,color,icon,parent_id,group_id,active,created_at) VALUES (gen_random_uuid(),:name,:desc,:color,:icon,CAST(NULLIF(:parent_id,'') AS uuid),CAST(NULLIF(:group_id,'') AS uuid),true,NOW())"),
                      {"name":data.get("name"),"desc":data.get("description",""),"color":data.get("color","#45B6E4"),"icon":data.get("icon","🎫"),"parent_id":data.get("parent_id",""),"group_id":data.get("group_id","")})
     await db.commit()
@@ -304,7 +306,7 @@ async def create_category(data:dict,db:AsyncSession=Depends(get_db)):
 
 
 @router.put("/categories/{cid}")
-async def update_category(cid:str,data:dict,db:AsyncSession=Depends(get_db)):
+async def update_category(cid:str,data:dict,db:AsyncSession=Depends(get_db), _: str = Depends(require_permission("helpdesk", "admin_cockpit", "edit"))):
     await db.execute(text("""UPDATE ticket_categories SET
         group_id=CAST(NULLIF(:group_id,'') AS uuid),
         name=COALESCE(NULLIF(:name,''),name),
@@ -318,14 +320,14 @@ async def update_category(cid:str,data:dict,db:AsyncSession=Depends(get_db)):
 
 
 @router.delete("/categories/{cid}")
-async def delete_category(cid:str,db:AsyncSession=Depends(get_db)):
+async def delete_category(cid:str,db:AsyncSession=Depends(get_db), _: str = Depends(require_permission("helpdesk", "admin_cockpit", "edit"))):
     await db.execute(text("UPDATE ticket_categories SET active=false WHERE id=CAST(:id AS uuid) OR parent_id=CAST(:id AS uuid)"),{"id":cid})
     await db.commit()
     return {"status":"ok"}
 
 
 @router.get("/groups")
-async def get_groups(db:AsyncSession=Depends(get_db)):
+async def get_groups(db:AsyncSession=Depends(get_db), _: str = Depends(require_permission("helpdesk", "tickets", "view"))):
     r=await db.execute(text("SELECT * FROM helpdesk_groups WHERE active=true ORDER BY name"))
     groups=[]
     for g in r.fetchall():
@@ -337,7 +339,7 @@ async def get_groups(db:AsyncSession=Depends(get_db)):
 
 
 @router.post("/groups")
-async def create_group(data:dict,db:AsyncSession=Depends(get_db)):
+async def create_group(data:dict,db:AsyncSession=Depends(get_db), _: str = Depends(require_permission("helpdesk", "admin_cockpit", "edit"))):
     gid=str(uuid.uuid4())
     await db.execute(text("INSERT INTO helpdesk_groups (id,name,description,responsible_email,responsible_name,active,created_at) VALUES (CAST(:id AS uuid),:name,:desc,:resp_email,:resp_name,true,NOW())"),
                      {"id":gid,"name":data.get("name"),"desc":data.get("description",""),"resp_email":data.get("responsible_email",""),"resp_name":data.get("responsible_name","")})
@@ -346,7 +348,7 @@ async def create_group(data:dict,db:AsyncSession=Depends(get_db)):
 
 
 @router.put("/groups/{gid}")
-async def update_group(gid:str,data:dict,db:AsyncSession=Depends(get_db)):
+async def update_group(gid:str,data:dict,db:AsyncSession=Depends(get_db), _: str = Depends(require_permission("helpdesk", "admin_cockpit", "edit"))):
     if data.get("is_default"):
         await db.execute(text("UPDATE helpdesk_groups SET is_default=false"))
     await db.execute(text("UPDATE helpdesk_groups SET name=:name,description=:desc,is_default=:is_default WHERE id=CAST(:id AS uuid)"),
@@ -356,7 +358,7 @@ async def update_group(gid:str,data:dict,db:AsyncSession=Depends(get_db)):
 
 
 @router.post("/groups/{gid}/members")
-async def add_group_member(gid:str,data:dict,db:AsyncSession=Depends(get_db)):
+async def add_group_member(gid:str,data:dict,db:AsyncSession=Depends(get_db), _: str = Depends(require_permission("helpdesk", "admin_cockpit", "edit"))):
     await db.execute(text("INSERT INTO helpdesk_group_members (id,group_id,user_email,user_name,is_responsible,created_at) VALUES (gen_random_uuid(),CAST(:gid AS uuid),:email,:name,:resp,NOW()) ON CONFLICT DO NOTHING"),
                      {"gid":gid,"email":data.get("user_email"),"name":data.get("user_name",""),"resp":data.get("is_responsible",False)})
     if data.get("is_responsible"):
@@ -367,20 +369,20 @@ async def add_group_member(gid:str,data:dict,db:AsyncSession=Depends(get_db)):
 
 
 @router.delete("/groups/{gid}/members/{email}")
-async def remove_group_member(gid:str,email:str,db:AsyncSession=Depends(get_db)):
+async def remove_group_member(gid:str,email:str,db:AsyncSession=Depends(get_db), _: str = Depends(require_permission("helpdesk", "admin_cockpit", "edit"))):
     await db.execute(text("DELETE FROM helpdesk_group_members WHERE group_id=CAST(:gid AS uuid) AND user_email=:email"),{"gid":gid,"email":email})
     await db.commit()
     return {"status":"ok"}
 
 
 @router.get("/users")
-async def get_users(db:AsyncSession=Depends(get_db)):
+async def get_users(db:AsyncSession=Depends(get_db), _: str = Depends(require_permission("helpdesk", "admin_cockpit", "view"))):
     r=await db.execute(text("SELECT * FROM helpdesk_users ORDER BY user_name"))
     return {"users":[dict(u._mapping) for u in r.fetchall()]}
 
 
 @router.post("/users")
-async def upsert_user(data:dict,db:AsyncSession=Depends(get_db)):
+async def upsert_user(data:dict,db:AsyncSession=Depends(get_db), _: str = Depends(require_permission("helpdesk", "admin_cockpit", "edit"))):
     await db.execute(text("INSERT INTO helpdesk_users (id,user_email,user_name,role,created_at) VALUES (gen_random_uuid(),:email,:name,:role,NOW()) ON CONFLICT (user_email) DO UPDATE SET role=EXCLUDED.role,user_name=EXCLUDED.user_name"),
                      {"email":data.get("user_email"),"name":data.get("user_name",""),"role":data.get("role","end_user")})
     await db.commit()
@@ -403,14 +405,14 @@ async def lookup_user(email:str):
 
 
 @router.get("/sla")
-async def get_sla(db:AsyncSession=Depends(get_db)):
+async def get_sla(db:AsyncSession=Depends(get_db), _: str = Depends(require_permission("helpdesk", "sla", "view"))):
     await seed(db)
     r=await db.execute(text("SELECT * FROM sla_policies ORDER BY response_time_hours"))
     return {"policies":[dict(x._mapping) for x in r.fetchall()]}
 
 
 @router.get("/knowledge")
-async def list_articles(search:str=None,category:str=None,db:AsyncSession=Depends(get_db)):
+async def list_articles(search:str=None,category:str=None,db:AsyncSession=Depends(get_db), _: str = Depends(require_permission("helpdesk", "knowledge", "view"))):
     where,params=["published=true"],{}
     if search: where.append("(title ILIKE :s OR content ILIKE :s OR tags ILIKE :s)"); params["s"]=f"%{search}%"
     if category: where.append("category=:cat"); params["cat"]=category
@@ -419,7 +421,7 @@ async def list_articles(search:str=None,category:str=None,db:AsyncSession=Depend
 
 
 @router.get("/knowledge/{aid}")
-async def get_article(aid:str,db:AsyncSession=Depends(get_db)):
+async def get_article(aid:str,db:AsyncSession=Depends(get_db), _: str = Depends(require_permission("helpdesk", "knowledge", "view"))):
     await db.execute(text("UPDATE knowledge_articles SET views=views+1 WHERE id=CAST(:id AS uuid)"),{"id":aid})
     await db.commit()
     r=await db.execute(text("SELECT * FROM knowledge_articles WHERE id=CAST(:id AS uuid)"),{"id":aid})
@@ -428,7 +430,7 @@ async def get_article(aid:str,db:AsyncSession=Depends(get_db)):
 
 
 @router.post("/knowledge")
-async def create_article(data:dict,db:AsyncSession=Depends(get_db)):
+async def create_article(data:dict,db:AsyncSession=Depends(get_db), _: str = Depends(require_permission("helpdesk", "knowledge", "edit"))):
     await db.execute(text("INSERT INTO knowledge_articles (id,title,content,category,tags,author_email,author_name,published,created_at,updated_at) VALUES (gen_random_uuid(),:title,:content,:cat,:tags,:email,:name,:pub,NOW(),NOW())"),
                      {"title":data.get("title"),"content":data.get("content"),"cat":data.get("category"),"tags":data.get("tags",""),"email":data.get("author_email"),"name":data.get("author_name"),"pub":data.get("published",True)})
     await db.commit()
@@ -436,14 +438,14 @@ async def create_article(data:dict,db:AsyncSession=Depends(get_db)):
 
 
 @router.delete("/knowledge/{aid}")
-async def delete_article(aid:str,db:AsyncSession=Depends(get_db)):
+async def delete_article(aid:str,db:AsyncSession=Depends(get_db), _: str = Depends(require_permission("helpdesk", "knowledge", "edit"))):
     await db.execute(text("DELETE FROM knowledge_articles WHERE id=CAST(:id AS uuid)"),{"id":aid})
     await db.commit()
     return {"status":"ok"}
 
 
 @router.get("/reporting")
-async def reporting(days:int=30,db:AsyncSession=Depends(get_db)):
+async def reporting(days:int=30,db:AsyncSession=Depends(get_db), _: str = Depends(require_permission("helpdesk", "admin_cockpit", "view"))):
     since=datetime.utcnow()-timedelta(days=days)
     vol=await db.execute(text("SELECT DATE(created_at) as d,COUNT(*) as c FROM tickets WHERE created_at>:s GROUP BY DATE(created_at) ORDER BY d"),{"s":since})
     cat=await db.execute(text("SELECT c.name,c.color,c.icon,COUNT(t.id) as c FROM tickets t LEFT JOIN ticket_categories c ON t.category_id=c.id WHERE t.created_at>:s GROUP BY c.name,c.color,c.icon ORDER BY c DESC"),{"s":since})

@@ -1,6 +1,6 @@
 'use client'
 import { useState, useEffect, useCallback } from 'react'
-import { HRLayout } from '@/components/HRLayout'
+import { HRLayout, useHRPerm } from '@/components/HRLayout'
 import { getStoredUser } from '@/lib/auth'
 
 const API = 'https://api.whubbi.wcomply.com'
@@ -303,8 +303,8 @@ function ComposeTab({ users, groups, loadingUsers, onSent }: {
 /* ══════════════════════════════════════════════════════════════════════
    SCHEDULED TAB
 ══════════════════════════════════════════════════════════════════════ */
-function ScheduledTab({ messages, onCancel, onRefresh }: {
-  messages: ChatMsg[]; onCancel: (id: string) => void; onRefresh: () => void
+function ScheduledTab({ messages, onCancel, onRefresh, canEdit }: {
+  messages: ChatMsg[]; onCancel: (id: string) => void; onRefresh: () => void; canEdit: boolean
 }) {
   if (messages.length === 0) {
     return (
@@ -343,10 +343,12 @@ function ScheduledTab({ messages, onCancel, onRefresh }: {
                 <span style={{ ...F, fontSize: '10px', color: '#CBD5E1' }}>{fmtDate(m.created_at)}</span>
               </div>
             </div>
-            <button onClick={() => onCancel(m.id)}
-              style={{ ...F, fontSize: '11px', fontWeight: '700', background: '#FEF2F2', color: '#DC2626', border: 'none', borderRadius: '7px', padding: '7px 14px', cursor: 'pointer', whiteSpace: 'nowrap' }}>
-              Cancel
-            </button>
+            {canEdit && (
+              <button onClick={() => onCancel(m.id)}
+                style={{ ...F, fontSize: '11px', fontWeight: '700', background: '#FEF2F2', color: '#DC2626', border: 'none', borderRadius: '7px', padding: '7px 14px', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                Cancel
+              </button>
+            )}
           </div>
         )
       })}
@@ -448,6 +450,7 @@ function HistoryTab({ messages, onRefresh }: { messages: ChatMsg[]; onRefresh: (
    PAGE ROOT
 ══════════════════════════════════════════════════════════════════════ */
 export default function ChatPage() {
+  const { canEdit } = useHRPerm('chat')
   const [tab, setTab] = useState<Tab>('compose')
   const [users, setUsers] = useState<User[]>([])
   const [groups, setGroups] = useState<Group[]>([])
@@ -485,7 +488,7 @@ export default function ChatPage() {
   }
 
   const TABS: { key: Tab; label: string; count?: number }[] = [
-    { key: 'compose',   label: '💬 New Message' },
+    ...(canEdit ? [{ key: 'compose' as Tab, label: '💬 New Message' }] : []),
     { key: 'scheduled', label: '🗓 Scheduled', count: scheduledMessages.length },
     { key: 'history',   label: '📋 History',   count: sentMessages.length },
   ]
@@ -518,12 +521,12 @@ export default function ChatPage() {
         </div>
 
         {/* Tab content */}
-        {tab === 'compose' && (
+        {tab === 'compose' && canEdit && (
           <ComposeTab users={users} groups={groups} loadingUsers={loadingUsers}
             onSent={() => { loadHistory(); setTab('history') }} />
         )}
         {tab === 'scheduled' && (
-          <ScheduledTab messages={scheduledMessages} onCancel={cancelScheduled} onRefresh={loadHistory} />
+          <ScheduledTab messages={scheduledMessages} onCancel={cancelScheduled} onRefresh={loadHistory} canEdit={canEdit} />
         )}
         {tab === 'history' && (
           loadingHistory ? (

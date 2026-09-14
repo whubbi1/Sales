@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
 from app.database import get_db
+from app.authz import require_permission
 from app.services.ids import next_internal_id
 from app.routers.hr import upload_to_s3, s3_ref_to_presigned
 from app.routers.companies import claude_web_search
@@ -51,7 +52,7 @@ async def _get_partner(db: AsyncSession, partner_id: str) -> dict | None:
 
 # ─── Partner CRUD ────────────────────────────────────────────────────────────────
 @router.get("/")
-async def list_partners(search: str = None, db: AsyncSession = Depends(get_db)):
+async def list_partners(search: str = None, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("sales", "partners", "view"))):
     where = ""
     params = {}
     if search:
@@ -62,7 +63,7 @@ async def list_partners(search: str = None, db: AsyncSession = Depends(get_db)):
 
 
 @router.post("/")
-async def create_partner(data: dict, db: AsyncSession = Depends(get_db)):
+async def create_partner(data: dict, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("sales", "partners", "edit"))):
     if not data.get("name"):
         raise HTTPException(status_code=400, detail="name is required")
     partner_id = str(uuid.uuid4())
@@ -94,7 +95,7 @@ async def create_partner(data: dict, db: AsyncSession = Depends(get_db)):
 
 
 @router.get("/{partner_id}")
-async def get_partner(partner_id: str, db: AsyncSession = Depends(get_db)):
+async def get_partner(partner_id: str, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("sales", "partners", "view"))):
     partner = await _get_partner(db, partner_id)
     if not partner:
         raise HTTPException(status_code=404, detail="Partner not found")
@@ -102,7 +103,7 @@ async def get_partner(partner_id: str, db: AsyncSession = Depends(get_db)):
 
 
 @router.put("/{partner_id}")
-async def update_partner(partner_id: str, data: dict, db: AsyncSession = Depends(get_db)):
+async def update_partner(partner_id: str, data: dict, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("sales", "partners", "edit"))):
     partner = await _get_partner(db, partner_id)
     if not partner:
         raise HTTPException(status_code=404, detail="Partner not found")
@@ -134,7 +135,7 @@ async def update_partner(partner_id: str, data: dict, db: AsyncSession = Depends
 
 
 @router.post("/{partner_id}/logo")
-async def upload_partner_logo(partner_id: str, file: UploadFile = File(...), db: AsyncSession = Depends(get_db)):
+async def upload_partner_logo(partner_id: str, file: UploadFile = File(...), db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("sales", "partners", "edit"))):
     partner = await _get_partner(db, partner_id)
     if not partner:
         raise HTTPException(status_code=404, detail="Partner not found")
@@ -149,7 +150,7 @@ async def upload_partner_logo(partner_id: str, file: UploadFile = File(...), db:
 # Must come before /{partner_id} for the same reason as companies.py's equivalent routes —
 # otherwise FastAPI tries (and fails) to parse "linkedin-enrich" as a partner_id.
 @router.post("/linkedin-enrich")
-async def linkedin_enrich_partner(data: dict, db: AsyncSession = Depends(get_db)):
+async def linkedin_enrich_partner(data: dict, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("sales", "partners", "edit"))):
     import json
     url = (data.get("linkedin_url") or "").strip()
     partner_id = (data.get("partner_id") or "").strip() or None
@@ -191,7 +192,7 @@ Return ONLY the JSON, no markdown, no explanation."""
 
 
 @router.delete("/{partner_id}")
-async def delete_partner(partner_id: str, db: AsyncSession = Depends(get_db)):
+async def delete_partner(partner_id: str, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("sales", "partners", "edit"))):
     await db.execute(text("DELETE FROM partners WHERE id = CAST(:id AS UUID)"), {"id": partner_id})
     await db.commit()
     return {"status": "ok"}
@@ -199,19 +200,19 @@ async def delete_partner(partner_id: str, db: AsyncSession = Depends(get_db)):
 
 # ─── Related records ─────────────────────────────────────────────────────────────
 @router.get("/{partner_id}/contacts")
-async def get_partner_contacts(partner_id: str, db: AsyncSession = Depends(get_db)):
+async def get_partner_contacts(partner_id: str, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("sales", "partners", "view"))):
     r = await db.execute(text("SELECT * FROM contacts WHERE partner_id = CAST(:id AS UUID)"), {"id": partner_id})
     return [_row(dict(row._mapping)) for row in r.fetchall()]
 
 
 @router.get("/{partner_id}/opportunities")
-async def get_partner_opportunities(partner_id: str, db: AsyncSession = Depends(get_db)):
+async def get_partner_opportunities(partner_id: str, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("sales", "partners", "view"))):
     r = await db.execute(text("SELECT * FROM opportunities WHERE partner_id = CAST(:id AS UUID)"), {"id": partner_id})
     return [_row(dict(row._mapping)) for row in r.fetchall()]
 
 
 @router.get("/{partner_id}/leads")
-async def get_partner_leads(partner_id: str, db: AsyncSession = Depends(get_db)):
+async def get_partner_leads(partner_id: str, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("sales", "partners", "view"))):
     # A Lead can involve more than one Partner (lead_partners is many-to-many) — join
     # rather than a plain partner_id column like Opportunity's.
     r = await db.execute(text("""
@@ -225,7 +226,7 @@ async def get_partner_leads(partner_id: str, db: AsyncSession = Depends(get_db))
 
 # ─── Action items — flat, each optionally auto-creates a Task Manager task ──────
 @router.get("/{partner_id}/action-items")
-async def list_action_items(partner_id: str, db: AsyncSession = Depends(get_db)):
+async def list_action_items(partner_id: str, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("sales", "partners", "view"))):
     r = await db.execute(text("""
         SELECT a.*, c.name AS company_name, ct.first_name AS contact_first_name, ct.last_name AS contact_last_name
         FROM partner_action_items a
@@ -252,7 +253,7 @@ async def _maybe_create_task(db: AsyncSession, item_id: str, partner_id: str, ti
 
 
 @router.post("/{partner_id}/action-items")
-async def create_action_item(partner_id: str, data: dict, db: AsyncSession = Depends(get_db)):
+async def create_action_item(partner_id: str, data: dict, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("sales", "partners", "edit"))):
     if not data.get("title"):
         raise HTTPException(status_code=400, detail="title is required")
     item_id = str(uuid.uuid4())
@@ -282,7 +283,7 @@ async def create_action_item(partner_id: str, data: dict, db: AsyncSession = Dep
 
 
 @router.put("/{partner_id}/action-items/{item_id}")
-async def update_action_item(partner_id: str, item_id: str, data: dict, db: AsyncSession = Depends(get_db)):
+async def update_action_item(partner_id: str, item_id: str, data: dict, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("sales", "partners", "edit"))):
     r = await db.execute(text("SELECT * FROM partner_action_items WHERE id = CAST(:id AS UUID) AND partner_id = CAST(:pid AS UUID)"),
                           {"id": item_id, "pid": partner_id})
     row = r.fetchone()
@@ -328,7 +329,7 @@ async def update_action_item(partner_id: str, item_id: str, data: dict, db: Asyn
 
 
 @router.delete("/{partner_id}/action-items/{item_id}")
-async def delete_action_item(partner_id: str, item_id: str, db: AsyncSession = Depends(get_db)):
+async def delete_action_item(partner_id: str, item_id: str, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("sales", "partners", "edit"))):
     await db.execute(text("DELETE FROM partner_action_items WHERE id = CAST(:id AS UUID) AND partner_id = CAST(:pid AS UUID)"),
                       {"id": item_id, "pid": partner_id})
     await db.commit()
@@ -337,7 +338,7 @@ async def delete_action_item(partner_id: str, item_id: str, db: AsyncSession = D
 
 # ─── Comments (Overview tab) ──────────────────────────────────────────────────────
 @router.get("/{partner_id}/comments")
-async def list_comments(partner_id: str, db: AsyncSession = Depends(get_db)):
+async def list_comments(partner_id: str, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("sales", "partners", "view"))):
     r = await db.execute(text("""
         SELECT * FROM partner_comments WHERE partner_id = CAST(:id AS UUID) ORDER BY created_at DESC
     """), {"id": partner_id})
@@ -345,7 +346,7 @@ async def list_comments(partner_id: str, db: AsyncSession = Depends(get_db)):
 
 
 @router.post("/{partner_id}/comments")
-async def add_comment(partner_id: str, data: dict, db: AsyncSession = Depends(get_db)):
+async def add_comment(partner_id: str, data: dict, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("sales", "partners", "edit"))):
     if not data.get("comment"):
         raise HTTPException(status_code=400, detail="comment is required")
     comment_id = str(uuid.uuid4())
@@ -359,7 +360,7 @@ async def add_comment(partner_id: str, data: dict, db: AsyncSession = Depends(ge
 
 
 @router.delete("/{partner_id}/comments/{comment_id}")
-async def delete_comment(partner_id: str, comment_id: str, db: AsyncSession = Depends(get_db)):
+async def delete_comment(partner_id: str, comment_id: str, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("sales", "partners", "edit"))):
     await db.execute(text("DELETE FROM partner_comments WHERE id = CAST(:id AS UUID) AND partner_id = CAST(:pid AS UUID)"),
                       {"id": comment_id, "pid": partner_id})
     await db.commit()
@@ -392,7 +393,7 @@ async def _fetch_link_metadata(url: str) -> tuple[str, str]:
 
 
 @router.get("/{partner_id}/links")
-async def list_links(partner_id: str, db: AsyncSession = Depends(get_db)):
+async def list_links(partner_id: str, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("sales", "partners", "view"))):
     r = await db.execute(text("""
         SELECT * FROM partner_links WHERE partner_id = CAST(:id AS UUID) ORDER BY created_at DESC
     """), {"id": partner_id})
@@ -400,7 +401,7 @@ async def list_links(partner_id: str, db: AsyncSession = Depends(get_db)):
 
 
 @router.post("/{partner_id}/links")
-async def add_link(partner_id: str, data: dict, db: AsyncSession = Depends(get_db)):
+async def add_link(partner_id: str, data: dict, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("sales", "partners", "edit"))):
     if not data.get("url"):
         raise HTTPException(status_code=400, detail="url is required")
     title, description = await _fetch_link_metadata(data["url"])
@@ -415,7 +416,7 @@ async def add_link(partner_id: str, data: dict, db: AsyncSession = Depends(get_d
 
 
 @router.delete("/{partner_id}/links/{link_id}")
-async def delete_link(partner_id: str, link_id: str, db: AsyncSession = Depends(get_db)):
+async def delete_link(partner_id: str, link_id: str, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("sales", "partners", "edit"))):
     await db.execute(text("DELETE FROM partner_links WHERE id = CAST(:id AS UUID) AND partner_id = CAST(:pid AS UUID)"),
                       {"id": link_id, "pid": partner_id})
     await db.commit()
@@ -426,7 +427,7 @@ async def delete_link(partner_id: str, link_id: str, db: AsyncSession = Depends(
 # article_partners with Companies and Contacts (see companies.py's Articles section)
 # ────────────────────────────────────────────────────────────────────────────────
 @router.get("/{partner_id}/articles")
-async def list_partner_articles(partner_id: str, db: AsyncSession = Depends(get_db)):
+async def list_partner_articles(partner_id: str, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("sales", "partners", "view"))):
     r = await db.execute(text("""
         SELECT * FROM (
             SELECT a.*, a.created_at AS link_date FROM company_articles a WHERE a.partner_id = CAST(:pid AS UUID)
@@ -440,7 +441,7 @@ async def list_partner_articles(partner_id: str, db: AsyncSession = Depends(get_
 
 
 @router.post("/{partner_id}/articles")
-async def create_partner_article(partner_id: str, data: dict, db: AsyncSession = Depends(get_db)):
+async def create_partner_article(partner_id: str, data: dict, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("sales", "partners", "edit"))):
     if not data.get("title") or not data.get("url"):
         raise HTTPException(status_code=400, detail="title and url are required")
     article_id = str(uuid.uuid4())
@@ -454,7 +455,7 @@ async def create_partner_article(partner_id: str, data: dict, db: AsyncSession =
 
 
 @router.delete("/{partner_id}/articles/{article_id}")
-async def delete_partner_article(partner_id: str, article_id: str, db: AsyncSession = Depends(get_db)):
+async def delete_partner_article(partner_id: str, article_id: str, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("sales", "partners", "edit"))):
     r = await db.execute(text("SELECT 1 FROM company_articles WHERE id = CAST(:id AS UUID) AND partner_id = CAST(:pid AS UUID)"),
                           {"id": article_id, "pid": partner_id})
     if not r.first():
@@ -466,7 +467,7 @@ async def delete_partner_article(partner_id: str, article_id: str, db: AsyncSess
 
 # ─── Events — Marketing events linked to this partner ──────────────────────────
 @router.get("/{partner_id}/events")
-async def list_partner_events(partner_id: str, db: AsyncSession = Depends(get_db)):
+async def list_partner_events(partner_id: str, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("sales", "partners", "view"))):
     r = await db.execute(text("""
         SELECT e.* FROM marketing_event_partners ep
         JOIN marketing_events e ON e.id = ep.event_id
@@ -478,7 +479,7 @@ async def list_partner_events(partner_id: str, db: AsyncSession = Depends(get_db
 
 # ─── Customers — companies listing this partner's name as a Cybersecurity Solution ─
 @router.get("/{partner_id}/customers")
-async def list_partner_customers(partner_id: str, db: AsyncSession = Depends(get_db)):
+async def list_partner_customers(partner_id: str, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("sales", "partners", "view"))):
     partner = await _get_partner(db, partner_id)
     if not partner:
         raise HTTPException(status_code=404, detail="Partner not found")

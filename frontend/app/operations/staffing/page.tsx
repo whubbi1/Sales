@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react'
 import { OperationsLayout, useOperationsPerm } from '@/components/OperationsLayout'
 import { opportunitiesAPI } from '@/lib/api'
 import { getStoredUser } from '@/lib/auth'
+import { apiFetch } from '@/lib/apiClient'
 import { PageHeader } from '@/components/shared/RecordLayout'
 import { useReportBuilder, applyReport, ReportPanel, ReportColumn, SortArrow } from '@/components/it/ReportBuilder'
 import { StaffingDrilldownModal } from '@/components/shared/StaffingDrilldownModal'
@@ -61,7 +62,7 @@ function StaffingContent() {
 
   useEffect(() => {
     Promise.all([
-      fetch(`${API}/settings/users`).then(r => r.json()).then(d => d.users || []),
+      apiFetch(`${API}/settings/users`).then(r => r.json()).then(d => d.users || []),
       opportunitiesAPI.getAllStaffing(),
     ]).then(([u, s]) => { setUsers(u); setStaffing(s) }).finally(() => setLoading(false))
     const u = getStoredUser()

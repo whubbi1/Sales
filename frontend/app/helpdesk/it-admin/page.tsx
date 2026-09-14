@@ -3,6 +3,7 @@ import { useState, useEffect, useRef } from 'react'
 import HelpdeskLayout from '@/components/HelpdeskLayout'
 import { getStoredUser } from '@/lib/auth'
 import { API } from '../constants'
+import { apiFetch } from '@/lib/apiClient'
 
 const COLORS = ['#DC2626','#D97706','#059669','#45B6E4','#156082','#e97132','#7C3AED','#848EA5','#0F172A','#BE185D']
 const ICONS  = ['🎫','🔐','🖱️','💿','🖥️','⚙️','📋','📱','💻','🔷','🛡️','📧','🗂️','🌐','🔧']
@@ -52,7 +53,7 @@ export default function HelpdeskAdminCockpitPage() {
     if (!user) { setPermLevel('none'); return }
 
     // Check permissions for helpdesk.admin_cockpit
-    fetch(`${API}/settings/permissions/${encodeURIComponent(user.email)}`)
+    apiFetch(`${API}/settings/permissions/${encodeURIComponent(user.email)}`)
       .then(r => r.json())
       .then(data => {
         const perm = data?.permissions?.helpdesk?.admin_cockpit
@@ -73,14 +74,14 @@ export default function HelpdeskAdminCockpitPage() {
 
   const loadCategories = () => {
     setCatLoading(true)
-    fetch(`${API}/helpdesk/categories`).then(r => r.json()).then(d => setCategories(d.categories || [])).finally(() => setCatLoading(false))
+    apiFetch(`${API}/helpdesk/categories`).then(r => r.json()).then(d => setCategories(d.categories || [])).finally(() => setCatLoading(false))
   }
 
   const loadGroups = () => {
     setGrpLoading(true)
     Promise.all([
-      fetch(`${API}/helpdesk/groups`).then(r => r.json()),
-      fetch(`${API}/settings/users`).then(r => r.json()),
+      apiFetch(`${API}/helpdesk/groups`).then(r => r.json()),
+      apiFetch(`${API}/settings/users`).then(r => r.json()),
     ]).then(([gd, ud]) => {
       setGroups(gd.groups || [])
       setMsUsers(ud.users || [])
@@ -93,19 +94,19 @@ export default function HelpdeskAdminCockpitPage() {
     const cat = categories.find(c => c.id === id); if (!cat) return
     const updated = { ...cat, [field]: value }
     setCategories(prev => prev.map(c => c.id === id ? { ...c, [field]: value } : c))
-    await fetch(`${API}/helpdesk/categories/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: updated.name, color: updated.color, icon: updated.icon, group_id: updated.group_id || '' }) })
+    await apiFetch(`${API}/helpdesk/categories/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: updated.name, color: updated.color, icon: updated.icon, group_id: updated.group_id || '' }) })
   }
 
   const createCategory = async () => {
     if (!canEdit || !newCatName.trim()) return; setAddingCat(true)
-    await fetch(`${API}/helpdesk/categories`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: newCatName.trim(), icon: newCatIcon, color: newCatColor, description: '' }) })
+    await apiFetch(`${API}/helpdesk/categories`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: newCatName.trim(), icon: newCatIcon, color: newCatColor, description: '' }) })
     setNewCatName(''); setAddingCat(false); loadCategories()
   }
 
   const deleteCategory = async (id: string) => {
     if (!canEdit) return
     if (!confirm('Delete this category and all its subcategories?')) return
-    await fetch(`${API}/helpdesk/categories/${id}`, { method: 'DELETE' })
+    await apiFetch(`${API}/helpdesk/categories/${id}`, { method: 'DELETE' })
     setCategories(prev => prev.filter(c => c.id !== id))
     if (expandedCat === id) setExpandedCat(null)
   }
@@ -113,33 +114,33 @@ export default function HelpdeskAdminCockpitPage() {
   const addSubcategory = async (parentId: string, parentColor: string) => {
     if (!canEdit) return
     const name = (newSubName[parentId] || '').trim(); if (!name) return
-    await fetch(`${API}/helpdesk/categories`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, icon: '📱', color: parentColor, description: '', parent_id: parentId }) })
+    await apiFetch(`${API}/helpdesk/categories`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, icon: '📱', color: parentColor, description: '', parent_id: parentId }) })
     setNewSubName(prev => ({ ...prev, [parentId]: '' })); loadCategories()
   }
 
   const saveSubcategory = async (parentId: string, subId: string, name: string) => {
     if (!canEdit) return
     setCategories(prev => prev.map(c => c.id === parentId ? { ...c, subcategories: (c.subcategories || []).map((s: any) => s.id === subId ? { ...s, name } : s) } : c))
-    await fetch(`${API}/helpdesk/categories/${subId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name }) })
+    await apiFetch(`${API}/helpdesk/categories/${subId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name }) })
   }
 
   const deleteSubcategory = async (subId: string) => {
     if (!canEdit) return
-    await fetch(`${API}/helpdesk/categories/${subId}`, { method: 'DELETE' })
+    await apiFetch(`${API}/helpdesk/categories/${subId}`, { method: 'DELETE' })
     setCategories(prev => prev.map(c => ({ ...c, subcategories: (c.subcategories || []).filter((s: any) => s.id !== subId) })))
   }
 
   // ── Groups ────────────────────────────────────────────────
   const createGroup = async () => {
     if (!canEdit || !newGrpName.trim()) return; setAddingGrp(true)
-    await fetch(`${API}/helpdesk/groups`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: newGrpName.trim(), description: newGrpDesc.trim() }) })
+    await apiFetch(`${API}/helpdesk/groups`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: newGrpName.trim(), description: newGrpDesc.trim() }) })
     setNewGrpName(''); setNewGrpDesc(''); setAddingGrp(false); loadGroups()
   }
 
   const setDefaultGroup = async (gid: string, grp: any) => {
     if (!canEdit) return
     setGroups(prev => prev.map(g => ({ ...g, is_default: g.id === gid })))
-    await fetch(`${API}/helpdesk/groups/${gid}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: grp.name, description: grp.description || '', is_default: true }) })
+    await apiFetch(`${API}/helpdesk/groups/${gid}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: grp.name, description: grp.description || '', is_default: true }) })
   }
 
   const addMember = async (gid: string) => {
@@ -147,20 +148,20 @@ export default function HelpdeskAdminCockpitPage() {
     const email = (addMemberEmail[gid] || '').trim(); if (!email) return
     const user = msUsers.find(u => u.email === email)
     const name = user?.display_name || `${user?.first_name || ''} ${user?.last_name || ''}`.trim() || email
-    await fetch(`${API}/helpdesk/groups/${gid}/members`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user_email: email, user_name: name }) })
+    await apiFetch(`${API}/helpdesk/groups/${gid}/members`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user_email: email, user_name: name }) })
     setAddMemberEmail(prev => ({ ...prev, [gid]: '' })); setUserSearch(prev => ({ ...prev, [gid]: '' })); loadGroups()
   }
 
   const removeMember = async (gid: string, email: string) => {
     if (!canEdit) return
-    await fetch(`${API}/helpdesk/groups/${gid}/members/${encodeURIComponent(email)}`, { method: 'DELETE' })
+    await apiFetch(`${API}/helpdesk/groups/${gid}/members/${encodeURIComponent(email)}`, { method: 'DELETE' })
     setGroups(prev => prev.map(g => g.id === gid ? { ...g, members: g.members.filter((m: any) => m.user_email !== email) } : g))
   }
 
   const setResponsible = async (gid: string, memberEmail: string, memberName: string) => {
     if (!canEdit) return
     setGroups(prev => prev.map(g => g.id === gid ? { ...g, members: g.members.map((m: any) => ({ ...m, is_responsible: m.user_email === memberEmail })) } : g))
-    await fetch(`${API}/helpdesk/groups/${gid}/members`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user_email: memberEmail, user_name: memberName, is_responsible: true }) })
+    await apiFetch(`${API}/helpdesk/groups/${gid}/members`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user_email: memberEmail, user_name: memberName, is_responsible: true }) })
   }
 
   const tabBtn = (active: boolean) => ({ padding: '8px 20px', borderRadius: '8px', border: 'none', cursor: 'pointer', fontFamily: 'Montserrat, sans-serif', fontSize: '12px', fontWeight: active ? '700' : '500', background: active ? '#156082' : 'white', color: active ? 'white' : '#64748B', transition: 'all 0.15s' } as React.CSSProperties)

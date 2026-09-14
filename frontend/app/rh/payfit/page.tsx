@@ -1,6 +1,6 @@
 'use client'
 import { useState, useEffect } from 'react'
-import { HRLayout } from '@/components/HRLayout'
+import { HRLayout, useHRPerm } from '@/components/HRLayout'
 import { getStoredUser } from '@/lib/auth'
 import { PayfitTestPanel } from '@/components/payfit/PayfitTestPanel'
 
@@ -13,6 +13,7 @@ const ABSENCE_STATUS_COLOR: Record<string, { bg: string; text: string }> = {
 }
 
 export default function PayfitSyncPage() {
+  const { canEdit } = useHRPerm('payfit')
   const [userEmail, setUserEmail] = useState('')
   const [status, setStatus] = useState<any>(null)
   const [loadingStatus, setLoadingStatus] = useState(true)
@@ -184,19 +185,23 @@ export default function PayfitSyncPage() {
           <div style={{ ...card, padding: '16px 20px' }}>
             <div style={label}>Collaborators</div>
             <p style={{ fontSize: '11px', color: '#94A3B8', margin: '6px 0 12px' }}>Pulls the full PayFit roster. Read + create only — profile edits still happen in PayFit.</p>
-            <button onClick={syncCollaborators} disabled={syncingCollaborators || !status?.configured}
-              style={{ padding: '8px 16px', background: '#156082', color: 'white', border: 'none', borderRadius: '7px', fontSize: '12px', fontWeight: '700', cursor: 'pointer', fontFamily: 'Montserrat, sans-serif', opacity: syncingCollaborators || !status?.configured ? 0.6 : 1 }}>
-              {syncingCollaborators ? '⏳ Syncing…' : '🔄 Sync from PayFit'}
-            </button>
+            {canEdit && (
+              <button onClick={syncCollaborators} disabled={syncingCollaborators || !status?.configured}
+                style={{ padding: '8px 16px', background: '#156082', color: 'white', border: 'none', borderRadius: '7px', fontSize: '12px', fontWeight: '700', cursor: 'pointer', fontFamily: 'Montserrat, sans-serif', opacity: syncingCollaborators || !status?.configured ? 0.6 : 1 }}>
+                {syncingCollaborators ? '⏳ Syncing…' : '🔄 Sync from PayFit'}
+              </button>
+            )}
             <span style={{ marginLeft: '10px', fontSize: '11px', color: '#94A3B8' }}>{collaborators.length} synced</span>
           </div>
           <div style={{ ...card, padding: '16px 20px' }}>
             <div style={label}>Absences</div>
             <p style={{ fontSize: '11px', color: '#94A3B8', margin: '6px 0 12px' }}>Genuinely two-way — WHUBBI can create/cancel, and pull PayFit's own record.</p>
-            <button onClick={syncAbsences} disabled={syncingAbsences || !status?.configured}
-              style={{ padding: '8px 16px', background: '#156082', color: 'white', border: 'none', borderRadius: '7px', fontSize: '12px', fontWeight: '700', cursor: 'pointer', fontFamily: 'Montserrat, sans-serif', opacity: syncingAbsences || !status?.configured ? 0.6 : 1 }}>
-              {syncingAbsences ? '⏳ Syncing…' : '🔄 Sync from PayFit'}
-            </button>
+            {canEdit && (
+              <button onClick={syncAbsences} disabled={syncingAbsences || !status?.configured}
+                style={{ padding: '8px 16px', background: '#156082', color: 'white', border: 'none', borderRadius: '7px', fontSize: '12px', fontWeight: '700', cursor: 'pointer', fontFamily: 'Montserrat, sans-serif', opacity: syncingAbsences || !status?.configured ? 0.6 : 1 }}>
+                {syncingAbsences ? '⏳ Syncing…' : '🔄 Sync from PayFit'}
+              </button>
+            )}
             <span style={{ marginLeft: '10px', fontSize: '11px', color: '#94A3B8' }}>{absences.length} tracked</span>
           </div>
         </div>
@@ -295,13 +300,15 @@ export default function PayfitSyncPage() {
         <div style={{ ...card, overflow: 'hidden' }}>
           <div style={{ padding: '12px 20px', borderBottom: '1px solid #F1F5F9', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <span style={{ fontSize: '13px', fontWeight: '800', color: '#156082' }}>Absences</span>
-            <button onClick={() => setShowNewAbsence(v => !v)}
-              style={{ padding: '6px 14px', background: '#EFF6FF', color: '#156082', border: 'none', borderRadius: '6px', fontSize: '11px', fontWeight: '700', cursor: 'pointer', fontFamily: 'Montserrat, sans-serif' }}>
-              + New Absence
-            </button>
+            {canEdit && (
+              <button onClick={() => setShowNewAbsence(v => !v)}
+                style={{ padding: '6px 14px', background: '#EFF6FF', color: '#156082', border: 'none', borderRadius: '6px', fontSize: '11px', fontWeight: '700', cursor: 'pointer', fontFamily: 'Montserrat, sans-serif' }}>
+                + New Absence
+              </button>
+            )}
           </div>
 
-          {showNewAbsence && (
+          {showNewAbsence && canEdit && (
             <div style={{ padding: '16px 20px', borderBottom: '1px solid #F1F5F9', background: '#FAFBFC' }}>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr auto', gap: '10px', alignItems: 'flex-end' }}>
                 <div>
@@ -348,8 +355,10 @@ export default function PayfitSyncPage() {
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                   <span style={{ fontSize: '10px', fontWeight: '700', background: c.bg, color: c.text, padding: '3px 9px', borderRadius: '10px' }}>{a.status}</span>
-                  <button onClick={() => cancelAbsence(a.id)}
-                    style={{ background: '#FEF2F2', color: '#DC2626', border: 'none', borderRadius: '6px', width: '26px', height: '26px', cursor: 'pointer', fontSize: '13px' }}>×</button>
+                  {canEdit && (
+                    <button onClick={() => cancelAbsence(a.id)}
+                      style={{ background: '#FEF2F2', color: '#DC2626', border: 'none', borderRadius: '6px', width: '26px', height: '26px', cursor: 'pointer', fontSize: '13px' }}>×</button>
+                  )}
                 </div>
               </div>
             )

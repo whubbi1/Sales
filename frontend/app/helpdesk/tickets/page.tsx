@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react'
 import HelpdeskLayout from '@/components/HelpdeskLayout'
 import { getStoredUser } from '@/lib/auth'
 import { API, STATUS_STYLE, PRIORITY_STYLE, BTN } from '../constants'
+import { apiFetch } from '@/lib/apiClient'
 
 const FILTER_STORAGE = (e: string) => `hd_filters_${e}`
 const LAYOUTS_STORAGE = (e: string) => `hd_layouts_${e}`
@@ -78,8 +79,8 @@ export default function TicketsPage() {
     if (params.get('mine') === '1') setFilters(prev => ({ ...prev, mine: true }))
     if (params.get('new') === '1') setShowModal(true)
 
-    fetch(`${API}/helpdesk/categories`).then(r => r.json()).then(d => setCategories(d.categories || []))
-    fetch(`${API}/helpdesk/groups`).then(r => r.json()).then(d => setGroups(d.groups || []))
+    apiFetch(`${API}/helpdesk/categories`).then(r => r.json()).then(d => setCategories(d.categories || []))
+    apiFetch(`${API}/helpdesk/groups`).then(r => r.json()).then(d => setGroups(d.groups || []))
     readyRef.current = true
   }, [])
 
@@ -128,7 +129,7 @@ export default function TicketsPage() {
     if (f.priority) p.set('priority', f.priority)
     if (f.search)   p.set('search', f.search)
     if (f.mine && email) p.set('requester_email', email)
-    const r = await fetch(`${API}/helpdesk/tickets?${p}`)
+    const r = await apiFetch(`${API}/helpdesk/tickets?${p}`)
     const d = await r.json()
     setTickets(d.tickets || []); setTotal(d.total || 0); setLoading(false)
   }
@@ -144,7 +145,7 @@ export default function TicketsPage() {
       emailDebounce.current = setTimeout(async () => {
         setLookupLoading(true)
         try {
-          const r = await fetch(`${API}/helpdesk/lookup/user?email=${encodeURIComponent(email)}`)
+          const r = await apiFetch(`${API}/helpdesk/lookup/user?email=${encodeURIComponent(email)}`)
           const d = await r.json()
           if (d.found) setForm(p => ({ ...p, requester_name: d.name, requester_type: 'internal' }))
         } catch {}
@@ -164,7 +165,7 @@ export default function TicketsPage() {
   const create = async () => {
     if (!form.title || !form.requester_email || !form.ticket_type) return
     setSaving(true)
-    const r = await fetch(`${API}/helpdesk/tickets`, {
+    const r = await apiFetch(`${API}/helpdesk/tickets`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form)
     })
     const d = await r.json()

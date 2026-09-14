@@ -6,6 +6,7 @@ from typing import List
 from uuid import UUID
 
 from app.database import get_db
+from app.authz import require_permission
 from app.models.timesheet import TimesheetEntry
 from app.models.project import Project
 from app.schemas.schemas import TimesheetEntryCreate, TimesheetEntryUpdate, TimesheetEntryResponse
@@ -17,7 +18,8 @@ router = APIRouter()
 async def list_timesheet_entries(
     user_email: str = None, project_id: UUID = None,
     date_from: str = None, date_to: str = None,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    _: str = Depends(require_permission("operations", "timesheets", "view")),
 ):
     query = select(TimesheetEntry)
     if user_email:
@@ -34,7 +36,7 @@ async def list_timesheet_entries(
 
 
 @router.post("/", response_model=TimesheetEntryResponse, status_code=status.HTTP_201_CREATED)
-async def create_timesheet_entry(data: TimesheetEntryCreate, db: AsyncSession = Depends(get_db)):
+async def create_timesheet_entry(data: TimesheetEntryCreate, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("operations", "timesheets", "edit"))):
     r = await db.execute(select(Project.id).where(Project.id == data.project_id))
     if not r.scalar_one_or_none():
         raise HTTPException(status_code=404, detail="Project not found")
@@ -46,7 +48,7 @@ async def create_timesheet_entry(data: TimesheetEntryCreate, db: AsyncSession = 
 
 
 @router.put("/{entry_id}", response_model=TimesheetEntryResponse)
-async def update_timesheet_entry(entry_id: UUID, data: TimesheetEntryUpdate, db: AsyncSession = Depends(get_db)):
+async def update_timesheet_entry(entry_id: UUID, data: TimesheetEntryUpdate, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("operations", "timesheets", "edit"))):
     r = await db.execute(select(TimesheetEntry).where(TimesheetEntry.id == entry_id))
     row = r.scalar_one_or_none()
     if not row:
@@ -59,7 +61,7 @@ async def update_timesheet_entry(entry_id: UUID, data: TimesheetEntryUpdate, db:
 
 
 @router.delete("/{entry_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_timesheet_entry(entry_id: UUID, db: AsyncSession = Depends(get_db)):
+async def delete_timesheet_entry(entry_id: UUID, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("operations", "timesheets", "edit"))):
     r = await db.execute(select(TimesheetEntry).where(TimesheetEntry.id == entry_id))
     row = r.scalar_one_or_none()
     if not row:

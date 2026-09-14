@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
 from app.database import get_db
+from app.authz import require_permission
 from datetime import datetime
 import uuid, json
 
@@ -34,7 +35,7 @@ async def _get_cycle(db: AsyncSession, cycle_id: str) -> dict | None:
 
 # ─── Cycles ─────────────────────────────────────────────────────────────────────
 @router.get("/access-review")
-async def list_cycles(db: AsyncSession = Depends(get_db)):
+async def list_cycles(db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("grc", "access_review", "view"))):
     r = await db.execute(text("""
         SELECT c.*, jsonb_array_length(c.scope) AS scope_count,
                (SELECT COUNT(*) FROM tasks t WHERE t.entity_type='access_review' AND t.entity_id=c.id) AS tasks_total,
@@ -46,7 +47,7 @@ async def list_cycles(db: AsyncSession = Depends(get_db)):
 
 
 @router.post("/access-review")
-async def create_cycle(data: dict, db: AsyncSession = Depends(get_db)):
+async def create_cycle(data: dict, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("grc", "access_review", "edit"))):
     if not data.get("cycle_name"):
         raise HTTPException(status_code=400, detail="cycle_name is required")
     review_type = data.get("review_type") or "adhoc"
@@ -67,7 +68,7 @@ async def create_cycle(data: dict, db: AsyncSession = Depends(get_db)):
 
 
 @router.get("/access-review/{cycle_id}")
-async def get_cycle(cycle_id: str, db: AsyncSession = Depends(get_db)):
+async def get_cycle(cycle_id: str, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("grc", "access_review", "view"))):
     cycle = await _get_cycle(db, cycle_id)
     if not cycle:
         raise HTTPException(status_code=404, detail="Review cycle not found")
@@ -79,7 +80,7 @@ async def get_cycle(cycle_id: str, db: AsyncSession = Depends(get_db)):
 
 
 @router.put("/access-review/{cycle_id}")
-async def update_cycle(cycle_id: str, data: dict, db: AsyncSession = Depends(get_db)):
+async def update_cycle(cycle_id: str, data: dict, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("grc", "access_review", "edit"))):
     cycle = await _get_cycle(db, cycle_id)
     if not cycle:
         raise HTTPException(status_code=404, detail="Review cycle not found")
@@ -109,7 +110,7 @@ async def update_cycle(cycle_id: str, data: dict, db: AsyncSession = Depends(get
 
 
 @router.delete("/access-review/{cycle_id}")
-async def delete_cycle(cycle_id: str, db: AsyncSession = Depends(get_db)):
+async def delete_cycle(cycle_id: str, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("grc", "access_review", "edit"))):
     await db.execute(text("DELETE FROM grc_access_review_cycles WHERE id = CAST(:id AS UUID)"), {"id": cycle_id})
     await db.commit()
     return {"status": "ok"}
@@ -117,7 +118,7 @@ async def delete_cycle(cycle_id: str, db: AsyncSession = Depends(get_db)):
 
 # ─── Status transition — closing is gated on every generated task being done ───
 @router.put("/access-review/{cycle_id}/status")
-async def set_cycle_status(cycle_id: str, data: dict, db: AsyncSession = Depends(get_db)):
+async def set_cycle_status(cycle_id: str, data: dict, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("grc", "access_review", "edit"))):
     cycle = await _get_cycle(db, cycle_id)
     if not cycle:
         raise HTTPException(status_code=404, detail="Review cycle not found")
@@ -148,7 +149,7 @@ async def set_cycle_status(cycle_id: str, data: dict, db: AsyncSession = Depends
 
 # ─── Scope — diffed against current scope; new entries spawn a task + watcher ──
 @router.put("/access-review/{cycle_id}/scope")
-async def set_cycle_scope(cycle_id: str, data: dict, db: AsyncSession = Depends(get_db)):
+async def set_cycle_scope(cycle_id: str, data: dict, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("grc", "access_review", "edit"))):
     cycle = await _get_cycle(db, cycle_id)
     if not cycle:
         raise HTTPException(status_code=404, detail="Review cycle not found")
@@ -208,13 +209,13 @@ async def set_cycle_scope(cycle_id: str, data: dict, db: AsyncSession = Depends(
 
 # ─── Documents & links ──────────────────────────────────────────────────────────
 @router.get("/access-review/{cycle_id}/links")
-async def list_cycle_links(cycle_id: str, db: AsyncSession = Depends(get_db)):
+async def list_cycle_links(cycle_id: str, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("grc", "access_review", "view"))):
     r = await db.execute(text("SELECT * FROM grc_access_review_links WHERE cycle_id = CAST(:id AS UUID) ORDER BY created_at ASC"), {"id": cycle_id})
     return {"links": [_row(dict(row._mapping)) for row in r.fetchall()]}
 
 
 @router.post("/access-review/{cycle_id}/links")
-async def add_cycle_link(cycle_id: str, data: dict, db: AsyncSession = Depends(get_db)):
+async def add_cycle_link(cycle_id: str, data: dict, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("grc", "access_review", "edit"))):
     if not data.get("label") or not data.get("url"):
         raise HTTPException(status_code=400, detail="label and url are required")
     link_id = str(uuid.uuid4())
@@ -227,7 +228,7 @@ async def add_cycle_link(cycle_id: str, data: dict, db: AsyncSession = Depends(g
 
 
 @router.delete("/access-review/{cycle_id}/links/{link_id}")
-async def delete_cycle_link(cycle_id: str, link_id: str, db: AsyncSession = Depends(get_db)):
+async def delete_cycle_link(cycle_id: str, link_id: str, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("grc", "access_review", "edit"))):
     await db.execute(text("DELETE FROM grc_access_review_links WHERE id = CAST(:id AS UUID) AND cycle_id = CAST(:cid AS UUID)"), {"id": link_id, "cid": cycle_id})
     await db.commit()
     return {"status": "ok"}
@@ -235,7 +236,7 @@ async def delete_cycle_link(cycle_id: str, link_id: str, db: AsyncSession = Depe
 
 # ─── Access Review Requirements — access-control-tagged compliance requirements ─
 @router.get("/access-review/requirements")
-async def list_access_review_requirements(show_all: bool = False, db: AsyncSession = Depends(get_db)):
+async def list_access_review_requirements(show_all: bool = False, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("grc", "access_review", "view"))):
     where = "" if show_all else "WHERE r.category = 'access_control'"
     r = await db.execute(text(f"""
         SELECT r.*, f.name AS framework_name
@@ -248,7 +249,7 @@ async def list_access_review_requirements(show_all: bool = False, db: AsyncSessi
 
 
 @router.put("/requirements/{req_id}/category")
-async def set_requirement_category(req_id: str, data: dict, db: AsyncSession = Depends(get_db)):
+async def set_requirement_category(req_id: str, data: dict, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("grc", "access_review", "edit"))):
     await db.execute(text("UPDATE grc_requirements SET category = :category, updated_at = NOW() WHERE id = CAST(:id AS UUID)"),
                       {"category": data.get("category") or None, "id": req_id})
     await db.commit()

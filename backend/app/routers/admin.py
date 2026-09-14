@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
 from app.database import get_db
+from app.authz import require_permission
 import boto3
 import os
 import httpx
@@ -25,7 +26,7 @@ DEFAULT_URLS = [
 ]
 
 @router.get("/health")
-async def get_services_health():
+async def get_services_health(_: str = Depends(require_permission("admin", "monitoring", "view"))):
     services = []
     try:
         ecs = boto3.client("ecs", region_name=AWS_REGION)
@@ -101,7 +102,7 @@ async def get_services_health():
 
 
 @router.get("/costs")
-async def get_costs():
+async def get_costs(_: str = Depends(require_permission("admin", "costs", "view"))):
     end = datetime.utcnow().date()
     month_start = datetime.utcnow().replace(day=1).date()
     start_30 = (datetime.utcnow() - timedelta(days=30)).date()
@@ -159,7 +160,7 @@ async def check_url_live(url: str, name: str, url_id: str) -> dict:
 
 
 @router.post("/urls/check")
-async def run_checks(db: AsyncSession = Depends(get_db)):
+async def run_checks(db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("admin", "monitoring", "edit"))):
     try:
         result = await db.execute(text("SELECT id, name, url FROM monitored_urls WHERE active = true"))
         urls = result.fetchall()
@@ -186,7 +187,7 @@ async def run_checks(db: AsyncSession = Depends(get_db)):
 
 
 @router.get("/urls")
-async def get_monitored_urls(db: AsyncSession = Depends(get_db)):
+async def get_monitored_urls(db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("admin", "monitoring", "view"))):
     try:
         result = await db.execute(text("SELECT id, name, url, active, created_at FROM monitored_urls ORDER BY created_at"))
         urls = result.fetchall()
@@ -237,7 +238,7 @@ async def get_monitored_urls(db: AsyncSession = Depends(get_db)):
 
 
 @router.post("/urls")
-async def add_url(data: dict, db: AsyncSession = Depends(get_db)):
+async def add_url(data: dict, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("admin", "monitoring", "edit"))):
     try:
         await db.execute(text("""
             INSERT INTO monitored_urls (id, name, url, active, created_at)
@@ -250,7 +251,7 @@ async def add_url(data: dict, db: AsyncSession = Depends(get_db)):
 
 
 @router.delete("/urls/{url_id}")
-async def delete_url(url_id: str, db: AsyncSession = Depends(get_db)):
+async def delete_url(url_id: str, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("admin", "monitoring", "edit"))):
     try:
         await db.execute(text("DELETE FROM health_checks WHERE url_id = CAST(:id AS UUID)"), {"id": url_id})
         await db.execute(text("DELETE FROM monitored_urls WHERE id = CAST(:id AS UUID)"), {"id": url_id})
@@ -261,7 +262,7 @@ async def delete_url(url_id: str, db: AsyncSession = Depends(get_db)):
 
 
 @router.get("/logs")
-async def get_error_logs(limit: int = 50, db: AsyncSession = Depends(get_db)):
+async def get_error_logs(limit: int = 50, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("admin", "monitoring", "view"))):
     logs = []
     try:
         cw = boto3.client("logs", region_name=AWS_REGION)
@@ -321,7 +322,7 @@ ACCOUNT_NAMES = {
 }
 
 @router.get("/costs/multi")
-async def get_multi_account_costs():
+async def get_multi_account_costs(_: str = Depends(require_permission("admin", "costs", "view"))):
     """Get AWS costs broken down by account."""
     try:
         from datetime import datetime, timedelta
@@ -373,7 +374,7 @@ async def get_multi_account_costs():
 
 
 @router.get("/costs/account/{account_id}")
-async def get_account_costs(account_id: str):
+async def get_account_costs(account_id: str, _: str = Depends(require_permission("admin", "costs", "view"))):
     """Get detailed costs for a specific account."""
     try:
         from datetime import datetime, timedelta

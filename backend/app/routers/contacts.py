@@ -7,6 +7,7 @@ from typing import List
 from uuid import UUID
 
 from app.database import get_db
+from app.authz import require_permission
 from app.models.contact import Contact, ContactNote, ContactTask
 from app.models.company import Company, CompanyArticle
 from app.models.opportunity import Opportunity
@@ -43,7 +44,8 @@ async def list_contacts(
     # capped the displayed total below the real count once the table passed 100 rows.
     skip: int = 0, limit: int = 10000,
     search: str = None, company_id: str = None, partner_id: str = None, partner_only: bool = None,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    _: str = Depends(require_permission("sales", "contacts", "view")),
 ):
     query = select(Contact).options(selectinload(Contact.company))
     if search:
@@ -65,7 +67,7 @@ async def list_contacts(
     return contacts
 
 @router.post("/", response_model=ContactResponse, status_code=status.HTTP_201_CREATED)
-async def create_contact(contact: ContactCreate, db: AsyncSession = Depends(get_db)):
+async def create_contact(contact: ContactCreate, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("sales", "contacts", "edit"))):
     data = contact.model_dump()
     data['internal_id'] = await next_internal_id(db, 'contact_internal_id_seq', 'CNT')
     # Default a new contact's owner to their company's owner, unless the caller already
@@ -88,7 +90,7 @@ async def create_contact(contact: ContactCreate, db: AsyncSession = Depends(get_
 # Must come before /{contact_id} — otherwise FastAPI tries to parse "linkedin-enrich"
 # as a UUID for that route and 422s instead of falling through to this one.
 @router.post("/linkedin-enrich")
-async def linkedin_enrich_contact(data: dict):
+async def linkedin_enrich_contact(data: dict, _: str = Depends(require_permission("sales", "contacts", "edit"))):
     url = (data.get("linkedin_url") or "").strip()
     if not url:
         raise HTTPException(status_code=400, detail="linkedin_url is required")
@@ -111,7 +113,7 @@ Return ONLY the JSON, no markdown, no explanation."""
 
 
 @router.get("/{contact_id}", response_model=ContactResponse)
-async def get_contact(contact_id: UUID, db: AsyncSession = Depends(get_db)):
+async def get_contact(contact_id: UUID, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("sales", "contacts", "view"))):
     r = await db.execute(select(Contact).options(selectinload(Contact.company), selectinload(Contact.opportunities)).where(Contact.id == contact_id))
     contact = r.scalar_one_or_none()
     if not contact:
@@ -120,7 +122,7 @@ async def get_contact(contact_id: UUID, db: AsyncSession = Depends(get_db)):
     return contact
 
 @router.put("/{contact_id}", response_model=ContactResponse)
-async def update_contact(contact_id: UUID, data: ContactUpdate, db: AsyncSession = Depends(get_db)):
+async def update_contact(contact_id: UUID, data: ContactUpdate, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("sales", "contacts", "edit"))):
     r = await db.execute(select(Contact).where(Contact.id == contact_id))
     contact = r.scalar_one_or_none()
     if not contact:
@@ -134,7 +136,7 @@ async def update_contact(contact_id: UUID, data: ContactUpdate, db: AsyncSession
     return row
 
 @router.delete("/{contact_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_contact(contact_id: UUID, db: AsyncSession = Depends(get_db)):
+async def delete_contact(contact_id: UUID, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("sales", "contacts", "edit"))):
     r = await db.execute(select(Contact).where(Contact.id == contact_id))
     contact = r.scalar_one_or_none()
     if not contact:
@@ -143,7 +145,7 @@ async def delete_contact(contact_id: UUID, db: AsyncSession = Depends(get_db)):
     await db.commit()
 
 @router.get("/{contact_id}/opportunities", response_model=List[OpportunitySummary])
-async def get_contact_opportunities(contact_id: UUID, db: AsyncSession = Depends(get_db)):
+async def get_contact_opportunities(contact_id: UUID, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("sales", "contacts", "view"))):
     r = await db.execute(select(Contact).options(selectinload(Contact.opportunities)).where(Contact.id == contact_id))
     contact = r.scalar_one_or_none()
     if not contact:
@@ -152,7 +154,7 @@ async def get_contact_opportunities(contact_id: UUID, db: AsyncSession = Depends
 
 # Leads where this contact is either the Company Contact or one of the Partner Contacts.
 @router.get("/{contact_id}/leads")
-async def get_contact_leads(contact_id: UUID, db: AsyncSession = Depends(get_db)):
+async def get_contact_leads(contact_id: UUID, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("sales", "contacts", "view"))):
     r = await db.execute(text("""
         SELECT DISTINCT l.* FROM leads l
         LEFT JOIN lead_partner_contacts lpc ON lpc.lead_id = l.id
@@ -170,12 +172,12 @@ async def get_contact_leads(contact_id: UUID, db: AsyncSession = Depends(get_db)
 
 # ─── Tasks ──────────────────────────────────────────────────────────────────────
 @router.get("/{contact_id}/tasks", response_model=List[TaskResponse])
-async def list_contact_tasks(contact_id: UUID, db: AsyncSession = Depends(get_db)):
+async def list_contact_tasks(contact_id: UUID, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("sales", "tasks", "view"))):
     r = await db.execute(select(ContactTask).where(ContactTask.contact_id == contact_id).order_by(ContactTask.due_date.asc()))
     return r.scalars().all()
 
 @router.post("/{contact_id}/tasks", response_model=TaskResponse, status_code=status.HTTP_201_CREATED)
-async def create_contact_task(contact_id: UUID, task: TaskCreate, db: AsyncSession = Depends(get_db)):
+async def create_contact_task(contact_id: UUID, task: TaskCreate, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("sales", "tasks", "edit"))):
     db_task = ContactTask(contact_id=contact_id, **task.model_dump())
     db.add(db_task)
     await db.commit()
@@ -183,7 +185,7 @@ async def create_contact_task(contact_id: UUID, task: TaskCreate, db: AsyncSessi
     return db_task
 
 @router.put("/{contact_id}/tasks/{task_id}", response_model=TaskResponse)
-async def update_contact_task(contact_id: UUID, task_id: UUID, task_data: TaskUpdate, db: AsyncSession = Depends(get_db)):
+async def update_contact_task(contact_id: UUID, task_id: UUID, task_data: TaskUpdate, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("sales", "tasks", "edit"))):
     r = await db.execute(select(ContactTask).where(ContactTask.id == task_id, ContactTask.contact_id == contact_id))
     task = r.scalar_one_or_none()
     if not task:
@@ -195,7 +197,7 @@ async def update_contact_task(contact_id: UUID, task_id: UUID, task_data: TaskUp
     return task
 
 @router.delete("/{contact_id}/tasks/{task_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_contact_task(contact_id: UUID, task_id: UUID, db: AsyncSession = Depends(get_db)):
+async def delete_contact_task(contact_id: UUID, task_id: UUID, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("sales", "tasks", "edit"))):
     r = await db.execute(select(ContactTask).where(ContactTask.id == task_id, ContactTask.contact_id == contact_id))
     task = r.scalar_one_or_none()
     if not task:
@@ -205,12 +207,12 @@ async def delete_contact_task(contact_id: UUID, task_id: UUID, db: AsyncSession 
 
 # ─── Notes ────────────────────────────────────────────────────────────────────
 @router.get("/{contact_id}/notes", response_model=List[NoteResponse])
-async def list_contact_notes(contact_id: UUID, db: AsyncSession = Depends(get_db)):
+async def list_contact_notes(contact_id: UUID, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("sales", "contacts", "view"))):
     r = await db.execute(select(ContactNote).where(ContactNote.contact_id == contact_id).order_by(ContactNote.created_at.desc()))
     return r.scalars().all()
 
 @router.post("/{contact_id}/notes", response_model=NoteResponse, status_code=status.HTTP_201_CREATED)
-async def create_contact_note(contact_id: UUID, note: NoteCreate, db: AsyncSession = Depends(get_db)):
+async def create_contact_note(contact_id: UUID, note: NoteCreate, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("sales", "contacts", "edit"))):
     db_note = ContactNote(contact_id=contact_id, **note.model_dump())
     db.add(db_note)
     await db.commit()
@@ -218,7 +220,7 @@ async def create_contact_note(contact_id: UUID, note: NoteCreate, db: AsyncSessi
     return db_note
 
 @router.delete("/{contact_id}/notes/{note_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_contact_note(contact_id: UUID, note_id: UUID, db: AsyncSession = Depends(get_db)):
+async def delete_contact_note(contact_id: UUID, note_id: UUID, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("sales", "contacts", "edit"))):
     r = await db.execute(select(ContactNote).where(ContactNote.id == note_id, ContactNote.contact_id == contact_id))
     note = r.scalar_one_or_none()
     if not note:
@@ -231,7 +233,7 @@ async def delete_contact_note(contact_id: UUID, note_id: UUID, db: AsyncSession 
 # (see companies.py's Articles section) — an article created here has contact_id set and
 # company_id null, but can still be additionally linked to companies via article_companies.
 @router.get("/{contact_id}/articles", response_model=List[ArticleResponse])
-async def list_contact_articles(contact_id: UUID, db: AsyncSession = Depends(get_db)):
+async def list_contact_articles(contact_id: UUID, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("sales", "contacts", "view"))):
     r = await db.execute(text("""
         SELECT * FROM (
             SELECT a.*, a.created_at AS link_date FROM company_articles a WHERE a.contact_id = :cid
@@ -244,7 +246,7 @@ async def list_contact_articles(contact_id: UUID, db: AsyncSession = Depends(get
     return [dict(row._mapping) for row in r.fetchall()]
 
 @router.post("/{contact_id}/articles", response_model=ArticleResponse, status_code=status.HTTP_201_CREATED)
-async def create_contact_article(contact_id: UUID, article: ArticleCreate, db: AsyncSession = Depends(get_db)):
+async def create_contact_article(contact_id: UUID, article: ArticleCreate, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("sales", "contacts", "edit"))):
     db_article = CompanyArticle(contact_id=contact_id, **article.model_dump())
     db.add(db_article)
     await db.commit()
@@ -252,7 +254,7 @@ async def create_contact_article(contact_id: UUID, article: ArticleCreate, db: A
     return db_article
 
 @router.delete("/{contact_id}/articles/{article_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_contact_article(contact_id: UUID, article_id: UUID, db: AsyncSession = Depends(get_db)):
+async def delete_contact_article(contact_id: UUID, article_id: UUID, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("sales", "contacts", "edit"))):
     r = await db.execute(select(CompanyArticle).where(CompanyArticle.id == article_id, CompanyArticle.contact_id == contact_id))
     article = r.scalar_one_or_none()
     if not article:

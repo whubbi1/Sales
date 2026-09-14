@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import HelpdeskLayout from '@/components/HelpdeskLayout'
 import { BackendCheck } from '@/components/BackendCheck'
 import { API, STATUS_STYLE, PRIORITY_STYLE } from './constants'
+import { apiFetch } from '@/lib/apiClient'
 
 export default function HelpdeskPage() {
   const router = useRouter()
@@ -11,7 +12,7 @@ export default function HelpdeskPage() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    fetch(`${API}/helpdesk/dashboard`).then(r => r.json()).then(setD).finally(() => setLoading(false))
+    apiFetch(`${API}/helpdesk/dashboard`).then(r => r.json()).then(setD).finally(() => setLoading(false))
   }, [])
 
   return (

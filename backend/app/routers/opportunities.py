@@ -8,6 +8,7 @@ from uuid import UUID, uuid4
 from datetime import datetime
 
 from app.database import get_db
+from app.authz import require_permission
 from app.models.opportunity import Opportunity
 from app.models.contact import Contact
 from app.models.company import Company
@@ -202,7 +203,8 @@ async def list_opportunities(
     # array itself, so this needs enough headroom to not silently truncate as the table grows.
     skip: int = 0, limit: int = 10000,
     search: str = None, company_id: str = None, partner_id: str = None, deal_status: str = None,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    _: str = Depends(require_permission("sales", "opportunities", "view")),
 ):
     query = select(Opportunity).options(
         selectinload(Opportunity.company),
@@ -229,7 +231,7 @@ async def list_opportunities(
     return opps
 
 @router.post("/", response_model=OpportunityResponse, status_code=status.HTTP_201_CREATED)
-async def create_opportunity(opp: OpportunityCreate, db: AsyncSession = Depends(get_db)):
+async def create_opportunity(opp: OpportunityCreate, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("sales", "opportunities", "edit"))):
     if opp.deal_status in RETIRED_DEAL_STATUSES:
         raise HTTPException(status_code=400, detail=f"'{opp.deal_status}' is retired — use 'Contract Won' instead")
     contact_ids = opp.contact_ids or []
@@ -263,7 +265,7 @@ async def create_opportunity(opp: OpportunityCreate, db: AsyncSession = Depends(
     return row
 
 @router.get("/{opportunity_id}", response_model=OpportunityResponse)
-async def get_opportunity(opportunity_id: UUID, db: AsyncSession = Depends(get_db)):
+async def get_opportunity(opportunity_id: UUID, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("sales", "opportunities", "view"))):
     r = await db.execute(select(Opportunity).options(selectinload(Opportunity.company), selectinload(Opportunity.contacts)).where(Opportunity.id == opportunity_id))
     opp = r.scalar_one_or_none()
     if not opp:
@@ -275,7 +277,7 @@ async def get_opportunity(opportunity_id: UUID, db: AsyncSession = Depends(get_d
     return opp
 
 @router.put("/{opportunity_id}", response_model=OpportunityResponse)
-async def update_opportunity(opportunity_id: UUID, data: OpportunityUpdate, db: AsyncSession = Depends(get_db)):
+async def update_opportunity(opportunity_id: UUID, data: OpportunityUpdate, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("sales", "opportunities", "edit"))):
     r = await db.execute(select(Opportunity).options(selectinload(Opportunity.contacts)).where(Opportunity.id == opportunity_id))
     opp = r.scalar_one_or_none()
     if not opp:
@@ -323,7 +325,7 @@ async def update_opportunity(opportunity_id: UUID, data: OpportunityUpdate, db: 
 
 # ─── Linked Contacts (incremental, alongside the full-replace via PUT above) ────
 @router.post("/{opportunity_id}/contacts/{contact_id}")
-async def link_opportunity_contact(opportunity_id: UUID, contact_id: UUID, db: AsyncSession = Depends(get_db)):
+async def link_opportunity_contact(opportunity_id: UUID, contact_id: UUID, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("sales", "opportunities", "edit"))):
     r = await db.execute(select(Opportunity).options(selectinload(Opportunity.contacts)).where(Opportunity.id == opportunity_id))
     opp = r.scalar_one_or_none()
     if not opp:
@@ -339,7 +341,7 @@ async def link_opportunity_contact(opportunity_id: UUID, contact_id: UUID, db: A
 
 
 @router.delete("/{opportunity_id}/contacts/{contact_id}")
-async def unlink_opportunity_contact(opportunity_id: UUID, contact_id: UUID, db: AsyncSession = Depends(get_db)):
+async def unlink_opportunity_contact(opportunity_id: UUID, contact_id: UUID, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("sales", "opportunities", "edit"))):
     r = await db.execute(select(Opportunity).options(selectinload(Opportunity.contacts)).where(Opportunity.id == opportunity_id))
     opp = r.scalar_one_or_none()
     if not opp:
@@ -350,7 +352,7 @@ async def unlink_opportunity_contact(opportunity_id: UUID, contact_id: UUID, db:
 
 
 @router.delete("/{opportunity_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_opportunity(opportunity_id: UUID, db: AsyncSession = Depends(get_db)):
+async def delete_opportunity(opportunity_id: UUID, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("sales", "opportunities", "edit"))):
     r = await db.execute(select(Opportunity).where(Opportunity.id == opportunity_id))
     opp = r.scalar_one_or_none()
     if not opp:
@@ -366,7 +368,7 @@ async def delete_opportunity(opportunity_id: UUID, db: AsyncSession = Depends(ge
 
 # ─── Staffing (employees assigned to this opportunity) ─────────────────────────
 @router.get("/{opportunity_id}/staffing/", response_model=List[StaffingResponse])
-async def list_staffing(opportunity_id: UUID, db: AsyncSession = Depends(get_db)):
+async def list_staffing(opportunity_id: UUID, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("sales", "opportunities", "view"))):
     r = await db.execute(
         select(OpportunityStaffing).options(selectinload(OpportunityStaffing.months))
         .where(OpportunityStaffing.opportunity_id == opportunity_id).order_by(OpportunityStaffing.created_at)
@@ -374,7 +376,7 @@ async def list_staffing(opportunity_id: UUID, db: AsyncSession = Depends(get_db)
     return r.scalars().all()
 
 @router.post("/{opportunity_id}/staffing/", response_model=StaffingResponse, status_code=status.HTTP_201_CREATED)
-async def add_staffing(opportunity_id: UUID, data: StaffingCreate, db: AsyncSession = Depends(get_db)):
+async def add_staffing(opportunity_id: UUID, data: StaffingCreate, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("sales", "opportunities", "edit"))):
     row = OpportunityStaffing(opportunity_id=opportunity_id, **data.model_dump())
     db.add(row)
     await db.commit()
@@ -386,7 +388,7 @@ async def add_staffing(opportunity_id: UUID, data: StaffingCreate, db: AsyncSess
     return r.scalar_one()
 
 @router.delete("/{opportunity_id}/staffing/{staffing_id}/", status_code=status.HTTP_204_NO_CONTENT)
-async def remove_staffing(opportunity_id: UUID, staffing_id: UUID, db: AsyncSession = Depends(get_db)):
+async def remove_staffing(opportunity_id: UUID, staffing_id: UUID, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("sales", "opportunities", "edit"))):
     r = await db.execute(select(OpportunityStaffing).where(OpportunityStaffing.id == staffing_id, OpportunityStaffing.opportunity_id == opportunity_id))
     row = r.scalar_one_or_none()
     if not row:
@@ -397,7 +399,7 @@ async def remove_staffing(opportunity_id: UUID, staffing_id: UUID, db: AsyncSess
 # Replaces this staffing assignment's whole month->days allocation (simplest correct
 # semantics for an editable grid — the frontend always sends its full current state).
 @router.put("/{opportunity_id}/staffing/{staffing_id}/months", response_model=StaffingResponse)
-async def set_staffing_months(opportunity_id: UUID, staffing_id: UUID, data: StaffingMonthsUpdate, db: AsyncSession = Depends(get_db)):
+async def set_staffing_months(opportunity_id: UUID, staffing_id: UUID, data: StaffingMonthsUpdate, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("sales", "opportunities", "edit"))):
     r = await db.execute(select(OpportunityStaffing).options(selectinload(OpportunityStaffing.months))
                           .where(OpportunityStaffing.id == staffing_id, OpportunityStaffing.opportunity_id == opportunity_id))
     row = r.scalar_one_or_none()
@@ -409,7 +411,7 @@ async def set_staffing_months(opportunity_id: UUID, staffing_id: UUID, data: Sta
     return r.scalar_one()
 
 @router.get("/staffing/all", response_model=None)
-async def list_all_staffing(db: AsyncSession = Depends(get_db)):
+async def list_all_staffing(db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("sales", "opportunities", "view"))):
     r = await db.execute(
         select(OpportunityStaffing, Opportunity.deal_name, Opportunity.deal_status)
         .join(Opportunity, Opportunity.id == OpportunityStaffing.opportunity_id)
@@ -433,12 +435,12 @@ async def list_all_staffing(db: AsyncSession = Depends(get_db)):
 
 # ─── Checklist ──────────────────────────────────────────────────────────────────
 @router.get("/{opportunity_id}/checklist/", response_model=List[ChecklistItemResponse])
-async def list_checklist(opportunity_id: UUID, db: AsyncSession = Depends(get_db)):
+async def list_checklist(opportunity_id: UUID, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("sales", "opportunities", "view"))):
     r = await db.execute(select(OpportunityChecklistItem).where(OpportunityChecklistItem.opportunity_id == opportunity_id).order_by(OpportunityChecklistItem.position, OpportunityChecklistItem.created_at))
     return r.scalars().all()
 
 @router.post("/{opportunity_id}/checklist/", response_model=ChecklistItemResponse, status_code=status.HTTP_201_CREATED)
-async def add_checklist_item(opportunity_id: UUID, data: ChecklistItemCreate, db: AsyncSession = Depends(get_db)):
+async def add_checklist_item(opportunity_id: UUID, data: ChecklistItemCreate, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("sales", "opportunities", "edit"))):
     row = OpportunityChecklistItem(opportunity_id=opportunity_id, **data.model_dump())
     db.add(row)
     await db.commit()
@@ -446,7 +448,7 @@ async def add_checklist_item(opportunity_id: UUID, data: ChecklistItemCreate, db
     return row
 
 @router.put("/{opportunity_id}/checklist/{item_id}/", response_model=ChecklistItemResponse)
-async def update_checklist_item(opportunity_id: UUID, item_id: UUID, data: ChecklistItemUpdate, db: AsyncSession = Depends(get_db)):
+async def update_checklist_item(opportunity_id: UUID, item_id: UUID, data: ChecklistItemUpdate, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("sales", "opportunities", "edit"))):
     r = await db.execute(select(OpportunityChecklistItem).where(OpportunityChecklistItem.id == item_id, OpportunityChecklistItem.opportunity_id == opportunity_id))
     row = r.scalar_one_or_none()
     if not row:
@@ -458,7 +460,7 @@ async def update_checklist_item(opportunity_id: UUID, item_id: UUID, data: Check
     return row
 
 @router.delete("/{opportunity_id}/checklist/{item_id}/", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_checklist_item(opportunity_id: UUID, item_id: UUID, db: AsyncSession = Depends(get_db)):
+async def delete_checklist_item(opportunity_id: UUID, item_id: UUID, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("sales", "opportunities", "edit"))):
     r = await db.execute(select(OpportunityChecklistItem).where(OpportunityChecklistItem.id == item_id, OpportunityChecklistItem.opportunity_id == opportunity_id))
     row = r.scalar_one_or_none()
     if not row:
@@ -468,12 +470,12 @@ async def delete_checklist_item(opportunity_id: UUID, item_id: UUID, db: AsyncSe
 
 # ─── Comments ───────────────────────────────────────────────────────────────────
 @router.get("/{opportunity_id}/comments/", response_model=List[CommentResponse])
-async def list_comments(opportunity_id: UUID, db: AsyncSession = Depends(get_db)):
+async def list_comments(opportunity_id: UUID, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("sales", "opportunities", "view"))):
     r = await db.execute(select(OpportunityComment).where(OpportunityComment.opportunity_id == opportunity_id).order_by(OpportunityComment.created_at.desc()))
     return r.scalars().all()
 
 @router.post("/{opportunity_id}/comments/", response_model=CommentResponse, status_code=status.HTTP_201_CREATED)
-async def add_comment(opportunity_id: UUID, data: CommentCreate, db: AsyncSession = Depends(get_db)):
+async def add_comment(opportunity_id: UUID, data: CommentCreate, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("sales", "opportunities", "edit"))):
     row = OpportunityComment(opportunity_id=opportunity_id, **data.model_dump())
     db.add(row)
     await db.commit()
@@ -481,7 +483,7 @@ async def add_comment(opportunity_id: UUID, data: CommentCreate, db: AsyncSessio
     return row
 
 @router.delete("/{opportunity_id}/comments/{comment_id}/", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_comment(opportunity_id: UUID, comment_id: UUID, db: AsyncSession = Depends(get_db)):
+async def delete_comment(opportunity_id: UUID, comment_id: UUID, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("sales", "opportunities", "edit"))):
     r = await db.execute(select(OpportunityComment).where(OpportunityComment.id == comment_id, OpportunityComment.opportunity_id == opportunity_id))
     row = r.scalar_one_or_none()
     if not row:
@@ -491,7 +493,7 @@ async def delete_comment(opportunity_id: UUID, comment_id: UUID, db: AsyncSessio
 
 # ─── SharePoint files (live listing via Microsoft Graph Shares API) ───────────
 @router.get("/{opportunity_id}/sharepoint-files")
-async def list_sharepoint_files(opportunity_id: UUID, db: AsyncSession = Depends(get_db)):
+async def list_sharepoint_files(opportunity_id: UUID, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("sales", "opportunities", "view"))):
     import base64
     import httpx
     from app.routers.settings import get_ms_token
@@ -537,7 +539,7 @@ async def list_sharepoint_files(opportunity_id: UUID, db: AsyncSession = Depends
 
 # ─── Links (manually-curated SharePoint folders/files, each with a description) ─
 @router.get("/{opportunity_id}/links")
-async def list_opportunity_links(opportunity_id: str, db: AsyncSession = Depends(get_db)):
+async def list_opportunity_links(opportunity_id: str, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("sales", "opportunities", "view"))):
     r = await db.execute(text("""
         SELECT * FROM opportunity_links WHERE opportunity_id = CAST(:oid AS UUID) ORDER BY created_at DESC
     """), {"oid": opportunity_id})
@@ -550,7 +552,7 @@ async def list_opportunity_links(opportunity_id: str, db: AsyncSession = Depends
     return {"links": links}
 
 @router.post("/{opportunity_id}/links")
-async def create_opportunity_link(opportunity_id: str, data: dict, db: AsyncSession = Depends(get_db)):
+async def create_opportunity_link(opportunity_id: str, data: dict, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("sales", "opportunities", "edit"))):
     if not data.get("url"):
         raise HTTPException(status_code=400, detail="url is required")
     lid = str(uuid4())
@@ -562,7 +564,7 @@ async def create_opportunity_link(opportunity_id: str, data: dict, db: AsyncSess
     return {"status": "ok", "id": lid}
 
 @router.put("/{opportunity_id}/links/{link_id}")
-async def update_opportunity_link(opportunity_id: str, link_id: str, data: dict, db: AsyncSession = Depends(get_db)):
+async def update_opportunity_link(opportunity_id: str, link_id: str, data: dict, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("sales", "opportunities", "edit"))):
     await db.execute(text("""
         UPDATE opportunity_links SET
             url = COALESCE(NULLIF(:url,''), url),
@@ -574,7 +576,7 @@ async def update_opportunity_link(opportunity_id: str, link_id: str, data: dict,
     return {"status": "ok"}
 
 @router.delete("/{opportunity_id}/links/{link_id}")
-async def delete_opportunity_link(opportunity_id: str, link_id: str, db: AsyncSession = Depends(get_db)):
+async def delete_opportunity_link(opportunity_id: str, link_id: str, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("sales", "opportunities", "edit"))):
     await db.execute(text("""
         DELETE FROM opportunity_links WHERE id = CAST(:id AS UUID) AND opportunity_id = CAST(:oid AS UUID)
     """), {"id": link_id, "oid": opportunity_id})

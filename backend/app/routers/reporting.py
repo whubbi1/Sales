@@ -10,6 +10,7 @@ from typing import List
 from uuid import UUID
 
 from app.database import get_db
+from app.authz import require_permission
 from app.models.reporting import SavedReport, SavedDashboard
 from app.schemas.schemas import (
     ReportSpec, SavedReportCreate, SavedReportUpdate, SavedReportResponse,
@@ -29,12 +30,12 @@ def _visible_to(rows: list, user_email: str):
 
 
 @router.get("/schema")
-async def get_schema():
+async def get_schema(_: str = Depends(require_permission("reporting", "reports", "view"))):
     return {"entities": registry_for_frontend()}
 
 
 @router.post("/run")
-async def run_report(spec: ReportSpec, db: AsyncSession = Depends(get_db)):
+async def run_report(spec: ReportSpec, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("reporting", "reports", "view"))):
     try:
         rows = await run_report_query(db, spec.model_dump())
     except ReportSpecError as e:
@@ -44,12 +45,12 @@ async def run_report(spec: ReportSpec, db: AsyncSession = Depends(get_db)):
 
 # ─── Saved Reports ──────────────────────────────────────────────────────────────
 @router.get("/reports", response_model=List[SavedReportResponse])
-async def list_reports(user_email: str, db: AsyncSession = Depends(get_db)):
+async def list_reports(user_email: str, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("reporting", "reports", "view"))):
     r = await db.execute(select(SavedReport).order_by(SavedReport.updated_at.desc()))
     return _visible_to(r.scalars().all(), user_email)
 
 @router.post("/reports", response_model=SavedReportResponse, status_code=status.HTTP_201_CREATED)
-async def create_report(data: SavedReportCreate, db: AsyncSession = Depends(get_db)):
+async def create_report(data: SavedReportCreate, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("reporting", "reports", "edit"))):
     row = SavedReport(name=data.name, owner_email=data.owner_email, spec=data.spec.model_dump(), chart_type=data.chart_type, shared_with=data.shared_with)
     db.add(row)
     await db.commit()
@@ -57,7 +58,7 @@ async def create_report(data: SavedReportCreate, db: AsyncSession = Depends(get_
     return row
 
 @router.get("/reports/{report_id}", response_model=SavedReportResponse)
-async def get_report(report_id: UUID, db: AsyncSession = Depends(get_db)):
+async def get_report(report_id: UUID, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("reporting", "reports", "view"))):
     r = await db.execute(select(SavedReport).where(SavedReport.id == report_id))
     row = r.scalar_one_or_none()
     if not row:
@@ -65,7 +66,7 @@ async def get_report(report_id: UUID, db: AsyncSession = Depends(get_db)):
     return row
 
 @router.put("/reports/{report_id}", response_model=SavedReportResponse)
-async def update_report(report_id: UUID, data: SavedReportUpdate, db: AsyncSession = Depends(get_db)):
+async def update_report(report_id: UUID, data: SavedReportUpdate, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("reporting", "reports", "edit"))):
     r = await db.execute(select(SavedReport).where(SavedReport.id == report_id))
     row = r.scalar_one_or_none()
     if not row:
@@ -80,7 +81,7 @@ async def update_report(report_id: UUID, data: SavedReportUpdate, db: AsyncSessi
     return row
 
 @router.delete("/reports/{report_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_report(report_id: UUID, db: AsyncSession = Depends(get_db)):
+async def delete_report(report_id: UUID, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("reporting", "reports", "edit"))):
     r = await db.execute(select(SavedReport).where(SavedReport.id == report_id))
     row = r.scalar_one_or_none()
     if not row:
@@ -89,7 +90,7 @@ async def delete_report(report_id: UUID, db: AsyncSession = Depends(get_db)):
     await db.commit()
 
 @router.post("/reports/{report_id}/run")
-async def run_saved_report(report_id: UUID, db: AsyncSession = Depends(get_db)):
+async def run_saved_report(report_id: UUID, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("reporting", "reports", "view"))):
     r = await db.execute(select(SavedReport).where(SavedReport.id == report_id))
     row = r.scalar_one_or_none()
     if not row:
@@ -103,12 +104,12 @@ async def run_saved_report(report_id: UUID, db: AsyncSession = Depends(get_db)):
 
 # ─── Saved Dashboards ───────────────────────────────────────────────────────────
 @router.get("/dashboards", response_model=List[SavedDashboardResponse])
-async def list_dashboards(user_email: str, db: AsyncSession = Depends(get_db)):
+async def list_dashboards(user_email: str, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("reporting", "dashboards", "view"))):
     r = await db.execute(select(SavedDashboard).order_by(SavedDashboard.updated_at.desc()))
     return _visible_to(r.scalars().all(), user_email)
 
 @router.post("/dashboards", response_model=SavedDashboardResponse, status_code=status.HTTP_201_CREATED)
-async def create_dashboard(data: SavedDashboardCreate, db: AsyncSession = Depends(get_db)):
+async def create_dashboard(data: SavedDashboardCreate, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("reporting", "dashboards", "edit"))):
     row = SavedDashboard(name=data.name, owner_email=data.owner_email, report_ids=[str(i) for i in (data.report_ids or [])], shared_with=data.shared_with)
     db.add(row)
     await db.commit()
@@ -116,7 +117,7 @@ async def create_dashboard(data: SavedDashboardCreate, db: AsyncSession = Depend
     return row
 
 @router.get("/dashboards/{dashboard_id}", response_model=SavedDashboardResponse)
-async def get_dashboard(dashboard_id: UUID, db: AsyncSession = Depends(get_db)):
+async def get_dashboard(dashboard_id: UUID, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("reporting", "dashboards", "view"))):
     r = await db.execute(select(SavedDashboard).where(SavedDashboard.id == dashboard_id))
     row = r.scalar_one_or_none()
     if not row:
@@ -124,7 +125,7 @@ async def get_dashboard(dashboard_id: UUID, db: AsyncSession = Depends(get_db)):
     return row
 
 @router.put("/dashboards/{dashboard_id}", response_model=SavedDashboardResponse)
-async def update_dashboard(dashboard_id: UUID, data: SavedDashboardUpdate, db: AsyncSession = Depends(get_db)):
+async def update_dashboard(dashboard_id: UUID, data: SavedDashboardUpdate, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("reporting", "dashboards", "edit"))):
     r = await db.execute(select(SavedDashboard).where(SavedDashboard.id == dashboard_id))
     row = r.scalar_one_or_none()
     if not row:
@@ -139,7 +140,7 @@ async def update_dashboard(dashboard_id: UUID, data: SavedDashboardUpdate, db: A
     return row
 
 @router.delete("/dashboards/{dashboard_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_dashboard(dashboard_id: UUID, db: AsyncSession = Depends(get_db)):
+async def delete_dashboard(dashboard_id: UUID, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("reporting", "dashboards", "edit"))):
     r = await db.execute(select(SavedDashboard).where(SavedDashboard.id == dashboard_id))
     row = r.scalar_one_or_none()
     if not row:
@@ -153,7 +154,7 @@ async def delete_dashboard(dashboard_id: UUID, db: AsyncSession = Depends(get_db
 # against that exact same whitelist (via ReportSpec + run_report_query) before it's handed
 # back to the frontend — nothing it produces is trusted or executed directly.
 @router.post("/ai-draft")
-async def ai_draft_report(data: AIReportDraftRequest, db: AsyncSession = Depends(get_db)):
+async def ai_draft_report(data: AIReportDraftRequest, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("reporting", "reports", "edit"))):
     if not ANTHROPIC_API_KEY:
         raise HTTPException(status_code=500, detail="ANTHROPIC_API_KEY not configured")
 

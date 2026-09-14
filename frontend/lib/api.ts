@@ -1,9 +1,16 @@
 // lib/api.ts
+import { getStoredUser } from './auth'
+
 const API_URL = 'https://api.whubbi.wcomply.com'
 
 async function fetchAPI(path: string, options: RequestInit = {}) {
+  const user = getStoredUser()
   const res = await fetch(`${API_URL}${path}`, {
-    headers: { 'Content-Type': 'application/json', ...options.headers },
+    headers: {
+      'Content-Type': 'application/json',
+      ...(user?.email ? { 'X-User-Email': user.email } : {}),
+      ...options.headers,
+    },
     ...options,
   })
   if (!res.ok) {

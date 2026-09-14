@@ -3,6 +3,7 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
 from app.database import get_db
+from app.authz import require_permission, require_self_or_permission, get_current_user_email
 from io import BytesIO
 import uuid, json
 
@@ -13,7 +14,7 @@ async def _table_exists(db: AsyncSession, name: str) -> bool:
     return r.scalar() is not None
 
 @router.get("")
-async def list_all_cvs(db: AsyncSession = Depends(get_db)):
+async def list_all_cvs(db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("sales", "cv_database", "view"))):
     from app.routers.settings import list_users as _list_users
     users_resp = await _list_users(db)
     users = users_resp.get("users", [])
@@ -34,8 +35,7 @@ async def list_all_cvs(db: AsyncSession = Depends(get_db)):
         })
     return {"users": result}
 
-@router.get("/{email}")
-async def get_cv(email: str, db: AsyncSession = Depends(get_db)):
+async def _get_cv_data(email: str, db: AsyncSession) -> dict:
     r = await db.execute(text("SELECT * FROM employee_cv WHERE email = :email"), {"email": email})
     row = r.fetchone()
     if row:
@@ -81,8 +81,23 @@ async def get_cv(email: str, db: AsyncSession = Depends(get_db)):
 
     return {"cv": cv}
 
+@router.get("/{email}")
+async def get_cv(
+    email: str,
+    db: AsyncSession = Depends(get_db),
+    caller: str = Depends(get_current_user_email),
+):
+    await require_self_or_permission(email, caller, "sales", "cv_database", db, "view")
+    return await _get_cv_data(email, db)
+
 @router.put("/{email}")
-async def update_cv(email: str, data: dict, db: AsyncSession = Depends(get_db)):
+async def update_cv(
+    email: str,
+    data: dict,
+    db: AsyncSession = Depends(get_db),
+    caller: str = Depends(get_current_user_email),
+):
+    await require_self_or_permission(email, caller, "sales", "cv_database", db, "edit")
     await db.execute(text("""
         INSERT INTO employee_cv (id, email, first_name, last_name, title, short_description, skills, languages, created_at, updated_at)
         VALUES (gen_random_uuid(), :email, :first_name, :last_name, :title, :short_description, CAST(:skills AS JSON), CAST(:languages AS JSON), NOW(), NOW())
@@ -107,7 +122,8 @@ async def update_cv(email: str, data: dict, db: AsyncSession = Depends(get_db)):
     return {"status": "ok"}
 
 @router.post("/{email}/experience")
-async def create_experience(email: str, data: dict, db: AsyncSession = Depends(get_db)):
+async def create_experience(email: str, data: dict, db: AsyncSession = Depends(get_db), caller: str = Depends(get_current_user_email)):
+    await require_self_or_permission(email, caller, "sales", "cv_database", db, "edit")
     exp_id = str(uuid.uuid4())
     await db.execute(text("""
         INSERT INTO employee_cv_experience
@@ -129,7 +145,8 @@ async def create_experience(email: str, data: dict, db: AsyncSession = Depends(g
     return {"status": "ok", "id": exp_id}
 
 @router.put("/{email}/experience/{eid}")
-async def update_experience(email: str, eid: str, data: dict, db: AsyncSession = Depends(get_db)):
+async def update_experience(email: str, eid: str, data: dict, db: AsyncSession = Depends(get_db), caller: str = Depends(get_current_user_email)):
+    await require_self_or_permission(email, caller, "sales", "cv_database", db, "edit")
     await db.execute(text("""
         UPDATE employee_cv_experience SET
             job_title = :job_title,
@@ -154,14 +171,15 @@ async def update_experience(email: str, eid: str, data: dict, db: AsyncSession =
     return {"status": "ok"}
 
 @router.delete("/{email}/experience/{eid}")
-async def delete_experience(email: str, eid: str, db: AsyncSession = Depends(get_db)):
+async def delete_experience(email: str, eid: str, db: AsyncSession = Depends(get_db), caller: str = Depends(get_current_user_email)):
+    await require_self_or_permission(email, caller, "sales", "cv_database", db, "edit")
     await db.execute(text("DELETE FROM employee_cv_experience WHERE id = CAST(:id AS UUID) AND user_email = :email"), {"id": eid, "email": email})
     await db.commit()
     return {"status": "ok"}
 
 # ─── Export: Word (complete or curated) and PowerPoint (summary) ──────────────
 async def _load_cv_for_export(email: str, db: AsyncSession) -> dict:
-    resp = await get_cv(email, db)
+    resp = await _get_cv_data(email, db)
     return resp["cv"]
 
 def _cv_full_name(cv: dict) -> str:
@@ -350,7 +368,8 @@ def _generate_cv_pptx(cv: dict) -> bytes:
     return buf.getvalue()
 
 @router.get("/{email}/export/word")
-async def export_word(email: str, experience_ids: str = None, db: AsyncSession = Depends(get_db)):
+async def export_word(email: str, experience_ids: str = None, db: AsyncSession = Depends(get_db), caller: str = Depends(get_current_user_email)):
+    await require_self_or_permission(email, caller, "sales", "cv_database", db, "view")
     cv = await _load_cv_for_export(email, db)
     ids = experience_ids.split(",") if experience_ids else None
     content = _generate_cv_docx(cv, ids)
@@ -360,7 +379,8 @@ async def export_word(email: str, experience_ids: str = None, db: AsyncSession =
         headers={"Content-Disposition": f'attachment; filename="{fname}"'})
 
 @router.get("/{email}/export/pptx")
-async def export_pptx(email: str, db: AsyncSession = Depends(get_db)):
+async def export_pptx(email: str, db: AsyncSession = Depends(get_db), caller: str = Depends(get_current_user_email)):
+    await require_self_or_permission(email, caller, "sales", "cv_database", db, "view")
     cv = await _load_cv_for_export(email, db)
     content = _generate_cv_pptx(cv)
     fname = f"{_cv_full_name(cv).replace(' ', '_') or 'CV'}_Summary.pptx"

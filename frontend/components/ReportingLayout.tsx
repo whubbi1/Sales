@@ -2,26 +2,21 @@
 import { useRouter, usePathname } from 'next/navigation'
 import { createContext, useContext, useEffect, useRef, useState } from 'react'
 import { getStoredUser, clearStoredUser } from '@/lib/auth'
+import { apiFetch } from '@/lib/apiClient'
+import { lookupPerm, ModulePerms, PermLevel } from '@/lib/permissions'
 import { EasyAccessMenu } from '@/components/shared/EasyAccessMenu'
 
-const API = 'https://api.whubbi.wcomply.com'
-
 const NAV = [
-  { href: '/reporting/reports', icon: '📊', label: 'Reports' },
-  { href: '/reporting/dashboards', icon: '🗂️', label: 'Dashboards' },
+  { href: '/reporting/reports', icon: '📊', label: 'Reports', submodule: 'reports' },
+  { href: '/reporting/dashboards', icon: '🗂️', label: 'Dashboards', submodule: 'dashboards' },
 ]
 
-type PermLevel = 'loading' | 'none' | 'view' | 'edit'
-type ReportingPerms = Record<string, { access_mode?: string; id?: string | null }> | null
+type ReportingPerms = ModulePerms
 const ReportingPermContext = createContext<ReportingPerms>(null)
 
 export function useReportingPerm(submodule: string): { level: PermLevel; canEdit: boolean } {
   const perms = useContext(ReportingPermContext)
-  if (perms === null) return { level: 'loading', canEdit: false }
-  const p = perms[submodule]
-  if (!p || p.id == null) return { level: 'edit', canEdit: true }
-  const level = (p.access_mode as PermLevel) || 'none'
-  return { level, canEdit: level === 'edit' }
+  return lookupPerm(perms, submodule)
 }
 
 export function ReportingLayout({ children }: { children: React.ReactNode }) {
@@ -44,7 +39,7 @@ export function ReportingLayout({ children }: { children: React.ReactNode }) {
     setUserEmail(user.email)
     setUserName(user.name)
 
-    fetch(`${API}/settings/permissions/${encodeURIComponent(user.email)}`)
+    apiFetch(`/settings/permissions/${encodeURIComponent(user.email)}`)
       .then(r => r.json())
       .then(d => setPerms(d.permissions?.reporting || {}))
       .catch(() => setPerms({}))
@@ -81,7 +76,7 @@ export function ReportingLayout({ children }: { children: React.ReactNode }) {
         </div>
 
         <nav style={{ flex: 1, padding: '10px 8px', overflowY: 'auto' }}>
-          {NAV.map(item => {
+          {NAV.filter(item => lookupPerm(perms, item.submodule).level !== 'none').map(item => {
             const active = path === item.href || path.startsWith(item.href + '/')
             return (
               <button key={item.href} onClick={() => router.push(item.href)} style={btnStyle(active)}>
@@ -115,9 +110,32 @@ export function ReportingLayout({ children }: { children: React.ReactNode }) {
 
       <main style={{ marginLeft: '220px', width: 'calc(100vw - 220px)', background: '#F5F7FA', minHeight: '100vh', overflowX: 'hidden' }}>
         <ReportingPermContext.Provider value={perms}>
-          {children}
+          <ReportingRouteGate perms={perms} path={path}>{children}</ReportingRouteGate>
         </ReportingPermContext.Provider>
       </main>
     </div>
   )
+}
+
+// Belt-and-suspenders guard, same as HRLayout's RouteGate: blocks a page even
+// if it forgot to call useReportingPerm itself, or someone navigates straight to a URL.
+function ReportingRouteGate({ perms, path, children }: { perms: ReportingPerms; path: string; children: React.ReactNode }) {
+  const matched = NAV
+    .filter(item => path === item.href || path.startsWith(item.href + '/'))
+    .sort((a, b) => b.href.length - a.href.length)[0]
+  if (!matched) return <>{children}</>
+  const { level } = lookupPerm(perms, matched.submodule)
+  if (level === 'loading') {
+    return <div style={{ padding: '48px', textAlign: 'center', color: '#C4B5FD', fontSize: '13px' }}>Loading…</div>
+  }
+  if (level === 'none') {
+    return (
+      <div style={{ padding: '48px', textAlign: 'center' }}>
+        <div style={{ fontSize: '32px', marginBottom: '12px' }}>🚫</div>
+        <div style={{ fontSize: '14px', fontWeight: '700', color: '#3F3F3F', marginBottom: '4px' }}>Access Denied</div>
+        <div style={{ fontSize: '12px', color: '#94A3B8' }}>You don't have access to this section. Contact your admin if you believe this is a mistake.</div>
+      </div>
+    )
+  }
+  return <>{children}</>
 }

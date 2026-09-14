@@ -5,6 +5,7 @@ from fastapi import APIRouter, Request, Response, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
 from app.database import get_db
+from app.authz import require_permission
 import httpx, os, re, json
 from datetime import datetime, timedelta
 
@@ -298,7 +299,7 @@ async def teams_webhook(request: Request, db: AsyncSession = Depends(get_db)):
 
 # ─── Manual sync + chat link ────────────────────────────────────────────────────
 @router.post("/tasks/{task_id}/teams/sync")
-async def sync_teams_messages(task_id: str, db: AsyncSession = Depends(get_db)):
+async def sync_teams_messages(task_id: str, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("tasks", "manager", "edit"))):
     t = await db.execute(text("SELECT teams_chat_id FROM tasks WHERE id = CAST(:id AS UUID)"), {"id": task_id})
     row = t.fetchone()
     if not row or not row.teams_chat_id:
@@ -337,7 +338,7 @@ async def sync_teams_messages(task_id: str, db: AsyncSession = Depends(get_db)):
 
 
 @router.get("/tasks/{task_id}/teams")
-async def get_teams_info(task_id: str, db: AsyncSession = Depends(get_db)):
+async def get_teams_info(task_id: str, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("tasks", "manager", "view"))):
     t = await db.execute(text("SELECT teams_chat_id FROM tasks WHERE id = CAST(:id AS UUID)"), {"id": task_id})
     row = t.fetchone()
     if not row or not row.teams_chat_id:

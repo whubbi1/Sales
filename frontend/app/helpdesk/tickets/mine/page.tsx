@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import HelpdeskLayout from '@/components/HelpdeskLayout'
 import { getStoredUser } from '@/lib/auth'
+import { apiFetch } from '@/lib/apiClient'
 const API = 'https://api.whubbi.wcomply.com'
 
 const PRIO_COLOR: Record<string,string> = { critical:'#DC2626', high:'#D97706', medium:'#156082', low:'#45B6E4' }
@@ -35,12 +36,12 @@ export default function MyTicketsPage() {
     const user = getStoredUser()
     if (user) { setUserEmail(user.email); loadTickets(user.email) }
 
-    fetch(`${API}/helpdesk/categories`).then(r=>r.json()).then(d=>setCategories(d.categories||[])).catch(()=>{})
+    apiFetch(`${API}/helpdesk/categories`).then(r=>r.json()).then(d=>setCategories(d.categories||[])).catch(()=>{})
   }, [])
 
   const loadTickets = (email: string) => {
     setLoading(true)
-    fetch(`${API}/helpdesk/tickets?requester_email=${encodeURIComponent(email)}&limit=100`)
+    apiFetch(`${API}/helpdesk/tickets?requester_email=${encodeURIComponent(email)}&limit=100`)
       .then(r => r.json())
       .then(d => setTickets(d.tickets || []))
       .finally(() => setLoading(false))

@@ -2,9 +2,8 @@
 import React, { createContext, useContext, useEffect, useRef, useState } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import { getStoredUser, clearStoredUser } from '@/lib/auth'
+import { apiFetch } from '@/lib/apiClient'
 import { EasyAccessMenu } from '@/components/shared/EasyAccessMenu'
-
-const API = 'https://api.whubbi.wcomply.com'
 
 type PermLevel = 'loading' | 'none' | 'view' | 'edit'
 
@@ -40,7 +39,7 @@ export default function TrainingLayout({ children }: { children: React.ReactNode
     setUserName(user.name || user.email)
     setUserEmail(user.email)
 
-    fetch(`${API}/settings/permissions/${encodeURIComponent(user.email)}`)
+    apiFetch(`/settings/permissions/${encodeURIComponent(user.email)}`)
       .then(r => r.json())
       .then(d => {
         const p = d.permissions?.training?.manager
@@ -51,6 +50,12 @@ export default function TrainingLayout({ children }: { children: React.ReactNode
 
   const handleSignOut = () => { clearStoredUser(); router.push('/auth/login') }
   const isActive = (href: string) => pathname === href || (href !== '/training' && pathname.startsWith(href + '/'))
+
+  // Catalogue browsing is open to every authenticated employee (self-service —
+  // matches the backend's GET /training/catalog, which only requires
+  // require_authenticated, not training.manager). Everything else in this
+  // module (dashboard, plans, assignments, execution) stays manager-only.
+  const isCatalogueRoute = pathname === '/training/catalogue' || pathname.startsWith('/training/catalogue/')
 
   const sidebar = (
     <aside style={{ width: '220px', minHeight: '100vh', background: '#156082', position: 'fixed', left: 0, top: 0, zIndex: 100, display: 'flex', flexDirection: 'column' }}>
@@ -106,7 +111,7 @@ export default function TrainingLayout({ children }: { children: React.ReactNode
     </div>
   )
 
-  if (permLevel === 'none') return (
+  if (permLevel === 'none' && !isCatalogueRoute) return (
     <div style={{ display: 'flex', minHeight: '100vh', fontFamily: 'Montserrat, sans-serif' }}>
       {sidebar}
       <main style={{ marginLeft: '220px', flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#F5F7FA' }}>

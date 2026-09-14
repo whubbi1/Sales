@@ -2,35 +2,28 @@
 import { useRouter, usePathname } from 'next/navigation'
 import { createContext, useContext, useEffect, useRef, useState } from 'react'
 import { getStoredUser, clearStoredUser } from '@/lib/auth'
+import { apiFetch } from '@/lib/apiClient'
+import { lookupPerm, ModulePerms, PermLevel } from '@/lib/permissions'
 import { EasyAccessMenu } from '@/components/shared/EasyAccessMenu'
 
-const API = 'https://api.whubbi.wcomply.com'
-
 const NAV = [
-  { href: '/grc',              icon: '📊', label: 'Dashboard' },
-  { href: '/grc/frameworks',   icon: '📋', label: 'Frameworks' },
-  { href: '/grc/mapping',      icon: '🔗', label: 'Mapping' },
-  { href: '/grc/risks',        icon: '⚠️', label: 'Risk Register' },
-  { href: '/grc/audits',       icon: '🔍', label: 'Audits' },
-  { href: '/grc/access-review', icon: '🔑', label: 'Access Review' },
-  { href: '/grc/tprm',            icon: '🏢', label: 'TPRM' },
-  { href: '/grc/whistleblowing',  icon: '📢', label: 'Whistleblowing & Ethics' },
-  { href: '/grc/data-privacy',    icon: '🔒', label: 'Data & Privacy' },
+  { href: '/grc',              icon: '📊', label: 'Dashboard',    submodule: null as string | null },
+  { href: '/grc/frameworks',   icon: '📋', label: 'Frameworks',   submodule: 'compliance' },
+  { href: '/grc/mapping',      icon: '🔗', label: 'Mapping',      submodule: 'compliance' },
+  { href: '/grc/risks',        icon: '⚠️', label: 'Risk Register', submodule: 'risks' },
+  { href: '/grc/audits',       icon: '🔍', label: 'Audits',       submodule: 'audits' },
+  { href: '/grc/access-review', icon: '🔑', label: 'Access Review', submodule: 'access_review' },
+  { href: '/grc/tprm',            icon: '🏢', label: 'TPRM',              submodule: 'tprm' },
+  { href: '/grc/whistleblowing',  icon: '📢', label: 'Whistleblowing & Ethics', submodule: 'whistleblowing' },
+  { href: '/grc/data-privacy',    icon: '🔒', label: 'Data & Privacy',    submodule: 'ropa' },
 ]
 
-type PermLevel = 'loading' | 'none' | 'view' | 'edit'
-type GRCPerms = Record<string, { access_mode?: string; id?: string | null }> | null
+type GRCPerms = ModulePerms
 const GRCPermContext = createContext<GRCPerms>(null)
 
-// Only the newly-added GRC pages (Access Review, TPRM, Whistleblowing) call this to gate
-// themselves — the pre-existing Dashboard/Frameworks/Mapping/Risks/Audits pages stay ungated.
 export function useGRCPerm(submodule: string): { level: PermLevel; canEdit: boolean } {
   const perms = useContext(GRCPermContext)
-  if (perms === null) return { level: 'loading', canEdit: false }
-  const p = perms[submodule]
-  if (!p || p.id == null) return { level: 'edit', canEdit: true }
-  const level = (p.access_mode as PermLevel) || 'none'
-  return { level, canEdit: level === 'edit' }
+  return lookupPerm(perms, submodule)
 }
 
 export function GRCLayout({ children }: { children: React.ReactNode }) {
@@ -53,7 +46,7 @@ export function GRCLayout({ children }: { children: React.ReactNode }) {
     setUserEmail(user.email)
     setUserName(user.name)
 
-    fetch(`${API}/settings/permissions/${encodeURIComponent(user.email)}`)
+    apiFetch(`/settings/permissions/${encodeURIComponent(user.email)}`)
       .then(r => r.json())
       .then(d => setGrcPerms(d.permissions?.grc || {}))
       .catch(() => setGrcPerms({}))
@@ -90,7 +83,7 @@ export function GRCLayout({ children }: { children: React.ReactNode }) {
         </div>
 
         <nav style={{ flex: 1, padding: '10px 8px', overflowY: 'auto' }}>
-          {NAV.map(item => {
+          {NAV.filter(item => !item.submodule || lookupPerm(grcPerms, item.submodule).level !== 'none').map(item => {
             const active = path === item.href || (item.href !== '/grc' && path.startsWith(item.href))
             return (
               <button key={item.href} onClick={() => router.push(item.href)} style={btnStyle(active)}>
@@ -124,9 +117,32 @@ export function GRCLayout({ children }: { children: React.ReactNode }) {
 
       <main style={{ marginLeft: '220px', width: 'calc(100vw - 220px)', background: '#F5F7FA', minHeight: '100vh', overflowX: 'hidden' }}>
         <GRCPermContext.Provider value={grcPerms}>
-          {children}
+          <GRCRouteGate grcPerms={grcPerms} path={path}>{children}</GRCRouteGate>
         </GRCPermContext.Provider>
       </main>
     </div>
   )
+}
+
+// Belt-and-suspenders guard, same as HRLayout's RouteGate: blocks a page even
+// if it forgot to call useGRCPerm itself, or someone navigates straight to a URL.
+function GRCRouteGate({ grcPerms, path, children }: { grcPerms: GRCPerms; path: string; children: React.ReactNode }) {
+  const matched = NAV
+    .filter(item => item.submodule && (path === item.href || path.startsWith(item.href + '/')))
+    .sort((a, b) => b.href.length - a.href.length)[0]
+  if (!matched) return <>{children}</>
+  const { level } = lookupPerm(grcPerms, matched.submodule!)
+  if (level === 'loading') {
+    return <div style={{ padding: '48px', textAlign: 'center', color: '#45B6E4', fontSize: '13px' }}>Loading…</div>
+  }
+  if (level === 'none') {
+    return (
+      <div style={{ padding: '48px', textAlign: 'center' }}>
+        <div style={{ fontSize: '32px', marginBottom: '12px' }}>🚫</div>
+        <div style={{ fontSize: '14px', fontWeight: '700', color: '#3F3F3F', marginBottom: '4px' }}>Access Denied</div>
+        <div style={{ fontSize: '12px', color: '#94A3B8' }}>You don't have access to this section. Contact your GRC administrator if you believe this is a mistake.</div>
+      </div>
+    )
+  }
+  return <>{children}</>
 }

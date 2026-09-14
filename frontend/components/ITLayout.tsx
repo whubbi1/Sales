@@ -2,28 +2,36 @@
 import React, { createContext, useContext, useEffect, useRef, useState } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import { getStoredUser, clearStoredUser } from '@/lib/auth'
+import { apiFetch } from '@/lib/apiClient'
+import { lookupPerm, ModulePerms, PermLevel } from '@/lib/permissions'
 import { EasyAccessMenu } from '@/components/shared/EasyAccessMenu'
 
-const API = 'https://api.whubbi.wcomply.com'
+type ITPerms = ModulePerms
+const ITPermContext = createContext<ITPerms>(null)
 
-type PermLevel = 'loading' | 'none' | 'view' | 'edit'
+// Submodule granularity, same shape as every other module (HRLayout, GRCLayout,
+// FinanceLayout). Previously this only exposed a single whole-module `canEdit`
+// keyed off the 'assets' submodule alone — callers now pass which submodule
+// they're checking.
+export function useITPerm(submodule: string): { level: PermLevel; canEdit: boolean } {
+  const perms = useContext(ITPermContext)
+  return lookupPerm(perms, submodule)
+}
 
-interface ITPermCtx { canEdit: boolean }
-export const ITPermContext = createContext<ITPermCtx>({ canEdit: false })
-export const useITPerm = () => useContext(ITPermContext)
-
+// equipments/software/applications share the IT 'assets' submodule (matches the
+// previous single whole-module gate); company-links maps to 'infrastructure'.
 const NAV_ITEMS = [
-  { href: '/it/equipments',     label: 'Equipments',     icon: '🖥️' },
-  { href: '/it/software',       label: 'Software',       icon: '💿' },
-  { href: '/it/applications',   label: 'Applications',   icon: '🧩' },
-  { href: '/it/company-links',  label: 'Company Links',  icon: '🔗' },
+  { href: '/it/equipments',     label: 'Equipments',     icon: '🖥️', submodule: 'assets' },
+  { href: '/it/software',       label: 'Software',       icon: '💿', submodule: 'assets' },
+  { href: '/it/applications',   label: 'Applications',   icon: '🧩', submodule: 'assets' },
+  { href: '/it/company-links',  label: 'Company Links',  icon: '🔗', submodule: 'infrastructure' },
 ]
 
 export default function ITLayout({ children }: { children: React.ReactNode }) {
   const router      = useRouter()
   const pathname    = usePathname()
   const redirecting = useRef(false)
-  const [permLevel, setPermLevel] = useState<PermLevel>('loading')
+  const [itPerms, setItPerms]     = useState<ITPerms>(null)
   const [userName,  setUserName]  = useState('')
   const [userEmail, setUserEmail] = useState('')
 
@@ -39,15 +47,16 @@ export default function ITLayout({ children }: { children: React.ReactNode }) {
     setUserName(user.name || user.email)
     setUserEmail(user.email)
 
-    fetch(`${API}/settings/permissions/${encodeURIComponent(user.email)}`)
+    apiFetch(`/settings/permissions/${encodeURIComponent(user.email)}`)
       .then(r => r.json())
-      .then(d => {
-        const p = d.permissions?.it?.assets
-        if (!p || p.id === null) { setPermLevel('edit'); return }
-        setPermLevel((p.access_mode as PermLevel) || 'none')
-      })
-      .catch(() => setPermLevel('edit'))
+      .then(d => setItPerms(d.permissions?.it || {}))
+      .catch(() => setItPerms({}))
   }, [])
+
+  const matched = NAV_ITEMS
+    .filter(item => pathname === item.href || pathname.startsWith(item.href + '/'))
+    .sort((a, b) => b.href.length - a.href.length)[0]
+  const permLevel: PermLevel = matched ? lookupPerm(itPerms, matched.submodule).level : (itPerms === null ? 'loading' : 'edit')
 
   const handleSignOut = () => { clearStoredUser(); router.push('/auth/login') }
   const isActive = (href: string) => pathname === href || pathname.startsWith(href + '/')
@@ -66,7 +75,7 @@ export default function ITLayout({ children }: { children: React.ReactNode }) {
       </div>
 
       <nav style={{ flex: 1, padding: '8px' }}>
-        {NAV_ITEMS.map(item => {
+        {NAV_ITEMS.filter(item => lookupPerm(itPerms, item.submodule).level !== 'none').map(item => {
           const active = isActive(item.href)
           return (
             <button key={item.href} onClick={() => router.push(item.href)}
@@ -123,7 +132,7 @@ export default function ITLayout({ children }: { children: React.ReactNode }) {
   )
 
   return (
-    <ITPermContext.Provider value={{ canEdit: permLevel === 'edit' }}>
+    <ITPermContext.Provider value={itPerms}>
       <div style={{ display: 'flex', minHeight: '100vh', fontFamily: 'Montserrat, sans-serif' }}>
         {sidebar}
         <main style={{ marginLeft: '220px', flex: 1, minHeight: '100vh', background: '#F5F7FA' }}>

@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react'
 import HelpdeskLayout from '@/components/HelpdeskLayout'
 import { API, BTN } from '../constants'
+import { apiFetch } from '@/lib/apiClient'
 
 export default function HelpdeskAdminPage() {
   const [tab, setTab] = useState<'categories'|'groups'|'users'>('categories')
@@ -18,9 +19,9 @@ export default function HelpdeskAdminPage() {
   const load = async () => {
     setLoading(true)
     const [c,g,u] = await Promise.all([
-      fetch(`${API}/helpdesk/categories`).then(r=>r.json()),
-      fetch(`${API}/helpdesk/groups`).then(r=>r.json()),
-      fetch(`${API}/helpdesk/users`).then(r=>r.json()),
+      apiFetch(`${API}/helpdesk/categories`).then(r=>r.json()),
+      apiFetch(`${API}/helpdesk/groups`).then(r=>r.json()),
+      apiFetch(`${API}/helpdesk/users`).then(r=>r.json()),
     ])
     setCategories(c.categories||[]); setGroups(g.groups||[]); setUsers(u.users||[])
     setLoading(false)
@@ -29,33 +30,33 @@ export default function HelpdeskAdminPage() {
 
   const createCategory = async () => {
     if (!newCat.name) return; setSaving(true)
-    await fetch(`${API}/helpdesk/categories`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(newCat)})
+    await apiFetch(`${API}/helpdesk/categories`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(newCat)})
     setNewCat({name:'',description:'',color:'#45B6E4',icon:'🎫',parent_id:'',group_id:''}); setSaving(false); load()
   }
   const assignGroup = async (catId: string, groupId: string) => {
-    await fetch(`${API}/helpdesk/categories/${catId}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({group_id:groupId})})
+    await apiFetch(`${API}/helpdesk/categories/${catId}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({group_id:groupId})})
     load()
   }
   const delCategory = async (id: string) => {
     if (!confirm('Delete?')) return
-    await fetch(`${API}/helpdesk/categories/${id}`,{method:'DELETE'}); load()
+    await apiFetch(`${API}/helpdesk/categories/${id}`,{method:'DELETE'}); load()
   }
   const createGroup = async () => {
     if (!newGroup.name) return; setSaving(true)
-    await fetch(`${API}/helpdesk/groups`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(newGroup)})
+    await apiFetch(`${API}/helpdesk/groups`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(newGroup)})
     setNewGroup({name:'',description:'',responsible_email:'',responsible_name:''}); setSaving(false); load()
   }
   const addMember = async () => {
     if (!newMember.group_id||!newMember.user_email) return; setSaving(true)
-    await fetch(`${API}/helpdesk/groups/${newMember.group_id}/members`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(newMember)})
+    await apiFetch(`${API}/helpdesk/groups/${newMember.group_id}/members`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(newMember)})
     setNewMember({group_id:'',user_email:'',user_name:'',is_responsible:false}); setSaving(false); load()
   }
   const removeMember = async (gid: string, email: string) => {
-    await fetch(`${API}/helpdesk/groups/${gid}/members/${encodeURIComponent(email)}`,{method:'DELETE'}); load()
+    await apiFetch(`${API}/helpdesk/groups/${gid}/members/${encodeURIComponent(email)}`,{method:'DELETE'}); load()
   }
   const upsertUser = async () => {
     if (!newUser.user_email) return; setSaving(true)
-    await fetch(`${API}/helpdesk/users`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(newUser)})
+    await apiFetch(`${API}/helpdesk/users`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(newUser)})
     setNewUser({user_email:'',user_name:'',role:'end_user'}); setSaving(false); load()
   }
 
@@ -228,7 +229,7 @@ export default function HelpdeskAdminPage() {
                         <td style={{ padding:'10px 14px' }}>
                           <select style={{ padding:'4px 8px',borderRadius:'6px',border:'1px solid #45B6E4',fontSize:'11px',fontFamily:'Montserrat, sans-serif' }}
                             value={u.role} onChange={async e=>{
-                              await fetch(`${API}/helpdesk/users`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...u,role:e.target.value})})
+                              await apiFetch(`${API}/helpdesk/users`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...u,role:e.target.value})})
                               load()
                             }}>
                             <option value="end_user">End User</option>

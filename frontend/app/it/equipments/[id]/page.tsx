@@ -59,7 +59,7 @@ function fmtDate(d: string) {
 function EquipmentDetailContent() {
   const { id } = useParams()
   const router = useRouter()
-  const { canEdit } = useITPerm()
+  const { canEdit } = useITPerm('assets')
   const [equipment, setEquipment] = useState<any>(null)
   const [users, setUsers] = useState<any[]>([])
   const [locations, setLocations] = useState<any[]>([])

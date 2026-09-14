@@ -2,41 +2,35 @@
 import React, { createContext, useContext, useEffect, useRef, useState } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import { getStoredUser, clearStoredUser } from '@/lib/auth'
+import { apiFetch } from '@/lib/apiClient'
+import { lookupPerm, ModulePerms, PermLevel } from '@/lib/permissions'
 import { EasyAccessMenu } from '@/components/shared/EasyAccessMenu'
 
-const API = 'https://api.whubbi.wcomply.com'
-
-type PermLevel = 'loading' | 'none' | 'view' | 'edit'
-
-type DevPerms = Record<string, { access_mode?: string; id?: string | null }> | null
+type DevPerms = ModulePerms
 export const DevPermContext = createContext<DevPerms>(null)
 
 // submodule defaults to 'general' so existing call sites (`const {canEdit} = useDevPerm()`)
 // keep working unchanged — Test Plans/Campaigns/Remediation pages pass their own submodule key.
 export function useDevPerm(submodule: string = 'general'): { level: PermLevel; canEdit: boolean } {
   const perms = useContext(DevPermContext)
-  if (perms === null) return { level: 'loading', canEdit: false }
-  const p = perms[submodule]
-  if (!p || p.id == null) return { level: 'edit', canEdit: true }
-  const level = (p.access_mode as PermLevel) || 'none'
-  return { level, canEdit: level === 'edit' }
+  return lookupPerm(perms, submodule)
 }
 
+// Each item maps to one of MODULES['development'] = ['general','test_plans','test_campaigns','remediation'].
 const NAV_ITEMS = [
-  { href: '/development/requests',          label: 'Development Requests', icon: '📋' },
-  { href: '/development/pipeline',          label: 'Development Pipeline', icon: '🔄' },
-  { href: '/development/test-scripts',      label: 'Test Scripts',         icon: '📝' },
-  { href: '/development/test-execution',    label: 'Test Execution',       icon: '▶️' },
-  { href: '/development/test-plans',        label: 'Test Plans',           icon: '📋' },
-  { href: '/development/test-campaigns',    label: 'Test Campaigns',       icon: '🧪' },
-  { href: '/development/remediation-plans', label: 'Remediation Plans',    icon: '🛠️' },
+  { href: '/development/requests',          label: 'Development Requests', icon: '📋', submodule: 'general' },
+  { href: '/development/pipeline',          label: 'Development Pipeline', icon: '🔄', submodule: 'general' },
+  { href: '/development/test-scripts',      label: 'Test Scripts',         icon: '📝', submodule: 'test_plans' },
+  { href: '/development/test-execution',    label: 'Test Execution',       icon: '▶️', submodule: 'test_campaigns' },
+  { href: '/development/test-plans',        label: 'Test Plans',           icon: '📋', submodule: 'test_plans' },
+  { href: '/development/test-campaigns',    label: 'Test Campaigns',       icon: '🧪', submodule: 'test_campaigns' },
+  { href: '/development/remediation-plans', label: 'Remediation Plans',    icon: '🛠️', submodule: 'remediation' },
 ]
 
 export default function DevelopmentLayout({ children }: { children: React.ReactNode }) {
   const router      = useRouter()
   const pathname    = usePathname()
   const redirecting = useRef(false)
-  const [permLevel, setPermLevel] = useState<PermLevel>('loading')
   const [devPerms,  setDevPerms]  = useState<DevPerms>(null)
   const [userName,  setUserName]  = useState('')
   const [userEmail, setUserEmail] = useState('')
@@ -53,20 +47,20 @@ export default function DevelopmentLayout({ children }: { children: React.ReactN
     setUserName(user.name || user.email)
     setUserEmail(user.email)
 
-    fetch(`${API}/settings/permissions/${encodeURIComponent(user.email)}`)
+    apiFetch(`/settings/permissions/${encodeURIComponent(user.email)}`)
       .then(r => r.json())
-      .then(d => {
-        const perms = d.permissions?.development || {}
-        setDevPerms(perms)
-        const p = perms.general
-        if (!p || p.id === null) { setPermLevel('edit'); return }
-        setPermLevel((p.access_mode as PermLevel) || 'none')
-      })
-      .catch(() => { setDevPerms({}); setPermLevel('edit') })
+      .then(d => setDevPerms(d.permissions?.development || {}))
+      .catch(() => setDevPerms({}))
   }, [])
 
   const handleSignOut = () => { clearStoredUser(); router.push('/auth/login') }
   const isActive = (href: string) => pathname === href || pathname.startsWith(href + '/')
+
+  // Which NAV item (and therefore which submodule) the current route belongs to.
+  const matchedNavItem = NAV_ITEMS
+    .filter(item => pathname === item.href || pathname.startsWith(item.href + '/'))
+    .sort((a, b) => b.href.length - a.href.length)[0]
+  const permLevel: PermLevel = matchedNavItem ? lookupPerm(devPerms, matchedNavItem.submodule).level : 'edit'
 
   const sidebar = (
     <aside style={{ width: '220px', minHeight: '100vh', background: '#156082', position: 'fixed', left: 0, top: 0, zIndex: 100, display: 'flex', flexDirection: 'column' }}>
@@ -85,7 +79,7 @@ export default function DevelopmentLayout({ children }: { children: React.ReactN
       </div>
 
       <nav style={{ flex: 1, padding: '8px' }}>
-        {NAV_ITEMS.map(item => {
+        {NAV_ITEMS.filter(item => lookupPerm(devPerms, item.submodule).level !== 'none').map(item => {
           const active = isActive(item.href)
           return (
             <button key={item.href} onClick={() => router.push(item.href)}
@@ -132,7 +126,7 @@ export default function DevelopmentLayout({ children }: { children: React.ReactN
         <div style={{ textAlign: 'center', color: '#94A3B8' }}>
           <div style={{ fontSize: '48px', marginBottom: '16px' }}>🔒</div>
           <h2 style={{ color: '#156082', fontSize: '18px', fontWeight: '800', margin: '0 0 8px' }}>Access Denied</h2>
-          <p style={{ fontSize: '13px', margin: '0 0 20px' }}>You don't have permission to access the Development module.</p>
+          <p style={{ fontSize: '13px', margin: '0 0 20px' }}>You don't have permission to access this section.</p>
           <button onClick={() => router.push('/home')} style={{ padding: '10px 24px', background: '#156082', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontFamily: 'Montserrat, sans-serif', fontWeight: '700', fontSize: '13px' }}>
             Go Home
           </button>

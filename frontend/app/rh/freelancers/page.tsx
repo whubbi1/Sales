@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import { HRLayout } from '@/components/HRLayout'
+import { HRLayout, useHRPerm } from '@/components/HRLayout'
 
 const API = 'https://api.whubbi.wcomply.com'
 const FLAG: Record<string,string> = { france:'🇫🇷', portugal:'🇵🇹', czech_republic:'🇨🇿', romania:'🇷🇴', spain:'🇪🇸' }
@@ -73,6 +73,7 @@ function cellValue(col: string, f: any) {
 
 export default function FreelancersPage() {
   const router = useRouter()
+  const { canEdit } = useHRPerm('freelancers')
   const [freelancers, setFreelancers] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
@@ -159,8 +160,8 @@ export default function FreelancersPage() {
               style={{ background: showCustomize ? '#EFF6FF' : 'white', color:'#156082', border:`1.5px solid ${showCustomize?'#156082':'#EDF2F7'}`, padding:'8px 16px', borderRadius:'8px', fontSize:'12px', fontWeight:'700', cursor:'pointer', fontFamily:'Montserrat, sans-serif' }}>
               ⚙ Columns ({columns.length})
             </button>
-            <button onClick={() => setShowModal(true)}
-              style={{ background:'#156082', color:'white', border:'none', padding:'9px 18px', borderRadius:'8px', fontSize:'12px', fontWeight:'700', cursor:'pointer', fontFamily:'Montserrat, sans-serif' }}>
+            <button onClick={() => canEdit && setShowModal(true)} disabled={!canEdit} title={canEdit ? undefined : 'View-only access'}
+              style={{ background: canEdit?'#156082':'#F1F5F9', color: canEdit?'white':'#45B6E4', border:'none', padding:'9px 18px', borderRadius:'8px', fontSize:'12px', fontWeight:'700', cursor: canEdit?'pointer':'not-allowed', fontFamily:'Montserrat, sans-serif' }}>
               + Add Freelancer
             </button>
           </div>

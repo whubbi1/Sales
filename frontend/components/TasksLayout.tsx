@@ -2,9 +2,8 @@
 import React, { createContext, useContext, useEffect, useRef, useState } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import { getStoredUser, clearStoredUser } from '@/lib/auth'
+import { apiFetch } from '@/lib/apiClient'
 import { EasyAccessMenu } from '@/components/shared/EasyAccessMenu'
-
-const API = 'https://api.whubbi.wcomply.com'
 
 type PermLevel = 'loading' | 'none' | 'view' | 'edit'
 
@@ -38,15 +37,19 @@ export default function TasksLayout({ children }: { children: React.ReactNode })
     setUserName(user.name || user.email)
     setUserEmail(user.email)
 
-    fetch(`${API}/settings/permissions/${encodeURIComponent(user.email)}`)
+    apiFetch(`/settings/permissions/${encodeURIComponent(user.email)}`)
       .then(r => r.json())
       .then(d => {
         const p = d.permissions?.tasks?.manager
-        if (!p || p.id === null) { setPermLevel('edit'); setDataScope('own'); return }
+        // No permission row means NO access, not full access — a missing row used to
+        // default to 'edit' here, which is why revoking Task Manager access never took
+        // effect. Now that the baseline migration guarantees a real row for everyone
+        // who should have access, a missing row genuinely means "not granted".
+        if (!p || p.id == null) { setPermLevel('none'); setDataScope('own'); return }
         setPermLevel((p.access_mode as PermLevel) || 'none')
         setDataScope((p.data_scope as DataScope) || 'own')
       })
-      .catch(() => { setPermLevel('edit'); setDataScope('own') })
+      .catch(() => { setPermLevel('none'); setDataScope('own') })
   }, [])
 
   const handleSignOut = () => { clearStoredUser(); router.push('/auth/login') }

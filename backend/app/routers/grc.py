@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
 from app.database import get_db
+from app.authz import require_permission
 from datetime import datetime
 import uuid
 
@@ -186,7 +187,7 @@ async def get_dashboard(db: AsyncSession = Depends(get_db)):
 
 # ─── Frameworks ───────────────────────────────────────────────────────────────
 @router.get("/frameworks")
-async def list_frameworks(db: AsyncSession = Depends(get_db)):
+async def list_frameworks(db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("grc", "compliance", "view"))):
     await seed_grc(db)
     result = await db.execute(text("""
         SELECT f.*, COUNT(c.id) as total_controls,
@@ -204,7 +205,7 @@ async def list_frameworks(db: AsyncSession = Depends(get_db)):
     return {"frameworks": frameworks}
 
 @router.get("/frameworks/{framework_id}/controls")
-async def get_framework_controls(framework_id: str, db: AsyncSession = Depends(get_db)):
+async def get_framework_controls(framework_id: str, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("grc", "compliance", "view"))):
     result = await db.execute(text("""
         SELECT * FROM grc_controls WHERE framework_id = CAST(:id AS UUID) ORDER BY control_id
     """), {"id": framework_id})
@@ -217,7 +218,7 @@ async def get_framework_controls(framework_id: str, db: AsyncSession = Depends(g
     return {"framework": dict(fw_row._mapping) if fw_row else {}, "controls": controls}
 
 @router.put("/controls/{control_id}")
-async def update_control(control_id: str, data: dict, db: AsyncSession = Depends(get_db)):
+async def update_control(control_id: str, data: dict, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("grc", "compliance", "edit"))):
     await db.execute(text("""
         UPDATE grc_controls SET
             status = COALESCE(:status, status),
@@ -232,7 +233,7 @@ async def update_control(control_id: str, data: dict, db: AsyncSession = Depends
 
 # ─── Risks ────────────────────────────────────────────────────────────────────
 @router.get("/risks")
-async def list_risks(db: AsyncSession = Depends(get_db)):
+async def list_risks(db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("grc", "risks", "view"))):
     result = await db.execute(text("""
         SELECT *, probability * impact as score FROM grc_risks ORDER BY score DESC, created_at DESC
     """))
@@ -242,7 +243,7 @@ async def list_risks(db: AsyncSession = Depends(get_db)):
     return {"risks": risks}
 
 @router.post("/risks")
-async def create_risk(data: dict, db: AsyncSession = Depends(get_db)):
+async def create_risk(data: dict, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("grc", "risks", "edit"))):
     risk_id = str(uuid.uuid4())
     try:
         await db.execute(text("""
@@ -262,7 +263,7 @@ async def create_risk(data: dict, db: AsyncSession = Depends(get_db)):
     return {"status": "ok", "id": risk_id}
 
 @router.put("/risks/{risk_id}")
-async def update_risk(risk_id: str, data: dict, db: AsyncSession = Depends(get_db)):
+async def update_risk(risk_id: str, data: dict, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("grc", "risks", "edit"))):
     await db.execute(text("""
         UPDATE grc_risks SET
             title = COALESCE(:title, title), description = COALESCE(:description, description),
@@ -276,14 +277,14 @@ async def update_risk(risk_id: str, data: dict, db: AsyncSession = Depends(get_d
     return {"status": "ok"}
 
 @router.delete("/risks/{risk_id}")
-async def delete_risk(risk_id: str, db: AsyncSession = Depends(get_db)):
+async def delete_risk(risk_id: str, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("grc", "risks", "edit"))):
     await db.execute(text("DELETE FROM grc_risks WHERE id = CAST(:id AS UUID)"), {"id": risk_id})
     await db.commit()
     return {"status": "ok"}
 
 # ─── Audits ───────────────────────────────────────────────────────────────────
 @router.get("/audits")
-async def list_audits(db: AsyncSession = Depends(get_db)):
+async def list_audits(db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("grc", "audits", "view"))):
     result = await db.execute(text("""
         SELECT a.*, COUNT(f.id) as findings_count
         FROM grc_audits a LEFT JOIN grc_findings f ON f.audit_id = a.id
@@ -295,7 +296,7 @@ async def list_audits(db: AsyncSession = Depends(get_db)):
     return {"audits": audits}
 
 @router.post("/audits")
-async def create_audit(data: dict, db: AsyncSession = Depends(get_db)):
+async def create_audit(data: dict, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("grc", "audits", "edit"))):
     audit_id = str(uuid.uuid4())
     await db.execute(text("""
         INSERT INTO grc_audits (id, title, audit_type, status, start_date, end_date, auditor_name, scope, created_at, updated_at)
@@ -310,14 +311,14 @@ async def create_audit(data: dict, db: AsyncSession = Depends(get_db)):
     return {"status": "ok", "id": audit_id}
 
 @router.get("/audits/{audit_id}")
-async def get_audit(audit_id: str, db: AsyncSession = Depends(get_db)):
+async def get_audit(audit_id: str, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("grc", "audits", "view"))):
     audit = await db.execute(text("SELECT * FROM grc_audits WHERE id = CAST(:id AS UUID)"), {"id": audit_id})
     findings = await db.execute(text("SELECT * FROM grc_findings WHERE audit_id = CAST(:id AS UUID) ORDER BY created_at DESC"), {"id": audit_id})
     audit_row = audit.fetchone()
     return {"audit": dict(audit_row._mapping) if audit_row else {}, "findings": [dict(r._mapping) for r in findings.fetchall()]}
 
 @router.post("/audits/{audit_id}/findings")
-async def add_finding(audit_id: str, data: dict, db: AsyncSession = Depends(get_db)):
+async def add_finding(audit_id: str, data: dict, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("grc", "audits", "edit"))):
     await db.execute(text("""
         INSERT INTO grc_findings (id, audit_id, title, description, severity, status, corrective_action, owner_email, created_at)
         VALUES (gen_random_uuid(), CAST(:audit_id AS UUID), :title, :description, :severity, 'open', :corrective_action, :owner_email, NOW())

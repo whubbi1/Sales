@@ -3,6 +3,7 @@ import { useRouter, useParams } from 'next/navigation'
 import { useState, useEffect } from 'react'
 import HelpdeskLayout from '@/components/HelpdeskLayout'
 import { API, STATUS_STYLE, PRIORITY_STYLE, BTN } from '../../constants'
+import { apiFetch } from '@/lib/apiClient'
 
 function EditableField({ label, display, editing, onStartEdit, children }: any) {
   return (
@@ -52,10 +53,10 @@ export default function TicketDetailPage() {
 
   const load = async () => {
     const [tr, gr, ti, cr] = await Promise.all([
-      fetch(`${API}/helpdesk/tickets/${id}`).then(r => r.json()),
-      fetch(`${API}/helpdesk/groups`).then(r => r.json()),
-      fetch(`${API}/helpdesk/tickets/${id}/teams`).then(r => r.json()).catch(() => ({has_chat:false})),
-      fetch(`${API}/helpdesk/categories`).then(r => r.json()).catch(() => ({categories:[]})),
+      apiFetch(`${API}/helpdesk/tickets/${id}`).then(r => r.json()),
+      apiFetch(`${API}/helpdesk/groups`).then(r => r.json()),
+      apiFetch(`${API}/helpdesk/tickets/${id}/teams`).then(r => r.json()).catch(() => ({has_chat:false})),
+      apiFetch(`${API}/helpdesk/categories`).then(r => r.json()).catch(() => ({categories:[]})),
     ])
     setTicket(tr.ticket)
     setComments(tr.comments || [])
@@ -81,7 +82,7 @@ export default function TicketDetailPage() {
   const addComment = async () => {
     if (!comment.trim()) return
     setSubmitting(true)
-    await fetch(`${API}/helpdesk/tickets/${id}/comments`, {
+    await apiFetch(`${API}/helpdesk/tickets/${id}/comments`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ content: comment, is_internal: isInternal, author_email: 'admin@wcomply.com', author_name: 'Admin' })
     })
@@ -104,7 +105,7 @@ export default function TicketDetailPage() {
     setEf(payload)
     let r: Response
     try {
-      r = await fetch(`${API}/helpdesk/tickets/${id}`, {
+      r = await apiFetch(`${API}/helpdesk/tickets/${id}`, {
         method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
       })
     } catch {
@@ -141,7 +142,7 @@ export default function TicketDetailPage() {
 
   const syncTeams = async () => {
     setSyncing(true)
-    const r = await fetch(`${API}/helpdesk/tickets/${id}/teams/sync`, { method: 'POST' })
+    const r = await apiFetch(`${API}/helpdesk/tickets/${id}/teams/sync`, { method: 'POST' })
     const d = await r.json()
     setSyncing(false)
     if (d.status === 'ok') {

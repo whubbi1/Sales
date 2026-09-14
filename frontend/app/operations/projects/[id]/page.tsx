@@ -4,6 +4,7 @@ import { useParams, useRouter } from 'next/navigation'
 import { OperationsLayout, useOperationsPerm } from '@/components/OperationsLayout'
 import { projectsAPI, taskManagerAPI, contactsAPI, legalAPI, partnersAPI } from '@/lib/api'
 import { getStoredUser } from '@/lib/auth'
+import { apiFetch } from '@/lib/apiClient'
 import { PropertyRow, SidebarSection, SidebarCard, TabNav } from '@/components/shared/RecordLayout'
 import { TaskModal } from '@/components/tasks/TaskModal'
 import { ProjectStaffingSheet } from '@/components/projects/ProjectStaffingSheet'
@@ -169,7 +170,7 @@ function ProjectDetailContent() {
 
   useEffect(() => { load() }, [id])
   useEffect(() => {
-    fetch(`${API}/settings/users`).then(r => r.json()).then(d => setUsers(d.users || [])).catch(() => {})
+    apiFetch(`${API}/settings/users`).then(r => r.json()).then(d => setUsers(d.users || [])).catch(() => {})
     contactsAPI.list({}).then(setAllContacts).catch(() => {})
     partnersAPI.list({}).then(setAllPartners).catch(() => {})
     legalAPI.getOrgEntities('operational_team').then(d => setOperationalTeams(d.org_entities || [])).catch(() => {})

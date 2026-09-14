@@ -2,6 +2,7 @@
 import { LegalLayout } from '@/components/LegalLayout'
 import { useEffect, useState } from 'react'
 import { getStoredUser } from '@/lib/auth'
+import { apiFetch } from '@/lib/apiClient'
 
 const API = 'https://api.whubbi.wcomply.com'
 const FILTER_KEY = 'legal_template_filters'
@@ -57,12 +58,12 @@ export default function LegalTemplatesPage() {
     const user = getStoredUser()
     if (!user) return
     setCurrentUser({ email: user.email, name: user.name })
-    fetch(`${API}/settings/permissions/${user.email}`)
+    apiFetch(`${API}/settings/permissions/${user.email}`)
       .then(r => r.json())
       .then(d => setCanEdit(d.permissions?.legal?.templates?.access_mode === 'edit'))
       .catch(() => {})
-    fetch(`${API}/legal/entities`).then(r => r.json()).then(d => setEntities(d.entities || []))
-    fetch(`${API}/legal/templates`).then(r => r.json()).then(d => { setTemplates(d.templates || []); setLoading(false) }).catch(() => setLoading(false))
+    apiFetch(`${API}/legal/entities`).then(r => r.json()).then(d => setEntities(d.entities || []))
+    apiFetch(`${API}/legal/templates`).then(r => r.json()).then(d => { setTemplates(d.templates || []); setLoading(false) }).catch(() => setLoading(false))
   }, [])
 
   const updateFilter = (key: string, value: string) => {
@@ -77,7 +78,7 @@ export default function LegalTemplatesPage() {
   }
 
   const reload = () =>
-    fetch(`${API}/legal/templates`).then(r => r.json()).then(d => setTemplates(d.templates || []))
+    apiFetch(`${API}/legal/templates`).then(r => r.json()).then(d => setTemplates(d.templates || []))
 
   const saveTemplate = async () => {
     setSaving(true)
@@ -89,7 +90,7 @@ export default function LegalTemplatesPage() {
 
   const deleteTemplate = async (id: string) => {
     if (!confirm('Delete this template?')) return
-    await fetch(`${API}/legal/templates/${id}`, { method: 'DELETE' })
+    await apiFetch(`${API}/legal/templates/${id}`, { method: 'DELETE' })
     reload()
   }
 

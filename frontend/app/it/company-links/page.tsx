@@ -137,7 +137,7 @@ function EditableLocation({ item, locations, editing, onStartEdit, onSave }: any
 }
 
 function CompanyLinksContent() {
-  const { canEdit } = useITPerm()
+  const { canEdit } = useITPerm('infrastructure')
   const [links, setLinks] = useState<any[]>([])
   const [locations, setLocations] = useState<any[]>([])
   const [loading, setLoading] = useState(true)

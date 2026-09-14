@@ -2,6 +2,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { LegalLayout } from '@/components/LegalLayout'
 import { getStoredUser } from '@/lib/auth'
+import { apiFetch } from '@/lib/apiClient'
 
 const API = 'https://api.whubbi.wcomply.com'
 const CODE_RE = /^[A-Za-z0-9]{5}$/
@@ -90,11 +91,11 @@ export default function LegalLocationsPage() {
 
   const load = () => {
     setLoading(true)
-    fetch(`${API}/legal/locations`).then(r => r.json()).then(d => setLocations(d.locations || [])).finally(() => setLoading(false))
+    apiFetch(`${API}/legal/locations`).then(r => r.json()).then(d => setLocations(d.locations || [])).finally(() => setLoading(false))
   }
 
   const loadDocTypes = () => {
-    fetch(`${API}/legal/doc-types`).then(r => r.json()).then(d => {
+    apiFetch(`${API}/legal/doc-types`).then(r => r.json()).then(d => {
       setDocTypes((d.doc_types || []).map((t: any) => ({ value: t.type_key, label: t.label })))
     })
   }
@@ -103,7 +104,7 @@ export default function LegalLocationsPage() {
     const loc = locations.find(l => l.id === id)
     if (!loc) return
     setLocations(prev => prev.map(l => l.id === id ? { ...l, [field]: value } : l))
-    await fetch(`${API}/legal/locations/${id}`, {
+    await apiFetch(`${API}/legal/locations/${id}`, {
       method: 'PUT', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ ...loc, [field]: value, updated_by: userEmail }),
     })
@@ -114,7 +115,7 @@ export default function LegalLocationsPage() {
     const code = newCode.trim().toUpperCase()
     if (code && !CODE_RE.test(code)) { alert('Code must be exactly 5 letters/digits'); return }
     setCreating(true)
-    const r = await fetch(`${API}/legal/locations`, {
+    const r = await apiFetch(`${API}/legal/locations`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ location_name: newName.trim(), country: newCountry, code, created_by: userEmail }),
     })
@@ -135,14 +136,14 @@ export default function LegalLocationsPage() {
     if (!loc) return
     const next = !loc.is_archived
     setLocations(prev => prev.map(l => l.id === id ? { ...l, is_archived: next } : l))
-    await fetch(`${API}/legal/locations/${id}`, {
+    await apiFetch(`${API}/legal/locations/${id}`, {
       method: 'PUT', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ ...loc, is_archived: next, updated_by: userEmail }),
     })
   }
 
   const addReg = async (locId: string) => {
-    const r = await fetch(`${API}/legal/locations/${locId}/registrations`, {
+    const r = await apiFetch(`${API}/legal/locations/${locId}/registrations`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ reg_type: 'SIRET', reg_value: '', created_by: userEmail }),
     })
@@ -156,21 +157,21 @@ export default function LegalLocationsPage() {
     if (!reg) return
     setLocations(prev => prev.map(l => l.id === locId
       ? { ...l, registrations: l.registrations.map((r: any) => r.id === regId ? { ...r, [field]: value } : r) } : l))
-    await fetch(`${API}/legal/locations/${locId}/registrations/${regId}`, {
+    await apiFetch(`${API}/legal/locations/${locId}/registrations/${regId}`, {
       method: 'PUT', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ ...reg, [field]: value }),
     })
   }
 
   const deleteReg = async (locId: string, regId: string) => {
-    await fetch(`${API}/legal/locations/${locId}/registrations/${regId}`, { method: 'DELETE' })
+    await apiFetch(`${API}/legal/locations/${locId}/registrations/${regId}`, { method: 'DELETE' })
     setLocations(prev => prev.map(l => l.id === locId
       ? { ...l, registrations: l.registrations.filter((r: any) => r.id !== regId) } : l))
   }
 
   const addDoc = async (locId: string) => {
     const defaultType = docTypes[0]?.value || 'other'
-    const r = await fetch(`${API}/legal/locations/${locId}/documents`, {
+    const r = await apiFetch(`${API}/legal/locations/${locId}/documents`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ doc_type: defaultType, sharepoint_url: '', created_by: userEmail }),
     })
@@ -184,20 +185,20 @@ export default function LegalLocationsPage() {
     if (!doc) return
     setLocations(prev => prev.map(l => l.id === locId
       ? { ...l, documents: l.documents.map((d: any) => d.id === docId ? { ...d, [field]: value } : d) } : l))
-    await fetch(`${API}/legal/locations/${locId}/documents/${docId}`, {
+    await apiFetch(`${API}/legal/locations/${locId}/documents/${docId}`, {
       method: 'PUT', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ ...doc, [field]: value }),
     })
   }
 
   const deleteDoc = async (locId: string, docId: string) => {
-    await fetch(`${API}/legal/locations/${locId}/documents/${docId}`, { method: 'DELETE' })
+    await apiFetch(`${API}/legal/locations/${locId}/documents/${docId}`, { method: 'DELETE' })
     setLocations(prev => prev.map(l => l.id === locId
       ? { ...l, documents: l.documents.filter((d: any) => d.id !== docId) } : l))
   }
 
   const addWeb = async (locId: string) => {
-    const r = await fetch(`${API}/legal/locations/${locId}/websites`, {
+    const r = await apiFetch(`${API}/legal/locations/${locId}/websites`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ label: 'Website', url: '', created_by: userEmail }),
     })
@@ -211,14 +212,14 @@ export default function LegalLocationsPage() {
     if (!web) return
     setLocations(prev => prev.map(l => l.id === locId
       ? { ...l, websites: l.websites.map((w: any) => w.id === webId ? { ...w, [field]: value } : w) } : l))
-    await fetch(`${API}/legal/locations/${locId}/websites/${webId}`, {
+    await apiFetch(`${API}/legal/locations/${locId}/websites/${webId}`, {
       method: 'PUT', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ ...web, [field]: value }),
     })
   }
 
   const deleteWeb = async (locId: string, webId: string) => {
-    await fetch(`${API}/legal/locations/${locId}/websites/${webId}`, { method: 'DELETE' })
+    await apiFetch(`${API}/legal/locations/${locId}/websites/${webId}`, { method: 'DELETE' })
     setLocations(prev => prev.map(l => l.id === locId
       ? { ...l, websites: l.websites.filter((w: any) => w.id !== webId) } : l))
   }

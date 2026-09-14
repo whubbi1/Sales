@@ -10,6 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
 from app.database import get_db
+from app.authz import require_permission, require_self_or_permission, get_current_user_email
 import httpx
 import os
 import asyncio
@@ -107,7 +108,7 @@ async def _log_sync(db: AsyncSession, sync_type: str, status: str, items_synced:
 # ─── Status / connection health ───────────────────────────────────────────────
 
 @router.get("/status")
-async def get_status(db: AsyncSession = Depends(get_db)):
+async def get_status(db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("hr", "payfit", "view"))):
     configured = bool(API_KEY)
     company = None
     error = None
@@ -165,7 +166,7 @@ async def _test_call(method: str, path: str, label: str) -> dict:
 
 
 @router.get("/test/{resource}")
-async def test_resource(resource: str, collaborator_id: str = None, db: AsyncSession = Depends(get_db)):
+async def test_resource(resource: str, collaborator_id: str = None, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("hr", "payfit", "edit"))):
     if resource not in TEST_RESOURCES:
         raise HTTPException(status_code=400, detail=f"resource must be one of {sorted(TEST_RESOURCES)}")
     if not API_KEY:
@@ -211,7 +212,7 @@ async def test_resource(resource: str, collaborator_id: str = None, db: AsyncSes
 # ─── Collaborators (read + create only — no update endpoint on PayFit's side) ─────
 
 @router.post("/sync/collaborators")
-async def sync_collaborators(triggered_by: str = "manual", db: AsyncSession = Depends(get_db)):
+async def sync_collaborators(triggered_by: str = "manual", db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("hr", "payfit", "edit"))):
     try:
         collaborators = await _fetch_all_pages(_company_path("/collaborators"), "collaborators")
         count = 0
@@ -255,7 +256,7 @@ async def sync_collaborators(triggered_by: str = "manual", db: AsyncSession = De
 
 
 @router.get("/collaborators")
-async def list_collaborators(search: str = None, db: AsyncSession = Depends(get_db)):
+async def list_collaborators(search: str = None, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("hr", "payfit", "view"))):
     where = "WHERE pc.first_name ILIKE :q OR pc.last_name ILIKE :q OR pc.email ILIKE :q" if search else ""
     params = {"q": f"%{search}%"} if search else {}
     r = await db.execute(text(f"""
@@ -270,7 +271,7 @@ async def list_collaborators(search: str = None, db: AsyncSession = Depends(get_
 
 
 @router.put("/collaborators/{collaborator_id}/link")
-async def link_collaborator(collaborator_id: str, data: dict, db: AsyncSession = Depends(get_db)):
+async def link_collaborator(collaborator_id: str, data: dict, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("hr", "payfit", "edit"))):
     """Manually associate a synced PayFit collaborator with a WHUBBI user email."""
     await db.execute(text("""
         UPDATE payfit_collaborators SET whubbi_user_email = :email WHERE id = CAST(:id AS UUID)
@@ -310,7 +311,7 @@ async def _resolve_contract(payfit_id: str) -> dict:
 
 
 @router.get("/collaborators/{collaborator_id}/contract")
-async def get_collaborator_contract(collaborator_id: str, db: AsyncSession = Depends(get_db)):
+async def get_collaborator_contract(collaborator_id: str, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("hr", "payfit", "view"))):
     """Lazy per-row fetch for the HR PayFit Integration page — contract data is only
     requested when a collaborator's row is actually expanded, not for the whole list at once."""
     r = await db.execute(text("SELECT payfit_id FROM payfit_collaborators WHERE id = CAST(:id AS UUID)"), {"id": collaborator_id})
@@ -321,10 +322,17 @@ async def get_collaborator_contract(collaborator_id: str, db: AsyncSession = Dep
 
 
 @router.get("/my/{email}")
-async def get_my_payfit(email: str, db: AsyncSession = Depends(get_db)):
+async def get_my_payfit(
+    email: str,
+    db: AsyncSession = Depends(get_db),
+    caller: str = Depends(get_current_user_email),
+):
     """Used by the MyWhubbi personal profile PayFit tab. Matched by email — either the
     collaborator's own email as synced from PayFit, or a manually-set whubbi_user_email
-    override (e.g. if the two systems use different addresses for the same person)."""
+    override (e.g. if the two systems use different addresses for the same person).
+    Always allowed for a caller looking at their own record (self-service), otherwise
+    requires HR PayFit view access."""
+    await require_self_or_permission(email, caller, "hr", "payfit", db, "view")
     r = await db.execute(text("""
         SELECT pc.id::text, pc.payfit_id, pc.first_name, pc.last_name, pc.email, pc.whubbi_user_email,
                pc.matricule, pc.birth_date, pc.team_name, pc.manager_payfit_id, pc.synced_at,
@@ -352,7 +360,7 @@ async def get_my_payfit(email: str, db: AsyncSession = Depends(get_db)):
 # ─── Absences — the genuinely two-way resource ────────────────────────────────
 
 @router.post("/sync/absences")
-async def sync_absences(triggered_by: str = "manual", db: AsyncSession = Depends(get_db)):
+async def sync_absences(triggered_by: str = "manual", db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("hr", "payfit", "edit"))):
     try:
         absences = await _fetch_all_pages(_company_path("/absences"), "absences")
         count = 0
@@ -393,7 +401,7 @@ async def sync_absences(triggered_by: str = "manual", db: AsyncSession = Depends
 
 
 @router.get("/absences")
-async def list_absences(db: AsyncSession = Depends(get_db)):
+async def list_absences(db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("hr", "payfit", "view"))):
     r = await db.execute(text("""
         SELECT id::text, payfit_id, collaborator_payfit_id, absence_type, start_date, end_date,
                status, source, error_detail, created_by, created_at
@@ -403,7 +411,7 @@ async def list_absences(db: AsyncSession = Depends(get_db)):
 
 
 @router.post("/absences")
-async def create_absence(data: dict, db: AsyncSession = Depends(get_db)):
+async def create_absence(data: dict, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("hr", "payfit", "edit"))):
     """Create an absence in WHUBBI and push it to PayFit. Recorded locally first so a
     push failure is visible (status='error') instead of silently lost."""
     collaborator_id = data.get("collaborator_payfit_id", "")
@@ -457,7 +465,7 @@ async def create_absence(data: dict, db: AsyncSession = Depends(get_db)):
 
 
 @router.delete("/absences/{absence_id}")
-async def cancel_absence(absence_id: str, db: AsyncSession = Depends(get_db)):
+async def cancel_absence(absence_id: str, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("hr", "payfit", "edit"))):
     r = await db.execute(text("SELECT payfit_id FROM payfit_absences WHERE id = CAST(:id AS UUID)"), {"id": absence_id})
     row = r.fetchone()
     if not row:

@@ -1,6 +1,7 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { HRLayout } from '@/components/HRLayout'
+import { apiFetch } from '@/lib/apiClient'
 
 const API = 'https://api.whubbi.wcomply.com'
 
@@ -32,6 +33,7 @@ const HR_SUBMODULE_META: Record<string, { label: string; href: string }> = {
 
 const LEGAL_SUBMODULE_META: Record<string, { label: string; href: string }> = {
   entities:  { label: 'Legal Entities',        href: '/legal/entities' },
+  locations: { label: 'Locations',             href: '/legal/locations' },
   templates: { label: 'Template Documents',    href: '/legal/templates' },
   admin:     { label: 'Legal Admin Cockpit',   href: '/legal/admin' },
 }
@@ -88,26 +90,26 @@ export default function PermissionsPage() {
   const [expandedModules, setExpandedModules] = useState<Record<string, boolean>>({})
 
   const loadUsers = () => {
-    fetch(`${API}/settings/users`).then(r=>r.json()).then(d=>setUsers(d.users||[])).catch(()=>{})
+    apiFetch(`${API}/settings/users`).then(r=>r.json()).then(d=>setUsers(d.users||[])).catch(()=>{})
   }
 
   useEffect(() => {
     loadUsers()
-    fetch(`${API}/legal/locations`).then(r=>r.json()).then(d=>setLocations(d.locations||[])).catch(()=>{})
-    fetch(`${API}/legal/entities`).then(r=>r.json()).then(d=>setCompanies(d.entities||[])).catch(()=>{})
-    fetch(`${API}/legal/org-entities?category=sales_entity`).then(r=>r.json()).then(d=>setSalesOrgs(d.org_entities||[])).catch(()=>{})
-    fetch(`${API}/legal/org-entities?category=purchasing_entity`).then(r=>r.json()).then(d=>setPurchasingOrgs(d.org_entities||[])).catch(()=>{})
-    fetch(`${API}/legal/org-entities?category=operational_team`).then(r=>r.json()).then(d=>setOperationalOrgs(d.org_entities||[])).catch(()=>{})
+    apiFetch(`${API}/legal/locations`).then(r=>r.json()).then(d=>setLocations(d.locations||[])).catch(()=>{})
+    apiFetch(`${API}/legal/entities`).then(r=>r.json()).then(d=>setCompanies(d.entities||[])).catch(()=>{})
+    apiFetch(`${API}/legal/org-entities?category=sales_entity`).then(r=>r.json()).then(d=>setSalesOrgs(d.org_entities||[])).catch(()=>{})
+    apiFetch(`${API}/legal/org-entities?category=purchasing_entity`).then(r=>r.json()).then(d=>setPurchasingOrgs(d.org_entities||[])).catch(()=>{})
+    apiFetch(`${API}/legal/org-entities?category=operational_team`).then(r=>r.json()).then(d=>setOperationalOrgs(d.org_entities||[])).catch(()=>{})
   }, [])
 
   useEffect(() => {
     if (selectedUser) {
       loadPermissions(selectedUser)
-      fetch(`${API}/settings/main-location/${encodeURIComponent(selectedUser)}`).then(r=>r.json()).then(d=>{
+      apiFetch(`${API}/settings/main-location/${encodeURIComponent(selectedUser)}`).then(r=>r.json()).then(d=>{
         setMainLocationId(d.main_location_id || '')
         setIsExcluded(!!d.is_excluded)
       }).catch(()=>{ setMainLocationId(''); setIsExcluded(false) })
-      fetch(`${API}/settings/org-assignments/${encodeURIComponent(selectedUser)}`).then(r=>r.json()).then(d=>{
+      apiFetch(`${API}/settings/org-assignments/${encodeURIComponent(selectedUser)}`).then(r=>r.json()).then(d=>{
         setOrgAssignments({ ...EMPTY_ORG_ASSIGNMENTS, ...d })
       }).catch(()=>setOrgAssignments(EMPTY_ORG_ASSIGNMENTS))
     }
@@ -133,7 +135,7 @@ export default function PermissionsPage() {
   const saveOrgAssignments = async () => {
     setOrgAssignmentsSaving(true)
     try {
-      await fetch(`${API}/settings/org-assignments/${encodeURIComponent(selectedUser)}`, {
+      await apiFetch(`${API}/settings/org-assignments/${encodeURIComponent(selectedUser)}`, {
         method: 'PUT', headers: {'Content-Type':'application/json'},
         body: JSON.stringify({ ...orgAssignments, updated_by: 'hr_manager' }),
       })
@@ -151,7 +153,7 @@ export default function PermissionsPage() {
     setMainLocationSaving(true)
     const loc = locations.find(l => l.id === locationId)
     try {
-      await fetch(`${API}/settings/main-location/${encodeURIComponent(selectedUser)}`, {
+      await apiFetch(`${API}/settings/main-location/${encodeURIComponent(selectedUser)}`, {
         method: 'PUT', headers: {'Content-Type':'application/json'},
         body: JSON.stringify({ main_location_id: locationId || null, main_location_name: loc?.location_name || 'All', is_excluded: excluded }),
       })
@@ -163,7 +165,7 @@ export default function PermissionsPage() {
   const loadPermissions = async (email: string) => {
     setLoading(true)
     try {
-      const r = await fetch(`${API}/settings/permissions/${email}`)
+      const r = await apiFetch(`${API}/settings/permissions/${email}`)
       setPermissions(await r.json())
     } catch {}
     setLoading(false)
@@ -199,7 +201,7 @@ export default function PermissionsPage() {
   const savePermissions = async () => {
     setSaving(true)
     try {
-      const r = await fetch(`${API}/settings/permissions/${selectedUser}`, {
+      const r = await apiFetch(`${API}/settings/permissions/${selectedUser}`, {
         method: 'PUT', headers: {'Content-Type':'application/json'},
         body: JSON.stringify({ permissions: permissions.permissions, granted_by: 'hr_manager' })
       })
@@ -241,7 +243,7 @@ export default function PermissionsPage() {
             <p style={{ fontSize:'12px', color:'#45B6E4' }}>Manage user access rights across all modules — HR Manager only</p>
           </div>
           <button
-            onClick={async () => { setSyncing(true); await fetch(`${API}/settings/users`); loadUsers(); setSyncing(false) }}
+            onClick={async () => { setSyncing(true); await apiFetch(`${API}/settings/users`); loadUsers(); setSyncing(false) }}
             disabled={syncing}
             style={{ background:'#156082', color:'white', border:'none', padding:'8px 16px', borderRadius:'8px', fontSize:'12px', fontWeight:'700', cursor: syncing ? 'not-allowed' : 'pointer', fontFamily:'Montserrat, sans-serif', opacity: syncing ? 0.7 : 1 }}>
             {syncing ? '⏳ Syncing...' : '🔄 Sync MS AD Users'}

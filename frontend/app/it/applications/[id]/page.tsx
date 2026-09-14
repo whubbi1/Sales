@@ -59,7 +59,7 @@ function PropertyRow({ label, children }: { label: string; children: React.React
 function ApplicationDetailContent() {
   const { id } = useParams()
   const router = useRouter()
-  const { canEdit } = useITPerm()
+  const { canEdit } = useITPerm('assets')
   const [application, setApplication] = useState<any>(null)
   const [users, setUsers] = useState<any[]>([])
   const [locations, setLocations] = useState<any[]>([])

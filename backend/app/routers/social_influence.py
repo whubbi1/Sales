@@ -24,6 +24,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
 
 from app.database import get_db
+from app.authz import require_permission
 from app.routers.hr import upload_to_s3, s3_ref_to_presigned
 from app.routers.companies import claude_web_search
 from app.routers.outlook import FRONTEND_BASE_URL
@@ -86,7 +87,7 @@ async def _get_source(db: AsyncSession, source_id: str) -> dict | None:
 
 # ─── Sources ─────────────────────────────────────────────────────────────────────
 @router.get("/influence-sources")
-async def list_influence_sources(db: AsyncSession = Depends(get_db)):
+async def list_influence_sources(db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("marketing", "social_media_influence", "view"))):
     r = await db.execute(text("""
         SELECT * FROM influence_sources ORDER BY category NULLS LAST, subtype NULLS LAST, created_at DESC
     """))
@@ -94,7 +95,7 @@ async def list_influence_sources(db: AsyncSession = Depends(get_db)):
 
 
 @router.post("/influence-sources")
-async def create_influence_source(data: dict, db: AsyncSession = Depends(get_db)):
+async def create_influence_source(data: dict, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("marketing", "social_media_influence", "edit"))):
     if not data.get("name") or not data.get("url"):
         raise HTTPException(status_code=400, detail="name and url are required")
     subtype = data.get("subtype") or "other"
@@ -123,6 +124,7 @@ async def upload_influence_source(
     description: str = Form(""), language: str = Form(""), category: str = Form("Other"),
     file: UploadFile = File(...), created_by_email: str = Form(""),
     db: AsyncSession = Depends(get_db),
+    _: str = Depends(require_permission("marketing", "social_media_influence", "edit")),
 ):
     # No check_frequency here — files are static, there's nothing to periodically re-check
     # (see _check_source, which already no-ops for non-'url' sources); always stored 'manual'.
@@ -145,7 +147,7 @@ async def upload_influence_source(
 
 
 @router.post("/influence-sources/{source_id}/file")
-async def replace_influence_source_file(source_id: str, file: UploadFile = File(...), db: AsyncSession = Depends(get_db)):
+async def replace_influence_source_file(source_id: str, file: UploadFile = File(...), db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("marketing", "social_media_influence", "edit"))):
     existing = await _get_source(db, source_id)
     if not existing:
         raise HTTPException(status_code=404, detail="Source not found")
@@ -162,7 +164,7 @@ async def replace_influence_source_file(source_id: str, file: UploadFile = File(
 
 
 @router.get("/influence-sources/{source_id}")
-async def get_influence_source(source_id: str, db: AsyncSession = Depends(get_db)):
+async def get_influence_source(source_id: str, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("marketing", "social_media_influence", "view"))):
     source = await _get_source(db, source_id)
     if not source:
         raise HTTPException(status_code=404, detail="Source not found")
@@ -170,7 +172,7 @@ async def get_influence_source(source_id: str, db: AsyncSession = Depends(get_db
 
 
 @router.put("/influence-sources/{source_id}")
-async def update_influence_source(source_id: str, data: dict, db: AsyncSession = Depends(get_db)):
+async def update_influence_source(source_id: str, data: dict, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("marketing", "social_media_influence", "edit"))):
     existing = await _get_source(db, source_id)
     if not existing:
         raise HTTPException(status_code=404, detail="Source not found")
@@ -205,7 +207,7 @@ async def update_influence_source(source_id: str, data: dict, db: AsyncSession =
 
 
 @router.delete("/influence-sources/{source_id}")
-async def delete_influence_source(source_id: str, db: AsyncSession = Depends(get_db)):
+async def delete_influence_source(source_id: str, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("marketing", "social_media_influence", "edit"))):
     await db.execute(text("DELETE FROM influence_source_updates WHERE source_id = CAST(:id AS UUID)"), {"id": source_id})
     await db.execute(text("DELETE FROM influence_sources WHERE id = CAST(:id AS UUID)"), {"id": source_id})
     await db.commit()
@@ -213,7 +215,7 @@ async def delete_influence_source(source_id: str, db: AsyncSession = Depends(get
 
 
 @router.get("/influence-sources/{source_id}/updates")
-async def list_source_updates(source_id: str, db: AsyncSession = Depends(get_db)):
+async def list_source_updates(source_id: str, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("marketing", "social_media_influence", "view"))):
     r = await db.execute(text("""
         SELECT * FROM influence_source_updates WHERE source_id = CAST(:id AS UUID) ORDER BY checked_at DESC
     """), {"id": source_id})
@@ -268,7 +270,7 @@ async def _check_source(source: dict) -> dict:
 
 
 @router.post("/influence-sources/{source_id}/check")
-async def check_influence_source(source_id: str, db: AsyncSession = Depends(get_db)):
+async def check_influence_source(source_id: str, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("marketing", "social_media_influence", "edit"))):
     source = await _get_source(db, source_id)
     if not source:
         raise HTTPException(status_code=404, detail="Source not found")
@@ -353,7 +355,7 @@ async def _get_valid_mailbox_token(db: AsyncSession, mailbox: dict) -> str:
 
 
 @router.get("/social-influence-mailbox/status")
-async def mailbox_status(db: AsyncSession = Depends(get_db)):
+async def mailbox_status(db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("marketing", "social_media_influence", "view"))):
     mailbox = await _get_mailbox(db)
     if not mailbox:
         return {"connected": False}
@@ -364,6 +366,8 @@ async def mailbox_status(db: AsyncSession = Depends(get_db)):
 
 
 @router.get("/social-influence-mailbox/connect")
+# Left ungated: the browser navigates here as a full-page redirect (not a fetch()
+# call), so no X-User-Email header is available — same as OAuth callback below.
 async def mailbox_connect(mailbox: str, email: str):
     if not MS_CLIENT_ID:
         raise HTTPException(status_code=500, detail="MS_CLIENT_ID not configured")
@@ -399,14 +403,14 @@ async def mailbox_callback(code: str = None, state: str = None, error: str = Non
 
 
 @router.delete("/social-influence-mailbox")
-async def mailbox_disconnect(db: AsyncSession = Depends(get_db)):
+async def mailbox_disconnect(db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("marketing", "social_media_influence", "edit"))):
     await db.execute(text("DELETE FROM social_influence_mailbox"))
     await db.commit()
     return {"status": "ok"}
 
 
 @router.get("/social-influence-mailbox/diagnose")
-async def diagnose_mailbox(address: str = None, db: AsyncSession = Depends(get_db)):
+async def diagnose_mailbox(address: str = None, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("marketing", "social_media_influence", "view"))):
     """Looks the given (or currently connected) mailbox address up directly via Graph's
     app-only client-credentials token (same mechanism settings.py already uses for the WHUBBI
     group lookup) to tell apart 'this address doesn't exist as a Graph user object' from other
@@ -571,7 +575,7 @@ def _normalize_pending(d: dict) -> dict:
 
 
 @router.get("/social-influence-mailbox/pending")
-async def list_pending_emails(db: AsyncSession = Depends(get_db)):
+async def list_pending_emails(db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("marketing", "social_media_influence", "view"))):
     r = await db.execute(text("""
         SELECT * FROM influence_pending_emails WHERE status = 'pending' ORDER BY received_at DESC NULLS LAST, created_at DESC
     """))
@@ -585,7 +589,7 @@ async def _get_pending_email(db: AsyncSession, pending_id: str) -> dict | None:
 
 
 @router.post("/social-influence-mailbox/pending/{pending_id}/reject")
-async def reject_pending_email(pending_id: str, data: dict, db: AsyncSession = Depends(get_db)):
+async def reject_pending_email(pending_id: str, data: dict, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("marketing", "social_media_influence", "edit"))):
     """Rejecting also deletes the source message from the shared mailbox (Graph moves it to
     Deleted Items — recoverable, not a hard delete) so rejected spam doesn't pile up in the
     inbox and get re-staged. Same discipline as accept_pending_email: the slow Graph call runs
@@ -627,7 +631,7 @@ async def reject_pending_email(pending_id: str, data: dict, db: AsyncSession = D
 
 
 @router.post("/social-influence-mailbox/pending/{pending_id}/accept")
-async def accept_pending_email(pending_id: str, data: dict, db: AsyncSession = Depends(get_db)):
+async def accept_pending_email(pending_id: str, data: dict, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("marketing", "social_media_influence", "edit"))):
     """Only on Accept do we touch S3/influence_sources — attachments are re-fetched fresh from
     Graph now (staging only kept metadata) so a rejected/never-reviewed email never costs a
     single byte of attachment storage.
@@ -761,7 +765,7 @@ async def _source_content_blocks(source: dict) -> list[dict]:
 
 
 @router.post("/social-posts/generate")
-async def generate_social_post(data: dict, db: AsyncSession = Depends(get_db)):
+async def generate_social_post(data: dict, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("marketing", "social_media_influence", "edit"))):
     platform = data.get("platform")
     if platform not in PLATFORMS:
         raise HTTPException(status_code=400, detail=f"platform must be one of {sorted(PLATFORMS)}")
@@ -819,13 +823,13 @@ async def generate_social_post(data: dict, db: AsyncSession = Depends(get_db)):
 
 
 @router.get("/social-posts")
-async def list_social_posts(db: AsyncSession = Depends(get_db)):
+async def list_social_posts(db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("marketing", "social_media_influence", "view"))):
     r = await db.execute(text("SELECT * FROM social_posts ORDER BY created_at DESC"))
     return {"posts": [_row(dict(row._mapping)) for row in r.fetchall()]}
 
 
 @router.put("/social-posts/{post_id}")
-async def update_social_post(post_id: str, data: dict, db: AsyncSession = Depends(get_db)):
+async def update_social_post(post_id: str, data: dict, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("marketing", "social_media_influence", "edit"))):
     r = await db.execute(text("SELECT id FROM social_posts WHERE id = CAST(:id AS UUID)"), {"id": post_id})
     if not r.first():
         raise HTTPException(status_code=404, detail="Post not found")
@@ -842,7 +846,7 @@ async def update_social_post(post_id: str, data: dict, db: AsyncSession = Depend
 
 
 @router.delete("/social-posts/{post_id}")
-async def delete_social_post(post_id: str, db: AsyncSession = Depends(get_db)):
+async def delete_social_post(post_id: str, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("marketing", "social_media_influence", "edit"))):
     await db.execute(text("DELETE FROM social_posts WHERE id = CAST(:id AS UUID)"), {"id": post_id})
     await db.commit()
     return {"status": "ok"}

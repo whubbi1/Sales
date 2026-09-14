@@ -3,6 +3,11 @@ from fastapi import APIRouter, Depends, HTTPException, Header
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
 from app.database import get_db
+from app.authz import (
+    get_current_user_email,
+    require_permissions_admin,
+    require_self_or_permissions_admin,
+)
 import httpx
 import os
 import base64
@@ -34,7 +39,7 @@ MODULES = {
     "it":        ["assets", "incidents", "access", "infrastructure"],
     "helpdesk":     ["tickets", "knowledge", "sla", "admin_cockpit"],
     "admin":        ["users", "permissions", "monitoring", "costs"],
-    "legal":        ["entities", "templates", "admin"],
+    "legal":        ["entities", "locations", "templates", "admin"],
     "development":  ["general", "test_plans", "test_campaigns", "remediation"],
     "training":     ["manager"],
     "tasks":        ["manager"],
@@ -235,7 +240,12 @@ async def sync_profile(email: str, db: AsyncSession = Depends(get_db)):
 
 # ─── Permissions ─────────────────────────────────────────────────────────────
 @router.get("/permissions/{email}")
-async def get_permissions(email: str, db: AsyncSession = Depends(get_db)):
+async def get_permissions(
+    email: str,
+    db: AsyncSession = Depends(get_db),
+    caller: str = Depends(get_current_user_email),
+):
+    await require_self_or_permissions_admin(email, caller, db)
     result = await db.execute(
         text("SELECT * FROM whubbi_permissions WHERE user_email = :email ORDER BY module, submodule"),
         {"email": email}
@@ -264,7 +274,12 @@ async def get_permissions(email: str, db: AsyncSession = Depends(get_db)):
 
 
 @router.put("/permissions/{email}")
-async def update_permissions(email: str, data: dict, db: AsyncSession = Depends(get_db)):
+async def update_permissions(
+    email: str,
+    data: dict,
+    db: AsyncSession = Depends(get_db),
+    _admin: str = Depends(require_permissions_admin),
+):
     """Update permissions for a user. Admin only."""
     import json as _json
     granted_by = data.get("granted_by", "admin")
@@ -513,7 +528,12 @@ ORG_ASSIGNMENT_CATEGORIES = ["company_ids", "location_ids", "sales_org_ids", "pu
 
 
 @router.get("/org-assignments/{email}")
-async def get_org_assignments(email: str, db: AsyncSession = Depends(get_db)):
+async def get_org_assignments(
+    email: str,
+    db: AsyncSession = Depends(get_db),
+    caller: str = Depends(get_current_user_email),
+):
+    await require_self_or_permissions_admin(email, caller, db)
     r = await db.execute(text("SELECT * FROM whubbi_org_assignments WHERE user_email = :email"), {"email": email})
     row = r.fetchone()
     if not row:
@@ -530,7 +550,12 @@ async def get_org_assignments(email: str, db: AsyncSession = Depends(get_db)):
 
 
 @router.put("/org-assignments/{email}")
-async def set_org_assignments(email: str, data: dict, db: AsyncSession = Depends(get_db)):
+async def set_org_assignments(
+    email: str,
+    data: dict,
+    db: AsyncSession = Depends(get_db),
+    _admin: str = Depends(require_permissions_admin),
+):
     values = {cat: json.dumps(data.get(cat) or []) for cat in ORG_ASSIGNMENT_CATEGORIES}
     await db.execute(text("""
         INSERT INTO whubbi_org_assignments
@@ -553,7 +578,12 @@ async def set_org_assignments(email: str, data: dict, db: AsyncSession = Depends
 
 # ─── Per-user main location (drives which company links appear on the home page) ─
 @router.get("/main-location/{email}")
-async def get_main_location(email: str, db: AsyncSession = Depends(get_db)):
+async def get_main_location(
+    email: str,
+    db: AsyncSession = Depends(get_db),
+    caller: str = Depends(get_current_user_email),
+):
+    await require_self_or_permissions_admin(email, caller, db)
     r = await db.execute(text("SELECT main_location_id, main_location_name, is_excluded FROM user_profiles WHERE email = :email"), {"email": email})
     row = r.fetchone()
     if not row:
@@ -565,7 +595,12 @@ async def get_main_location(email: str, db: AsyncSession = Depends(get_db)):
     }
 
 @router.put("/main-location/{email}")
-async def set_main_location(email: str, data: dict, db: AsyncSession = Depends(get_db)):
+async def set_main_location(
+    email: str,
+    data: dict,
+    db: AsyncSession = Depends(get_db),
+    _admin: str = Depends(require_permissions_admin),
+):
     location_id = data.get("main_location_id") or ""
     location_name = data.get("main_location_name") or "All"
     is_excluded = bool(data.get("is_excluded", False))

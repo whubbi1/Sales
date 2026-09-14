@@ -2,6 +2,7 @@
 import { useState, useEffect, useRef } from 'react'
 import ProfileLayout from '@/components/ProfileLayout'
 import { getStoredUser } from '@/lib/auth'
+import { apiFetch } from '@/lib/apiClient'
 
 const API = 'https://api.whubbi.wcomply.com'
 
@@ -137,8 +138,8 @@ export default function TrainingPage() {
   const load = async (email: string) => {
     setLoading(true)
     const [pr, tr] = await Promise.all([
-      fetch(`${API}/training/assignments/${encodeURIComponent(email)}`).then(r => r.json()).catch(() => ({ assignments: [] })),
-      fetch(`${API}/training/trainings/${encodeURIComponent(email)}`).then(r => r.json()).catch(() => ({ trainings: [] })),
+      apiFetch(`/training/assignments/${encodeURIComponent(email)}`).then(r => r.json()).catch(() => ({ assignments: [] })),
+      apiFetch(`/training/trainings/${encodeURIComponent(email)}`).then(r => r.json()).catch(() => ({ trainings: [] })),
     ])
     setPlans(pr.assignments || [])
     setTrainings(tr.trainings || [])
@@ -146,7 +147,7 @@ export default function TrainingPage() {
   }
 
   const addTraining = async (form: any) => {
-    await fetch(`${API}/training/trainings/${encodeURIComponent(email)}`, {
+    await apiFetch(`/training/trainings/${encodeURIComponent(email)}`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form),
     })
     setShowAdd(false)
@@ -154,7 +155,7 @@ export default function TrainingPage() {
   }
 
   const patchTraining = async (t: any, fields: any) => {
-    await fetch(`${API}/training/trainings/${encodeURIComponent(email)}/${t.id}`, {
+    await apiFetch(`/training/trainings/${encodeURIComponent(email)}/${t.id}`, {
       method: 'PUT', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ training_date: t.training_date, name: t.name, description: t.description, ...fields }),
     })
@@ -164,14 +165,14 @@ export default function TrainingPage() {
 
   const deleteTraining = async (t: any) => {
     if (!confirm(`Delete "${t.name}"?`)) return
-    await fetch(`${API}/training/trainings/${encodeURIComponent(email)}/${t.id}`, { method: 'DELETE' })
+    await apiFetch(`/training/trainings/${encodeURIComponent(email)}/${t.id}`, { method: 'DELETE' })
     load(email)
   }
 
   const uploadFile = async (t: any, file: File) => {
     const fd = new FormData()
     fd.append('file', file)
-    await fetch(`${API}/training/trainings/${encodeURIComponent(email)}/${t.id}/upload`, { method: 'POST', body: fd })
+    await apiFetch(`/training/trainings/${encodeURIComponent(email)}/${t.id}/upload`, { method: 'POST', body: fd })
     load(email)
   }
 
@@ -180,7 +181,7 @@ export default function TrainingPage() {
     fd.append('completion_date', date)
     fd.append('description', description)
     if (file) fd.append('file', file)
-    await fetch(`${API}/training/assignments/${encodeURIComponent(email)}/${plan.id}/complete`, { method: 'POST', body: fd })
+    await apiFetch(`/training/assignments/${encodeURIComponent(email)}/${plan.id}/complete`, { method: 'POST', body: fd })
     setCompletingPlan(null)
     load(email)
   }

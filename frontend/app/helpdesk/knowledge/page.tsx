@@ -3,6 +3,7 @@ import { useRouter } from 'next/navigation'
 import { useState, useEffect } from 'react'
 import HelpdeskLayout from '@/components/HelpdeskLayout'
 import { API, BTN } from '../constants'
+import { apiFetch } from '@/lib/apiClient'
 
 const CATS = ['IT Infrastructure','SAP / ERP','Access & Security','Software','Hardware','General']
 
@@ -20,21 +21,21 @@ export default function KnowledgePage() {
     setLoading(true)
     const p = new URLSearchParams()
     if (search) p.set('search', search)
-    const r = await fetch(`${API}/helpdesk/knowledge?${p}`)
+    const r = await apiFetch(`${API}/helpdesk/knowledge?${p}`)
     const d = await r.json()
     setArticles(d.articles || []); setLoading(false)
   }
   useEffect(() => { load() }, [search])
 
   const openArticle = async (id: string) => {
-    const r = await fetch(`${API}/helpdesk/knowledge/${id}`)
+    const r = await apiFetch(`${API}/helpdesk/knowledge/${id}`)
     setSelected(await r.json())
   }
 
   const create = async () => {
     if (!form.title || !form.content) return
     setSaving(true)
-    await fetch(`${API}/helpdesk/knowledge`, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(form) })
+    await apiFetch(`${API}/helpdesk/knowledge`, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(form) })
     setSaving(false); setShowNew(false)
     setForm({ title:'',content:'',category:'',tags:'',author_email:'admin@wcomply.com',author_name:'Admin',published:true })
     load()
@@ -42,7 +43,7 @@ export default function KnowledgePage() {
 
   const del = async (id: string) => {
     if (!confirm('Delete this article?')) return
-    await fetch(`${API}/helpdesk/knowledge/${id}`, { method:'DELETE' })
+    await apiFetch(`${API}/helpdesk/knowledge/${id}`, { method:'DELETE' })
     setSelected(null); load()
   }
 

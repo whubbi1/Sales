@@ -2,28 +2,42 @@
 import { useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
 import { getStoredUser } from '@/lib/auth'
+import { apiFetch } from '@/lib/apiClient'
 
 const API = 'https://api.whubbi.wcomply.com'
 const MODULE_LINE_COLOR = '#156082'
 
+// `permModule: null` means the tile is never permission-gated (personal
+// settings — everyone has a profile). Every other tile maps to a key in
+// backend/app/routers/settings.py's MODULES dict; a tile is hidden unless the
+// user has at least one non-'none' submodule grant under that module.
 const MODULES = [
-  { id:'settings', title:'MyWHUBBI', description:'Manage your profile, preferences, notifications and account settings.',           icon:'⚙️', href:'/settings',  color:'#45B6E4', available:true  },
-  { id:'task-manager', title:'Task Manager',    description:'Cross-module workflow tasks, subtasks, delegation and Teams-connected updates.',      icon:'✅', href:'/task-manager', color:'#219BD6', available:true  },
-  { id:'sales',    title:'Sales',            description:'Manage companies, contacts, opportunities and partners. Track your commercial pipeline.',   icon:'💼', href:'/dashboard', color:'#156082', available:true  },
-  { id:'marketing', title:'Marketing',       description:'Events, company website, competitor analysis, social marketing and marketing plans.', icon:'📣', href:'/marketing/events', color:'#e97132', available:true  },
-  { id:'operations', title:'Operations',     description:'Running projects, software licenses, and wcomply resource staffing utilization.',    icon:'🛠️', href:'/operations/projects', color:'#059669', available:true  },
-  { id:'reporting', title:'Reporting & Analytics', description:'Build, share, and chart your own reports across the WHUBBI data model.',       icon:'📊', href:'/reporting/reports', color:'#7C3AED', available:true  },
-  { id:'finance',  title:'Finance',           description:'Supplier contracts, purchase orders and invoice approvals.',              icon:'💰', href:'/finance',   color:'#e97132', available:true  },
-  { id:'legal',       title:'Legal',            description:'Legal entities, template documents and compliance. Manage WCOMPLY legal structure.', icon:'⚖️', href:'/legal',        color:'#1a2744', available:true  },
-  { id:'rh',       title:'Human Resources',   description:'Manage employees, contracts, onboarding and HR processes.',                       icon:'👥', href:'/rh',        color:'#45B6E4', available:true  },
-  { id:'grc',      title:'GRC',               description:'Governance, Risk and Compliance. Manage audits, risks and regulatory frameworks.', icon:'🛡️', href:'/grc',       color:'#7C3AED', available:true  },
-  { id:'it',       title:'IT',                description:'IT asset management, incidents, access control and infrastructure monitoring.',    icon:'🖥️', href:'/it',        color:'#45B6E4', available:true  },
-  { id:'training',    title:'Training',         description:'Training catalogue, function-based plans, assignments and completion follow-up.',    icon:'🎓', href:'/training',    color:'#7C3AED', available:true  },
-  { id:'helpdesk',    title:'Helpdesk',          description:'Support tickets, incident tracking and knowledge base management.',               icon:'🎧', href:'/helpdesk',     color:'#45B6E4', available:true  },
-  { id:'development', title:'Development',      description:'Development requests, pipelines, test plans, campaigns, execution and remediation tracking.', icon:'💻', href:'/development', color:'#156082', available:true  },
-  { id:'admin',    title:'Admin Cockpit',     description:'Service health, cost tracking, error logs and system administration.',             icon:'🔧', href:'/admin',     color:'#45B6E4', available:true  },
+  { id:'settings', title:'MyWHUBBI', description:'Manage your profile, preferences, notifications and account settings.',           icon:'⚙️', href:'/settings',  color:'#45B6E4', available:true, permModule:null as string | null },
+  { id:'task-manager', title:'Task Manager',    description:'Cross-module workflow tasks, subtasks, delegation and Teams-connected updates.',      icon:'✅', href:'/task-manager', color:'#219BD6', available:true, permModule:'tasks' },
+  { id:'sales',    title:'Sales',            description:'Manage companies, contacts, opportunities and partners. Track your commercial pipeline.',   icon:'💼', href:'/dashboard', color:'#156082', available:true, permModule:'sales' },
+  { id:'marketing', title:'Marketing',       description:'Events, company website, competitor analysis, social marketing and marketing plans.', icon:'📣', href:'/marketing/events', color:'#e97132', available:true, permModule:'marketing' },
+  { id:'operations', title:'Operations',     description:'Running projects, software licenses, and wcomply resource staffing utilization.',    icon:'🛠️', href:'/operations/projects', color:'#059669', available:true, permModule:'operations' },
+  { id:'reporting', title:'Reporting & Analytics', description:'Build, share, and chart your own reports across the WHUBBI data model.',       icon:'📊', href:'/reporting/reports', color:'#7C3AED', available:true, permModule:'reporting' },
+  { id:'finance',  title:'Finance',           description:'Supplier contracts, purchase orders and invoice approvals.',              icon:'💰', href:'/finance',   color:'#e97132', available:true, permModule:'finance' },
+  { id:'legal',       title:'Legal',            description:'Legal entities, template documents and compliance. Manage WCOMPLY legal structure.', icon:'⚖️', href:'/legal',        color:'#1a2744', available:true, permModule:'legal' },
+  { id:'rh',       title:'Human Resources',   description:'Manage employees, contracts, onboarding and HR processes.',                       icon:'👥', href:'/rh',        color:'#45B6E4', available:true, permModule:'hr' },
+  { id:'grc',      title:'GRC',               description:'Governance, Risk and Compliance. Manage audits, risks and regulatory frameworks.', icon:'🛡️', href:'/grc',       color:'#7C3AED', available:true, permModule:'grc' },
+  { id:'it',       title:'IT',                description:'IT asset management, incidents, access control and infrastructure monitoring.',    icon:'🖥️', href:'/it',        color:'#45B6E4', available:true, permModule:'it' },
+  { id:'training',    title:'Training',         description:'Training catalogue, function-based plans, assignments and completion follow-up.',    icon:'🎓', href:'/training',    color:'#7C3AED', available:true, permModule:'training' },
+  { id:'helpdesk',    title:'Helpdesk',          description:'Support tickets, incident tracking and knowledge base management.',               icon:'🎧', href:'/helpdesk',     color:'#45B6E4', available:true, permModule:'helpdesk' },
+  { id:'development', title:'Development',      description:'Development requests, pipelines, test plans, campaigns, execution and remediation tracking.', icon:'💻', href:'/development', color:'#156082', available:true, permModule:'development' },
+  { id:'admin',    title:'Admin Cockpit',     description:'Service health, cost tracking, error logs and system administration.',             icon:'🔧', href:'/admin',     color:'#45B6E4', available:true, permModule:'admin' },
 ]
 const DEFAULT_ORDER = MODULES.map(m => m.id)
+
+// True if the user has at least one non-'none' submodule grant anywhere under this module.
+function hasModuleAccess(permsByModule: Record<string, Record<string, { access_mode?: string }>> | null, permModule: string | null): boolean {
+  if (permModule === null) return true
+  if (permsByModule === null) return false // not loaded yet — tile stays hidden until we know
+  const submodules = permsByModule[permModule]
+  if (!submodules) return false
+  return Object.values(submodules).some(p => (p?.access_mode || 'none') !== 'none')
+}
 
 interface CompanyLink { id: string; label: string; url: string; icon: string; location_id: string | null; location_name: string; category: string | null }
 
@@ -35,6 +49,7 @@ export default function HomePage() {
   const [userEmail, setUserEmail] = useState('')
   const [order, setOrder] = useState<string[]>(DEFAULT_ORDER)
   const [dragId, setDragId] = useState<string | null>(null)
+  const [permsByModule, setPermsByModule] = useState<Record<string, Record<string, { access_mode?: string }>> | null>(null)
 
   useEffect(() => {
     fetch(`${API}/health`, { signal: AbortSignal.timeout(5000) })
@@ -57,6 +72,11 @@ export default function HomePage() {
         }
       } catch {}
 
+      apiFetch(`/settings/permissions/${encodeURIComponent(user.email)}`)
+        .then(r => r.json())
+        .then(d => setPermsByModule(d.permissions || {}))
+        .catch(() => setPermsByModule({}))
+
       fetch(`${API}/settings/main-location/${encodeURIComponent(user.email)}`)
         .then(r => r.json())
         .then(loc => {
@@ -73,7 +93,10 @@ export default function HomePage() {
     }
   }, [])
 
-  const orderedModules = order.map(id => MODULES.find(m => m.id === id)).filter((m): m is typeof MODULES[number] => !!m)
+  const orderedModules = order
+    .map(id => MODULES.find(m => m.id === id))
+    .filter((m): m is typeof MODULES[number] => !!m)
+    .filter(m => hasModuleAccess(permsByModule, m.permModule))
 
   const LINK_CATEGORY_ORDER = ['WCOMPLY Internal Tools', 'Partner Portals', 'Other']
   const linkGroups = LINK_CATEGORY_ORDER
@@ -149,6 +172,9 @@ export default function HomePage() {
         {/* Modules grid */}
         <div>
           <p style={{ fontSize:'11px', color:'#94A3B8', margin:'0 0 10px' }}>Drag a tile to reorder your modules.</p>
+          {permsByModule === null ? (
+            <div style={{ padding:'48px', textAlign:'center', color:'#94A3B8', fontSize:'12px' }}>Loading your modules…</div>
+          ) : (
           <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:'18px' }}>
             {orderedModules.map(mod => (
               <div key={mod.id} onClick={() => mod.available && router.push(mod.href)}
@@ -172,6 +198,7 @@ export default function HomePage() {
               </div>
             ))}
           </div>
+          )}
         </div>
       </div>
     </div>

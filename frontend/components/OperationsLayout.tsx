@@ -2,29 +2,24 @@
 import { useRouter, usePathname } from 'next/navigation'
 import { createContext, useContext, useEffect, useRef, useState } from 'react'
 import { getStoredUser, clearStoredUser } from '@/lib/auth'
+import { apiFetch } from '@/lib/apiClient'
+import { lookupPerm, ModulePerms, PermLevel } from '@/lib/permissions'
 import { EasyAccessMenu } from '@/components/shared/EasyAccessMenu'
 
-const API = 'https://api.whubbi.wcomply.com'
-
 const NAV = [
-  { href: '/operations/projects', icon: '📁', label: 'Projects' },
-  { href: '/operations/internal-projects', icon: '🏠', label: 'Internal Projects' },
-  { href: '/operations/licenses', icon: '🔑', label: 'Licenses' },
-  { href: '/operations/staffing', icon: '👥', label: 'Staffing' },
-  { href: '/operations/timesheets', icon: '🕒', label: 'Timesheets' },
+  { href: '/operations/projects', icon: '📁', label: 'Projects', submodule: 'projects' },
+  { href: '/operations/internal-projects', icon: '🏠', label: 'Internal Projects', submodule: 'internal_projects' },
+  { href: '/operations/licenses', icon: '🔑', label: 'Licenses', submodule: 'licenses' },
+  { href: '/operations/staffing', icon: '👥', label: 'Staffing', submodule: 'staffing' },
+  { href: '/operations/timesheets', icon: '🕒', label: 'Timesheets', submodule: 'timesheets' },
 ]
 
-type PermLevel = 'loading' | 'none' | 'view' | 'edit'
-type OperationsPerms = Record<string, { access_mode?: string; id?: string | null }> | null
+type OperationsPerms = ModulePerms
 const OperationsPermContext = createContext<OperationsPerms>(null)
 
 export function useOperationsPerm(submodule: string): { level: PermLevel; canEdit: boolean } {
   const perms = useContext(OperationsPermContext)
-  if (perms === null) return { level: 'loading', canEdit: false }
-  const p = perms[submodule]
-  if (!p || p.id == null) return { level: 'edit', canEdit: true }
-  const level = (p.access_mode as PermLevel) || 'none'
-  return { level, canEdit: level === 'edit' }
+  return lookupPerm(perms, submodule)
 }
 
 export function OperationsLayout({ children }: { children: React.ReactNode }) {
@@ -47,7 +42,7 @@ export function OperationsLayout({ children }: { children: React.ReactNode }) {
     setUserEmail(user.email)
     setUserName(user.name)
 
-    fetch(`${API}/settings/permissions/${encodeURIComponent(user.email)}`)
+    apiFetch(`/settings/permissions/${encodeURIComponent(user.email)}`)
       .then(r => r.json())
       .then(d => setPerms(d.permissions?.operations || {}))
       .catch(() => setPerms({}))
@@ -84,7 +79,7 @@ export function OperationsLayout({ children }: { children: React.ReactNode }) {
         </div>
 
         <nav style={{ flex: 1, padding: '10px 8px', overflowY: 'auto' }}>
-          {NAV.map(item => {
+          {NAV.filter(item => lookupPerm(perms, item.submodule).level !== 'none').map(item => {
             const active = path === item.href || path.startsWith(item.href + '/')
             return (
               <button key={item.href} onClick={() => router.push(item.href)} style={btnStyle(active)}>
@@ -118,9 +113,30 @@ export function OperationsLayout({ children }: { children: React.ReactNode }) {
 
       <main style={{ marginLeft: '220px', width: 'calc(100vw - 220px)', background: '#F5F7FA', minHeight: '100vh', overflowX: 'hidden' }}>
         <OperationsPermContext.Provider value={perms}>
-          {children}
+          <OperationsRouteGate perms={perms} path={path}>{children}</OperationsRouteGate>
         </OperationsPermContext.Provider>
       </main>
     </div>
   )
+}
+
+function OperationsRouteGate({ perms, path, children }: { perms: OperationsPerms; path: string; children: React.ReactNode }) {
+  const matched = NAV
+    .filter(item => path === item.href || path.startsWith(item.href + '/'))
+    .sort((a, b) => b.href.length - a.href.length)[0]
+  if (!matched) return <>{children}</>
+  const { level } = lookupPerm(perms, matched.submodule)
+  if (level === 'loading') {
+    return <div style={{ padding: '48px', textAlign: 'center', color: '#45B6E4', fontSize: '13px' }}>Loading…</div>
+  }
+  if (level === 'none') {
+    return (
+      <div style={{ padding: '48px', textAlign: 'center' }}>
+        <div style={{ fontSize: '32px', marginBottom: '12px' }}>🚫</div>
+        <div style={{ fontSize: '14px', fontWeight: '700', color: '#3F3F3F', marginBottom: '4px' }}>Access Denied</div>
+        <div style={{ fontSize: '12px', color: '#94A3B8' }}>You don't have access to this section. Contact your administrator if you believe this is a mistake.</div>
+      </div>
+    )
+  }
+  return <>{children}</>
 }

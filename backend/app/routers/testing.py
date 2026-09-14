@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
 from app.database import get_db
+from app.authz import require_permission
 from datetime import datetime
 import uuid, os, asyncio
 import boto3
@@ -58,7 +59,7 @@ FRONTEND_URL = os.getenv("FRONTEND_URL", "https://app.whubbi.wcomply.com")
 
 # ─── Test Plans ──────────────────────────────────────────────────────────────────
 @router.get("/test-plans")
-async def list_plans(application_id: str = None, search: str = None, db: AsyncSession = Depends(get_db)):
+async def list_plans(application_id: str = None, search: str = None, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("development", "test_plans", "view"))):
     where = ["1=1"]
     params = {}
     if application_id:
@@ -80,7 +81,7 @@ async def list_plans(application_id: str = None, search: str = None, db: AsyncSe
 
 
 @router.post("/test-plans")
-async def create_plan(data: dict, db: AsyncSession = Depends(get_db)):
+async def create_plan(data: dict, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("development", "test_plans", "edit"))):
     if not data.get("title"):
         raise HTTPException(status_code=400, detail="title is required")
     plan_id = str(uuid.uuid4())
@@ -99,7 +100,7 @@ async def create_plan(data: dict, db: AsyncSession = Depends(get_db)):
 
 
 @router.get("/test-plans/{plan_id}")
-async def get_plan(plan_id: str, db: AsyncSession = Depends(get_db)):
+async def get_plan(plan_id: str, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("development", "test_plans", "view"))):
     r = await db.execute(text("""
         SELECT p.*, a.name AS application_name, s.name AS submodule_name
         FROM test_plans p
@@ -117,7 +118,7 @@ async def get_plan(plan_id: str, db: AsyncSession = Depends(get_db)):
 
 
 @router.put("/test-plans/{plan_id}")
-async def update_plan(plan_id: str, data: dict, db: AsyncSession = Depends(get_db)):
+async def update_plan(plan_id: str, data: dict, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("development", "test_plans", "edit"))):
     await db.execute(text("""
         UPDATE test_plans SET
             title = COALESCE(NULLIF(:title,''), title),
@@ -135,7 +136,7 @@ async def update_plan(plan_id: str, data: dict, db: AsyncSession = Depends(get_d
 
 
 @router.delete("/test-plans/{plan_id}")
-async def delete_plan(plan_id: str, db: AsyncSession = Depends(get_db)):
+async def delete_plan(plan_id: str, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("development", "test_plans", "edit"))):
     await db.execute(text("DELETE FROM test_plans WHERE id = CAST(:id AS UUID)"), {"id": plan_id})
     await db.commit()
     return {"status": "ok"}
@@ -143,7 +144,7 @@ async def delete_plan(plan_id: str, db: AsyncSession = Depends(get_db)):
 
 # ─── Test Scripts (= steps, belong to exactly one plan) ─────────────────────────
 @router.post("/test-plans/{plan_id}/scripts")
-async def create_script(plan_id: str, data: dict, db: AsyncSession = Depends(get_db)):
+async def create_script(plan_id: str, data: dict, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("development", "test_plans", "edit"))):
     if not data.get("title"):
         raise HTTPException(status_code=400, detail="title is required")
     r = await db.execute(text("SELECT COUNT(*) FROM test_plan_scripts WHERE plan_id = CAST(:id AS UUID)"), {"id": plan_id})
@@ -163,7 +164,7 @@ async def create_script(plan_id: str, data: dict, db: AsyncSession = Depends(get
 
 
 @router.put("/test-plans/{plan_id}/scripts/{script_id}")
-async def update_script(plan_id: str, script_id: str, data: dict, db: AsyncSession = Depends(get_db)):
+async def update_script(plan_id: str, script_id: str, data: dict, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("development", "test_plans", "edit"))):
     await db.execute(text("""
         UPDATE test_plan_scripts SET
             title = COALESCE(NULLIF(:title,''), title),
@@ -179,7 +180,7 @@ async def update_script(plan_id: str, script_id: str, data: dict, db: AsyncSessi
 
 
 @router.delete("/test-plans/{plan_id}/scripts/{script_id}")
-async def delete_script(plan_id: str, script_id: str, db: AsyncSession = Depends(get_db)):
+async def delete_script(plan_id: str, script_id: str, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("development", "test_plans", "edit"))):
     await db.execute(text("DELETE FROM test_plan_scripts WHERE id = CAST(:id AS UUID) AND plan_id = CAST(:plan_id AS UUID)"), {"id": script_id, "plan_id": plan_id})
     await db.commit()
     return {"status": "ok"}
@@ -202,7 +203,7 @@ async def _campaign_task(db: AsyncSession, campaign: dict, role_label: str, owne
 
 
 @router.get("/test-campaigns")
-async def list_campaigns(status: str = None, db: AsyncSession = Depends(get_db)):
+async def list_campaigns(status: str = None, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("development", "test_campaigns", "view"))):
     where = ["1=1"]
     params = {}
     if status:
@@ -218,7 +219,7 @@ async def list_campaigns(status: str = None, db: AsyncSession = Depends(get_db))
 
 
 @router.post("/test-campaigns")
-async def create_campaign(data: dict, db: AsyncSession = Depends(get_db)):
+async def create_campaign(data: dict, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("development", "test_campaigns", "edit"))):
     if not data.get("title"):
         raise HTTPException(status_code=400, detail="title is required")
     plan_ids = data.get("plan_ids") or []
@@ -274,7 +275,7 @@ async def _get_campaign(db: AsyncSession, campaign_id: str) -> dict | None:
 
 
 @router.get("/test-campaigns/{campaign_id}")
-async def get_campaign(campaign_id: str, db: AsyncSession = Depends(get_db)):
+async def get_campaign(campaign_id: str, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("development", "test_campaigns", "view"))):
     campaign = await _get_campaign(db, campaign_id)
     if not campaign:
         raise HTTPException(status_code=404, detail="Test campaign not found")
@@ -292,7 +293,7 @@ async def get_campaign(campaign_id: str, db: AsyncSession = Depends(get_db)):
 
 
 @router.put("/test-campaigns/{campaign_id}")
-async def update_campaign(campaign_id: str, data: dict, db: AsyncSession = Depends(get_db)):
+async def update_campaign(campaign_id: str, data: dict, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("development", "test_campaigns", "edit"))):
     campaign = await _get_campaign(db, campaign_id)
     if not campaign:
         raise HTTPException(status_code=404, detail="Test campaign not found")
@@ -325,7 +326,7 @@ async def update_campaign(campaign_id: str, data: dict, db: AsyncSession = Depen
 
 # ─── Execution — steps displayed one by one, executor records result/deviation/remediation ─
 @router.put("/test-campaigns/{campaign_id}/steps/{step_id}/execute")
-async def execute_step(campaign_id: str, step_id: str, data: dict, db: AsyncSession = Depends(get_db)):
+async def execute_step(campaign_id: str, step_id: str, data: dict, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("development", "test_campaigns", "edit"))):
     campaign = await _get_campaign(db, campaign_id)
     if not campaign:
         raise HTTPException(status_code=404, detail="Test campaign not found")
@@ -354,7 +355,7 @@ async def execute_step(campaign_id: str, step_id: str, data: dict, db: AsyncSess
 
 
 @router.post("/test-campaigns/{campaign_id}/steps/{step_id}/screenshot")
-async def upload_step_screenshot(campaign_id: str, step_id: str, file: UploadFile = File(...), db: AsyncSession = Depends(get_db)):
+async def upload_step_screenshot(campaign_id: str, step_id: str, file: UploadFile = File(...), db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("development", "test_campaigns", "edit"))):
     content = await file.read()
     key = f"development/{campaign_id}/{step_id}/{file.filename}"
     ref = await upload_to_s3(key, content, file.content_type or "application/octet-stream")
@@ -368,7 +369,7 @@ async def upload_step_screenshot(campaign_id: str, step_id: str, file: UploadFil
 
 # ─── Review — reviewer refines deviation/remediation, sets criticality ──────────
 @router.put("/test-campaigns/{campaign_id}/steps/{step_id}/review")
-async def review_step(campaign_id: str, step_id: str, data: dict, db: AsyncSession = Depends(get_db)):
+async def review_step(campaign_id: str, step_id: str, data: dict, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("development", "test_campaigns", "edit"))):
     campaign = await _get_campaign(db, campaign_id)
     if not campaign:
         raise HTTPException(status_code=404, detail="Test campaign not found")
@@ -392,7 +393,7 @@ async def review_step(campaign_id: str, step_id: str, data: dict, db: AsyncSessi
 
 
 @router.post("/test-campaigns/{campaign_id}/complete-review")
-async def complete_review(campaign_id: str, data: dict, db: AsyncSession = Depends(get_db)):
+async def complete_review(campaign_id: str, data: dict, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("development", "test_campaigns", "edit"))):
     campaign = await _get_campaign(db, campaign_id)
     if not campaign:
         raise HTTPException(status_code=404, detail="Test campaign not found")
@@ -458,7 +459,7 @@ async def _remediation_task(db: AsyncSession, title: str, url_path: str, entity_
 
 
 @router.get("/remediation-plans")
-async def list_remediation_plans(status: str = None, db: AsyncSession = Depends(get_db)):
+async def list_remediation_plans(status: str = None, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("development", "remediation", "view"))):
     where = ["1=1"]
     params = {}
     if status:
@@ -477,7 +478,7 @@ async def list_remediation_plans(status: str = None, db: AsyncSession = Depends(
 
 
 @router.get("/remediation-plans/{plan_id}")
-async def get_remediation_plan(plan_id: str, db: AsyncSession = Depends(get_db)):
+async def get_remediation_plan(plan_id: str, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("development", "remediation", "view"))):
     r = await db.execute(text("""
         SELECT rp.*, c.title AS campaign_title, c.campaign_number FROM remediation_plans rp
         JOIN test_campaigns c ON c.id = rp.campaign_id WHERE rp.id = CAST(:id AS UUID)
@@ -492,7 +493,7 @@ async def get_remediation_plan(plan_id: str, db: AsyncSession = Depends(get_db))
 
 
 @router.put("/remediation-plans/{plan_id}")
-async def update_remediation_plan(plan_id: str, data: dict, db: AsyncSession = Depends(get_db)):
+async def update_remediation_plan(plan_id: str, data: dict, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("development", "remediation", "edit"))):
     r = await db.execute(text("SELECT * FROM remediation_plans WHERE id = CAST(:id AS UUID)"), {"id": plan_id})
     row = r.fetchone()
     if not row:
@@ -514,7 +515,7 @@ async def update_remediation_plan(plan_id: str, data: dict, db: AsyncSession = D
 
 
 @router.put("/remediation-actions/{action_id}")
-async def update_remediation_action(action_id: str, data: dict, db: AsyncSession = Depends(get_db)):
+async def update_remediation_action(action_id: str, data: dict, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("development", "remediation", "edit"))):
     r = await db.execute(text("SELECT * FROM remediation_actions WHERE id = CAST(:id AS UUID)"), {"id": action_id})
     row = r.fetchone()
     if not row:

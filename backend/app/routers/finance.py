@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
 from app.database import get_db
+from app.authz import require_permission
 from app.services.ids import next_internal_id
 from app.routers.hr import upload_to_s3, s3_ref_to_presigned
 from datetime import date
@@ -40,7 +41,7 @@ SUPPLIER_FIELDS = ["name", "contact_name", "email", "phone", "sector", "country"
 
 
 @router.get("/suppliers")
-async def list_suppliers(search: str = None, db: AsyncSession = Depends(get_db)):
+async def list_suppliers(search: str = None, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("finance", "suppliers", "view"))):
     where, params = "", {}
     if search:
         where = "WHERE name ILIKE :q OR contact_name ILIKE :q"
@@ -50,7 +51,7 @@ async def list_suppliers(search: str = None, db: AsyncSession = Depends(get_db))
 
 
 @router.post("/suppliers")
-async def create_supplier(data: dict, db: AsyncSession = Depends(get_db)):
+async def create_supplier(data: dict, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("finance", "suppliers", "edit"))):
     if not data.get("name"):
         raise HTTPException(status_code=400, detail="name is required")
     supplier_id = str(uuid.uuid4())
@@ -73,7 +74,7 @@ async def create_supplier(data: dict, db: AsyncSession = Depends(get_db)):
 
 
 @router.get("/suppliers/{supplier_id}")
-async def get_supplier(supplier_id: str, db: AsyncSession = Depends(get_db)):
+async def get_supplier(supplier_id: str, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("finance", "suppliers", "view"))):
     r = await db.execute(text("SELECT * FROM finance_suppliers WHERE id = CAST(:id AS UUID)"), {"id": supplier_id})
     row = r.fetchone()
     if not row:
@@ -82,7 +83,7 @@ async def get_supplier(supplier_id: str, db: AsyncSession = Depends(get_db)):
 
 
 @router.put("/suppliers/{supplier_id}")
-async def update_supplier(supplier_id: str, data: dict, db: AsyncSession = Depends(get_db)):
+async def update_supplier(supplier_id: str, data: dict, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("finance", "suppliers", "edit"))):
     existing = await get_supplier(supplier_id, db)
     merged = {**existing, **{k: v for k, v in data.items() if k in SUPPLIER_FIELDS}}
     await db.execute(text("""
@@ -102,7 +103,7 @@ async def update_supplier(supplier_id: str, data: dict, db: AsyncSession = Depen
 
 
 @router.delete("/suppliers/{supplier_id}")
-async def delete_supplier(supplier_id: str, db: AsyncSession = Depends(get_db)):
+async def delete_supplier(supplier_id: str, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("finance", "suppliers", "edit"))):
     await db.execute(text("DELETE FROM finance_suppliers WHERE id = CAST(:id AS UUID)"), {"id": supplier_id})
     await db.commit()
     return {"status": "deleted"}
@@ -118,7 +119,7 @@ _CONTRACT_SELECT = """
 
 
 @router.get("/contracts")
-async def list_contracts(search: str = None, supplier_id: str = None, db: AsyncSession = Depends(get_db)):
+async def list_contracts(search: str = None, supplier_id: str = None, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("finance", "contracts", "view"))):
     where, params = [], {}
     if search:
         where.append("c.contract_name ILIKE :q")
@@ -132,7 +133,7 @@ async def list_contracts(search: str = None, supplier_id: str = None, db: AsyncS
 
 
 @router.post("/contracts")
-async def create_contract(data: dict, db: AsyncSession = Depends(get_db)):
+async def create_contract(data: dict, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("finance", "contracts", "edit"))):
     if not data.get("supplier_id"):
         raise HTTPException(status_code=400, detail="supplier_id is required")
     if not data.get("contract_name"):
@@ -158,7 +159,7 @@ async def create_contract(data: dict, db: AsyncSession = Depends(get_db)):
 
 
 @router.get("/contracts/{contract_id}")
-async def get_contract(contract_id: str, db: AsyncSession = Depends(get_db)):
+async def get_contract(contract_id: str, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("finance", "contracts", "view"))):
     r = await db.execute(text(f"{_CONTRACT_SELECT} WHERE c.id = CAST(:id AS UUID)"), {"id": contract_id})
     row = r.fetchone()
     if not row:
@@ -167,7 +168,7 @@ async def get_contract(contract_id: str, db: AsyncSession = Depends(get_db)):
 
 
 @router.put("/contracts/{contract_id}")
-async def update_contract(contract_id: str, data: dict, db: AsyncSession = Depends(get_db)):
+async def update_contract(contract_id: str, data: dict, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("finance", "contracts", "edit"))):
     existing = await get_contract(contract_id, db)
     merged = {**existing, **{k: v for k, v in data.items() if k in CONTRACT_FIELDS}}
     await db.execute(text("""
@@ -187,7 +188,7 @@ async def update_contract(contract_id: str, data: dict, db: AsyncSession = Depen
 
 
 @router.delete("/contracts/{contract_id}")
-async def delete_contract(contract_id: str, db: AsyncSession = Depends(get_db)):
+async def delete_contract(contract_id: str, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("finance", "contracts", "edit"))):
     await db.execute(text("DELETE FROM finance_contracts WHERE id = CAST(:id AS UUID)"), {"id": contract_id})
     await db.commit()
     return {"status": "deleted"}
@@ -195,7 +196,7 @@ async def delete_contract(contract_id: str, db: AsyncSession = Depends(get_db)):
 
 # ─── Contract Documents (S3-backed attachments) ───────────────────────────────
 @router.get("/contracts/{contract_id}/documents")
-async def list_contract_documents(contract_id: str, db: AsyncSession = Depends(get_db)):
+async def list_contract_documents(contract_id: str, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("finance", "contracts", "view"))):
     r = await db.execute(text("""
         SELECT id, filename, file_url, uploaded_by_email, uploaded_at
         FROM finance_contract_documents WHERE contract_id = CAST(:id AS UUID) ORDER BY uploaded_at DESC
@@ -211,6 +212,7 @@ async def list_contract_documents(contract_id: str, db: AsyncSession = Depends(g
 async def upload_contract_document(
     contract_id: str, file: UploadFile = File(...), uploaded_by_email: str = Form(""),
     db: AsyncSession = Depends(get_db),
+    _: str = Depends(require_permission("finance", "contracts", "edit")),
 ):
     content = await file.read()
     safe_fn = file.filename.replace(" ", "_")
@@ -226,7 +228,7 @@ async def upload_contract_document(
 
 
 @router.delete("/contracts/{contract_id}/documents/{doc_id}")
-async def delete_contract_document(contract_id: str, doc_id: str, db: AsyncSession = Depends(get_db)):
+async def delete_contract_document(contract_id: str, doc_id: str, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("finance", "contracts", "edit"))):
     await db.execute(text("""
         DELETE FROM finance_contract_documents WHERE id = CAST(:id AS UUID) AND contract_id = CAST(:cid AS UUID)
     """), {"id": doc_id, "cid": contract_id})
@@ -247,7 +249,7 @@ _PO_SELECT = """
 
 
 @router.get("/purchase-orders")
-async def list_purchase_orders(search: str = None, supplier_id: str = None, contract_id: str = None, db: AsyncSession = Depends(get_db)):
+async def list_purchase_orders(search: str = None, supplier_id: str = None, contract_id: str = None, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("finance", "purchasing", "view"))):
     where, params = [], {}
     if search:
         where.append("po.description ILIKE :q")
@@ -264,7 +266,7 @@ async def list_purchase_orders(search: str = None, supplier_id: str = None, cont
 
 
 @router.post("/purchase-orders")
-async def create_purchase_order(data: dict, db: AsyncSession = Depends(get_db)):
+async def create_purchase_order(data: dict, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("finance", "purchasing", "edit"))):
     if not data.get("supplier_id"):
         raise HTTPException(status_code=400, detail="supplier_id is required")
     po_id = str(uuid.uuid4())
@@ -288,7 +290,7 @@ async def create_purchase_order(data: dict, db: AsyncSession = Depends(get_db)):
 
 
 @router.get("/purchase-orders/{po_id}")
-async def get_purchase_order(po_id: str, db: AsyncSession = Depends(get_db)):
+async def get_purchase_order(po_id: str, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("finance", "purchasing", "view"))):
     r = await db.execute(text(f"{_PO_SELECT} WHERE po.id = CAST(:id AS UUID)"), {"id": po_id})
     row = r.fetchone()
     if not row:
@@ -297,7 +299,7 @@ async def get_purchase_order(po_id: str, db: AsyncSession = Depends(get_db)):
 
 
 @router.put("/purchase-orders/{po_id}")
-async def update_purchase_order(po_id: str, data: dict, db: AsyncSession = Depends(get_db)):
+async def update_purchase_order(po_id: str, data: dict, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("finance", "purchasing", "edit"))):
     existing = await get_purchase_order(po_id, db)
     merged = {**existing, **{k: v for k, v in data.items() if k in PO_FIELDS}}
     await db.execute(text("""
@@ -319,7 +321,7 @@ async def update_purchase_order(po_id: str, data: dict, db: AsyncSession = Depen
 
 
 @router.delete("/purchase-orders/{po_id}")
-async def delete_purchase_order(po_id: str, db: AsyncSession = Depends(get_db)):
+async def delete_purchase_order(po_id: str, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("finance", "purchasing", "edit"))):
     await db.execute(text("DELETE FROM finance_purchase_orders WHERE id = CAST(:id AS UUID)"), {"id": po_id})
     await db.commit()
     return {"status": "deleted"}
@@ -338,7 +340,7 @@ _INVOICE_SELECT = """
 
 
 @router.get("/invoices")
-async def list_invoices(search: str = None, supplier_id: str = None, approval_status: str = None, db: AsyncSession = Depends(get_db)):
+async def list_invoices(search: str = None, supplier_id: str = None, approval_status: str = None, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("finance", "invoices", "view"))):
     where, params = [], {}
     if search:
         where.append("i.invoice_number ILIKE :q")
@@ -355,7 +357,7 @@ async def list_invoices(search: str = None, supplier_id: str = None, approval_st
 
 
 @router.post("/invoices")
-async def create_invoice(data: dict, db: AsyncSession = Depends(get_db)):
+async def create_invoice(data: dict, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("finance", "invoices", "edit"))):
     if not data.get("supplier_id"):
         raise HTTPException(status_code=400, detail="supplier_id is required")
     invoice_id = str(uuid.uuid4())
@@ -378,7 +380,7 @@ async def create_invoice(data: dict, db: AsyncSession = Depends(get_db)):
 
 
 @router.get("/invoices/{invoice_id}")
-async def get_invoice(invoice_id: str, db: AsyncSession = Depends(get_db)):
+async def get_invoice(invoice_id: str, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("finance", "invoices", "view"))):
     r = await db.execute(text(f"{_INVOICE_SELECT} WHERE i.id = CAST(:id AS UUID)"), {"id": invoice_id})
     row = r.fetchone()
     if not row:
@@ -387,7 +389,7 @@ async def get_invoice(invoice_id: str, db: AsyncSession = Depends(get_db)):
 
 
 @router.put("/invoices/{invoice_id}")
-async def update_invoice(invoice_id: str, data: dict, db: AsyncSession = Depends(get_db)):
+async def update_invoice(invoice_id: str, data: dict, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("finance", "invoices", "edit"))):
     existing = await get_invoice(invoice_id, db)
     merged = {**existing, **{k: v for k, v in data.items() if k in INVOICE_FIELDS}}
     await db.execute(text("""
@@ -408,7 +410,7 @@ async def update_invoice(invoice_id: str, data: dict, db: AsyncSession = Depends
 
 
 @router.delete("/invoices/{invoice_id}")
-async def delete_invoice(invoice_id: str, db: AsyncSession = Depends(get_db)):
+async def delete_invoice(invoice_id: str, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("finance", "invoices", "edit"))):
     await db.execute(text("DELETE FROM finance_invoices WHERE id = CAST(:id AS UUID)"), {"id": invoice_id})
     await db.commit()
     return {"status": "deleted"}

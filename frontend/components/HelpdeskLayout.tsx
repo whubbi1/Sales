@@ -1,24 +1,38 @@
 'use client'
 import { useRouter, usePathname } from 'next/navigation'
-import { useEffect, useRef, useState } from 'react'
+import { createContext, useContext, useEffect, useRef, useState } from 'react'
 import { getStoredUser, clearStoredUser } from '@/lib/auth'
+import { apiFetch } from '@/lib/apiClient'
+import { lookupPerm, ModulePerms, PermLevel } from '@/lib/permissions'
 import { EasyAccessMenu } from '@/components/shared/EasyAccessMenu'
 
-const API = 'https://api.whubbi.wcomply.com'
-
-interface NavItem { href: string; label: string; icon: string; roles: string[] }
+// Helpdesk has always had its own internal role tiers (end_user/helpdesk_user/
+// administrator, from helpdesk_users.role) layered on top of — this keeps
+// that UX distinction (an end_user shouldn't see "All Tickets") but ALSO now
+// respects the whubbi_permissions module/submodule grant, same as every other
+// module: an admin can revoke someone's helpdesk access entirely via the
+// Permissions page even if their helpdesk role would otherwise show it.
+interface NavItem { href: string; label: string; icon: string; roles: string[]; submodule: string }
 
 const NAV_ITEMS: NavItem[] = [
-  { href: '/helpdesk',                  label: 'Dashboard',       icon: '📊', roles: ['end_user','helpdesk_user','administrator'] },
-  { href: '/helpdesk/tickets?mine=1',   label: 'My Tickets',      icon: '🎫', roles: ['end_user','helpdesk_user','administrator'] },
-  { href: '/helpdesk/tickets',          label: 'All Tickets',     icon: '📂', roles: ['helpdesk_user','administrator'] },
-  { href: '/helpdesk/tickets/assigned',   label: 'Assigned to Me',    icon: '👤', roles: ['helpdesk_user','administrator'] },
-  { href: '/helpdesk/ticket-reporting',  label: 'Ticket Reporting',  icon: '📋', roles: ['end_user','helpdesk_user','administrator'] },
-  { href: '/helpdesk/reporting',         label: 'Analytics',         icon: '📈', roles: ['helpdesk_user','administrator'] },
-  { href: '/helpdesk/knowledge',        label: 'Knowledge Base',  icon: '📚', roles: ['end_user','helpdesk_user','administrator'] },
-  { href: '/helpdesk/it-admin',         label: 'Helpdesk Admin Cockpit', icon: '🔧', roles: ['helpdesk_user','administrator'] },
-  { href: '/helpdesk/admin',            label: 'Administration',  icon: '⚙️', roles: ['administrator'] },
+  { href: '/helpdesk',                  label: 'Dashboard',       icon: '📊', roles: ['end_user','helpdesk_user','administrator'], submodule: 'tickets' },
+  { href: '/helpdesk/tickets?mine=1',   label: 'My Tickets',      icon: '🎫', roles: ['end_user','helpdesk_user','administrator'], submodule: 'tickets' },
+  { href: '/helpdesk/tickets',          label: 'All Tickets',     icon: '📂', roles: ['helpdesk_user','administrator'], submodule: 'tickets' },
+  { href: '/helpdesk/tickets/assigned',   label: 'Assigned to Me',    icon: '👤', roles: ['helpdesk_user','administrator'], submodule: 'tickets' },
+  { href: '/helpdesk/ticket-reporting',  label: 'Ticket Reporting',  icon: '📋', roles: ['end_user','helpdesk_user','administrator'], submodule: 'tickets' },
+  { href: '/helpdesk/reporting',         label: 'Analytics',         icon: '📈', roles: ['helpdesk_user','administrator'], submodule: 'admin_cockpit' },
+  { href: '/helpdesk/knowledge',        label: 'Knowledge Base',  icon: '📚', roles: ['end_user','helpdesk_user','administrator'], submodule: 'knowledge' },
+  { href: '/helpdesk/it-admin',         label: 'Helpdesk Admin Cockpit', icon: '🔧', roles: ['helpdesk_user','administrator'], submodule: 'admin_cockpit' },
+  { href: '/helpdesk/admin',            label: 'Administration',  icon: '⚙️', roles: ['administrator'], submodule: 'admin_cockpit' },
 ]
+
+type HelpdeskPerms = ModulePerms
+const HelpdeskPermContext = createContext<HelpdeskPerms>(null)
+
+export function useHelpdeskPerm(submodule: string): { level: PermLevel; canEdit: boolean } {
+  const perms = useContext(HelpdeskPermContext)
+  return lookupPerm(perms, submodule)
+}
 
 interface Props { children: React.ReactNode }
 
@@ -29,6 +43,7 @@ export default function HelpdeskLayout({ children }: Props) {
   const [role,      setRole]      = useState<string>('end_user')
   const [userEmail, setUserEmail] = useState<string>('')
   const [userName,  setUserName]  = useState<string>('')
+  const [perms,     setPerms]     = useState<HelpdeskPerms>(null)
 
   useEffect(() => {
     const user = getStoredUser()
@@ -41,10 +56,14 @@ export default function HelpdeskLayout({ children }: Props) {
     }
     setUserEmail(user.email)
     setUserName(user.name)
-    fetch(`${API}/helpdesk/users/${encodeURIComponent(user.email)}/role`)
+    apiFetch(`/helpdesk/users/${encodeURIComponent(user.email)}/role`)
       .then(r => r.json())
       .then(d => setRole(d.role || 'end_user'))
       .catch(() => {})
+    apiFetch(`/settings/permissions/${encodeURIComponent(user.email)}`)
+      .then(r => r.json())
+      .then(d => setPerms(d.permissions?.helpdesk || {}))
+      .catch(() => setPerms({}))
   }, [])
 
   const handleSignOut = () => {
@@ -52,7 +71,9 @@ export default function HelpdeskLayout({ children }: Props) {
     router.push('/auth/login')
   }
 
-  const visible = NAV_ITEMS.filter(item => item.roles.includes(role))
+  const visible = NAV_ITEMS.filter(item =>
+    item.roles.includes(role) && lookupPerm(perms, item.submodule).level !== 'none'
+  )
   const isActive = (href: string) => {
     const hrefPath = href.split('?')[0]
     return hrefPath === '/helpdesk' ? pathname === '/helpdesk' : pathname.startsWith(hrefPath)
@@ -115,8 +136,32 @@ export default function HelpdeskLayout({ children }: Props) {
       </aside>
 
       <main style={{ marginLeft: '220px', flex: 1, minHeight: '100vh', background: '#F5F7FA' }}>
-        {children}
+        <HelpdeskPermContext.Provider value={perms}>
+          <HelpdeskRouteGate perms={perms} pathname={pathname}>{children}</HelpdeskRouteGate>
+        </HelpdeskPermContext.Provider>
       </main>
     </div>
   )
+}
+
+function HelpdeskRouteGate({ perms, pathname, children }: { perms: HelpdeskPerms; pathname: string; children: React.ReactNode }) {
+  const matched = NAV_ITEMS
+    .map(item => ({ ...item, hrefPath: item.href.split('?')[0] }))
+    .filter(item => pathname === item.hrefPath || pathname.startsWith(item.hrefPath + '/'))
+    .sort((a, b) => b.hrefPath.length - a.hrefPath.length)[0]
+  if (!matched) return <>{children}</>
+  const { level } = lookupPerm(perms, matched.submodule)
+  if (level === 'loading') {
+    return <div style={{ padding: '48px', textAlign: 'center', color: '#45B6E4', fontSize: '13px' }}>Loading…</div>
+  }
+  if (level === 'none') {
+    return (
+      <div style={{ padding: '48px', textAlign: 'center' }}>
+        <div style={{ fontSize: '32px', marginBottom: '12px' }}>🚫</div>
+        <div style={{ fontSize: '14px', fontWeight: '700', color: '#3F3F3F', marginBottom: '4px' }}>Access Denied</div>
+        <div style={{ fontSize: '12px', color: '#94A3B8' }}>You don't have access to this section. Contact your administrator if you believe this is a mistake.</div>
+      </div>
+    )
+  }
+  return <>{children}</>
 }

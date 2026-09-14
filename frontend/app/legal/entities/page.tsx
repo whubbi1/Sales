@@ -2,6 +2,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { LegalLayout } from '@/components/LegalLayout'
 import { getStoredUser } from '@/lib/auth'
+import { apiFetch } from '@/lib/apiClient'
 
 const API = 'https://api.whubbi.wcomply.com'
 const CODE_RE = /^[A-Za-z0-9]{5}$/
@@ -90,11 +91,11 @@ export default function LegalEntitiesPage() {
 
   const load = () => {
     setLoading(true)
-    fetch(`${API}/legal/entities`).then(r => r.json()).then(d => setEntities(d.entities || [])).finally(() => setLoading(false))
+    apiFetch(`${API}/legal/entities`).then(r => r.json()).then(d => setEntities(d.entities || [])).finally(() => setLoading(false))
   }
 
   const loadDocTypes = () => {
-    fetch(`${API}/legal/doc-types`).then(r => r.json()).then(d => {
+    apiFetch(`${API}/legal/doc-types`).then(r => r.json()).then(d => {
       setDocTypes((d.doc_types || []).map((t: any) => ({ value: t.type_key, label: t.label })))
     })
   }
@@ -103,7 +104,7 @@ export default function LegalEntitiesPage() {
     const entity = entities.find(e => e.id === id)
     if (!entity) return
     setEntities(prev => prev.map(e => e.id === id ? { ...e, [field]: value } : e))
-    await fetch(`${API}/legal/entities/${id}`, {
+    await apiFetch(`${API}/legal/entities/${id}`, {
       method: 'PUT', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ ...entity, [field]: value, updated_by: userEmail }),
     })
@@ -114,7 +115,7 @@ export default function LegalEntitiesPage() {
     const code = newCode.trim().toUpperCase()
     if (code && !CODE_RE.test(code)) { alert('Code must be exactly 5 letters/digits'); return }
     setCreating(true)
-    const r = await fetch(`${API}/legal/entities`, {
+    const r = await apiFetch(`${API}/legal/entities`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ legal_name: newName.trim(), country: newCountry, code, created_by: userEmail }),
     })
@@ -135,14 +136,14 @@ export default function LegalEntitiesPage() {
     if (!entity) return
     const next = !entity.is_archived
     setEntities(prev => prev.map(e => e.id === id ? { ...e, is_archived: next } : e))
-    await fetch(`${API}/legal/entities/${id}`, {
+    await apiFetch(`${API}/legal/entities/${id}`, {
       method: 'PUT', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ ...entity, is_archived: next, updated_by: userEmail }),
     })
   }
 
   const addReg = async (entityId: string) => {
-    const r = await fetch(`${API}/legal/entities/${entityId}/registrations`, {
+    const r = await apiFetch(`${API}/legal/entities/${entityId}/registrations`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ reg_type: 'SIREN', reg_value: '', created_by: userEmail }),
     })
@@ -156,21 +157,21 @@ export default function LegalEntitiesPage() {
     if (!reg) return
     setEntities(prev => prev.map(e => e.id === entityId
       ? { ...e, registrations: e.registrations.map((r: any) => r.id === regId ? { ...r, [field]: value } : r) } : e))
-    await fetch(`${API}/legal/entities/${entityId}/registrations/${regId}`, {
+    await apiFetch(`${API}/legal/entities/${entityId}/registrations/${regId}`, {
       method: 'PUT', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ ...reg, [field]: value }),
     })
   }
 
   const deleteReg = async (entityId: string, regId: string) => {
-    await fetch(`${API}/legal/entities/${entityId}/registrations/${regId}`, { method: 'DELETE' })
+    await apiFetch(`${API}/legal/entities/${entityId}/registrations/${regId}`, { method: 'DELETE' })
     setEntities(prev => prev.map(e => e.id === entityId
       ? { ...e, registrations: e.registrations.filter((r: any) => r.id !== regId) } : e))
   }
 
   const addDoc = async (entityId: string) => {
     const defaultType = docTypes[0]?.value || 'other'
-    const r = await fetch(`${API}/legal/entities/${entityId}/documents`, {
+    const r = await apiFetch(`${API}/legal/entities/${entityId}/documents`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ doc_type: defaultType, sharepoint_url: '', created_by: userEmail }),
     })
@@ -184,20 +185,20 @@ export default function LegalEntitiesPage() {
     if (!doc) return
     setEntities(prev => prev.map(e => e.id === entityId
       ? { ...e, documents: e.documents.map((d: any) => d.id === docId ? { ...d, [field]: value } : d) } : e))
-    await fetch(`${API}/legal/entities/${entityId}/documents/${docId}`, {
+    await apiFetch(`${API}/legal/entities/${entityId}/documents/${docId}`, {
       method: 'PUT', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ ...doc, [field]: value }),
     })
   }
 
   const deleteDoc = async (entityId: string, docId: string) => {
-    await fetch(`${API}/legal/entities/${entityId}/documents/${docId}`, { method: 'DELETE' })
+    await apiFetch(`${API}/legal/entities/${entityId}/documents/${docId}`, { method: 'DELETE' })
     setEntities(prev => prev.map(e => e.id === entityId
       ? { ...e, documents: e.documents.filter((d: any) => d.id !== docId) } : e))
   }
 
   const addWeb = async (entityId: string) => {
-    const r = await fetch(`${API}/legal/entities/${entityId}/websites`, {
+    const r = await apiFetch(`${API}/legal/entities/${entityId}/websites`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ label: 'Website', url: '', created_by: userEmail }),
     })
@@ -211,14 +212,14 @@ export default function LegalEntitiesPage() {
     if (!web) return
     setEntities(prev => prev.map(e => e.id === entityId
       ? { ...e, websites: e.websites.map((w: any) => w.id === webId ? { ...w, [field]: value } : w) } : e))
-    await fetch(`${API}/legal/entities/${entityId}/websites/${webId}`, {
+    await apiFetch(`${API}/legal/entities/${entityId}/websites/${webId}`, {
       method: 'PUT', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ ...web, [field]: value }),
     })
   }
 
   const deleteWeb = async (entityId: string, webId: string) => {
-    await fetch(`${API}/legal/entities/${entityId}/websites/${webId}`, { method: 'DELETE' })
+    await apiFetch(`${API}/legal/entities/${entityId}/websites/${webId}`, { method: 'DELETE' })
     setEntities(prev => prev.map(e => e.id === entityId
       ? { ...e, websites: e.websites.filter((w: any) => w.id !== webId) } : e))
   }

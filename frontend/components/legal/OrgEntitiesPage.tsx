@@ -2,6 +2,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { LegalLayout } from '@/components/LegalLayout'
 import { getStoredUser } from '@/lib/auth'
+import { apiFetch } from '@/lib/apiClient'
 
 const API = 'https://api.whubbi.wcomply.com'
 const CODE_RE = /^[A-Za-z0-9]{5}$/
@@ -75,13 +76,13 @@ export function OrgEntitiesPage({ category, icon, title, subtitle }: {
 
   const load = () => {
     setLoading(true)
-    fetch(`${API}/legal/org-entities?category=${category}`).then(r => r.json()).then(d => setEntities(d.org_entities || [])).finally(() => setLoading(false))
+    apiFetch(`${API}/legal/org-entities?category=${category}`).then(r => r.json()).then(d => setEntities(d.org_entities || [])).finally(() => setLoading(false))
   }
 
   const saveTitle = async (id: string, value: string) => {
     const e = entities.find(x => x.id === id); if (!e) return
     setEntities(prev => prev.map(x => x.id === id ? { ...x, title: value } : x))
-    await fetch(`${API}/legal/org-entities/${id}`, {
+    await apiFetch(`${API}/legal/org-entities/${id}`, {
       method: 'PUT', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ title: value, description: e.description, updated_by: userEmail }),
     })
@@ -90,7 +91,7 @@ export function OrgEntitiesPage({ category, icon, title, subtitle }: {
   const saveDescription = async (id: string, value: string) => {
     const e = entities.find(x => x.id === id); if (!e) return
     setEntities(prev => prev.map(x => x.id === id ? { ...x, description: value } : x))
-    await fetch(`${API}/legal/org-entities/${id}`, {
+    await apiFetch(`${API}/legal/org-entities/${id}`, {
       method: 'PUT', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ title: e.title, description: value, updated_by: userEmail }),
     })
@@ -100,7 +101,7 @@ export function OrgEntitiesPage({ category, icon, title, subtitle }: {
     const e = entities.find(x => x.id === id); if (!e) return
     const next = !e.is_archived
     setEntities(prev => prev.map(x => x.id === id ? { ...x, is_archived: next } : x))
-    await fetch(`${API}/legal/org-entities/${id}`, {
+    await apiFetch(`${API}/legal/org-entities/${id}`, {
       method: 'PUT', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ title: e.title, description: e.description, is_archived: next, updated_by: userEmail }),
     })
@@ -111,7 +112,7 @@ export function OrgEntitiesPage({ category, icon, title, subtitle }: {
     const code = newCode.trim().toUpperCase()
     if (code && !CODE_RE.test(code)) { alert('Code must be exactly 5 letters/digits'); return }
     setAdding(true)
-    const res = await fetch(`${API}/legal/org-entities`, {
+    const res = await apiFetch(`${API}/legal/org-entities`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ category, title: newTitle.trim(), description: newDescription.trim(), code, created_by: userEmail }),
     })

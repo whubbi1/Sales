@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
 from app.database import get_db
+from app.authz import require_permission
 import uuid
 from datetime import datetime
 
@@ -39,7 +40,8 @@ async def list_requests(
     status: str = None,
     pipeline_id: str = None,
     search: str = None,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    _: str = Depends(require_permission("development", "general", "view")),
 ):
     where = ["t.ticket_type = 'development_request'"]
     params = {}
@@ -84,7 +86,7 @@ async def list_requests(
     return {"requests": result}
 
 @router.get("/requests/{rid}")
-async def get_request(rid: str, db: AsyncSession = Depends(get_db)):
+async def get_request(rid: str, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("development", "general", "view"))):
     r = await db.execute(text("""
         SELECT t.id,
                t.ticket_number  AS request_number,
@@ -125,7 +127,7 @@ async def get_request(rid: str, db: AsyncSession = Depends(get_db)):
     return {"request": req, "activity": activity}
 
 @router.put("/requests/{rid}")
-async def update_request(rid: str, data: dict, db: AsyncSession = Depends(get_db)):
+async def update_request(rid: str, data: dict, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("development", "general", "edit"))):
     cur = await db.execute(text("""
         SELECT t.*, dp.name AS pipeline_name
         FROM tickets t
@@ -197,7 +199,7 @@ async def update_request(rid: str, data: dict, db: AsyncSession = Depends(get_db
     return {"status": "ok", "changes": len(changes)}
 
 @router.post("/requests/{rid}/activity")
-async def add_activity(rid: str, data: dict, db: AsyncSession = Depends(get_db)):
+async def add_activity(rid: str, data: dict, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("development", "general", "edit"))):
     await db.execute(text("""
         INSERT INTO dev_request_activity
             (id, request_id, content, author_email, author_name, is_system, created_at)
@@ -217,7 +219,8 @@ async def add_activity(rid: str, data: dict, db: AsyncSession = Depends(get_db))
 async def list_pipelines(
     application: str = None,
     status: str = None,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    _: str = Depends(require_permission("development", "general", "view")),
 ):
     where = ["1=1"]
     params = {}
@@ -246,7 +249,7 @@ async def list_pipelines(
     return {"pipelines": result}
 
 @router.post("/pipelines")
-async def create_pipeline(data: dict, db: AsyncSession = Depends(get_db)):
+async def create_pipeline(data: dict, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("development", "general", "edit"))):
     pl_id = str(uuid.uuid4())
     pl_code = data.get("pipeline_code") or _gen_pipeline_code()
     await db.execute(text("""
@@ -267,7 +270,7 @@ async def create_pipeline(data: dict, db: AsyncSession = Depends(get_db)):
     return {"status": "ok", "id": pl_id, "pipeline_code": pl_code}
 
 @router.get("/pipelines/{pid}")
-async def get_pipeline(pid: str, db: AsyncSession = Depends(get_db)):
+async def get_pipeline(pid: str, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("development", "general", "view"))):
     r = await db.execute(
         text("SELECT * FROM development_pipelines WHERE id = CAST(:id AS UUID)"),
         {"id": pid}
@@ -293,7 +296,7 @@ async def get_pipeline(pid: str, db: AsyncSession = Depends(get_db)):
     return {"pipeline": pl, "requests": requests}
 
 @router.put("/pipelines/{pid}")
-async def update_pipeline(pid: str, data: dict, db: AsyncSession = Depends(get_db)):
+async def update_pipeline(pid: str, data: dict, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("development", "general", "edit"))):
     await db.execute(text("""
         UPDATE development_pipelines SET
             pipeline_code  = COALESCE(NULLIF(:pipeline_code, ''), pipeline_code),
@@ -317,7 +320,7 @@ async def update_pipeline(pid: str, data: dict, db: AsyncSession = Depends(get_d
     return {"status": "ok"}
 
 @router.delete("/pipelines/{pid}")
-async def delete_pipeline(pid: str, db: AsyncSession = Depends(get_db)):
+async def delete_pipeline(pid: str, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("development", "general", "edit"))):
     await db.execute(
         text("UPDATE tickets SET dev_pipeline_id = NULL WHERE dev_pipeline_id = CAST(:id AS UUID) AND ticket_type = 'development_request'"),
         {"id": pid}
@@ -334,7 +337,8 @@ async def delete_pipeline(pid: str, db: AsyncSession = Depends(get_db)):
 async def list_test_scripts(
     pipeline_id: str = None,
     request_id: str = None,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    _: str = Depends(require_permission("development", "test_plans", "view")),
 ):
     where = ["1=1"]
     params = {}
@@ -370,7 +374,7 @@ async def list_test_scripts(
     return {"scripts": result}
 
 @router.post("/test-scripts")
-async def create_test_script(data: dict, db: AsyncSession = Depends(get_db)):
+async def create_test_script(data: dict, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("development", "test_plans", "edit"))):
     sid = str(uuid.uuid4())
     await db.execute(text("""
         INSERT INTO test_scripts
@@ -393,7 +397,7 @@ async def create_test_script(data: dict, db: AsyncSession = Depends(get_db)):
     return {"status": "ok", "id": sid}
 
 @router.put("/test-scripts/{sid}")
-async def update_test_script(sid: str, data: dict, db: AsyncSession = Depends(get_db)):
+async def update_test_script(sid: str, data: dict, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("development", "test_plans", "edit"))):
     await db.execute(text("""
         UPDATE test_scripts SET
             title            = COALESCE(NULLIF(:title, ''), title),
@@ -419,7 +423,7 @@ async def update_test_script(sid: str, data: dict, db: AsyncSession = Depends(ge
     return {"status": "ok"}
 
 @router.delete("/test-scripts/{sid}")
-async def delete_test_script(sid: str, db: AsyncSession = Depends(get_db)):
+async def delete_test_script(sid: str, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("development", "test_plans", "edit"))):
     await db.execute(
         text("DELETE FROM test_executions WHERE script_id = CAST(:id AS UUID)"),
         {"id": sid}
@@ -436,7 +440,8 @@ async def delete_test_script(sid: str, db: AsyncSession = Depends(get_db)):
 async def list_test_executions(
     pipeline_id: str = None,
     script_id: str = None,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    _: str = Depends(require_permission("development", "test_campaigns", "view")),
 ):
     where = ["1=1"]
     params = {}
@@ -472,7 +477,7 @@ async def list_test_executions(
     return {"executions": result}
 
 @router.post("/test-executions")
-async def create_test_execution(data: dict, db: AsyncSession = Depends(get_db)):
+async def create_test_execution(data: dict, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("development", "test_campaigns", "edit"))):
     eid = str(uuid.uuid4())
     await db.execute(text("""
         INSERT INTO test_executions
@@ -493,7 +498,7 @@ async def create_test_execution(data: dict, db: AsyncSession = Depends(get_db)):
     return {"status": "ok", "id": eid}
 
 @router.put("/test-executions/{eid}")
-async def update_test_execution(eid: str, data: dict, db: AsyncSession = Depends(get_db)):
+async def update_test_execution(eid: str, data: dict, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("development", "test_campaigns", "edit"))):
     await db.execute(text("""
         UPDATE test_executions SET
             status      = COALESCE(NULLIF(:status, ''), status),
@@ -513,7 +518,7 @@ async def update_test_execution(eid: str, data: dict, db: AsyncSession = Depends
     return {"status": "ok"}
 
 @router.delete("/test-executions/{eid}")
-async def delete_test_execution(eid: str, db: AsyncSession = Depends(get_db)):
+async def delete_test_execution(eid: str, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("development", "test_campaigns", "edit"))):
     await db.execute(
         text("DELETE FROM test_executions WHERE id = CAST(:id AS UUID)"),
         {"id": eid}

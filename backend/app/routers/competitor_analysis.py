@@ -18,6 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
 
 from app.database import get_db
+from app.authz import require_permission
 from app.routers.companies import claude_web_search
 
 router = APIRouter()
@@ -62,13 +63,13 @@ async def _get_marketing_setup(db: AsyncSession, setup_id: str) -> dict | None:
 
 
 @router.get("/marketing-setups")
-async def list_marketing_setups(db: AsyncSession = Depends(get_db)):
+async def list_marketing_setups(db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("marketing", "marketing_objectives", "view"))):
     r = await db.execute(text("SELECT * FROM marketing_setups ORDER BY name"))
     return {"setups": [_normalize_setup(dict(row._mapping)) for row in r.fetchall()]}
 
 
 @router.get("/marketing-setups/{setup_id}")
-async def get_marketing_setup(setup_id: str, db: AsyncSession = Depends(get_db)):
+async def get_marketing_setup(setup_id: str, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("marketing", "marketing_objectives", "view"))):
     setup = await _get_marketing_setup(db, setup_id)
     if not setup:
         raise HTTPException(status_code=404, detail="Marketing setup not found")
@@ -87,7 +88,7 @@ def _entity_assignment_params(data: dict) -> dict:
 
 
 @router.post("/marketing-setups")
-async def create_marketing_setup(data: dict, db: AsyncSession = Depends(get_db)):
+async def create_marketing_setup(data: dict, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("marketing", "marketing_objectives", "edit"))):
     name = (data.get("name") or "").strip()
     if not name:
         raise HTTPException(status_code=400, detail="name is required")
@@ -111,7 +112,7 @@ async def create_marketing_setup(data: dict, db: AsyncSession = Depends(get_db))
 
 
 @router.put("/marketing-setups/{setup_id}")
-async def update_marketing_setup(setup_id: str, data: dict, db: AsyncSession = Depends(get_db)):
+async def update_marketing_setup(setup_id: str, data: dict, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("marketing", "marketing_objectives", "edit"))):
     """Partial update — only fields present in `data` are touched, same pattern as
     update_competitor. Needed because the frontend now edits one field at a time inline; sending
     every other field back as its old value on every keystroke-save would be brittle, and
@@ -149,7 +150,7 @@ async def update_marketing_setup(setup_id: str, data: dict, db: AsyncSession = D
 
 
 @router.delete("/marketing-setups/{setup_id}")
-async def delete_marketing_setup(setup_id: str, db: AsyncSession = Depends(get_db)):
+async def delete_marketing_setup(setup_id: str, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("marketing", "marketing_objectives", "edit"))):
     await db.execute(text("DELETE FROM marketing_setups WHERE id = CAST(:id AS UUID)"), {"id": setup_id})
     await db.commit()
     return {"status": "ok"}
@@ -187,7 +188,7 @@ async def _get_competitor(db: AsyncSession, competitor_id: str) -> dict | None:
 
 
 @router.get("/competitors")
-async def list_competitors(db: AsyncSession = Depends(get_db)):
+async def list_competitors(db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("marketing", "competitor_analysis", "view"))):
     r = await db.execute(text("SELECT * FROM competitors ORDER BY name"))
     out = []
     for row in r.fetchall():
@@ -199,7 +200,7 @@ async def list_competitors(db: AsyncSession = Depends(get_db)):
 
 
 @router.get("/competitors/{competitor_id}")
-async def get_competitor(competitor_id: str, db: AsyncSession = Depends(get_db)):
+async def get_competitor(competitor_id: str, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("marketing", "competitor_analysis", "view"))):
     competitor = await _get_competitor(db, competitor_id)
     if not competitor:
         raise HTTPException(status_code=404, detail="Competitor not found")
@@ -207,7 +208,7 @@ async def get_competitor(competitor_id: str, db: AsyncSession = Depends(get_db))
 
 
 @router.post("/competitors")
-async def create_competitor(data: dict, db: AsyncSession = Depends(get_db)):
+async def create_competitor(data: dict, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("marketing", "competitor_analysis", "edit"))):
     name = (data.get("name") or "").strip()
     if not name:
         raise HTTPException(status_code=400, detail="name is required")
@@ -226,7 +227,7 @@ async def create_competitor(data: dict, db: AsyncSession = Depends(get_db)):
 
 
 @router.put("/competitors/{competitor_id}")
-async def update_competitor(competitor_id: str, data: dict, db: AsyncSession = Depends(get_db)):
+async def update_competitor(competitor_id: str, data: dict, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("marketing", "competitor_analysis", "edit"))):
     existing = await _get_competitor(db, competitor_id)
     if not existing:
         raise HTTPException(status_code=404, detail="Competitor not found")
@@ -246,14 +247,14 @@ async def update_competitor(competitor_id: str, data: dict, db: AsyncSession = D
 
 
 @router.delete("/competitors/{competitor_id}")
-async def delete_competitor(competitor_id: str, db: AsyncSession = Depends(get_db)):
+async def delete_competitor(competitor_id: str, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("marketing", "competitor_analysis", "edit"))):
     await db.execute(text("DELETE FROM competitors WHERE id = CAST(:id AS UUID)"), {"id": competitor_id})
     await db.commit()
     return {"status": "ok"}
 
 
 @router.post("/competitors/suggest")
-async def suggest_competitors(data: dict, db: AsyncSession = Depends(get_db)):
+async def suggest_competitors(data: dict, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("marketing", "competitor_analysis", "edit"))):
     countries = [c.strip() for c in (data.get("countries") or []) if c and c.strip()][:MAX_SUGGEST_COUNTRIES]
     if not countries:
         raise HTTPException(status_code=400, detail="At least one country is required")
@@ -347,7 +348,7 @@ async def _analyze_competitor(competitor: dict) -> dict:
 
 
 @router.post("/competitors/{competitor_id}/analyze")
-async def analyze_competitor(competitor_id: str, db: AsyncSession = Depends(get_db)):
+async def analyze_competitor(competitor_id: str, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("marketing", "competitor_analysis", "edit"))):
     competitor = await _get_competitor(db, competitor_id)
     if not competitor:
         raise HTTPException(status_code=404, detail="Competitor not found")

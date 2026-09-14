@@ -2,6 +2,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { LegalLayout } from '@/components/LegalLayout'
 import { getStoredUser } from '@/lib/auth'
+import { apiFetch } from '@/lib/apiClient'
 
 const API = 'https://api.whubbi.wcomply.com'
 
@@ -58,14 +59,14 @@ export default function LegalAdminPage() {
 
   const load = () => {
     setLoading(true)
-    fetch(`${API}/legal/doc-types`).then(r => r.json()).then(d => setDocTypes(d.doc_types || [])).finally(() => setLoading(false))
+    apiFetch(`${API}/legal/doc-types`).then(r => r.json()).then(d => setDocTypes(d.doc_types || [])).finally(() => setLoading(false))
   }
 
   const saveLabel = async (id: string, label: string) => {
     const dt = docTypes.find(d => d.id === id)
     if (!dt) return
     setDocTypes(prev => prev.map(d => d.id === id ? { ...d, label } : d))
-    await fetch(`${API}/legal/doc-types/${id}`, {
+    await apiFetch(`${API}/legal/doc-types/${id}`, {
       method: 'PUT', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ ...dt, label }),
     })
@@ -75,7 +76,7 @@ export default function LegalAdminPage() {
     const dt = docTypes.find(d => d.id === id)
     if (!dt) return
     setDocTypes(prev => prev.map(d => d.id === id ? { ...d, scope } : d))
-    await fetch(`${API}/legal/doc-types/${id}`, {
+    await apiFetch(`${API}/legal/doc-types/${id}`, {
       method: 'PUT', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ ...dt, scope }),
     })
@@ -84,7 +85,7 @@ export default function LegalAdminPage() {
   const addDocType = async () => {
     if (!newLabel.trim()) return
     setAdding(true)
-    await fetch(`${API}/legal/doc-types`, {
+    await apiFetch(`${API}/legal/doc-types`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ label: newLabel.trim(), scope: newScope, created_by: userEmail }),
     })
@@ -93,7 +94,7 @@ export default function LegalAdminPage() {
 
   const deleteDocType = async (id: string) => {
     if (!confirm('Delete this document type?')) return
-    await fetch(`${API}/legal/doc-types/${id}`, { method: 'DELETE' })
+    await apiFetch(`${API}/legal/doc-types/${id}`, { method: 'DELETE' })
     setDocTypes(prev => prev.filter(d => d.id !== id))
   }
 

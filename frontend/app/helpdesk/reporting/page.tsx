@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react'
 import HelpdeskLayout from '@/components/HelpdeskLayout'
 import { API } from '../constants'
+import { apiFetch } from '@/lib/apiClient'
 
 const PRIO_COLOR: Record<string,string> = {critical:'#DC2626',high:'#D97706',medium:'#156082',low:'#45B6E4'}
 
@@ -26,7 +27,7 @@ export default function ReportingPage() {
 
   useEffect(() => {
     setLoading(true)
-    fetch(`${API}/helpdesk/reporting?days=${days}`).then(r => r.json()).then(setData).finally(() => setLoading(false))
+    apiFetch(`${API}/helpdesk/reporting?days=${days}`).then(r => r.json()).then(setData).finally(() => setLoading(false))
   }, [days])
 
   const saveConfig = () => {

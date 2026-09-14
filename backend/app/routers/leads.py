@@ -7,6 +7,7 @@ from uuid import UUID
 from datetime import datetime
 
 from app.database import get_db
+from app.authz import require_permission
 from app.models.lead import Lead, LeadActivityLog, LeadNote, LeadFile, lead_partner, lead_partner_contact
 from app.models.company import Company
 from app.models.contact import Contact
@@ -121,7 +122,8 @@ async def _log_change(db: AsyncSession, lead_id, field_name: str, old_value, new
 @router.get("/", response_model=List[LeadResponse])
 async def list_leads(
     skip: int = 0, limit: int = 500, search: str = None, lead_status: str = None,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    _: str = Depends(require_permission("sales", "leads", "view")),
 ):
     query = select(Lead)
     if search:
@@ -136,7 +138,7 @@ async def list_leads(
 
 
 @router.post("/", response_model=LeadResponse, status_code=status.HTTP_201_CREATED)
-async def create_lead(data: LeadCreate, db: AsyncSession = Depends(get_db)):
+async def create_lead(data: LeadCreate, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("sales", "leads", "edit"))):
     lead_number = await next_internal_id(db, 'lead_number_seq', 'LEAD')
     payload = data.model_dump(exclude={'partner_ids', 'partner_contact_ids'})
     payload['lead_number'] = lead_number
@@ -153,7 +155,7 @@ async def create_lead(data: LeadCreate, db: AsyncSession = Depends(get_db)):
 
 
 @router.get("/{lead_id}", response_model=LeadResponse)
-async def get_lead(lead_id: UUID, db: AsyncSession = Depends(get_db)):
+async def get_lead(lead_id: UUID, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("sales", "leads", "view"))):
     r = await db.execute(select(Lead).where(Lead.id == lead_id))
     lead = r.scalar_one_or_none()
     if not lead:
@@ -163,7 +165,7 @@ async def get_lead(lead_id: UUID, db: AsyncSession = Depends(get_db)):
 
 
 @router.put("/{lead_id}", response_model=LeadResponse)
-async def update_lead(lead_id: UUID, data: LeadUpdate, db: AsyncSession = Depends(get_db)):
+async def update_lead(lead_id: UUID, data: LeadUpdate, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("sales", "leads", "edit"))):
     r = await db.execute(select(Lead).where(Lead.id == lead_id))
     lead = r.scalar_one_or_none()
     if not lead:
@@ -197,7 +199,7 @@ async def update_lead(lead_id: UUID, data: LeadUpdate, db: AsyncSession = Depend
 
 
 @router.post("/{lead_id}/close-with-opportunity", response_model=LeadResponse)
-async def close_lead_with_opportunity(lead_id: UUID, data: LeadCloseWithOpportunity, db: AsyncSession = Depends(get_db)):
+async def close_lead_with_opportunity(lead_id: UUID, data: LeadCloseWithOpportunity, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("sales", "leads", "edit"))):
     # Called once the user has actually reviewed and saved the Opportunity created from
     # this lead — links the two records and closes the lead atomically. The "Create an
     # Opportunity" status itself is just a stage; this is the real trigger.
@@ -227,7 +229,7 @@ async def close_lead_with_opportunity(lead_id: UUID, data: LeadCloseWithOpportun
 
 # ─── Linked Partners / Contacts (incremental, alongside the full-replace via PUT above) ──
 @router.post("/{lead_id}/partners/{partner_id}")
-async def link_lead_partner(lead_id: UUID, partner_id: UUID, db: AsyncSession = Depends(get_db)):
+async def link_lead_partner(lead_id: UUID, partner_id: UUID, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("sales", "leads", "edit"))):
     exists = await db.execute(select(lead_partner).where(lead_partner.c.lead_id == lead_id, lead_partner.c.partner_id == partner_id))
     if not exists.first():
         await db.execute(insert(lead_partner).values(lead_id=lead_id, partner_id=partner_id))
@@ -236,14 +238,14 @@ async def link_lead_partner(lead_id: UUID, partner_id: UUID, db: AsyncSession = 
 
 
 @router.delete("/{lead_id}/partners/{partner_id}")
-async def unlink_lead_partner(lead_id: UUID, partner_id: UUID, db: AsyncSession = Depends(get_db)):
+async def unlink_lead_partner(lead_id: UUID, partner_id: UUID, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("sales", "leads", "edit"))):
     await db.execute(sa_delete(lead_partner).where(lead_partner.c.lead_id == lead_id, lead_partner.c.partner_id == partner_id))
     await db.commit()
     return {"status": "ok"}
 
 
 @router.post("/{lead_id}/contacts/{contact_id}")
-async def link_lead_contact(lead_id: UUID, contact_id: UUID, db: AsyncSession = Depends(get_db)):
+async def link_lead_contact(lead_id: UUID, contact_id: UUID, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("sales", "leads", "edit"))):
     exists = await db.execute(select(lead_partner_contact).where(lead_partner_contact.c.lead_id == lead_id, lead_partner_contact.c.contact_id == contact_id))
     if not exists.first():
         await db.execute(insert(lead_partner_contact).values(lead_id=lead_id, contact_id=contact_id))
@@ -252,14 +254,14 @@ async def link_lead_contact(lead_id: UUID, contact_id: UUID, db: AsyncSession = 
 
 
 @router.delete("/{lead_id}/contacts/{contact_id}")
-async def unlink_lead_contact(lead_id: UUID, contact_id: UUID, db: AsyncSession = Depends(get_db)):
+async def unlink_lead_contact(lead_id: UUID, contact_id: UUID, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("sales", "leads", "edit"))):
     await db.execute(sa_delete(lead_partner_contact).where(lead_partner_contact.c.lead_id == lead_id, lead_partner_contact.c.contact_id == contact_id))
     await db.commit()
     return {"status": "ok"}
 
 
 @router.delete("/{lead_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_lead(lead_id: UUID, db: AsyncSession = Depends(get_db)):
+async def delete_lead(lead_id: UUID, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("sales", "leads", "edit"))):
     r = await db.execute(select(Lead).where(Lead.id == lead_id))
     lead = r.scalar_one_or_none()
     if not lead:
@@ -270,19 +272,19 @@ async def delete_lead(lead_id: UUID, db: AsyncSession = Depends(get_db)):
 
 # ─── Activity log ───────────────────────────────────────────────────────────────
 @router.get("/{lead_id}/activity-log", response_model=List[LeadActivityLogResponse])
-async def list_lead_activity_log(lead_id: UUID, db: AsyncSession = Depends(get_db)):
+async def list_lead_activity_log(lead_id: UUID, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("sales", "leads", "view"))):
     r = await db.execute(select(LeadActivityLog).where(LeadActivityLog.lead_id == lead_id).order_by(LeadActivityLog.changed_at.desc()))
     return r.scalars().all()
 
 
 # ─── Notes ──────────────────────────────────────────────────────────────────────
 @router.get("/{lead_id}/notes/", response_model=List[LeadNoteResponse])
-async def list_lead_notes(lead_id: UUID, db: AsyncSession = Depends(get_db)):
+async def list_lead_notes(lead_id: UUID, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("sales", "leads", "view"))):
     r = await db.execute(select(LeadNote).where(LeadNote.lead_id == lead_id).order_by(LeadNote.created_at.desc()))
     return r.scalars().all()
 
 @router.post("/{lead_id}/notes/", response_model=LeadNoteResponse, status_code=status.HTTP_201_CREATED)
-async def add_lead_note(lead_id: UUID, data: LeadNoteCreate, db: AsyncSession = Depends(get_db)):
+async def add_lead_note(lead_id: UUID, data: LeadNoteCreate, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("sales", "leads", "edit"))):
     row = LeadNote(lead_id=lead_id, **data.model_dump())
     db.add(row)
     await db.commit()
@@ -290,7 +292,7 @@ async def add_lead_note(lead_id: UUID, data: LeadNoteCreate, db: AsyncSession = 
     return row
 
 @router.delete("/{lead_id}/notes/{note_id}/", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_lead_note(lead_id: UUID, note_id: UUID, db: AsyncSession = Depends(get_db)):
+async def delete_lead_note(lead_id: UUID, note_id: UUID, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("sales", "leads", "edit"))):
     r = await db.execute(select(LeadNote).where(LeadNote.id == note_id, LeadNote.lead_id == lead_id))
     row = r.scalar_one_or_none()
     if not row:
@@ -301,12 +303,12 @@ async def delete_lead_note(lead_id: UUID, note_id: UUID, db: AsyncSession = Depe
 
 # ─── Files ──────────────────────────────────────────────────────────────────────
 @router.get("/{lead_id}/files/", response_model=List[LeadFileResponse])
-async def list_lead_files(lead_id: UUID, db: AsyncSession = Depends(get_db)):
+async def list_lead_files(lead_id: UUID, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("sales", "leads", "view"))):
     r = await db.execute(select(LeadFile).where(LeadFile.lead_id == lead_id).order_by(LeadFile.created_at.desc()))
     return r.scalars().all()
 
 @router.post("/{lead_id}/files/", response_model=LeadFileResponse, status_code=status.HTTP_201_CREATED)
-async def add_lead_file(lead_id: UUID, data: LeadFileCreate, db: AsyncSession = Depends(get_db)):
+async def add_lead_file(lead_id: UUID, data: LeadFileCreate, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("sales", "leads", "edit"))):
     row = LeadFile(lead_id=lead_id, **data.model_dump())
     db.add(row)
     await db.commit()
@@ -314,7 +316,7 @@ async def add_lead_file(lead_id: UUID, data: LeadFileCreate, db: AsyncSession = 
     return row
 
 @router.delete("/{lead_id}/files/{file_id}/", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_lead_file(lead_id: UUID, file_id: UUID, db: AsyncSession = Depends(get_db)):
+async def delete_lead_file(lead_id: UUID, file_id: UUID, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("sales", "leads", "edit"))):
     r = await db.execute(select(LeadFile).where(LeadFile.id == file_id, LeadFile.lead_id == lead_id))
     row = r.scalar_one_or_none()
     if not row:

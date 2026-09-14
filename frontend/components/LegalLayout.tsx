@@ -1,18 +1,31 @@
 'use client'
 import { useRouter, usePathname } from 'next/navigation'
-import { useEffect, useRef, useState } from 'react'
+import { createContext, useContext, useEffect, useRef, useState } from 'react'
 import { getStoredUser, clearStoredUser } from '@/lib/auth'
+import { apiFetch } from '@/lib/apiClient'
+import { lookupPerm, ModulePerms, PermLevel } from '@/lib/permissions'
 import { EasyAccessMenu } from '@/components/shared/EasyAccessMenu'
 
+// Locations has its own "locations" submodule, separate from Legal Entities —
+// someone can be granted one without the other. Sales/Operational/Purchasing
+// Entities stay grouped under "entities" (see backend/app/routers/legal.py).
 const NAV = [
-  { href: '/legal/entities',  icon: '🏢', label: 'Legal Entities' },
-  { href: '/legal/locations', icon: '📍', label: 'Locations' },
-  { href: '/legal/sales-entities',       icon: '🏷️', label: 'Sales Entities' },
-  { href: '/legal/operational-teams',    icon: '🏭', label: 'Operational Teams' },
-  { href: '/legal/purchasing-entities',  icon: '🛒', label: 'Purchasing Entities' },
-  { href: '/legal/templates', icon: '📄', label: 'Template Documents' },
-  { href: '/legal/admin',     icon: '⚙️', label: 'Admin Cockpit' },
+  { href: '/legal/entities',  icon: '🏢', label: 'Legal Entities', submodule: 'entities' },
+  { href: '/legal/locations', icon: '📍', label: 'Locations', submodule: 'locations' },
+  { href: '/legal/sales-entities',       icon: '🏷️', label: 'Sales Entities', submodule: 'entities' },
+  { href: '/legal/operational-teams',    icon: '🏭', label: 'Operational Teams', submodule: 'entities' },
+  { href: '/legal/purchasing-entities',  icon: '🛒', label: 'Purchasing Entities', submodule: 'entities' },
+  { href: '/legal/templates', icon: '📄', label: 'Template Documents', submodule: 'templates' },
+  { href: '/legal/admin',     icon: '⚙️', label: 'Admin Cockpit', submodule: 'admin' },
 ]
+
+type LegalPerms = ModulePerms
+const LegalPermContext = createContext<LegalPerms>(null)
+
+export function useLegalPerm(submodule: string): { level: PermLevel; canEdit: boolean } {
+  const perms = useContext(LegalPermContext)
+  return lookupPerm(perms, submodule)
+}
 
 export function LegalLayout({ children }: { children: React.ReactNode }) {
   const router      = useRouter()
@@ -20,6 +33,7 @@ export function LegalLayout({ children }: { children: React.ReactNode }) {
   const redirecting = useRef(false)
   const [userEmail, setUserEmail] = useState('')
   const [userName,  setUserName]  = useState('')
+  const [legalPerms, setLegalPerms] = useState<LegalPerms>(null)
 
   useEffect(() => {
     const user = getStoredUser()
@@ -32,6 +46,11 @@ export function LegalLayout({ children }: { children: React.ReactNode }) {
     }
     setUserEmail(user.email)
     setUserName(user.name)
+
+    apiFetch(`/settings/permissions/${encodeURIComponent(user.email)}`)
+      .then(r => r.json())
+      .then(d => setLegalPerms(d.permissions?.legal || {}))
+      .catch(() => setLegalPerms({}))
   }, [])
 
   const handleSignOut = () => {
@@ -66,7 +85,7 @@ export function LegalLayout({ children }: { children: React.ReactNode }) {
         </div>
 
         <nav style={{ flex: 1, padding: '10px 8px', overflowY: 'auto' }}>
-          {NAV.map(item => {
+          {NAV.filter(item => lookupPerm(legalPerms, item.submodule).level !== 'none').map(item => {
             const active = path === item.href || path.startsWith(item.href)
             return (
               <button key={item.href} onClick={() => router.push(item.href)} style={btnStyle(active)}>
@@ -99,8 +118,35 @@ export function LegalLayout({ children }: { children: React.ReactNode }) {
       </div>
 
       <main style={{ marginLeft: '220px', width: 'calc(100vw - 220px)', background: '#F5F7FA', minHeight: '100vh', overflowX: 'hidden' }}>
-        {children}
+        <LegalPermContext.Provider value={legalPerms}>
+          <LegalRouteGate legalPerms={legalPerms} path={path}>{children}</LegalRouteGate>
+        </LegalPermContext.Provider>
       </main>
     </div>
   )
+}
+
+// Belt-and-suspenders guard, same as HRLayout's RouteGate / GRCLayout's
+// GRCRouteGate: blocks a page even if it forgot to call useLegalPerm itself,
+// or someone navigates straight to a URL rather than through the (already
+// permission-filtered) nav above.
+function LegalRouteGate({ legalPerms, path, children }: { legalPerms: LegalPerms; path: string; children: React.ReactNode }) {
+  const matched = NAV
+    .filter(item => path === item.href || path.startsWith(item.href + '/'))
+    .sort((a, b) => b.href.length - a.href.length)[0]
+  if (!matched) return <>{children}</>
+  const { level } = lookupPerm(legalPerms, matched.submodule)
+  if (level === 'loading') {
+    return <div style={{ padding: '48px', textAlign: 'center', color: '#45B6E4', fontSize: '13px' }}>Loading…</div>
+  }
+  if (level === 'none') {
+    return (
+      <div style={{ padding: '48px', textAlign: 'center' }}>
+        <div style={{ fontSize: '32px', marginBottom: '12px' }}>🚫</div>
+        <div style={{ fontSize: '14px', fontWeight: '700', color: '#3F3F3F', marginBottom: '4px' }}>Access Denied</div>
+        <div style={{ fontSize: '12px', color: '#94A3B8' }}>You don't have access to this section. Contact your Legal administrator if you believe this is a mistake.</div>
+      </div>
+    )
+  }
+  return <>{children}</>
 }

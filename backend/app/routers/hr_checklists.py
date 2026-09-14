@@ -5,11 +5,17 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
 from app.database import get_db
+from app.authz import require_any_permission
 import uuid
 
 router = APIRouter()
 
 KINDS = {"onboarding", "offboarding"}
+
+# Cases/tasks aren't split by kind at the route level (a case_id doesn't reveal
+# its kind without a DB lookup), so these routes are gated on either onboarding
+# or offboarding access rather than resolving the exact submodule per request.
+_ONBOARDING_OR_OFFBOARDING = [("hr", "onboarding"), ("hr", "offboarding")]
 
 
 def _row(d: dict) -> dict:
@@ -26,7 +32,7 @@ def _validate_kind(kind: str):
 
 # ─── Template tasks ─────────────────────────────────────────────────────────────
 @router.get("/checklist-tasks")
-async def list_checklist_tasks(kind: str = None, location_id: str = None, db: AsyncSession = Depends(get_db)):
+async def list_checklist_tasks(kind: str = None, location_id: str = None, db: AsyncSession = Depends(get_db), _: str = Depends(require_any_permission(_ONBOARDING_OR_OFFBOARDING, "view"))):
     where = ["1=1"]
     params = {}
     if kind:
@@ -43,7 +49,7 @@ async def list_checklist_tasks(kind: str = None, location_id: str = None, db: As
 
 
 @router.post("/checklist-tasks")
-async def create_checklist_task(data: dict, db: AsyncSession = Depends(get_db)):
+async def create_checklist_task(data: dict, db: AsyncSession = Depends(get_db), _: str = Depends(require_any_permission(_ONBOARDING_OR_OFFBOARDING, "edit"))):
     kind = data.get("kind", "")
     _validate_kind(kind)
     if not data.get("title") or not data.get("location_id"):
@@ -66,7 +72,7 @@ async def create_checklist_task(data: dict, db: AsyncSession = Depends(get_db)):
 
 
 @router.put("/checklist-tasks/{task_id}")
-async def update_checklist_task(task_id: str, data: dict, db: AsyncSession = Depends(get_db)):
+async def update_checklist_task(task_id: str, data: dict, db: AsyncSession = Depends(get_db), _: str = Depends(require_any_permission(_ONBOARDING_OR_OFFBOARDING, "edit"))):
     await db.execute(text("""
         UPDATE hr_checklist_tasks SET
             title = COALESCE(NULLIF(:title,''), title),
@@ -89,7 +95,7 @@ async def update_checklist_task(task_id: str, data: dict, db: AsyncSession = Dep
 
 
 @router.delete("/checklist-tasks/{task_id}")
-async def delete_checklist_task(task_id: str, db: AsyncSession = Depends(get_db)):
+async def delete_checklist_task(task_id: str, db: AsyncSession = Depends(get_db), _: str = Depends(require_any_permission(_ONBOARDING_OR_OFFBOARDING, "edit"))):
     await db.execute(text("DELETE FROM hr_checklist_tasks WHERE id = CAST(:id AS UUID)"), {"id": task_id})
     await db.commit()
     return {"status": "ok"}
@@ -126,7 +132,7 @@ async def _assign_responsible(db: AsyncSession, case: dict, responsible_email: s
 
 # ─── Cases — one run of a checklist for one real person ────────────────────────
 @router.get("/checklist-cases")
-async def list_checklist_cases(kind: str = None, status: str = None, db: AsyncSession = Depends(get_db)):
+async def list_checklist_cases(kind: str = None, status: str = None, db: AsyncSession = Depends(get_db), _: str = Depends(require_any_permission(_ONBOARDING_OR_OFFBOARDING, "view"))):
     where = ["1=1"]
     params = {}
     if kind:
@@ -148,7 +154,7 @@ async def list_checklist_cases(kind: str = None, status: str = None, db: AsyncSe
 
 
 @router.post("/checklist-cases")
-async def start_checklist_case(data: dict, db: AsyncSession = Depends(get_db)):
+async def start_checklist_case(data: dict, db: AsyncSession = Depends(get_db), _: str = Depends(require_any_permission(_ONBOARDING_OR_OFFBOARDING, "edit"))):
     kind = data.get("kind", "")
     _validate_kind(kind)
     user_email = data.get("user_email", "")
@@ -244,7 +250,7 @@ async def start_checklist_case(data: dict, db: AsyncSession = Depends(get_db)):
 
 
 @router.get("/checklist-cases/{case_id}")
-async def get_checklist_case(case_id: str, db: AsyncSession = Depends(get_db)):
+async def get_checklist_case(case_id: str, db: AsyncSession = Depends(get_db), _: str = Depends(require_any_permission(_ONBOARDING_OR_OFFBOARDING, "view"))):
     r = await db.execute(text("SELECT * FROM hr_checklist_cases WHERE id = CAST(:id AS UUID)"), {"id": case_id})
     row = r.fetchone()
     if not row:
@@ -262,7 +268,7 @@ async def get_checklist_case(case_id: str, db: AsyncSession = Depends(get_db)):
 
 
 @router.put("/checklist-cases/{case_id}")
-async def update_checklist_case(case_id: str, data: dict, db: AsyncSession = Depends(get_db)):
+async def update_checklist_case(case_id: str, data: dict, db: AsyncSession = Depends(get_db), _: str = Depends(require_any_permission(_ONBOARDING_OR_OFFBOARDING, "edit"))):
     case = await _get_case(db, case_id)
     if not case:
         raise HTTPException(status_code=404, detail="Case not found")
@@ -279,7 +285,7 @@ async def update_checklist_case(case_id: str, data: dict, db: AsyncSession = Dep
 
 
 @router.put("/checklist-cases/{case_id}/close")
-async def close_checklist_case(case_id: str, db: AsyncSession = Depends(get_db)):
+async def close_checklist_case(case_id: str, db: AsyncSession = Depends(get_db), _: str = Depends(require_any_permission(_ONBOARDING_OR_OFFBOARDING, "edit"))):
     case = await _get_case(db, case_id)
     if not case:
         raise HTTPException(status_code=404, detail="Case not found")
@@ -292,7 +298,7 @@ async def close_checklist_case(case_id: str, db: AsyncSession = Depends(get_db))
 
 # ─── Equipment — assigned directly on it_equipment.assigned_email, locked once closed ─
 @router.get("/checklist-cases/{case_id}/equipments")
-async def list_case_equipments(case_id: str, db: AsyncSession = Depends(get_db)):
+async def list_case_equipments(case_id: str, db: AsyncSession = Depends(get_db), _: str = Depends(require_any_permission(_ONBOARDING_OR_OFFBOARDING, "view"))):
     case = await _get_case(db, case_id)
     if not case:
         raise HTTPException(status_code=404, detail="Case not found")
@@ -301,7 +307,7 @@ async def list_case_equipments(case_id: str, db: AsyncSession = Depends(get_db))
 
 
 @router.post("/checklist-cases/{case_id}/equipments/{equipment_id}")
-async def assign_case_equipment(case_id: str, equipment_id: str, db: AsyncSession = Depends(get_db)):
+async def assign_case_equipment(case_id: str, equipment_id: str, db: AsyncSession = Depends(get_db), _: str = Depends(require_any_permission(_ONBOARDING_OR_OFFBOARDING, "edit"))):
     case = await _get_case(db, case_id)
     if not case:
         raise HTTPException(status_code=404, detail="Case not found")
@@ -315,7 +321,7 @@ async def assign_case_equipment(case_id: str, equipment_id: str, db: AsyncSessio
 
 
 @router.delete("/checklist-cases/{case_id}/equipments/{equipment_id}")
-async def unassign_case_equipment(case_id: str, equipment_id: str, db: AsyncSession = Depends(get_db)):
+async def unassign_case_equipment(case_id: str, equipment_id: str, db: AsyncSession = Depends(get_db), _: str = Depends(require_any_permission(_ONBOARDING_OR_OFFBOARDING, "edit"))):
     case = await _get_case(db, case_id)
     if not case:
         raise HTTPException(status_code=404, detail="Case not found")

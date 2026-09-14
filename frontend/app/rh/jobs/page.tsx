@@ -1,6 +1,6 @@
 'use client'
 import { useState, useEffect } from 'react'
-import { HRLayout } from '@/components/HRLayout'
+import { HRLayout, useHRPerm } from '@/components/HRLayout'
 
 const API = 'https://api.whubbi.wcomply.com'
 
@@ -17,6 +17,7 @@ const BTN = (props: React.ButtonHTMLAttributes<HTMLButtonElement> & { variant?: 
 }
 
 export default function JobsPage() {
+  const { canEdit } = useHRPerm('jobs')
   const [jobs, setJobs]           = useState<any[]>([])
   const [loading, setLoading]     = useState(true)
   const [showModal, setShowModal] = useState(false)
@@ -73,10 +74,12 @@ export default function JobsPage() {
             <h1 style={{ fontSize:'20px', fontWeight:'800', color:'#156082', marginBottom:'4px' }}>📋 Job Descriptions</h1>
             <p style={{ fontSize:'12px', color:'#45B6E4' }}>{jobs.length} description{jobs.length !== 1 ? 's' : ''}</p>
           </div>
-          <BTN variant="primary" style={{ fontSize:'12px', padding:'9px 18px' }}
-            onClick={() => { setEditJob(null); setShowModal(true) }}>
-            + New Job Description
-          </BTN>
+          {canEdit && (
+            <BTN variant="primary" style={{ fontSize:'12px', padding:'9px 18px' }}
+              onClick={() => { setEditJob(null); setShowModal(true) }}>
+              + New Job Description
+            </BTN>
+          )}
         </div>
 
         {loading && <div style={{ textAlign:'center', padding:'48px', color:'#45B6E4' }}>Loading...</div>}
@@ -150,8 +153,8 @@ export default function JobsPage() {
                     <div style={{ padding:'12px 20px', background:'#FAFBFC', borderTop:'1px solid #F1F5F9', display:'flex', gap:'8px', justifyContent:'flex-end' }}>
                       <BTN variant="export" onClick={() => downloadExport(j, 'pdf')}>📄 PDF</BTN>
                       <BTN variant="export" onClick={() => downloadExport(j, 'docx')}>📝 Word</BTN>
-                      <BTN variant="ghost" onClick={() => { setEditJob(j); setShowModal(true) }}>Edit</BTN>
-                      <BTN variant="danger" onClick={() => del(j.id)}>Delete</BTN>
+                      {canEdit && <BTN variant="ghost" onClick={() => { setEditJob(j); setShowModal(true) }}>Edit</BTN>}
+                      {canEdit && <BTN variant="danger" onClick={() => del(j.id)}>Delete</BTN>}
                     </div>
                   </div>
                 )}

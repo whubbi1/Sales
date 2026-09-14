@@ -9,6 +9,7 @@ from typing import List
 from uuid import UUID
 
 from app.database import get_db
+from app.authz import require_permission
 from app.services.ids import next_internal_id
 from app.models.rfp import RFP, RFPComment, RFPActionItem, RFPDocumentChecklist, RFPStaffingTask, RFPStaffingAllocation, RFPStaffingRate, RFPStaffingRole, rfp_opportunity
 from app.models.opportunity import Opportunity
@@ -89,7 +90,7 @@ async def _sync_approvers_from_role(db: AsyncSession, rfp_id, resource_email, re
 
 
 @router.get("/", response_model=List[RFPResponse])
-async def list_rfps(company_id: str = None, status_filter: str = None, db: AsyncSession = Depends(get_db)):
+async def list_rfps(company_id: str = None, status_filter: str = None, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("sales", "opportunities", "view"))):
     query = _load_query()
     if company_id:
         query = query.where(RFP.company_id == company_id)
@@ -104,7 +105,7 @@ async def list_rfps(company_id: str = None, status_filter: str = None, db: Async
 
 
 @router.post("/", response_model=RFPResponse, status_code=status.HTTP_201_CREATED)
-async def create_rfp(data: RFPCreate, db: AsyncSession = Depends(get_db)):
+async def create_rfp(data: RFPCreate, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("sales", "opportunities", "edit"))):
     opportunity_ids = data.opportunity_ids or []
     payload = data.model_dump(exclude={'opportunity_ids'})
     payload['approvers'] = [a.model_dump() if hasattr(a, 'model_dump') else a for a in (payload.get('approvers') or [])]
@@ -124,7 +125,7 @@ async def create_rfp(data: RFPCreate, db: AsyncSession = Depends(get_db)):
 
 
 @router.get("/{rfp_id}", response_model=RFPResponse)
-async def get_rfp(rfp_id: UUID, db: AsyncSession = Depends(get_db)):
+async def get_rfp(rfp_id: UUID, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("sales", "opportunities", "view"))):
     r = await db.execute(_load_query().where(RFP.id == rfp_id))
     rfp = r.scalar_one_or_none()
     if not rfp:
@@ -135,7 +136,7 @@ async def get_rfp(rfp_id: UUID, db: AsyncSession = Depends(get_db)):
 
 
 @router.put("/{rfp_id}", response_model=RFPResponse)
-async def update_rfp(rfp_id: UUID, data: RFPUpdate, db: AsyncSession = Depends(get_db)):
+async def update_rfp(rfp_id: UUID, data: RFPUpdate, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("sales", "opportunities", "edit"))):
     r = await db.execute(select(RFP).where(RFP.id == rfp_id))
     rfp = r.scalar_one_or_none()
     if not rfp:
@@ -155,7 +156,7 @@ async def update_rfp(rfp_id: UUID, data: RFPUpdate, db: AsyncSession = Depends(g
 
 
 @router.delete("/{rfp_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_rfp(rfp_id: UUID, db: AsyncSession = Depends(get_db)):
+async def delete_rfp(rfp_id: UUID, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("sales", "opportunities", "edit"))):
     r = await db.execute(select(RFP).where(RFP.id == rfp_id))
     rfp = r.scalar_one_or_none()
     if not rfp:
@@ -166,7 +167,7 @@ async def delete_rfp(rfp_id: UUID, db: AsyncSession = Depends(get_db)):
 
 # ─── Linked opportunities ───────────────────────────────────────────────────────
 @router.post("/{rfp_id}/opportunities/{opportunity_id}")
-async def link_opportunity(rfp_id: UUID, opportunity_id: UUID, db: AsyncSession = Depends(get_db)):
+async def link_opportunity(rfp_id: UUID, opportunity_id: UUID, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("sales", "opportunities", "edit"))):
     r = await db.execute(select(RFP).options(selectinload(RFP.opportunities)).where(RFP.id == rfp_id))
     rfp = r.scalar_one_or_none()
     if not rfp:
@@ -182,7 +183,7 @@ async def link_opportunity(rfp_id: UUID, opportunity_id: UUID, db: AsyncSession 
 
 
 @router.delete("/{rfp_id}/opportunities/{opportunity_id}")
-async def unlink_opportunity(rfp_id: UUID, opportunity_id: UUID, db: AsyncSession = Depends(get_db)):
+async def unlink_opportunity(rfp_id: UUID, opportunity_id: UUID, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("sales", "opportunities", "edit"))):
     await db.execute(
         delete(rfp_opportunity).where(
             rfp_opportunity.c.rfp_id == rfp_id, rfp_opportunity.c.opportunity_id == opportunity_id
@@ -225,12 +226,12 @@ async def _sync_internal_task(db: AsyncSession, item: RFPActionItem):
 
 
 @router.get("/{rfp_id}/comments/", response_model=List[RFPCommentResponse])
-async def list_rfp_comments(rfp_id: UUID, db: AsyncSession = Depends(get_db)):
+async def list_rfp_comments(rfp_id: UUID, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("sales", "opportunities", "view"))):
     r = await db.execute(select(RFPComment).where(RFPComment.rfp_id == rfp_id).order_by(RFPComment.created_at.desc()))
     return r.scalars().all()
 
 @router.post("/{rfp_id}/comments/", response_model=RFPCommentResponse, status_code=status.HTTP_201_CREATED)
-async def add_rfp_comment(rfp_id: UUID, data: RFPCommentCreate, db: AsyncSession = Depends(get_db)):
+async def add_rfp_comment(rfp_id: UUID, data: RFPCommentCreate, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("sales", "opportunities", "edit"))):
     row = RFPComment(rfp_id=rfp_id, **data.model_dump())
     db.add(row)
     await db.commit()
@@ -238,7 +239,7 @@ async def add_rfp_comment(rfp_id: UUID, data: RFPCommentCreate, db: AsyncSession
     return row
 
 @router.delete("/{rfp_id}/comments/{comment_id}/", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_rfp_comment(rfp_id: UUID, comment_id: UUID, db: AsyncSession = Depends(get_db)):
+async def delete_rfp_comment(rfp_id: UUID, comment_id: UUID, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("sales", "opportunities", "edit"))):
     r = await db.execute(select(RFPComment).where(RFPComment.id == comment_id, RFPComment.rfp_id == rfp_id))
     row = r.scalar_one_or_none()
     if not row:
@@ -248,13 +249,13 @@ async def delete_rfp_comment(rfp_id: UUID, comment_id: UUID, db: AsyncSession = 
 
 
 @router.get("/{rfp_id}/action-items", response_model=List[RFPActionItemResponse])
-async def list_action_items(rfp_id: UUID, db: AsyncSession = Depends(get_db)):
+async def list_action_items(rfp_id: UUID, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("sales", "opportunities", "view"))):
     r = await db.execute(select(RFPActionItem).where(RFPActionItem.rfp_id == rfp_id).order_by(RFPActionItem.position, RFPActionItem.created_at))
     return r.scalars().all()
 
 
 @router.post("/{rfp_id}/action-items", response_model=RFPActionItemResponse, status_code=status.HTTP_201_CREATED)
-async def create_action_item(rfp_id: UUID, data: RFPActionItemCreate, db: AsyncSession = Depends(get_db)):
+async def create_action_item(rfp_id: UUID, data: RFPActionItemCreate, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("sales", "opportunities", "edit"))):
     item = RFPActionItem(rfp_id=rfp_id, **data.model_dump())
     db.add(item)
     await db.flush()
@@ -266,7 +267,7 @@ async def create_action_item(rfp_id: UUID, data: RFPActionItemCreate, db: AsyncS
 
 
 @router.put("/{rfp_id}/action-items/{item_id}", response_model=RFPActionItemResponse)
-async def update_action_item(rfp_id: UUID, item_id: UUID, data: RFPActionItemUpdate, db: AsyncSession = Depends(get_db)):
+async def update_action_item(rfp_id: UUID, item_id: UUID, data: RFPActionItemUpdate, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("sales", "opportunities", "edit"))):
     r = await db.execute(select(RFPActionItem).where(RFPActionItem.id == item_id, RFPActionItem.rfp_id == rfp_id))
     item = r.scalar_one_or_none()
     if not item:
@@ -287,7 +288,7 @@ async def update_action_item(rfp_id: UUID, item_id: UUID, data: RFPActionItemUpd
 
 
 @router.delete("/{rfp_id}/action-items/{item_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_action_item(rfp_id: UUID, item_id: UUID, db: AsyncSession = Depends(get_db)):
+async def delete_action_item(rfp_id: UUID, item_id: UUID, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("sales", "opportunities", "edit"))):
     r = await db.execute(select(RFPActionItem).where(RFPActionItem.id == item_id, RFPActionItem.rfp_id == rfp_id))
     item = r.scalar_one_or_none()
     if not item:
@@ -298,13 +299,13 @@ async def delete_action_item(rfp_id: UUID, item_id: UUID, db: AsyncSession = Dep
 
 # ─── Document checklist ("documents to be created") ────────────────────────────
 @router.get("/{rfp_id}/document-checklist", response_model=List[RFPDocumentChecklistResponse])
-async def list_document_checklist(rfp_id: UUID, db: AsyncSession = Depends(get_db)):
+async def list_document_checklist(rfp_id: UUID, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("sales", "opportunities", "view"))):
     r = await db.execute(select(RFPDocumentChecklist).where(RFPDocumentChecklist.rfp_id == rfp_id).order_by(RFPDocumentChecklist.position, RFPDocumentChecklist.created_at))
     return r.scalars().all()
 
 
 @router.post("/{rfp_id}/document-checklist", response_model=RFPDocumentChecklistResponse, status_code=status.HTTP_201_CREATED)
-async def create_document_checklist_item(rfp_id: UUID, data: RFPDocumentChecklistCreate, db: AsyncSession = Depends(get_db)):
+async def create_document_checklist_item(rfp_id: UUID, data: RFPDocumentChecklistCreate, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("sales", "opportunities", "edit"))):
     item = RFPDocumentChecklist(rfp_id=rfp_id, **data.model_dump())
     db.add(item)
     await db.commit()
@@ -313,7 +314,7 @@ async def create_document_checklist_item(rfp_id: UUID, data: RFPDocumentChecklis
 
 
 @router.put("/{rfp_id}/document-checklist/{item_id}", response_model=RFPDocumentChecklistResponse)
-async def update_document_checklist_item(rfp_id: UUID, item_id: UUID, data: RFPDocumentChecklistUpdate, db: AsyncSession = Depends(get_db)):
+async def update_document_checklist_item(rfp_id: UUID, item_id: UUID, data: RFPDocumentChecklistUpdate, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("sales", "opportunities", "edit"))):
     r = await db.execute(select(RFPDocumentChecklist).where(RFPDocumentChecklist.id == item_id, RFPDocumentChecklist.rfp_id == rfp_id))
     item = r.scalar_one_or_none()
     if not item:
@@ -326,7 +327,7 @@ async def update_document_checklist_item(rfp_id: UUID, item_id: UUID, data: RFPD
 
 
 @router.delete("/{rfp_id}/document-checklist/{item_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_document_checklist_item(rfp_id: UUID, item_id: UUID, db: AsyncSession = Depends(get_db)):
+async def delete_document_checklist_item(rfp_id: UUID, item_id: UUID, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("sales", "opportunities", "edit"))):
     r = await db.execute(select(RFPDocumentChecklist).where(RFPDocumentChecklist.id == item_id, RFPDocumentChecklist.rfp_id == rfp_id))
     item = r.scalar_one_or_none()
     if not item:
@@ -337,7 +338,7 @@ async def delete_document_checklist_item(rfp_id: UUID, item_id: UUID, db: AsyncS
 
 # ─── AI document analysis ──────────────────────────────────────────────────────
 @router.post("/{rfp_id}/analyze")
-async def analyze_rfp(rfp_id: UUID, db: AsyncSession = Depends(get_db)):
+async def analyze_rfp(rfp_id: UUID, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("sales", "opportunities", "edit"))):
     import base64, io, json, os, httpx
     from docx import Document
     from app.routers.settings import get_ms_token
@@ -466,13 +467,13 @@ Return ONLY the JSON, no markdown, no explanation."""
 
 # ─── Staffing Roles (one assigned resource each; a resource can hold several roles) ────
 @router.get("/{rfp_id}/staffing-roles", response_model=List[RFPStaffingRoleResponse])
-async def list_staffing_roles(rfp_id: UUID, db: AsyncSession = Depends(get_db)):
+async def list_staffing_roles(rfp_id: UUID, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("sales", "opportunities", "view"))):
     r = await db.execute(select(RFPStaffingRole).where(RFPStaffingRole.rfp_id == rfp_id).order_by(RFPStaffingRole.created_at))
     return r.scalars().all()
 
 
 @router.post("/{rfp_id}/staffing-roles", response_model=RFPStaffingRoleResponse, status_code=status.HTTP_201_CREATED)
-async def create_staffing_role(rfp_id: UUID, data: RFPStaffingRoleCreate, db: AsyncSession = Depends(get_db)):
+async def create_staffing_role(rfp_id: UUID, data: RFPStaffingRoleCreate, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("sales", "opportunities", "edit"))):
     role = RFPStaffingRole(rfp_id=rfp_id, **data.model_dump())
     db.add(role)
     await db.commit()
@@ -482,7 +483,7 @@ async def create_staffing_role(rfp_id: UUID, data: RFPStaffingRoleCreate, db: As
 
 
 @router.put("/{rfp_id}/staffing-roles/{role_id}", response_model=RFPStaffingRoleResponse)
-async def update_staffing_role(rfp_id: UUID, role_id: UUID, data: RFPStaffingRoleUpdate, db: AsyncSession = Depends(get_db)):
+async def update_staffing_role(rfp_id: UUID, role_id: UUID, data: RFPStaffingRoleUpdate, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("sales", "opportunities", "edit"))):
     r = await db.execute(select(RFPStaffingRole).where(RFPStaffingRole.id == role_id, RFPStaffingRole.rfp_id == rfp_id))
     role = r.scalar_one_or_none()
     if not role:
@@ -496,7 +497,7 @@ async def update_staffing_role(rfp_id: UUID, role_id: UUID, data: RFPStaffingRol
 
 
 @router.delete("/{rfp_id}/staffing-roles/{role_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_staffing_role(rfp_id: UUID, role_id: UUID, db: AsyncSession = Depends(get_db)):
+async def delete_staffing_role(rfp_id: UUID, role_id: UUID, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("sales", "opportunities", "edit"))):
     r = await db.execute(select(RFPStaffingRole).where(RFPStaffingRole.id == role_id, RFPStaffingRole.rfp_id == rfp_id))
     role = r.scalar_one_or_none()
     if not role:
@@ -507,7 +508,7 @@ async def delete_staffing_role(rfp_id: UUID, role_id: UUID, db: AsyncSession = D
 
 # ─── Staffing/Costing Sheet ─────────────────────────────────────────────────────
 @router.get("/{rfp_id}/staffing-tasks", response_model=List[RFPStaffingTaskResponse])
-async def list_staffing_tasks(rfp_id: UUID, db: AsyncSession = Depends(get_db)):
+async def list_staffing_tasks(rfp_id: UUID, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("sales", "opportunities", "view"))):
     r = await db.execute(
         select(RFPStaffingTask).options(selectinload(RFPStaffingTask.allocations), selectinload(RFPStaffingTask.role))
         .where(RFPStaffingTask.rfp_id == rfp_id).order_by(RFPStaffingTask.position, RFPStaffingTask.created_at)
@@ -516,7 +517,7 @@ async def list_staffing_tasks(rfp_id: UUID, db: AsyncSession = Depends(get_db)):
 
 
 @router.post("/{rfp_id}/staffing-tasks", response_model=RFPStaffingTaskResponse, status_code=status.HTTP_201_CREATED)
-async def create_staffing_task(rfp_id: UUID, data: RFPStaffingTaskCreate, db: AsyncSession = Depends(get_db)):
+async def create_staffing_task(rfp_id: UUID, data: RFPStaffingTaskCreate, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("sales", "opportunities", "edit"))):
     task = RFPStaffingTask(rfp_id=rfp_id, **data.model_dump())
     db.add(task)
     await db.commit()
@@ -528,7 +529,7 @@ async def create_staffing_task(rfp_id: UUID, data: RFPStaffingTaskCreate, db: As
 
 
 @router.put("/{rfp_id}/staffing-tasks/{task_id}", response_model=RFPStaffingTaskResponse)
-async def update_staffing_task(rfp_id: UUID, task_id: UUID, data: RFPStaffingTaskUpdate, db: AsyncSession = Depends(get_db)):
+async def update_staffing_task(rfp_id: UUID, task_id: UUID, data: RFPStaffingTaskUpdate, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("sales", "opportunities", "edit"))):
     r = await db.execute(select(RFPStaffingTask).options(selectinload(RFPStaffingTask.allocations), selectinload(RFPStaffingTask.role))
                           .where(RFPStaffingTask.id == task_id, RFPStaffingTask.rfp_id == rfp_id))
     task = r.scalar_one_or_none()
@@ -544,7 +545,7 @@ async def update_staffing_task(rfp_id: UUID, task_id: UUID, data: RFPStaffingTas
 
 
 @router.delete("/{rfp_id}/staffing-tasks/{task_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_staffing_task(rfp_id: UUID, task_id: UUID, db: AsyncSession = Depends(get_db)):
+async def delete_staffing_task(rfp_id: UUID, task_id: UUID, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("sales", "opportunities", "edit"))):
     r = await db.execute(select(RFPStaffingTask).where(RFPStaffingTask.id == task_id, RFPStaffingTask.rfp_id == rfp_id))
     task = r.scalar_one_or_none()
     if not task:
@@ -557,7 +558,7 @@ async def delete_staffing_task(rfp_id: UUID, task_id: UUID, db: AsyncSession = D
 # state for the granularity (week/month) currently being edited; the other granularity's
 # rows, if any, are left untouched.
 @router.put("/{rfp_id}/staffing-tasks/{task_id}/allocations", response_model=RFPStaffingTaskResponse)
-async def set_staffing_allocations(rfp_id: UUID, task_id: UUID, data: RFPStaffingAllocationsSet, db: AsyncSession = Depends(get_db)):
+async def set_staffing_allocations(rfp_id: UUID, task_id: UUID, data: RFPStaffingAllocationsSet, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("sales", "opportunities", "edit"))):
     r = await db.execute(select(RFPStaffingTask).options(selectinload(RFPStaffingTask.allocations), selectinload(RFPStaffingTask.role))
                           .where(RFPStaffingTask.id == task_id, RFPStaffingTask.rfp_id == rfp_id))
     task = r.scalar_one_or_none()
@@ -572,13 +573,13 @@ async def set_staffing_allocations(rfp_id: UUID, task_id: UUID, data: RFPStaffin
 
 
 @router.get("/{rfp_id}/staffing-rates", response_model=List[RFPStaffingRateResponse])
-async def list_staffing_rates(rfp_id: UUID, db: AsyncSession = Depends(get_db)):
+async def list_staffing_rates(rfp_id: UUID, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("sales", "opportunities", "view"))):
     r = await db.execute(select(RFPStaffingRate).where(RFPStaffingRate.rfp_id == rfp_id))
     return r.scalars().all()
 
 
 @router.put("/{rfp_id}/staffing-rates", response_model=RFPStaffingRateResponse)
-async def set_staffing_rate(rfp_id: UUID, data: RFPStaffingRateCreate, db: AsyncSession = Depends(get_db)):
+async def set_staffing_rate(rfp_id: UUID, data: RFPStaffingRateCreate, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("sales", "opportunities", "edit"))):
     r = await db.execute(select(RFPStaffingRate).where(RFPStaffingRate.rfp_id == rfp_id, RFPStaffingRate.resource_email == data.resource_email))
     rate = r.scalar_one_or_none()
     if rate:

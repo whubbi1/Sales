@@ -2,31 +2,24 @@
 import { useRouter, usePathname } from 'next/navigation'
 import { createContext, useContext, useEffect, useRef, useState } from 'react'
 import { getStoredUser, clearStoredUser } from '@/lib/auth'
+import { apiFetch } from '@/lib/apiClient'
+import { lookupPerm, ModulePerms, PermLevel } from '@/lib/permissions'
 import { EasyAccessMenu } from '@/components/shared/EasyAccessMenu'
 
-const API = 'https://api.whubbi.wcomply.com'
-
 const NAV = [
-  { href: '/finance/suppliers',  icon: '🏭', label: 'Suppliers' },
-  { href: '/finance/contracts',  icon: '📃', label: 'Contracts' },
-  { href: '/finance/purchasing', icon: '🛒', label: 'Purchasing' },
-  { href: '/finance/invoicing',  icon: '🧾', label: 'Invoicing' },
-  { href: '/finance/customers',  icon: '🤝', label: 'Customers' },
+  { href: '/finance/suppliers',  icon: '🏭', label: 'Suppliers',  submodule: 'suppliers' },
+  { href: '/finance/contracts',  icon: '📃', label: 'Contracts',  submodule: 'contracts' },
+  { href: '/finance/purchasing', icon: '🛒', label: 'Purchasing', submodule: 'purchasing' },
+  { href: '/finance/invoicing',  icon: '🧾', label: 'Invoicing',  submodule: 'invoices' },
+  { href: '/finance/customers',  icon: '🤝', label: 'Customers',  submodule: 'customers' },
 ]
 
-type PermLevel = 'loading' | 'none' | 'view' | 'edit'
-type FinancePerms = Record<string, { access_mode?: string; id?: string | null }> | null
+type FinancePerms = ModulePerms
 const FinancePermContext = createContext<FinancePerms>(null)
 
-// Only the newly-added Finance pages (Customers) call this to gate themselves — the
-// pre-existing Finance pages stay ungated, same convention as GRC/HR.
 export function useFinancePerm(submodule: string): { level: PermLevel; canEdit: boolean } {
   const perms = useContext(FinancePermContext)
-  if (perms === null) return { level: 'loading', canEdit: false }
-  const p = perms[submodule]
-  if (!p || p.id == null) return { level: 'edit', canEdit: true }
-  const level = (p.access_mode as PermLevel) || 'none'
-  return { level, canEdit: level === 'edit' }
+  return lookupPerm(perms, submodule)
 }
 
 export function FinanceLayout({ children }: { children: React.ReactNode }) {
@@ -49,7 +42,7 @@ export function FinanceLayout({ children }: { children: React.ReactNode }) {
     setUserEmail(user.email)
     setUserName(user.name)
 
-    fetch(`${API}/settings/permissions/${encodeURIComponent(user.email)}`)
+    apiFetch(`/settings/permissions/${encodeURIComponent(user.email)}`)
       .then(r => r.json())
       .then(d => setFinancePerms(d.permissions?.finance || {}))
       .catch(() => setFinancePerms({}))
@@ -86,7 +79,7 @@ export function FinanceLayout({ children }: { children: React.ReactNode }) {
         </div>
 
         <nav style={{ flex: 1, padding: '10px 8px', overflowY: 'auto' }}>
-          {NAV.map(item => {
+          {NAV.filter(item => lookupPerm(financePerms, item.submodule).level !== 'none').map(item => {
             const active = path === item.href || path.startsWith(item.href)
             return (
               <button key={item.href} onClick={() => router.push(item.href)} style={btnStyle(active)}>
@@ -120,9 +113,33 @@ export function FinanceLayout({ children }: { children: React.ReactNode }) {
 
       <main style={{ marginLeft: '220px', width: 'calc(100vw - 220px)', background: '#F5F7FA', minHeight: '100vh', overflowX: 'hidden' }}>
         <FinancePermContext.Provider value={financePerms}>
-          {children}
+          <FinanceRouteGate financePerms={financePerms} path={path}>{children}</FinanceRouteGate>
         </FinancePermContext.Provider>
       </main>
     </div>
   )
+}
+
+// Belt-and-suspenders guard, same as HRLayout/GRCLayout's RouteGate: blocks a
+// page even if it forgot to call useFinancePerm itself, or someone navigates
+// straight to a URL rather than through the (already permission-filtered) nav.
+function FinanceRouteGate({ financePerms, path, children }: { financePerms: FinancePerms; path: string; children: React.ReactNode }) {
+  const matched = NAV
+    .filter(item => path === item.href || path.startsWith(item.href + '/'))
+    .sort((a, b) => b.href.length - a.href.length)[0]
+  if (!matched) return <>{children}</>
+  const { level } = lookupPerm(financePerms, matched.submodule)
+  if (level === 'loading') {
+    return <div style={{ padding: '48px', textAlign: 'center', color: '#45B6E4', fontSize: '13px' }}>Loading…</div>
+  }
+  if (level === 'none') {
+    return (
+      <div style={{ padding: '48px', textAlign: 'center' }}>
+        <div style={{ fontSize: '32px', marginBottom: '12px' }}>🚫</div>
+        <div style={{ fontSize: '14px', fontWeight: '700', color: '#3F3F3F', marginBottom: '4px' }}>Access Denied</div>
+        <div style={{ fontSize: '12px', color: '#94A3B8' }}>You don't have access to this section. Contact your Finance administrator if you believe this is a mistake.</div>
+      </div>
+    )
+  }
+  return <>{children}</>
 }

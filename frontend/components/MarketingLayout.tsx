@@ -2,34 +2,32 @@
 import { useRouter, usePathname } from 'next/navigation'
 import { createContext, useContext, useEffect, useRef, useState } from 'react'
 import { getStoredUser, clearStoredUser } from '@/lib/auth'
+import { apiFetch } from '@/lib/apiClient'
+import { lookupPerm, ModulePerms, PermLevel } from '@/lib/permissions'
 import { EasyAccessMenu } from '@/components/shared/EasyAccessMenu'
 
-const API = 'https://api.whubbi.wcomply.com'
-
+// `submodule: null` means "no matching MODULES['marketing'] entry exists for
+// this page" (e.g. Marketplaces) — left ungated, same convention as a
+// module's Dashboard page, since there's no permission granularity to check.
 const NAV = [
-  { href: '/marketing/marketing-objectives', icon: '📋', label: 'Marketing Objectives' },
-  { href: '/marketing/events',               icon: '🎪', label: 'Events' },
-  { href: '/marketing/templates',            icon: '✉️', label: 'Template Emails' },
-  { href: '/marketing/marketplaces',         icon: '🛒', label: 'Marketplaces' },
-  { href: '/marketing/company-website',      icon: '🌐', label: 'Company Website' },
-  { href: '/marketing/competitor-analysis',  icon: '🔬', label: 'Competitor Analysis' },
-  { href: '/marketing/social-marketing',     icon: '📱', label: 'Social Marketing' },
-  { href: '/marketing/social-media-influence', icon: '🚀', label: 'Social Media Influence' },
-  { href: '/marketing/marketing-plan',       icon: '🗺️', label: 'Marketing Plan' },
-  { href: '/marketing/marketing-material',   icon: '🖼️', label: 'Marketing Material' },
+  { href: '/marketing/marketing-objectives', icon: '📋', label: 'Marketing Objectives', submodule: 'marketing_objectives' as string | null },
+  { href: '/marketing/events',               icon: '🎪', label: 'Events',               submodule: 'events' },
+  { href: '/marketing/templates',            icon: '✉️', label: 'Template Emails',       submodule: 'email_templates' },
+  { href: '/marketing/marketplaces',         icon: '🛒', label: 'Marketplaces',          submodule: null },
+  { href: '/marketing/company-website',      icon: '🌐', label: 'Company Website',       submodule: 'company_website' },
+  { href: '/marketing/competitor-analysis',  icon: '🔬', label: 'Competitor Analysis',   submodule: 'competitor_analysis' },
+  { href: '/marketing/social-marketing',     icon: '📱', label: 'Social Marketing',      submodule: 'social_marketing' },
+  { href: '/marketing/social-media-influence', icon: '🚀', label: 'Social Media Influence', submodule: 'social_media_influence' },
+  { href: '/marketing/marketing-plan',       icon: '🗺️', label: 'Marketing Plan',        submodule: 'marketing_plan' },
+  { href: '/marketing/marketing-material',   icon: '🖼️', label: 'Marketing Material',    submodule: 'marketing_material' },
 ]
 
-type PermLevel = 'loading' | 'none' | 'view' | 'edit'
-type MarketingPerms = Record<string, { access_mode?: string; id?: string | null }> | null
+type MarketingPerms = ModulePerms
 const MarketingPermContext = createContext<MarketingPerms>(null)
 
 export function useMarketingPerm(submodule: string): { level: PermLevel; canEdit: boolean } {
   const perms = useContext(MarketingPermContext)
-  if (perms === null) return { level: 'loading', canEdit: false }
-  const p = perms[submodule]
-  if (!p || p.id == null) return { level: 'edit', canEdit: true }
-  const level = (p.access_mode as PermLevel) || 'none'
-  return { level, canEdit: level === 'edit' }
+  return lookupPerm(perms, submodule)
 }
 
 export function MarketingLayout({ children }: { children: React.ReactNode }) {
@@ -52,7 +50,7 @@ export function MarketingLayout({ children }: { children: React.ReactNode }) {
     setUserEmail(user.email)
     setUserName(user.name)
 
-    fetch(`${API}/settings/permissions/${encodeURIComponent(user.email)}`)
+    apiFetch(`/settings/permissions/${encodeURIComponent(user.email)}`)
       .then(r => r.json())
       .then(d => setPerms(d.permissions?.marketing || {}))
       .catch(() => setPerms({}))
@@ -89,7 +87,7 @@ export function MarketingLayout({ children }: { children: React.ReactNode }) {
         </div>
 
         <nav style={{ flex: 1, padding: '10px 8px', overflowY: 'auto' }}>
-          {NAV.map(item => {
+          {NAV.filter(item => !item.submodule || lookupPerm(perms, item.submodule).level !== 'none').map(item => {
             const active = path === item.href || path.startsWith(item.href + '/')
             return (
               <button key={item.href} onClick={() => router.push(item.href)} style={btnStyle(active)}>
@@ -123,9 +121,33 @@ export function MarketingLayout({ children }: { children: React.ReactNode }) {
 
       <main style={{ marginLeft: '220px', width: 'calc(100vw - 220px)', background: '#F5F7FA', minHeight: '100vh', overflowX: 'hidden' }}>
         <MarketingPermContext.Provider value={perms}>
-          {children}
+          <MarketingRouteGate perms={perms} path={path}>{children}</MarketingRouteGate>
         </MarketingPermContext.Provider>
       </main>
     </div>
   )
+}
+
+// Belt-and-suspenders guard, same as HRLayout/GRCLayout's RouteGate: blocks a
+// page even if it forgot to call useMarketingPerm itself, or someone
+// navigates straight to a URL.
+function MarketingRouteGate({ perms, path, children }: { perms: MarketingPerms; path: string; children: React.ReactNode }) {
+  const matched = NAV
+    .filter(item => item.submodule && (path === item.href || path.startsWith(item.href + '/')))
+    .sort((a, b) => b.href.length - a.href.length)[0]
+  if (!matched) return <>{children}</>
+  const { level } = lookupPerm(perms, matched.submodule!)
+  if (level === 'loading') {
+    return <div style={{ padding: '48px', textAlign: 'center', color: '#45B6E4', fontSize: '13px' }}>Loading…</div>
+  }
+  if (level === 'none') {
+    return (
+      <div style={{ padding: '48px', textAlign: 'center' }}>
+        <div style={{ fontSize: '32px', marginBottom: '12px' }}>🚫</div>
+        <div style={{ fontSize: '14px', fontWeight: '700', color: '#3F3F3F', marginBottom: '4px' }}>Access Denied</div>
+        <div style={{ fontSize: '12px', color: '#94A3B8' }}>You don't have access to this section. Contact your marketing administrator if you believe this is a mistake.</div>
+      </div>
+    )
+  }
+  return <>{children}</>
 }

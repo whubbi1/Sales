@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation'
 import HelpdeskLayout from '@/components/HelpdeskLayout'
 import { getStoredUser } from '@/lib/auth'
 import { API, STATUS_STYLE, PRIORITY_STYLE } from '../constants'
+import { apiFetch } from '@/lib/apiClient'
 
 const TICKET_TYPE_LABELS: Record<string, string> = {
   incident_request:    '🚨 Incident',
@@ -49,7 +50,7 @@ export default function TicketReportingPage() {
 
     // Fetch permissions and then tickets
     setPermLoading(true)
-    fetch(`${API}/settings/permissions/${encodeURIComponent(user.email)}`)
+    apiFetch(`${API}/settings/permissions/${encodeURIComponent(user.email)}`)
       .then(r => r.json())
       .then(perm => {
         const { scope: s, accessMode: m } = resolveScope(perm?.permissions)
@@ -71,7 +72,7 @@ export default function TicketReportingPage() {
     if (s === 'own') p.set('requester_email', email)
     // 'team' and 'company' load all tickets; 'none' — no data
     if (s === 'none') { setTickets([]); setLoading(false); return }
-    const r = await fetch(`${API}/helpdesk/tickets?${p}`)
+    const r = await apiFetch(`${API}/helpdesk/tickets?${p}`)
     const d = await r.json()
     setTickets(d.tickets || [])
     setLoading(false)

@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import { HRLayout } from '@/components/HRLayout'
+import { HRLayout, useHRPerm } from '@/components/HRLayout'
 
 const API = 'https://api.whubbi.wcomply.com'
 const FLAG: Record<string,string> = { france:'🇫🇷', portugal:'🇵🇹', czech_republic:'🇨🇿', romania:'🇷🇴', spain:'🇪🇸' }
@@ -67,6 +67,7 @@ function reportCell(col: string, c: any) {
 
 export default function RecruitmentPage() {
   const router = useRouter()
+  const { canEdit } = useHRPerm('recrutement')
   const [candidates, setCandidates] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [filterStatus, setFilterStatus] = useState('all')
@@ -154,10 +155,12 @@ export default function RecruitmentPage() {
             <h1 style={{ fontSize:'20px', fontWeight:'800', color:'#156082', marginBottom:'4px' }}>👥 Internal Recruitment</h1>
             <p style={{ fontSize:'12px', color:'#45B6E4' }}>{candidates.length} candidates</p>
           </div>
-          <button onClick={() => setShowModal(true)}
-            style={{ background:'#156082', color:'white', border:'none', padding:'9px 18px', borderRadius:'8px', fontSize:'12px', fontWeight:'700', cursor:'pointer', fontFamily:'Montserrat, sans-serif' }}>
-            + Add Candidate
-          </button>
+          {canEdit && (
+            <button onClick={() => setShowModal(true)}
+              style={{ background:'#156082', color:'white', border:'none', padding:'9px 18px', borderRadius:'8px', fontSize:'12px', fontWeight:'700', cursor:'pointer', fontFamily:'Montserrat, sans-serif' }}>
+              + Add Candidate
+            </button>
+          )}
         </div>
 
         {/* Search + filter */}

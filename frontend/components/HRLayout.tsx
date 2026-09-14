@@ -2,39 +2,36 @@
 import { useRouter, usePathname } from 'next/navigation'
 import { createContext, useContext, useEffect, useRef, useState } from 'react'
 import { getStoredUser, clearStoredUser } from '@/lib/auth'
+import { apiFetch } from '@/lib/apiClient'
+import { lookupPerm, ModulePerms, PermLevel } from '@/lib/permissions'
 import { EasyAccessMenu } from '@/components/shared/EasyAccessMenu'
 
-const API = 'https://api.whubbi.wcomply.com'
-
+// Every entry here is gated by its own submodule permission (see NAV filtering
+// in the component below) except Dashboard, which every HR user can see.
+// `editOnly` entries (permissions management) require edit, not just view —
+// view access to *other people's* data doesn't imply the right to change it.
 const NAV = [
-  { href: '/rh',             icon: '📊', label: 'Dashboard' },
-  { href: '/rh/freelancers', icon: '🔗', label: 'Freelancers' },
-  { href: '/rh/recrutement', icon: '👥', label: 'Recrutement' },
-  { href: '/rh/positions',   icon: '💼', label: 'Job Positions' },
-  { href: '/rh/jobs',        icon: '📋', label: 'Job Descriptions' },
-  { href: '/rh/onboarding-checklist',  icon: '🎒', label: 'Onboarding' },
-  { href: '/rh/offboarding-checklist', icon: '📤', label: 'Offboarding' },
-  { href: '/rh/permissions', icon: '🔐', label: 'WHUBBI Permissions' },
-  { href: '/rh/chat',        icon: '💬', label: 'WHUBBI Chat' },
-  { href: '/rh/payfit',      icon: '💰', label: 'PayFit Integration' },
+  { href: '/rh',             icon: '📊', label: 'Dashboard',      submodule: null as string | null, editOnly: false },
+  { href: '/rh/freelancers', icon: '🔗', label: 'Freelancers',    submodule: 'freelancers', editOnly: false },
+  { href: '/rh/recrutement', icon: '👥', label: 'Recrutement',    submodule: 'recrutement', editOnly: false },
+  { href: '/rh/positions',   icon: '💼', label: 'Job Positions',  submodule: 'positions', editOnly: false },
+  { href: '/rh/jobs',        icon: '📋', label: 'Job Descriptions', submodule: 'jobs', editOnly: false },
+  { href: '/rh/onboarding-checklist',  icon: '🎒', label: 'Onboarding',  submodule: 'onboarding', editOnly: false },
+  { href: '/rh/offboarding-checklist', icon: '📤', label: 'Offboarding', submodule: 'offboarding', editOnly: false },
+  { href: '/rh/permissions', icon: '🔐', label: 'WHUBBI Permissions', submodule: 'permissions', editOnly: true },
+  { href: '/rh/chat',        icon: '💬', label: 'WHUBBI Chat',    submodule: 'chat', editOnly: false },
+  { href: '/rh/payfit',      icon: '💰', label: 'PayFit Integration', submodule: 'payfit', editOnly: false },
 ]
 const HR_MANAGER_NAV = [
-  { href: '/rh/admin', icon: '⚙️', label: 'HR Admin Cockpit' },
+  { href: '/rh/admin', icon: '⚙️', label: 'HR Admin Cockpit', submodule: 'admin', editOnly: true },
 ]
 
-type PermLevel = 'loading' | 'none' | 'view' | 'edit'
-type HRPerms = Record<string, { access_mode?: string; id?: string | null }> | null
+type HRPerms = ModulePerms
 const HRPermContext = createContext<HRPerms>(null)
 
-// Only the newly-added HR pages (Onboarding, Offboarding) call this to gate
-// themselves — the pre-existing HR pages stay ungated, same convention as GRC.
 export function useHRPerm(submodule: string): { level: PermLevel; canEdit: boolean } {
   const perms = useContext(HRPermContext)
-  if (perms === null) return { level: 'loading', canEdit: false }
-  const p = perms[submodule]
-  if (!p || p.id == null) return { level: 'edit', canEdit: true }
-  const level = (p.access_mode as PermLevel) || 'none'
-  return { level, canEdit: level === 'edit' }
+  return lookupPerm(perms, submodule)
 }
 
 export function HRLayout({ children }: { children: React.ReactNode }) {
@@ -57,7 +54,7 @@ export function HRLayout({ children }: { children: React.ReactNode }) {
     setUserEmail(user.email)
     setUserName(user.name)
 
-    fetch(`${API}/settings/permissions/${encodeURIComponent(user.email)}`)
+    apiFetch(`/settings/permissions/${encodeURIComponent(user.email)}`)
       .then(r => r.json())
       .then(d => setHrPerms(d.permissions?.hr || {}))
       .catch(() => setHrPerms({}))
@@ -94,7 +91,14 @@ export function HRLayout({ children }: { children: React.ReactNode }) {
         </div>
 
         <nav style={{ flex: 1, padding: '10px 8px', overflowY: 'auto' }}>
-          {[...NAV, ...HR_MANAGER_NAV].map(item => {
+          {[...NAV, ...HR_MANAGER_NAV]
+            .filter(item => {
+              if (!item.submodule) return true
+              const { level, canEdit } = lookupPerm(hrPerms, item.submodule)
+              if (level === 'loading') return true
+              return item.editOnly ? canEdit : level !== 'none'
+            })
+            .map(item => {
             const active = path === item.href || (item.href !== '/rh' && path.startsWith(item.href))
             return (
               <button key={item.href} onClick={() => router.push(item.href)} style={btnStyle(active)}>
@@ -128,9 +132,34 @@ export function HRLayout({ children }: { children: React.ReactNode }) {
 
       <main style={{ marginLeft: '220px', width: 'calc(100vw - 220px)', background: '#F5F7FA', minHeight: '100vh', overflowX: 'hidden' }}>
         <HRPermContext.Provider value={hrPerms}>
-          {children}
+          <RouteGate hrPerms={hrPerms} path={path}>{children}</RouteGate>
         </HRPermContext.Provider>
       </main>
     </div>
   )
+}
+
+// Belt-and-suspenders guard at the layout level: blocks a page even if that
+// page forgot to call useHRPerm itself, or someone navigates straight to a
+// URL rather than through the (already permission-filtered) nav above.
+function RouteGate({ hrPerms, path, children }: { hrPerms: HRPerms; path: string; children: React.ReactNode }) {
+  const matched = [...NAV, ...HR_MANAGER_NAV]
+    .filter(item => item.submodule && (path === item.href || path.startsWith(item.href + '/')))
+    .sort((a, b) => b.href.length - a.href.length)[0]
+  if (!matched) return <>{children}</>
+  const { level, canEdit } = lookupPerm(hrPerms, matched.submodule!)
+  if (level === 'loading') {
+    return <div style={{ padding: '48px', textAlign: 'center', color: '#45B6E4', fontSize: '13px' }}>Loading…</div>
+  }
+  const denied = matched.editOnly ? !canEdit : level === 'none'
+  if (denied) {
+    return (
+      <div style={{ padding: '48px', textAlign: 'center' }}>
+        <div style={{ fontSize: '32px', marginBottom: '12px' }}>🚫</div>
+        <div style={{ fontSize: '14px', fontWeight: '700', color: '#3F3F3F', marginBottom: '4px' }}>Access Denied</div>
+        <div style={{ fontSize: '12px', color: '#94A3B8' }}>You don't have access to this section. Contact your HR administrator if you believe this is a mistake.</div>
+      </div>
+    )
+  }
+  return <>{children}</>
 }

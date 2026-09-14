@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
 from app.database import get_db
+from app.authz import require_permission
 from app.routers.hr import upload_to_s3, s3_ref_to_presigned
 import uuid
 import json
@@ -39,7 +40,7 @@ async def _get_event(db: AsyncSession, event_id: str) -> dict | None:
 
 # ─── Events ──────────────────────────────────────────────────────────────────────
 @router.get("/events")
-async def list_events(event_type: str = None, db: AsyncSession = Depends(get_db)):
+async def list_events(event_type: str = None, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("marketing", "events", "view"))):
     where = "WHERE event_type = :t" if event_type else ""
     params = {"t": event_type} if event_type else {}
     r = await db.execute(text(f"SELECT * FROM marketing_events {where} ORDER BY event_date DESC NULLS LAST, created_at DESC"), params)
@@ -47,7 +48,7 @@ async def list_events(event_type: str = None, db: AsyncSession = Depends(get_db)
 
 
 @router.post("/events")
-async def create_event(data: dict, db: AsyncSession = Depends(get_db)):
+async def create_event(data: dict, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("marketing", "events", "edit"))):
     if not data.get("title"):
         raise HTTPException(status_code=400, detail="title is required")
     event_type = data.get("event_type") or "other"
@@ -75,7 +76,7 @@ async def create_event(data: dict, db: AsyncSession = Depends(get_db)):
 
 # Registered before /events/{event_id} — otherwise that path param route would swallow this.
 @router.get("/events/kpis")
-async def get_event_kpis(db: AsyncSession = Depends(get_db)):
+async def get_event_kpis(db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("marketing", "events", "view"))):
     r = await db.execute(text("""
         SELECT
             COUNT(*) FILTER (WHERE status != 'Finished') AS ongoing_events,
@@ -134,7 +135,7 @@ KPI_DETAIL_QUERIES = {
 }
 
 @router.get("/events/kpis/details")
-async def get_event_kpis_details(kind: str, db: AsyncSession = Depends(get_db)):
+async def get_event_kpis_details(kind: str, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("marketing", "events", "view"))):
     query = KPI_DETAIL_QUERIES.get(kind)
     if not query:
         raise HTTPException(status_code=400, detail=f"kind must be one of {sorted(KPI_DETAIL_QUERIES)}")
@@ -143,7 +144,7 @@ async def get_event_kpis_details(kind: str, db: AsyncSession = Depends(get_db)):
 
 
 @router.get("/events/{event_id}")
-async def get_event(event_id: str, db: AsyncSession = Depends(get_db)):
+async def get_event(event_id: str, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("marketing", "events", "view"))):
     event = await _get_event(db, event_id)
     if not event:
         raise HTTPException(status_code=404, detail="Event not found")
@@ -194,7 +195,7 @@ async def get_event(event_id: str, db: AsyncSession = Depends(get_db)):
 
 
 @router.put("/events/{event_id}")
-async def update_event(event_id: str, data: dict, db: AsyncSession = Depends(get_db)):
+async def update_event(event_id: str, data: dict, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("marketing", "events", "edit"))):
     event = await _get_event(db, event_id)
     if not event:
         raise HTTPException(status_code=404, detail="Event not found")
@@ -233,14 +234,14 @@ async def update_event(event_id: str, data: dict, db: AsyncSession = Depends(get
 
 
 @router.delete("/events/{event_id}")
-async def delete_event(event_id: str, db: AsyncSession = Depends(get_db)):
+async def delete_event(event_id: str, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("marketing", "events", "edit"))):
     await db.execute(text("DELETE FROM marketing_events WHERE id = CAST(:id AS UUID)"), {"id": event_id})
     await db.commit()
     return {"status": "ok"}
 
 
 @router.post("/events/{event_id}/logo")
-async def upload_event_logo(event_id: str, file: UploadFile = File(...), db: AsyncSession = Depends(get_db)):
+async def upload_event_logo(event_id: str, file: UploadFile = File(...), db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("marketing", "events", "edit"))):
     event = await _get_event(db, event_id)
     if not event:
         raise HTTPException(status_code=404, detail="Event not found")
@@ -254,7 +255,7 @@ async def upload_event_logo(event_id: str, file: UploadFile = File(...), db: Asy
 
 # ─── Files ───────────────────────────────────────────────────────────────────────
 @router.post("/events/{event_id}/files")
-async def add_event_file(event_id: str, file: UploadFile = File(...), db: AsyncSession = Depends(get_db)):
+async def add_event_file(event_id: str, file: UploadFile = File(...), db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("marketing", "events", "edit"))):
     event = await _get_event(db, event_id)
     if not event:
         raise HTTPException(status_code=404, detail="Event not found")
@@ -271,7 +272,7 @@ async def add_event_file(event_id: str, file: UploadFile = File(...), db: AsyncS
 
 
 @router.delete("/events/{event_id}/files/{file_id}")
-async def delete_event_file(event_id: str, file_id: str, db: AsyncSession = Depends(get_db)):
+async def delete_event_file(event_id: str, file_id: str, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("marketing", "events", "edit"))):
     await db.execute(text("DELETE FROM marketing_event_files WHERE id = CAST(:id AS UUID) AND event_id = CAST(:eid AS UUID)"),
                       {"id": file_id, "eid": event_id})
     await db.commit()
@@ -293,7 +294,7 @@ async def _recompute_real_costs(db: AsyncSession, event_id: str) -> float:
 
 
 @router.post("/events/{event_id}/costs")
-async def add_event_cost(event_id: str, data: dict, db: AsyncSession = Depends(get_db)):
+async def add_event_cost(event_id: str, data: dict, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("marketing", "events", "edit"))):
     event = await _get_event(db, event_id)
     if not event:
         raise HTTPException(status_code=404, detail="Event not found")
@@ -318,7 +319,7 @@ async def add_event_cost(event_id: str, data: dict, db: AsyncSession = Depends(g
 
 
 @router.delete("/events/{event_id}/costs/{cost_id}")
-async def delete_event_cost(event_id: str, cost_id: str, db: AsyncSession = Depends(get_db)):
+async def delete_event_cost(event_id: str, cost_id: str, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("marketing", "events", "edit"))):
     await db.execute(text("DELETE FROM marketing_event_costs WHERE id = CAST(:id AS UUID) AND event_id = CAST(:eid AS UUID)"),
                       {"id": cost_id, "eid": event_id})
     real_costs = await _recompute_real_costs(db, event_id)
@@ -328,7 +329,7 @@ async def delete_event_cost(event_id: str, cost_id: str, db: AsyncSession = Depe
 
 # ─── Contributors ────────────────────────────────────────────────────────────────
 @router.post("/events/{event_id}/contributors")
-async def add_contributor(event_id: str, data: dict, db: AsyncSession = Depends(get_db)):
+async def add_contributor(event_id: str, data: dict, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("marketing", "events", "edit"))):
     if not data.get("user_email"):
         raise HTTPException(status_code=400, detail="user_email is required")
     cid = str(uuid.uuid4())
@@ -341,7 +342,7 @@ async def add_contributor(event_id: str, data: dict, db: AsyncSession = Depends(
 
 
 @router.delete("/events/{event_id}/contributors/{contributor_id}")
-async def remove_contributor(event_id: str, contributor_id: str, db: AsyncSession = Depends(get_db)):
+async def remove_contributor(event_id: str, contributor_id: str, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("marketing", "events", "edit"))):
     await db.execute(text("DELETE FROM marketing_event_contributors WHERE id = CAST(:id AS UUID) AND event_id = CAST(:eid AS UUID)"),
                       {"id": contributor_id, "eid": event_id})
     await db.commit()
@@ -350,7 +351,7 @@ async def remove_contributor(event_id: str, contributor_id: str, db: AsyncSessio
 
 # ─── Named URLs ──────────────────────────────────────────────────────────────────
 @router.post("/events/{event_id}/urls")
-async def add_url(event_id: str, data: dict, db: AsyncSession = Depends(get_db)):
+async def add_url(event_id: str, data: dict, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("marketing", "events", "edit"))):
     if not data.get("label") or not data.get("url"):
         raise HTTPException(status_code=400, detail="label and url are required")
     uid = str(uuid.uuid4())
@@ -363,7 +364,7 @@ async def add_url(event_id: str, data: dict, db: AsyncSession = Depends(get_db))
 
 
 @router.delete("/events/{event_id}/urls/{url_id}")
-async def remove_url(event_id: str, url_id: str, db: AsyncSession = Depends(get_db)):
+async def remove_url(event_id: str, url_id: str, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("marketing", "events", "edit"))):
     await db.execute(text("DELETE FROM marketing_event_urls WHERE id = CAST(:id AS UUID) AND event_id = CAST(:eid AS UUID)"),
                       {"id": url_id, "eid": event_id})
     await db.commit()
@@ -372,7 +373,7 @@ async def remove_url(event_id: str, url_id: str, db: AsyncSession = Depends(get_
 
 # ─── Linked Partners (many-to-many) ──────────────────────────────────────────────
 @router.post("/events/{event_id}/partners/{partner_id}")
-async def link_partner(event_id: str, partner_id: str, db: AsyncSession = Depends(get_db)):
+async def link_partner(event_id: str, partner_id: str, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("marketing", "events", "edit"))):
     await db.execute(text("""
         INSERT INTO marketing_event_partners (event_id, partner_id)
         VALUES (CAST(:eid AS UUID), CAST(:pid AS UUID))
@@ -383,7 +384,7 @@ async def link_partner(event_id: str, partner_id: str, db: AsyncSession = Depend
 
 
 @router.delete("/events/{event_id}/partners/{partner_id}")
-async def unlink_partner(event_id: str, partner_id: str, db: AsyncSession = Depends(get_db)):
+async def unlink_partner(event_id: str, partner_id: str, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("marketing", "events", "edit"))):
     await db.execute(text("DELETE FROM marketing_event_partners WHERE event_id = CAST(:eid AS UUID) AND partner_id = CAST(:pid AS UUID)"),
                       {"eid": event_id, "pid": partner_id})
     await db.commit()
@@ -392,7 +393,7 @@ async def unlink_partner(event_id: str, partner_id: str, db: AsyncSession = Depe
 
 # ─── Linked Contacts (many-to-many) ──────────────────────────────────────────────
 @router.post("/events/{event_id}/contacts/{contact_id}")
-async def link_contact(event_id: str, contact_id: str, db: AsyncSession = Depends(get_db)):
+async def link_contact(event_id: str, contact_id: str, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("marketing", "events", "edit"))):
     await db.execute(text("""
         INSERT INTO marketing_event_contacts (event_id, contact_id)
         VALUES (CAST(:eid AS UUID), CAST(:cid AS UUID))
@@ -403,7 +404,7 @@ async def link_contact(event_id: str, contact_id: str, db: AsyncSession = Depend
 
 
 @router.delete("/events/{event_id}/contacts/{contact_id}")
-async def unlink_contact(event_id: str, contact_id: str, db: AsyncSession = Depends(get_db)):
+async def unlink_contact(event_id: str, contact_id: str, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("marketing", "events", "edit"))):
     await db.execute(text("DELETE FROM marketing_event_contacts WHERE event_id = CAST(:eid AS UUID) AND contact_id = CAST(:cid AS UUID)"),
                       {"eid": event_id, "cid": contact_id})
     await db.commit()
@@ -427,13 +428,13 @@ async def _get_template(db: AsyncSession, template_id: str) -> dict | None:
 
 
 @router.get("/email-templates")
-async def list_email_templates(db: AsyncSession = Depends(get_db)):
+async def list_email_templates(db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("marketing", "email_templates", "view"))):
     r = await db.execute(text("SELECT * FROM marketing_email_templates ORDER BY updated_at DESC"))
     return {"templates": [_row(dict(row._mapping)) for row in r.fetchall()]}
 
 
 @router.post("/email-templates")
-async def create_email_template(data: dict, db: AsyncSession = Depends(get_db)):
+async def create_email_template(data: dict, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("marketing", "email_templates", "edit"))):
     if not data.get("short_title"):
         raise HTTPException(status_code=400, detail="short_title is required")
     template_id = str(uuid.uuid4())
@@ -450,7 +451,7 @@ async def create_email_template(data: dict, db: AsyncSession = Depends(get_db)):
 
 
 @router.get("/email-templates/{template_id}")
-async def get_email_template(template_id: str, db: AsyncSession = Depends(get_db)):
+async def get_email_template(template_id: str, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("marketing", "email_templates", "view"))):
     template = await _get_template(db, template_id)
     if not template:
         raise HTTPException(status_code=404, detail="Template not found")
@@ -458,7 +459,7 @@ async def get_email_template(template_id: str, db: AsyncSession = Depends(get_db
 
 
 @router.put("/email-templates/{template_id}")
-async def update_email_template(template_id: str, data: dict, db: AsyncSession = Depends(get_db)):
+async def update_email_template(template_id: str, data: dict, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("marketing", "email_templates", "edit"))):
     existing = await _get_template(db, template_id)
     if not existing:
         raise HTTPException(status_code=404, detail="Template not found")
@@ -478,14 +479,14 @@ async def update_email_template(template_id: str, data: dict, db: AsyncSession =
 
 
 @router.delete("/email-templates/{template_id}")
-async def delete_email_template(template_id: str, db: AsyncSession = Depends(get_db)):
+async def delete_email_template(template_id: str, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("marketing", "email_templates", "edit"))):
     await db.execute(text("DELETE FROM marketing_email_templates WHERE id = CAST(:id AS UUID)"), {"id": template_id})
     await db.commit()
     return {"status": "ok"}
 
 
 @router.post("/email-templates/{template_id}/attachments")
-async def add_template_attachment(template_id: str, file: UploadFile = File(...), db: AsyncSession = Depends(get_db)):
+async def add_template_attachment(template_id: str, file: UploadFile = File(...), db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("marketing", "email_templates", "edit"))):
     content = await file.read()
     key = f"marketing/email-templates/{template_id}/attachments/{file.filename.replace(' ', '_')}"
     file_ref = await upload_to_s3(key, content, file.content_type or "application/octet-stream")
@@ -499,7 +500,7 @@ async def add_template_attachment(template_id: str, file: UploadFile = File(...)
 
 
 @router.delete("/email-templates/{template_id}/attachments/{attachment_id}")
-async def delete_template_attachment(template_id: str, attachment_id: str, db: AsyncSession = Depends(get_db)):
+async def delete_template_attachment(template_id: str, attachment_id: str, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("marketing", "email_templates", "edit"))):
     await db.execute(text("DELETE FROM marketing_email_template_attachments WHERE id = CAST(:id AS UUID) AND template_id = CAST(:tid AS UUID)"),
                       {"id": attachment_id, "tid": template_id})
     await db.commit()
@@ -521,7 +522,7 @@ async def _attach_mailing_extras(db: AsyncSession, mailings: list):
 
 
 @router.get("/events/{event_id}/mailings")
-async def list_event_mailings(event_id: str, db: AsyncSession = Depends(get_db)):
+async def list_event_mailings(event_id: str, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("marketing", "events", "view"))):
     r = await db.execute(text("SELECT * FROM marketing_mailings WHERE event_id = CAST(:eid AS UUID) ORDER BY send_date NULLS LAST, created_at DESC"), {"eid": event_id})
     mailings = [_row(dict(row._mapping)) for row in r.fetchall()]
     await _attach_mailing_extras(db, mailings)
@@ -529,7 +530,7 @@ async def list_event_mailings(event_id: str, db: AsyncSession = Depends(get_db))
 
 
 @router.post("/events/{event_id}/mailings")
-async def create_event_mailing(event_id: str, data: dict, db: AsyncSession = Depends(get_db)):
+async def create_event_mailing(event_id: str, data: dict, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("marketing", "events", "edit"))):
     if not data.get("name"):
         raise HTTPException(status_code=400, detail="name is required")
     mailing_id = str(uuid.uuid4())
@@ -555,7 +556,7 @@ async def create_event_mailing(event_id: str, data: dict, db: AsyncSession = Dep
 
 
 @router.put("/mailings/{mailing_id}")
-async def update_mailing(mailing_id: str, data: dict, db: AsyncSession = Depends(get_db)):
+async def update_mailing(mailing_id: str, data: dict, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("marketing", "events", "edit"))):
     r = await db.execute(text("SELECT id FROM marketing_mailings WHERE id = CAST(:id AS UUID)"), {"id": mailing_id})
     if not r.first():
         raise HTTPException(status_code=404, detail="Mailing not found")
@@ -588,14 +589,14 @@ async def update_mailing(mailing_id: str, data: dict, db: AsyncSession = Depends
 
 
 @router.delete("/mailings/{mailing_id}")
-async def delete_mailing(mailing_id: str, db: AsyncSession = Depends(get_db)):
+async def delete_mailing(mailing_id: str, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("marketing", "events", "edit"))):
     await db.execute(text("DELETE FROM marketing_mailings WHERE id = CAST(:id AS UUID)"), {"id": mailing_id})
     await db.commit()
     return {"status": "ok"}
 
 
 @router.post("/mailings/{mailing_id}/contacts/{contact_id}")
-async def link_mailing_contact(mailing_id: str, contact_id: str, db: AsyncSession = Depends(get_db)):
+async def link_mailing_contact(mailing_id: str, contact_id: str, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("marketing", "events", "edit"))):
     await db.execute(text("""
         INSERT INTO marketing_mailing_contacts (mailing_id, contact_id) VALUES (CAST(:mid AS UUID), CAST(:cid AS UUID)) ON CONFLICT DO NOTHING
     """), {"mid": mailing_id, "cid": contact_id})
@@ -604,7 +605,7 @@ async def link_mailing_contact(mailing_id: str, contact_id: str, db: AsyncSessio
 
 
 @router.delete("/mailings/{mailing_id}/contacts/{contact_id}")
-async def unlink_mailing_contact(mailing_id: str, contact_id: str, db: AsyncSession = Depends(get_db)):
+async def unlink_mailing_contact(mailing_id: str, contact_id: str, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("marketing", "events", "edit"))):
     await db.execute(text("DELETE FROM marketing_mailing_contacts WHERE mailing_id = CAST(:mid AS UUID) AND contact_id = CAST(:cid AS UUID)"),
                       {"mid": mailing_id, "cid": contact_id})
     await db.commit()
