@@ -88,3 +88,36 @@ variable "domain_name" {
   type        = string
   default     = "whubbi.com"
 }
+
+# ─── Customer/Partner Portal ────────────────────────────────────────────────
+# Requires a DEDICATED multi-tenant ("any organization") Azure AD app registration —
+# the existing ms_client_id/ms_client_secret above are single-tenant (wcomply's own
+# tenant only) and gate internal employee SSO; reusing them here would let any
+# external portal visitor authenticate against employee-only infrastructure.
+variable "portal_ms_client_id" {
+  description = "Client ID of the multi-tenant Azure AD app registration used for portal Microsoft sign-in"
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
+variable "portal_ms_client_secret" {
+  description = "Client secret of the multi-tenant Azure AD app registration used for portal Microsoft sign-in"
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
+variable "google_client_id" {
+  description = "Google Cloud OAuth 2.0 client ID used for portal Google sign-in"
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
+variable "google_client_secret" {
+  description = "Google Cloud OAuth 2.0 client secret used for portal Google sign-in"
+  type        = string
+  sensitive   = true
+  default     = ""
+}

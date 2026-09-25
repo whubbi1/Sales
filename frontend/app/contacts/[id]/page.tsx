@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import { contactsAPI, marketingAPI, projectsAPI, partnersAPI } from '@/lib/api'
+import { contactsAPI, marketingAPI, projectsAPI, partnersAPI, portalAPI } from '@/lib/api'
 import { RecordLayout, PropertyRow, SidebarSection, SidebarCard, StatusBadge, TabNav } from '@/components/shared/RecordLayout'
 import { ContactModal } from '@/components/contacts/ContactModal'
 import { ContactNotes } from '@/components/contacts/ContactNotes'
@@ -82,6 +82,9 @@ export default function ContactDetailPage() {
   const [dataSourceRefName, setDataSourceRefName] = useState('')
   const [pickerType, setPickerType] = useState<string | null>(null)
 
+  const [invitingPortal, setInvitingPortal] = useState<'customer' | 'partner' | null>(null)
+  const [inviteMessage, setInviteMessage] = useState<{ portal: string; text: string; error?: boolean } | null>(null)
+
   const load = async () => {
     try {
       const [c, opps, ntes, lds] = await Promise.all([
@@ -132,6 +135,18 @@ export default function ContactDetailPage() {
   }
 
   useEffect(() => { load() }, [id])
+
+  const sendPortalInvite = async (portalType: 'customer' | 'partner') => {
+    setInvitingPortal(portalType)
+    setInviteMessage(null)
+    try {
+      const res = await portalAPI.createInvitation(contact.id, portalType)
+      setInviteMessage({ portal: portalType, text: `Invitation sent to ${res.sent_to}.` })
+    } catch (e: any) {
+      setInviteMessage({ portal: portalType, text: e?.message || 'Could not send the invitation.', error: true })
+    }
+    setInvitingPortal(null)
+  }
 
   if (loading) return (
     <RecordLayout
@@ -237,6 +252,27 @@ export default function ContactDetailPage() {
           <SidebarCard title={contact.partner.name} subtitle={`Status: ${contact.partner.status}`} href={`/partners/${contact.partner.id}`} color="#7C3AED" />
         ) : <p style={{ fontSize: '12px', color: '#9B9B9B' }}>None.</p>}
       </SidebarSection>
+      {contact.email && (contact.company?.status === 'client' || contact.company?.status === 'partner' || contact.partner) && (
+        <SidebarSection title="Portal Access">
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            {contact.company?.status === 'client' && (
+              <button onClick={() => sendPortalInvite('customer')} disabled={invitingPortal === 'customer'}
+                style={{ background: 'white', color: '#144766', padding: '7px 12px', borderRadius: '7px', fontSize: '12px', fontWeight: '600', border: '1.5px solid #CBD5E0', cursor: invitingPortal ? 'not-allowed' : 'pointer', textAlign: 'left' }}>
+                {invitingPortal === 'customer' ? 'Sending…' : '📨 Invite to Customer Portal'}
+              </button>
+            )}
+            {(contact.company?.status === 'partner' || contact.partner) && (
+              <button onClick={() => sendPortalInvite('partner')} disabled={invitingPortal === 'partner'}
+                style={{ background: 'white', color: '#144766', padding: '7px 12px', borderRadius: '7px', fontSize: '12px', fontWeight: '600', border: '1.5px solid #CBD5E0', cursor: invitingPortal ? 'not-allowed' : 'pointer', textAlign: 'left' }}>
+                {invitingPortal === 'partner' ? 'Sending…' : '📨 Invite to Partner Portal'}
+              </button>
+            )}
+            {inviteMessage && (
+              <p style={{ fontSize: '11px', color: inviteMessage.error ? '#DC2626' : '#059669', margin: 0 }}>{inviteMessage.text}</p>
+            )}
+          </div>
+        </SidebarSection>
+      )}
       <SidebarSection
         title={`Opportunities (${opportunities.length})`}
         onAdd={() => router.push(`/opportunities?contact_id=${id}${contact.company_id ? `&company_id=${contact.company_id}` : ''}${contact.partner_id ? `&partner_id=${contact.partner_id}` : ''}`)}

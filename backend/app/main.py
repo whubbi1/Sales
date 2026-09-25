@@ -24,7 +24,7 @@ async def global_exception_handler(request: Request, exc: Exception):
 async def startup():
     try:
         from app.database import engine, Base
-        from app.models import company, contact, opportunity, opportunity_extra, error_log, url_monitor, user_profile, helpdesk, background_jobs, grc, hr, project, timesheet, lead, reporting, social_influence, competitor_analysis
+        from app.models import company, contact, opportunity, opportunity_extra, error_log, url_monitor, user_profile, helpdesk, background_jobs, grc, hr, project, timesheet, lead, reporting, social_influence, competitor_analysis, project_management
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
 
@@ -2021,6 +2021,35 @@ async def startup():
                 # Marketing Objectives (renamed from Marketing Setup) — new field for target
                 # customer information, alongside the existing target_audience field.
                 "ALTER TABLE marketing_setups ADD COLUMN IF NOT EXISTS target_customers TEXT",
+
+                # Customer/Partner portal — invitation-only external access for a Contact.
+                # portal_invitations tracks the one-time invite link; portal_users tracks the
+                # resulting active account once accepted (see app/routers/portal.py).
+                """CREATE TABLE IF NOT EXISTS portal_invitations (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    contact_id UUID NOT NULL REFERENCES contacts(id) ON DELETE CASCADE,
+                    portal_type VARCHAR(20) NOT NULL,
+                    token VARCHAR(64) UNIQUE NOT NULL,
+                    status VARCHAR(20) NOT NULL DEFAULT 'pending',
+                    invited_by VARCHAR(255),
+                    created_at TIMESTAMP DEFAULT NOW(),
+                    expires_at TIMESTAMP NOT NULL,
+                    accepted_at TIMESTAMP
+                )""",
+                "CREATE INDEX IF NOT EXISTS idx_portal_invitations_contact ON portal_invitations(contact_id)",
+                """CREATE TABLE IF NOT EXISTS portal_users (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    contact_id UUID NOT NULL REFERENCES contacts(id) ON DELETE CASCADE,
+                    email VARCHAR(255) NOT NULL,
+                    portal_type VARCHAR(20) NOT NULL,
+                    status VARCHAR(20) NOT NULL DEFAULT 'active',
+                    auth_provider VARCHAR(20),
+                    first_login_at TIMESTAMP,
+                    last_login_at TIMESTAMP,
+                    created_at TIMESTAMP DEFAULT NOW(),
+                    UNIQUE(email, portal_type)
+                )""",
+                "CREATE INDEX IF NOT EXISTS idx_portal_users_contact ON portal_users(contact_id)",
             ]
             for sql in sqls:
                 try:
@@ -2213,10 +2242,12 @@ _include("app.routers.task_teams",     "/task-manager", "TaskTeams")
 _include("app.routers.finance",        "/finance",      "Finance")
 _include("app.routers.finance_customers", "/finance",   "FinanceCustomers")
 _include("app.routers.projects",       "/projects",     "Projects")
+_include("app.routers.project_management", "/project-management", "ProjectManagement")
 _include("app.routers.timesheets",     "/timesheets",   "Timesheets")
 _include("app.routers.leads",          "/leads",        "Leads")
 _include("app.routers.reporting",      "/reporting",    "Reporting")
 _include("app.routers.mass_upload",    "/mass-upload",  "MassUpload")
+_include("app.routers.portal",         "/portal",       "Portal")
 
 try:
     from app.routers import auth, outlook, copilot
