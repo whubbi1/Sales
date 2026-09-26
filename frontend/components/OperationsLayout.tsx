@@ -7,7 +7,8 @@ import { lookupPerm, ModulePerms, PermLevel } from '@/lib/permissions'
 import { EasyAccessMenu } from '@/components/shared/EasyAccessMenu'
 
 const NAV = [
-  { href: '/operations/projects', icon: '📁', label: 'Projects', submodule: 'projects' },
+  { href: '/operations/projects', icon: '📁', label: 'Projects Follow-Up', submodule: 'projects' },
+  { href: '/operations/project-management', icon: '🗂️', label: 'Project Management', submodule: 'project_management' },
   { href: '/operations/internal-projects', icon: '🏠', label: 'Internal Projects', submodule: 'internal_projects' },
   { href: '/operations/licenses', icon: '🔑', label: 'Licenses', submodule: 'licenses' },
   { href: '/operations/staffing', icon: '👥', label: 'Staffing', submodule: 'staffing' },

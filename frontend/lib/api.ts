@@ -730,3 +730,70 @@ export const portalAPI = {
   revokeInvitation: (id: string) => fetchAPI(`/portal/invitations/${id}/revoke`, { method: 'POST' }),
   revokeUser: (id: string) => fetchAPI(`/portal/users/${id}/revoke`, { method: 'POST' }),
 }
+
+// ─── Operations > Project Management ───────────────────────────────────────────
+// Multipart uploads can't go through fetchAPI (it forces a JSON Content-Type), so they
+// set the identity header themselves and let the browser pick the multipart boundary.
+async function uploadAPI(path: string, fields: Record<string, string | Blob>) {
+  const user = getStoredUser()
+  const fd = new FormData()
+  Object.entries(fields).forEach(([k, v]) => fd.append(k, v))
+  const res = await fetch(`${API_URL}${path}`, { method: 'POST', body: fd, headers: user?.email ? { 'X-User-Email': user.email } : {} })
+  if (!res.ok) { const err = await res.json().catch(() => ({})); throw new Error(err.detail || 'Upload failed') }
+  return res.json()
+}
+
+const pm = (projectId: string) => `/project-management/projects/${projectId}`
+const pmCrud = (segment: string) => ({
+  list:   (pid: string) => fetchAPI(`${pm(pid)}/${segment}`),
+  create: (pid: string, d: any) => fetchAPI(`${pm(pid)}/${segment}`, { method: 'POST', body: JSON.stringify(d) }),
+  update: (pid: string, id: string, d: any) => fetchAPI(`${pm(pid)}/${segment}/${id}`, { method: 'PUT', body: JSON.stringify(d) }),
+  remove: (pid: string, id: string) => fetchAPI(`${pm(pid)}/${segment}/${id}`, { method: 'DELETE' }),
+})
+
+export const pmAPI = {
+  listProjects:  () => fetchAPI('/project-management/projects'),
+  getProject:    (pid: string) => fetchAPI(pm(pid)),
+  getAccess:     (pid: string) => fetchAPI(`${pm(pid)}/access`),
+  myValidations: () => fetchAPI('/project-management/my-validations'),
+
+  getSettings:    (pid: string) => fetchAPI(`${pm(pid)}/settings`),
+  updateSettings: (pid: string, d: any) => fetchAPI(`${pm(pid)}/settings`, { method: 'PUT', body: JSON.stringify(d) }),
+  uploadLogo:     (pid: string, file: File) => uploadAPI(`${pm(pid)}/logo`, { file }),
+  listTemplates:  (pid: string) => fetchAPI(`${pm(pid)}/templates`),
+  uploadTemplate: (pid: string, templateType: string, name: string, file: File) => uploadAPI(`${pm(pid)}/templates`, { template_type: templateType, name, file }),
+  templateUrl:    (pid: string, tid: string) => fetchAPI(`${pm(pid)}/templates/${tid}/download`),
+  deleteTemplate: (pid: string, tid: string) => fetchAPI(`${pm(pid)}/templates/${tid}`, { method: 'DELETE' }),
+
+  members:      pmCrud('members'),
+  phases:       pmCrud('phases'),
+  tasks:        pmCrud('tasks'),
+  actions:      pmCrud('actions'),
+  risks:        pmCrud('risks'),
+  decisions:    pmCrud('decisions'),
+  meetings:     pmCrud('meetings'),
+  deliverables: pmCrud('deliverables'),
+
+  getMeeting:        (pid: string, mid: string) => fetchAPI(`${pm(pid)}/meetings/${mid}`),
+  uploadTranscript:  (pid: string, mid: string, file: File) => uploadAPI(`${pm(pid)}/meetings/${mid}/transcript`, { file }),
+  generateMinutes:   (pid: string, mid: string) => fetchAPI(`${pm(pid)}/meetings/${mid}/generate`, { method: 'POST' }),
+  saveReview:        (pid: string, mid: string, d: any) => fetchAPI(`${pm(pid)}/meetings/${mid}/review`, { method: 'PUT', body: JSON.stringify(d) }),
+  requestValidation: (pid: string, mid: string, validators: { name: string; email?: string | null }[]) =>
+    fetchAPI(`${pm(pid)}/meetings/${mid}/request-validation`, { method: 'POST', body: JSON.stringify({ validators }) }),
+  decideValidation:  (pid: string, mid: string, approve: boolean, comment?: string) =>
+    fetchAPI(`${pm(pid)}/meetings/${mid}/validate`, { method: 'POST', body: JSON.stringify({ approve, comment }) }),
+  exportMinutes: async (pid: string, mid: string) => {
+    const user = getStoredUser()
+    const res = await fetch(`${API_URL}${pm(pid)}/meetings/${mid}/export`, { headers: user?.email ? { 'X-User-Email': user.email } : {} })
+    if (!res.ok) { const err = await res.json().catch(() => ({})); throw new Error(err.detail || 'Export failed') }
+    const name = /filename="([^"]+)"/.exec(res.headers.get('Content-Disposition') || '')?.[1] || 'meeting_minutes.docx'
+    return { blob: await res.blob(), name }
+  },
+
+  addVersion:    (pid: string, did: string, d: any) => fetchAPI(`${pm(pid)}/deliverables/${did}/versions`, { method: 'POST', body: JSON.stringify(d) }),
+  updateVersion: (pid: string, did: string, vid: string, d: any) => fetchAPI(`${pm(pid)}/deliverables/${did}/versions/${vid}`, { method: 'PUT', body: JSON.stringify(d) }),
+  deleteVersion: (pid: string, did: string, vid: string) => fetchAPI(`${pm(pid)}/deliverables/${did}/versions/${vid}`, { method: 'DELETE' }),
+  submitVersion: (pid: string, did: string, vid: string) => fetchAPI(`${pm(pid)}/deliverables/${did}/versions/${vid}/submit`, { method: 'POST' }),
+  decideVersion: (pid: string, did: string, vid: string, approve: boolean, comment?: string) =>
+    fetchAPI(`${pm(pid)}/deliverables/${did}/versions/${vid}/approve`, { method: 'POST', body: JSON.stringify({ approve, comment }) }),
+}

@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { projectsAPI } from '@/lib/api'
+import { projectsAPI, pmAPI } from '@/lib/api'
 import { getStoredUser } from '@/lib/auth'
 import { useReportBuilder, applyReport, ReportPanel, ReportColumn, ColumnResizeHandle, REPORT_CELL_STYLE, SortArrow, Pagination } from '@/components/it/ReportBuilder'
 import { PageHeader } from '@/components/shared/RecordLayout'
@@ -32,7 +32,9 @@ const DEFAULT_COLUMN_WIDTHS: Record<string, number> = {
 
 const fmt = (d?: string) => d ? new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'
 
-export function OperationsProjectList({ mode }: { mode: 'customer' | 'internal' | 'license' }) {
+// 'management' is Project Management: the exact same project set as 'customer' (Projects
+// Follow-Up), loaded through its own permission-gated endpoint and opening its own detail page.
+export function OperationsProjectList({ mode }: { mode: 'customer' | 'internal' | 'license' | 'management' }) {
   const router = useRouter()
   const [projects, setProjects] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
@@ -41,11 +43,11 @@ export function OperationsProjectList({ mode }: { mode: 'customer' | 'internal' 
   const [showInternalModal, setShowInternalModal] = useState(false)
 
   const rb = useReportBuilder(
-    mode === 'internal' ? 'operations_internal_projects' : mode === 'license' ? 'operations_licenses' : 'operations_projects',
+    mode === 'internal' ? 'operations_internal_projects' : mode === 'license' ? 'operations_licenses' : mode === 'management' ? 'operations_project_management' : 'operations_projects',
     COLUMNS, userEmail
   )
 
-  const load = () => projectsAPI.list({ is_internal: mode === 'internal' }).then(setProjects).catch(() => {}).finally(() => setLoading(false))
+  const load = () => (mode === 'management' ? pmAPI.listProjects() : projectsAPI.list({ is_internal: mode === 'internal' })).then(setProjects).catch(() => {}).finally(() => setLoading(false))
 
   useEffect(() => {
     load()
@@ -57,7 +59,7 @@ export function OperationsProjectList({ mode }: { mode: 'customer' | 'internal' 
   // item instead of Projects — split on the linked Opportunity's project_status.
   const scoped = mode === 'license'
     ? projects.filter((p: any) => p.opportunity?.project_status === 'Software Licenses')
-    : mode === 'customer'
+    : mode === 'customer' || mode === 'management'
     ? projects.filter((p: any) => p.opportunity?.project_status !== 'Software Licenses')
     : projects
 
@@ -75,7 +77,7 @@ export function OperationsProjectList({ mode }: { mode: 'customer' | 'internal' 
   return (
     <div style={{ padding: '24px 28px' }}>
       <PageHeader
-        title={mode === 'internal' ? '🏠 Internal Projects' : mode === 'license' ? '🔑 Licenses' : '📁 Projects'}
+        title={mode === 'internal' ? '🏠 Internal Projects' : mode === 'license' ? '🔑 Licenses' : mode === 'management' ? '🗂️ Project Management' : '📁 Projects Follow-Up'}
         count={reported.length}
         search={{ value: search, onChange: setSearch }}
         action={
@@ -104,7 +106,7 @@ export function OperationsProjectList({ mode }: { mode: 'customer' | 'internal' 
             ) : reported.length === 0 ? (
               <tr><td colSpan={COLUMNS.length} style={{ textAlign: 'center', padding: '48px', color: '#9B9B9B', fontSize: '13px' }}>Nothing here yet.</td></tr>
             ) : pageRows.map(p => (
-              <tr key={p.id} onClick={() => router.push(`/operations/projects/${p.id}`)} style={{ cursor: 'pointer' }}
+              <tr key={p.id} onClick={() => router.push(`/operations/${mode === 'management' ? 'project-management' : 'projects'}/${p.id}`)} style={{ cursor: 'pointer' }}
                 onMouseEnter={e => (e.currentTarget.style.background = '#FAFBFC')}
                 onMouseLeave={e => (e.currentTarget.style.background = 'white')}>
                 {isVisible('project_number') && <td style={{ padding: '11px 16px', borderBottom: '1px solid #F1F5F9', ...REPORT_CELL_STYLE, fontWeight: 700, color: '#64748B' }}>{p.project_number || '—'}</td>}

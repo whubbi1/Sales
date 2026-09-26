@@ -42,7 +42,8 @@ const REGISTRY: ModuleGroup[] = [
     { label: 'Marketing Material', href: '/marketing/marketing-material', moduleKey: 'marketing', subKey: 'marketing_material' },
   ] },
   { module: 'Operations', icon: '🛠️', items: [
-    { label: 'Projects', href: '/operations/projects', moduleKey: 'operations', subKey: 'projects' },
+    { label: 'Projects Follow-Up', href: '/operations/projects', moduleKey: 'operations', subKey: 'projects' },
+    { label: 'Project Management', href: '/operations/project-management', moduleKey: 'operations', subKey: 'project_management' },
     { label: 'Internal Projects', href: '/operations/internal-projects', moduleKey: 'operations', subKey: 'internal_projects' },
     { label: 'Licenses', href: '/operations/licenses', moduleKey: 'operations', subKey: 'licenses' },
     { label: 'Staffing', href: '/operations/staffing', moduleKey: 'operations', subKey: 'staffing' },
