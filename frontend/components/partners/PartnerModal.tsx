@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { partnersAPI, contactsAPI } from '@/lib/api'
 
 const ERP_OPTIONS     = ["SAP", "Dynamics", "IFS", "Infor", "Odoo", "Oracle", "JDE", "SAGE", "Unknown", "Other"]
-const CYBER_OPTIONS   = ["SAP ETD", "SAP GRC", "SAP Focused Run", "Cloud ALM", "SecurityBridge", "Onapsis", "Layer Seven Security", "Other"]
+const CYBER_OPTIONS   = ["SAP ETD", "SAP GRC", "SAP IAG", "SAP Focused Run", "Cloud ALM", "SecurityBridge", "Onapsis", "Layer Seven Security", "Other"]
 const HOSTING_OPTIONS = ["RISE", "AWS", "Azure", "GXP", "BLUE", "SENS", "Scaleway", "Private Datacenter", "Other"]
 
 function FormField({ label, children, full }: { label: string; children: React.ReactNode; full?: boolean }) {

@@ -10,7 +10,7 @@ import { ActivityFeed } from '@/components/shared/ActivityFeed'
 import { PartnerArticles } from '@/components/partners/PartnerArticles'
 
 const ERP_OPTIONS     = ["SAP", "Dynamics", "IFS", "Infor", "Odoo", "Oracle", "JDE", "SAGE", "Unknown", "Other"]
-const CYBER_OPTIONS   = ["SAP ETD", "SAP GRC", "SAP Focused Run", "Cloud ALM", "SecurityBridge", "Onapsis", "Layer Seven Security", "Other"]
+const CYBER_OPTIONS   = ["SAP ETD", "SAP GRC", "SAP IAG", "SAP Focused Run", "Cloud ALM", "SecurityBridge", "Onapsis", "Layer Seven Security", "Other"]
 const HOSTING_OPTIONS = ["RISE", "AWS", "Azure", "GXP", "BLUE", "SENS", "Scaleway", "Private Datacenter", "Other"]
 
 const inlineInp: React.CSSProperties = { fontSize: '12px', padding: '4px 7px', border: '1px solid #219BD6', borderRadius: '5px', fontFamily: 'Montserrat, sans-serif', outline: 'none', background: 'white' }

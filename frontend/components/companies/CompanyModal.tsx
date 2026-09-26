@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { companiesAPI, contactsAPI } from '@/lib/api'
 
 const ERP_OPTIONS     = ["SAP", "Dynamics", "IFS", "Infor", "Odoo", "Oracle", "JDE", "SAGE", "Unknown", "Other"]
-const CYBER_OPTIONS   = ["SAP ETD", "SAP GRC", "SAP Focused Run", "Cloud ALM", "SecurityBridge", "Onapsis", "Layer Seven Security", "Other"]
+const CYBER_OPTIONS   = ["SAP ETD", "SAP GRC", "SAP IAG", "SAP Focused Run", "Cloud ALM", "SecurityBridge", "Onapsis", "Layer Seven Security", "Other"]
 const GRC_OPTIONS     = ["Smart Global Governance", "IBM OpenPages", "Provigis", "Other"]
 const HOSTING_OPTIONS = ["RISE", "AWS", "Azure", "GXP", "BLUE", "SENS", "Scaleway", "Private Datacenter", "Other"]
 const LEVEL_LABELS: Record<number, string> = { 1: 'Level 1 - Group', 2: 'Level 2 - Parent', 3: 'Level 3 - Child', 4: 'Level 4 - Sub-Child' }
