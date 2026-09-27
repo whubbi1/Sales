@@ -1,7 +1,10 @@
 # backend/app/routers/portal.py
-# Customer/Partner portal: invitation issuance (internal, existing X-User-Email model)
+# Partner portal: invitation issuance (internal, existing X-User-Email model)
 # plus the public-facing invitation-acceptance/session/self-profile endpoints (real
 # JWT verification via app/services/portal_auth.py — see that module's docstring for why).
+# `portal_type` is kept as a field throughout (DB columns, request/response bodies)
+# even though "partner" is the only value PORTAL_TYPES allows today, since it costs
+# nothing to keep and avoids a schema change if a second portal is ever added back.
 import secrets
 from datetime import datetime, timedelta
 
@@ -16,7 +19,7 @@ from app.services.portal_mail import send_portal_invitation_email
 
 router = APIRouter()
 
-PORTAL_TYPES = ("customer", "partner")
+PORTAL_TYPES = ("partner",)
 INVITE_VALIDITY_DAYS = 7
 
 
@@ -37,10 +40,7 @@ async def _get_contact_with_company(db: AsyncSession, contact_id: str):
 
 
 def _check_eligibility(contact: dict, portal_type: str) -> None:
-    if portal_type == "customer":
-        eligible = contact.get("company_status") == "client"
-    else:
-        eligible = contact.get("company_status") == "partner" or bool(contact.get("partner_id"))
+    eligible = contact.get("company_status") == "partner" or bool(contact.get("partner_id"))
     if not eligible:
         raise HTTPException(400, f"This contact is not eligible for the {portal_type} portal")
 
@@ -56,7 +56,7 @@ async def create_invitation(
     contact_id = data.get("contact_id")
     portal_type = data.get("portal_type")
     if portal_type not in PORTAL_TYPES:
-        raise HTTPException(400, "portal_type must be 'customer' or 'partner'")
+        raise HTTPException(400, "portal_type must be 'partner'")
     if not contact_id:
         raise HTTPException(400, "contact_id is required")
 
@@ -174,7 +174,7 @@ async def create_portal_session(data: dict, db: AsyncSession = Depends(get_db)):
     portal_type = data.get("portal_type")
     invite_token = data.get("invite_token")
     if portal_type not in PORTAL_TYPES:
-        raise HTTPException(400, "portal_type must be 'customer' or 'partner'")
+        raise HTTPException(400, "portal_type must be 'partner'")
     if not id_token:
         raise HTTPException(400, "id_token is required")
 

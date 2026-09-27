@@ -1,7 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
-import { buildPortalAuthUrl, type PortalType } from '@/lib/portalAuth'
+import { buildPortalAuthUrl } from '@/lib/portalAuth'
 import { API_BASE } from '@/lib/apiClient'
 
 interface InvitationInfo {
@@ -9,15 +9,11 @@ interface InvitationInfo {
   expired: boolean
   already_accepted: boolean
   revoked?: boolean
-  portal_type?: string
   contact_first_name?: string
 }
 
-const PORTAL_LABELS: Record<PortalType, string> = { customer: 'Customer Portal', partner: 'Partner Portal' }
-
 export default function PortalInvitePage() {
   const params = useParams()
-  const type = (params?.type as PortalType) || 'customer'
   const token = params?.token as string
 
   const [info, setInfo] = useState<InvitationInfo | null>(null)
@@ -35,7 +31,7 @@ export default function PortalInvitePage() {
     setLoading(provider)
     setError('')
     try {
-      window.location.href = await buildPortalAuthUrl(type, provider, token)
+      window.location.href = await buildPortalAuthUrl(provider, token)
     } catch (err: any) {
       setError(`Sign-in error: ${err?.message || 'Unknown error. Please try again.'}`)
       setLoading(null)
@@ -56,11 +52,11 @@ export default function PortalInvitePage() {
             </h1>
             <p style={{ fontSize: '13px', color: '#64748B', lineHeight: 1.6 }}>
               {info.already_accepted
-                ? `You can sign in directly at the ${PORTAL_LABELS[type]} login page.`
+                ? 'You can sign in directly at the Partner Portal login page.'
                 : 'Contact your WCOMPLY representative for a new invitation link.'}
             </p>
             {info.already_accepted && (
-              <a href={`/portal/${type}/login`} style={{ display: 'inline-block', marginTop: '16px', color: '#156082', fontSize: '13px', fontWeight: 700 }}>
+              <a href="/portal/login" style={{ display: 'inline-block', marginTop: '16px', color: '#156082', fontSize: '13px', fontWeight: 700 }}>
                 Go to sign-in →
               </a>
             )}
@@ -73,7 +69,7 @@ export default function PortalInvitePage() {
               Hi {info.contact_first_name || 'there'}, you've been invited
             </h1>
             <p style={{ fontSize: '13px', color: '#64748B', lineHeight: 1.6, marginBottom: '20px' }}>
-              Connect your Microsoft or Google account to access the WHUBBI {PORTAL_LABELS[type]}.
+              Connect your Microsoft or Google account to access the WHUBBI Partner Portal.
             </p>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>

@@ -82,7 +82,7 @@ export default function ContactDetailPage() {
   const [dataSourceRefName, setDataSourceRefName] = useState('')
   const [pickerType, setPickerType] = useState<string | null>(null)
 
-  const [invitingPortal, setInvitingPortal] = useState<'customer' | 'partner' | null>(null)
+  const [invitingPortal, setInvitingPortal] = useState<'partner' | null>(null)
   const [inviteMessage, setInviteMessage] = useState<{ portal: string; text: string; error?: boolean } | null>(null)
 
   const load = async () => {
@@ -136,7 +136,7 @@ export default function ContactDetailPage() {
 
   useEffect(() => { load() }, [id])
 
-  const sendPortalInvite = async (portalType: 'customer' | 'partner') => {
+  const sendPortalInvite = async (portalType: 'partner') => {
     setInvitingPortal(portalType)
     setInviteMessage(null)
     try {
@@ -252,21 +252,13 @@ export default function ContactDetailPage() {
           <SidebarCard title={contact.partner.name} subtitle={`Status: ${contact.partner.status}`} href={`/partners/${contact.partner.id}`} color="#7C3AED" />
         ) : <p style={{ fontSize: '12px', color: '#9B9B9B' }}>None.</p>}
       </SidebarSection>
-      {contact.email && (contact.company?.status === 'client' || contact.company?.status === 'partner' || contact.partner) && (
+      {contact.email && (contact.company?.status === 'partner' || contact.partner) && (
         <SidebarSection title="Portal Access">
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            {contact.company?.status === 'client' && (
-              <button onClick={() => sendPortalInvite('customer')} disabled={invitingPortal === 'customer'}
-                style={{ background: 'white', color: '#144766', padding: '7px 12px', borderRadius: '7px', fontSize: '12px', fontWeight: '600', border: '1.5px solid #CBD5E0', cursor: invitingPortal ? 'not-allowed' : 'pointer', textAlign: 'left' }}>
-                {invitingPortal === 'customer' ? 'Sending…' : '📨 Invite to Customer Portal'}
-              </button>
-            )}
-            {(contact.company?.status === 'partner' || contact.partner) && (
-              <button onClick={() => sendPortalInvite('partner')} disabled={invitingPortal === 'partner'}
-                style={{ background: 'white', color: '#144766', padding: '7px 12px', borderRadius: '7px', fontSize: '12px', fontWeight: '600', border: '1.5px solid #CBD5E0', cursor: invitingPortal ? 'not-allowed' : 'pointer', textAlign: 'left' }}>
-                {invitingPortal === 'partner' ? 'Sending…' : '📨 Invite to Partner Portal'}
-              </button>
-            )}
+            <button onClick={() => sendPortalInvite('partner')} disabled={invitingPortal === 'partner'}
+              style={{ background: 'white', color: '#144766', padding: '7px 12px', borderRadius: '7px', fontSize: '12px', fontWeight: '600', border: '1.5px solid #CBD5E0', cursor: invitingPortal ? 'not-allowed' : 'pointer', textAlign: 'left' }}>
+              {invitingPortal === 'partner' ? 'Sending…' : '📨 Invite to Partner Portal'}
+            </button>
             {inviteMessage && (
               <p style={{ fontSize: '11px', color: inviteMessage.error ? '#DC2626' : '#059669', margin: 0 }}>{inviteMessage.text}</p>
             )}

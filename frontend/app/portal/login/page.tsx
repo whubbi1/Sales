@@ -1,13 +1,8 @@
 'use client'
 import { useState } from 'react'
-import { useParams } from 'next/navigation'
-import { buildPortalAuthUrl, type PortalType } from '@/lib/portalAuth'
-
-const PORTAL_LABELS: Record<PortalType, string> = { customer: 'Customer Portal', partner: 'Partner Portal' }
+import { buildPortalAuthUrl } from '@/lib/portalAuth'
 
 export default function PortalLoginPage() {
-  const params = useParams()
-  const type = (params?.type as PortalType) || 'customer'
   const [loading, setLoading] = useState<'Microsoft' | 'Google' | null>(null)
   const [error, setError] = useState('')
 
@@ -15,7 +10,7 @@ export default function PortalLoginPage() {
     setLoading(provider)
     setError('')
     try {
-      window.location.href = await buildPortalAuthUrl(type, provider)
+      window.location.href = await buildPortalAuthUrl(provider)
     } catch (err: any) {
       setError(`Sign-in error: ${err?.message || 'Unknown error. Please try again.'}`)
       setLoading(null)
@@ -29,7 +24,7 @@ export default function PortalLoginPage() {
           <img src="/logo.png" alt="WHUBBI" style={{ width: '140px', height: 'auto', objectFit: 'contain', marginBottom: '32px' }} />
           <h1 style={{ fontSize: '40px', fontWeight: 900, letterSpacing: '-0.02em', lineHeight: 1.1, marginBottom: '16px', color: 'white' }}>WHUBBI</h1>
           <p style={{ fontSize: '15px', color: 'rgba(255,255,255,0.65)', lineHeight: '1.7', fontWeight: 400 }}>
-            {PORTAL_LABELS[type]} — sign in with your Microsoft or Google account.
+            Partner Portal — sign in with your Microsoft or Google account.
           </p>
         </div>
       </div>

@@ -1,8 +1,8 @@
 # infrastructure/terraform/cognito_portal.tf
-# Authentification AWS Cognito pour le portail Customer/Partner (customer.wcomply.com
-# / partner.wcomply.com) — pool SEPARE de whubbi-user-pool (cognito.tf), reserve aux
-# contacts CRM invites. Acces invitation-only : whubbi_permissions/portal_users
-# (backend) determinent l'acces reel, ce pool ne fait qu'authentifier l'identite.
+# Authentification AWS Cognito pour le Partner Portal (partner.wcomply.com) — pool
+# SEPARE de whubbi-user-pool (cognito.tf), reserve aux contacts CRM invites. Acces
+# invitation-only : portal_invitations/portal_users (backend) determinent l'acces
+# reel, ce pool ne fait qu'authentifier l'identite.
 #
 # Prerequis MANUELS avant `terraform apply` (voir variables.tf) :
 #   - Azure AD : app registration MULTI-TENANT ("Accounts in any organizational
@@ -52,14 +52,11 @@ resource "aws_cognito_user_pool_client" "portal" {
   allowed_oauth_scopes                 = ["email", "openid", "profile"]
 
   callback_urls = [
-    "https://customer.wcomply.com/portal/customer/auth/callback",
-    "https://partner.wcomply.com/portal/partner/auth/callback",
-    "http://localhost:3000/portal/customer/auth/callback",
-    "http://localhost:3000/portal/partner/auth/callback",
+    "https://partner.wcomply.com/portal/auth/callback",
+    "http://localhost:3000/portal/auth/callback",
   ]
 
   logout_urls = [
-    "https://customer.wcomply.com",
     "https://partner.wcomply.com",
     "http://localhost:3000",
   ]

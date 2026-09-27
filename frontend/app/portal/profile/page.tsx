@@ -1,7 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
-import { useRouter, useParams } from 'next/navigation'
-import { getStoredPortalUser, portalApiJson, type PortalType } from '@/lib/portalAuth'
+import { useRouter } from 'next/navigation'
+import { getStoredPortalUser, portalApiJson } from '@/lib/portalAuth'
 
 interface PortalProfile {
   email: string
@@ -10,13 +10,10 @@ interface PortalProfile {
   mobile_phone: string | null
   job_name: string | null
   company_name: string | null
-  portal_type: string
 }
 
 export default function PortalProfilePage() {
   const router = useRouter()
-  const params = useParams()
-  const type = (params?.type as PortalType) || 'customer'
 
   const [profile, setProfile] = useState<PortalProfile | null>(null)
   const [form, setForm] = useState({ first_name: '', last_name: '', mobile_phone: '' })
@@ -25,25 +22,25 @@ export default function PortalProfilePage() {
   const [message, setMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null)
 
   useEffect(() => {
-    const user = getStoredPortalUser(type)
+    const user = getStoredPortalUser()
     if (!user) {
-      router.replace(`/portal/${type}/login`)
+      router.replace('/portal/login')
       return
     }
-    portalApiJson<PortalProfile>(type, `/portal/${type}/me`)
+    portalApiJson<PortalProfile>('/portal/partner/me')
       .then(data => {
         setProfile(data)
         setForm({ first_name: data.first_name || '', last_name: data.last_name || '', mobile_phone: data.mobile_phone || '' })
       })
       .catch(() => setMessage({ text: 'Could not load your profile.', type: 'error' }))
       .finally(() => setLoading(false))
-  }, [type, router])
+  }, [router])
 
   const save = async () => {
     setSaving(true)
     setMessage(null)
     try {
-      const updated = await portalApiJson<PortalProfile>(type, `/portal/${type}/me`, {
+      const updated = await portalApiJson<PortalProfile>('/portal/partner/me', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(form),
@@ -69,7 +66,7 @@ export default function PortalProfilePage() {
       </div>
 
       <div style={{ padding: '32px 40px', maxWidth: '560px', margin: '0 auto' }}>
-        <button onClick={() => router.push(`/portal/${type}/home`)}
+        <button onClick={() => router.push('/portal/home')}
           style={{ background: 'none', border: 'none', color: '#156082', fontSize: '12px', fontWeight: 700, cursor: 'pointer', padding: 0, marginBottom: '16px' }}>
           ← Back
         </button>

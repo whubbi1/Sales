@@ -1,12 +1,10 @@
 'use client'
 import { useEffect, useRef, useState } from 'react'
-import { useRouter, useParams } from 'next/navigation'
-import { completePortalSignIn, type PortalType } from '@/lib/portalAuth'
+import { useRouter } from 'next/navigation'
+import { completePortalSignIn } from '@/lib/portalAuth'
 
 export default function PortalCallbackPage() {
   const router = useRouter()
-  const params = useParams()
-  const type = (params?.type as PortalType) || 'customer'
   const done = useRef(false)
   const [status, setStatus] = useState('Signing in…')
 
@@ -20,23 +18,23 @@ export default function PortalCallbackPage() {
 
     if (error) {
       setStatus(`Authentication error: ${decodeURIComponent(error)}. Redirecting…`)
-      setTimeout(() => router.push(`/portal/${type}/login`), 2500)
+      setTimeout(() => router.push('/portal/login'), 2500)
       return
     }
     if (!code) {
-      router.push(`/portal/${type}`)
+      router.push('/portal')
       return
     }
 
-    completePortalSignIn(type, code).then(result => {
+    completePortalSignIn(code).then(result => {
       if (result.ok) {
-        router.push(`/portal/${type}/home`)
+        router.push('/portal/home')
       } else {
         setStatus(`${result.error || 'Access denied'}. Redirecting…`)
-        setTimeout(() => router.push(`/portal/${type}/login`), 3500)
+        setTimeout(() => router.push('/portal/login'), 3500)
       }
     })
-  }, [router, type])
+  }, [router])
 
   return (
     <div style={{ minHeight: '100vh', background: '#F5F7FA', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Montserrat, sans-serif' }}>

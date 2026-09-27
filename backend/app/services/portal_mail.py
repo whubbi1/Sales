@@ -1,5 +1,5 @@
 # backend/app/services/portal_mail.py
-# Sends Customer/Partner portal invitation emails via Microsoft Graph, app-only
+# Sends Partner Portal invitation emails via Microsoft Graph, app-only
 # (client_credentials — same token pattern as app/routers/microsoft.py's org-wide Graph
 # calls), from a dedicated service mailbox. Requires that mailbox to exist and the
 # app registration to have been granted admin-consented Mail.Send (application) permission.
@@ -11,8 +11,8 @@ MS_CLIENT_ID     = os.getenv("MS_CLIENT_ID")
 MS_CLIENT_SECRET = os.getenv("MS_CLIENT_SECRET")
 PORTAL_SERVICE_MAILBOX = os.getenv("PORTAL_SERVICE_MAILBOX", "noreply@wcomply.com")
 
-PORTAL_LABELS = {"customer": "Customer Portal", "partner": "Partner Portal"}
-PORTAL_HOSTS  = {"customer": "customer.wcomply.com", "partner": "partner.wcomply.com"}
+PORTAL_LABELS = {"partner": "Partner Portal"}
+PORTAL_HOSTS  = {"partner": "partner.wcomply.com"}
 
 
 async def _get_app_only_token() -> str:
