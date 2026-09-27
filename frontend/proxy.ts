@@ -1,5 +1,5 @@
 // frontend/proxy.ts
-// Host-based routing for the Partner Portal. partner.wcomply.com serves the same
+// Host-based routing for the Partner Portal. portal.wcomply.com serves the same
 // Next.js app/deploy as the internal WHUBBI app, but every request on that host is
 // confined to the /portal route tree — it never sees (and can never rewrite/redirect
 // into) any internal module. The reverse also holds: the internal app's own domain
@@ -10,14 +10,14 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 
-function isPartnerHost(hostname: string): boolean {
-  return hostname === 'partner.wcomply.com' || hostname.startsWith('partner.')
+function isPortalHost(hostname: string): boolean {
+  return hostname === 'portal.wcomply.com' || hostname.startsWith('portal.')
 }
 
 export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl
 
-  if (isPartnerHost(request.nextUrl.hostname)) {
+  if (isPortalHost(request.nextUrl.hostname)) {
     if (pathname === '/portal' || pathname.startsWith('/portal/')) {
       return NextResponse.next()
     }
@@ -27,7 +27,7 @@ export function proxy(request: NextRequest) {
   }
 
   // Main WHUBBI domain — the portal route tree is only ever reached via
-  // partner.wcomply.com above.
+  // portal.wcomply.com above.
   if (pathname.startsWith('/portal')) {
     const url = request.nextUrl.clone()
     url.pathname = '/home'

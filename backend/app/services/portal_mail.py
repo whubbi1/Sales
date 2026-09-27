@@ -12,7 +12,7 @@ MS_CLIENT_SECRET = os.getenv("MS_CLIENT_SECRET")
 PORTAL_SERVICE_MAILBOX = os.getenv("PORTAL_SERVICE_MAILBOX", "noreply@wcomply.com")
 
 PORTAL_LABELS = {"partner": "Partner Portal"}
-PORTAL_HOSTS  = {"partner": "partner.wcomply.com"}
+PORTAL_HOSTS  = {"partner": "portal.wcomply.com"}
 
 
 async def _get_app_only_token() -> str:

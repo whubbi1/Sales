@@ -1,5 +1,5 @@
 # infrastructure/terraform/cognito_portal.tf
-# Authentification AWS Cognito pour le Partner Portal (partner.wcomply.com) — pool
+# Authentification AWS Cognito pour le Partner Portal (portal.wcomply.com) — pool
 # SEPARE de whubbi-user-pool (cognito.tf), reserve aux contacts CRM invites. Acces
 # invitation-only : portal_invitations/portal_users (backend) determinent l'acces
 # reel, ce pool ne fait qu'authentifier l'identite.
@@ -52,12 +52,12 @@ resource "aws_cognito_user_pool_client" "portal" {
   allowed_oauth_scopes                 = ["email", "openid", "profile"]
 
   callback_urls = [
-    "https://partner.wcomply.com/portal/auth/callback",
+    "https://portal.wcomply.com/portal/auth/callback",
     "http://localhost:3000/portal/auth/callback",
   ]
 
   logout_urls = [
-    "https://partner.wcomply.com",
+    "https://portal.wcomply.com",
     "http://localhost:3000",
   ]
 
