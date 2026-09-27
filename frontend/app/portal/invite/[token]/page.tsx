@@ -52,7 +52,7 @@ export default function PortalInvitePage() {
             </h1>
             <p style={{ fontSize: '13px', color: '#64748B', lineHeight: 1.6 }}>
               {info.already_accepted
-                ? 'You can sign in directly at the Partner Portal login page.'
+                ? 'You can sign in directly at the Portal login page.'
                 : 'Contact your WCOMPLY representative for a new invitation link.'}
             </p>
             {info.already_accepted && (
@@ -69,7 +69,7 @@ export default function PortalInvitePage() {
               Hi {info.contact_first_name || 'there'}, you've been invited
             </h1>
             <p style={{ fontSize: '13px', color: '#64748B', lineHeight: 1.6, marginBottom: '20px' }}>
-              Connect your Microsoft or Google account to access the WHUBBI Partner Portal.
+              Connect your Microsoft or Google account to access the WHUBBI Portal.
             </p>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>

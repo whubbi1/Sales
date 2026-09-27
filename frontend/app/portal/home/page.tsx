@@ -27,7 +27,7 @@ export default function PortalHomePage() {
         <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
           <img src="/logo.png" alt="WCOMPLY" style={{ height: '56px', objectFit: 'contain' }} />
           <div>
-            <div style={{ color: 'white', fontSize: '17px', fontWeight: 800, letterSpacing: '0.04em' }}>WHUBBI PARTNER PORTAL</div>
+            <div style={{ color: 'white', fontSize: '17px', fontWeight: 800, letterSpacing: '0.04em' }}>WHUBBI PORTAL</div>
             <div style={{ color: 'rgba(255,255,255,0.65)', fontSize: '12px', marginTop: '2px' }}>Welcome back{userName ? `, ${userName}` : ''}</div>
           </div>
         </div>

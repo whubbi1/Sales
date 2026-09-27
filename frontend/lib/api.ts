@@ -722,7 +722,7 @@ export const massUploadAPI = {
     fetchAPI(`/mass-upload/import`, { method: 'POST', body: JSON.stringify({ session_id: sessionId, entity_type: entityType, mapping }) }),
 }
 
-// ─── Partner Portal invitations ─────────────────────────────────────────────────
+// ─── Portal invitations (customer & partner contacts) ──────────────────────────
 export const portalAPI = {
   createInvitation: (contact_id: string, portal_type: 'partner') =>
     fetchAPI('/portal/invitations', { method: 'POST', body: JSON.stringify({ contact_id, portal_type }) }),

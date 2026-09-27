@@ -1,10 +1,13 @@
 # backend/app/routers/portal.py
-# Partner portal: invitation issuance (internal, existing X-User-Email model)
-# plus the public-facing invitation-acceptance/session/self-profile endpoints (real
-# JWT verification via app/services/portal_auth.py — see that module's docstring for why).
+# Portal (customer and partner contacts share the same portal.wcomply.com entry
+# point): invitation issuance (internal, existing X-User-Email model) plus the
+# public-facing invitation-acceptance/session/self-profile endpoints (real JWT
+# verification via app/services/portal_auth.py — see that module's docstring for why).
 # `portal_type` is kept as a field throughout (DB columns, request/response bodies)
-# even though "partner" is the only value PORTAL_TYPES allows today, since it costs
-# nothing to keep and avoids a schema change if a second portal is ever added back.
+# even though "partner" is the only value PORTAL_TYPES allows — it's a leftover name
+# from when customer/partner were separate portals, kept because renaming it end to
+# end (DB column, API field, stored rows) isn't worth it for a value that's purely
+# internal bookkeeping now; eligibility itself already covers both audiences.
 import secrets
 from datetime import datetime, timedelta
 
@@ -40,7 +43,7 @@ async def _get_contact_with_company(db: AsyncSession, contact_id: str):
 
 
 def _check_eligibility(contact: dict, portal_type: str) -> None:
-    eligible = contact.get("company_status") == "partner" or bool(contact.get("partner_id"))
+    eligible = contact.get("company_status") in ("partner", "client") or bool(contact.get("partner_id"))
     if not eligible:
         raise HTTPException(400, f"This contact is not eligible for the {portal_type} portal")
 

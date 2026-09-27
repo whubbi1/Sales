@@ -252,12 +252,12 @@ export default function ContactDetailPage() {
           <SidebarCard title={contact.partner.name} subtitle={`Status: ${contact.partner.status}`} href={`/partners/${contact.partner.id}`} color="#7C3AED" />
         ) : <p style={{ fontSize: '12px', color: '#9B9B9B' }}>None.</p>}
       </SidebarSection>
-      {contact.email && (contact.company?.status === 'partner' || contact.partner) && (
+      {contact.email && (contact.company?.status === 'partner' || contact.company?.status === 'client' || contact.partner) && (
         <SidebarSection title="Portal Access">
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
             <button onClick={() => sendPortalInvite('partner')} disabled={invitingPortal === 'partner'}
               style={{ background: 'white', color: '#144766', padding: '7px 12px', borderRadius: '7px', fontSize: '12px', fontWeight: '600', border: '1.5px solid #CBD5E0', cursor: invitingPortal ? 'not-allowed' : 'pointer', textAlign: 'left' }}>
-              {invitingPortal === 'partner' ? 'Sending…' : '📨 Invite to Partner Portal'}
+              {invitingPortal === 'partner' ? 'Sending…' : '📨 Invite to Portal'}
             </button>
             {inviteMessage && (
               <p style={{ fontSize: '11px', color: inviteMessage.error ? '#DC2626' : '#059669', margin: 0 }}>{inviteMessage.text}</p>

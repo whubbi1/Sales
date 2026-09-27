@@ -1,5 +1,5 @@
 // frontend/proxy.ts
-// Host-based routing for the Partner Portal. portal.wcomply.com serves the same
+// Host-based routing for the Portal (customer and partner contacts). portal.wcomply.com serves the same
 // Next.js app/deploy as the internal WHUBBI app, but every request on that host is
 // confined to the /portal route tree — it never sees (and can never rewrite/redirect
 // into) any internal module. The reverse also holds: the internal app's own domain
