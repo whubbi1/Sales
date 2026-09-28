@@ -84,13 +84,25 @@ async def create_invitation(
     invitation = _row(r.fetchone())
     await db.commit()
 
-    await send_portal_invitation_email(
-        to_email=contact["email"],
-        contact_first_name=contact.get("first_name") or "",
-        portal_type=portal_type,
-        token=token,
-        invited_by=caller,
-    )
+    try:
+        await send_portal_invitation_email(
+            to_email=contact["email"],
+            contact_first_name=contact.get("first_name") or "",
+            portal_type=portal_type,
+            token=token,
+            invited_by=caller,
+        )
+    except Exception as e:
+        # The invitation row above is already committed and its token is valid —
+        # only the email delivery failed. Surface that distinction instead of a
+        # bare 500, so the caller isn't left unsure whether anything happened.
+        raise HTTPException(
+            502,
+            f"Invitation was created but the email to {contact['email']} could not be sent "
+            f"({e}). Once mail delivery is fixed, click Invite to Portal again — a new invite "
+            f"email will go out (the earlier invitation record still exists but was never "
+            f"delivered, so it's safe to retry).",
+        )
 
     return {
         "id": str(invitation["id"]),
