@@ -17,8 +17,8 @@ resource "aws_cognito_user_pool" "portal" {
   username_attributes      = ["email"]
   auto_verified_attributes = ["email"]
 
-  # External users manage their own account via Microsoft/Google — no local
-  # password to enforce a strict policy on, but Cognito requires one regardless.
+  # Password policy applies only to the native email/password sign-up path (Microsoft/
+  # Google users never set a Cognito password), kept short since it's a fallback option.
   password_policy {
     minimum_length    = 8
     require_lowercase = true
@@ -27,7 +27,11 @@ resource "aws_cognito_user_pool" "portal" {
     require_uppercase = true
   }
 
-  mfa_configuration = "OPTIONAL"
+  # ON (not OPTIONAL) so TOTP setup/challenge is mandatory for the native email/password
+  # path (some orgs block third-party OAuth consent app-wide, hence that path existing at
+  # all) — this does not affect the Microsoft/Google buttons, which federate straight to
+  # the external IdP and never go through Cognito's own sign-in/MFA challenge machinery.
+  mfa_configuration = "ON"
   software_token_mfa_configuration {
     enabled = true
   }
@@ -47,6 +51,11 @@ resource "aws_cognito_user_pool_client" "portal" {
   user_pool_id = aws_cognito_user_pool.portal.id
 
   generate_secret = false
+
+  # ALLOW_USER_SRP_AUTH (+ ALLOW_USER_AUTH for the newer choice-based challenge API) lets
+  # the frontend's native email/password + TOTP MFA sign-up flow call Cognito directly via
+  # aws-amplify/auth, alongside the OAuth code flow used for Microsoft/Google federation.
+  explicit_auth_flows = ["ALLOW_USER_SRP_AUTH", "ALLOW_USER_AUTH", "ALLOW_REFRESH_TOKEN_AUTH"]
 
   allowed_oauth_flows                  = ["code"]
   allowed_oauth_flows_user_pool_client = true

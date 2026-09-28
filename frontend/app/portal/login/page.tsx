@@ -53,6 +53,16 @@ export default function PortalLoginPage() {
           {loading === 'Google' ? 'Redirecting to Google...' : 'Continue with Google'}
         </button>
 
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', margin: '4px 0' }}>
+          <div style={{ flex: 1, height: '1px', background: 'rgba(255,255,255,0.2)' }} />
+          <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.5)' }}>or</span>
+          <div style={{ flex: 1, height: '1px', background: 'rgba(255,255,255,0.2)' }} />
+        </div>
+
+        <a href="/portal/sign-in" style={{ width: '100%', boxSizing: 'border-box' as const, display: 'block', textAlign: 'center' as const, padding: '13px 20px', background: 'transparent', color: 'white', border: '1px solid rgba(255,255,255,0.4)', borderRadius: '10px', fontSize: '13px', fontWeight: 700, fontFamily: 'Montserrat, sans-serif', textDecoration: 'none' }}>
+          Sign in with email
+        </a>
+
         {error && (
           <div style={{ marginTop: '2px', background: 'rgba(220,38,38,0.15)', color: 'white', padding: '10px 14px', borderRadius: '8px', fontSize: '12px', fontWeight: 500 }}>
             {error}

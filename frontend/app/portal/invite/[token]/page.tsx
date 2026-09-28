@@ -69,7 +69,7 @@ export default function PortalInvitePage() {
               Hi {info.contact_first_name || 'there'}, you've been invited
             </h1>
             <p style={{ fontSize: '13px', color: '#64748B', lineHeight: 1.6, marginBottom: '20px' }}>
-              Connect your Microsoft or Google account to access the WHUBBI Portal.
+              Connect your Microsoft or Google account, or create an account with email and password, to access the WHUBBI Portal.
             </p>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
@@ -82,6 +82,17 @@ export default function PortalInvitePage() {
                 {loading === 'Google' ? 'Redirecting…' : 'Continue with Google'}
               </button>
             </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', margin: '14px 0' }}>
+              <div style={{ flex: 1, height: '1px', background: '#EDF2F7' }} />
+              <span style={{ fontSize: '11px', color: '#94A3B8' }}>or</span>
+              <div style={{ flex: 1, height: '1px', background: '#EDF2F7' }} />
+            </div>
+
+            <a href={`/portal/create-account?invite=${token}`}
+              style={{ width: '100%', boxSizing: 'border-box' as const, display: 'block', textAlign: 'center' as const, padding: '12px 18px', background: 'white', color: '#156082', border: '1.5px solid #156082', borderRadius: '10px', fontSize: '13px', fontWeight: 700, fontFamily: 'Montserrat, sans-serif', textDecoration: 'none' }}>
+              Create an account with email
+            </a>
 
             {error && (
               <div style={{ marginTop: '14px', background: '#FEF2F2', color: '#DC2626', padding: '10px 14px', borderRadius: '8px', fontSize: '12px', fontWeight: 500 }}>

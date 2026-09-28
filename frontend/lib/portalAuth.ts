@@ -55,7 +55,7 @@ export async function portalApiJson<T = any>(path: string, options: RequestInit 
   return r.json()
 }
 
-function decodeJwtPayload(token: string): Record<string, any> {
+export function decodeJwtPayload(token: string): Record<string, any> {
   const b64 = token.split('.')[1] ?? ''
   const padded = b64 + '=='.slice(0, (4 - (b64.length % 4)) % 4)
   return JSON.parse(atob(padded.replace(/-/g, '+').replace(/_/g, '/')))
@@ -98,8 +98,33 @@ export interface PortalSessionResult {
   user?: StoredPortalUser
 }
 
-// Exchanges the OAuth `code` for tokens, then calls POST /portal/session so the
-// backend can verify the token, check/accept the invitation, and confirm active access.
+// Shared by both sign-in paths: OAuth (Microsoft/Google, via completePortalSignIn below)
+// and native email/password + TOTP (lib/portalCognitoAuth.ts) — either way, once we have
+// a raw Cognito ID token, the backend exchange is identical: POST /portal/session lets it
+// verify the token, check/accept the invitation, and confirm active access.
+export async function finalizePortalSession(idToken: string, inviteToken?: string): Promise<PortalSessionResult> {
+  const sessionRes = await fetch(`${API_BASE}/portal/session`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ id_token: idToken, portal_type: PORTAL_TYPE, invite_token: inviteToken }),
+  })
+  const session = await sessionRes.json()
+  if (!sessionRes.ok) {
+    return { ok: false, error: session.detail || 'Access denied' }
+  }
+
+  const payload = decodeJwtPayload(idToken)
+  const user: StoredPortalUser = {
+    email: session.email,
+    name: session.name || session.email,
+    id_token: idToken,
+    exp: payload.exp,
+  }
+  setStoredPortalUser(user)
+  return { ok: true, user }
+}
+
+// Exchanges the OAuth `code` for tokens, then finalizes the portal session.
 export async function completePortalSignIn(code: string): Promise<PortalSessionResult> {
   const domain = process.env.NEXT_PUBLIC_PORTAL_COGNITO_DOMAIN!
   const clientId = process.env.NEXT_PUBLIC_PORTAL_COGNITO_CLIENT_ID!
@@ -128,23 +153,5 @@ export async function completePortalSignIn(code: string): Promise<PortalSessionR
   sessionStorage.removeItem('portal_pkce_verifier')
   sessionStorage.removeItem('portal_invite_token')
 
-  const sessionRes = await fetch(`${API_BASE}/portal/session`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ id_token: tokens.id_token, portal_type: PORTAL_TYPE, invite_token: inviteToken }),
-  })
-  const session = await sessionRes.json()
-  if (!sessionRes.ok) {
-    return { ok: false, error: session.detail || 'Access denied' }
-  }
-
-  const payload = decodeJwtPayload(tokens.id_token)
-  const user: StoredPortalUser = {
-    email: session.email,
-    name: session.name || session.email,
-    id_token: tokens.id_token,
-    exp: payload.exp,
-  }
-  setStoredPortalUser(user)
-  return { ok: true, user }
+  return finalizePortalSession(tokens.id_token, inviteToken)
 }
