@@ -1,10 +1,10 @@
 'use client'
 import { Suspense, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { portalSignInWithPassword, portalConfirmTotpChallenge } from '@/lib/portalCognitoAuth'
+import { portalSignInWithPassword, portalConfirmTotpChallenge, portalCompleteTotpSetup } from '@/lib/portalCognitoAuth'
 import { finalizePortalSession } from '@/lib/portalAuth'
 
-type Step = 'form' | 'mfa-code'
+type Step = 'form' | 'mfa-code' | 'mfa-setup'
 
 const inputStyle: React.CSSProperties = {
   width: '100%', padding: '12px 14px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.3)',
@@ -35,6 +35,7 @@ function PortalSignInForm() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [code, setCode] = useState('')
+  const [totpInfo, setTotpInfo] = useState<{ sharedSecret: string; otpauthUri: string } | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
 
@@ -53,7 +54,11 @@ function PortalSignInForm() {
       } else if (outcome.status === 'TOTP_CHALLENGE') {
         setStep('mfa-code')
       } else {
-        setError('This account has not finished MFA setup — please use "Create account" to finish setting it up.')
+        // Confirmed account that never finished MFA enrollment (e.g. dropped off
+        // mid-signup) — finish it here rather than dead-ending, since re-running
+        // sign-up for an already-confirmed email would just fail as "already exists".
+        setTotpInfo({ sharedSecret: outcome.sharedSecret, otpauthUri: outcome.otpauthUri })
+        setStep('mfa-setup')
       }
     } catch (err: any) {
       setError(err?.message || 'Incorrect email or password.')
@@ -72,13 +77,26 @@ function PortalSignInForm() {
     setBusy(false)
   }
 
+  const handleCompleteTotpSetup = async () => {
+    setBusy(true); setError('')
+    try {
+      const idToken = await portalCompleteTotpSetup(code)
+      await finish(idToken)
+    } catch (err: any) {
+      setError(err?.message || 'Incorrect code — please try again.')
+    }
+    setBusy(false)
+  }
+
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', fontFamily: 'Montserrat, sans-serif', background: '#156082', padding: '24px' }}>
       <div style={{ maxWidth: '400px', width: '100%', textAlign: 'center' as const, marginBottom: '28px' }}>
         <img src="/logo.png" alt="WHUBBI" style={{ width: '100px', height: 'auto', objectFit: 'contain', marginBottom: '18px' }} />
         <h1 style={{ fontSize: '24px', fontWeight: 900, color: 'white', margin: '0 0 8px' }}>Sign in</h1>
         <p style={{ fontSize: '13px', color: 'rgba(255,255,255,0.75)', lineHeight: 1.6 }}>
-          {step === 'form' ? 'Sign in with your email and password.' : 'Enter the code from your authenticator app.'}
+          {step === 'form' && 'Sign in with your email and password.'}
+          {step === 'mfa-code' && 'Enter the code from your authenticator app.'}
+          {step === 'mfa-setup' && "Your account was confirmed but MFA setup wasn't finished — let's finish it now."}
         </p>
       </div>
 
@@ -110,15 +128,33 @@ function PortalSignInForm() {
           </>
         )}
 
+        {step === 'mfa-setup' && totpInfo && (
+          <>
+            <div style={{ background: 'rgba(255,255,255,0.08)', borderRadius: '10px', padding: '14px', wordBreak: 'break-all' as const }}>
+              <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.6)', marginBottom: '6px' }}>Manual entry key</div>
+              <div style={{ fontSize: '13px', color: 'white', fontFamily: 'monospace' }}>{totpInfo.sharedSecret}</div>
+            </div>
+            <a href={totpInfo.otpauthUri} style={{ fontSize: '12px', color: 'white', textAlign: 'center' as const }}>Open in authenticator app →</a>
+            <label style={labelStyle}>6-digit code from your authenticator app
+              <input value={code} onChange={e => setCode(e.target.value)} style={{ ...inputStyle, marginTop: '6px' }} autoFocus />
+            </label>
+            <button onClick={handleCompleteTotpSetup} disabled={busy || code.length < 6} style={buttonStyle(busy || code.length < 6)}>
+              {busy ? 'Verifying…' : 'Confirm & finish'}
+            </button>
+          </>
+        )}
+
         {error && (
           <div style={{ background: 'rgba(220,38,38,0.15)', color: 'white', padding: '10px 14px', borderRadius: '8px', fontSize: '12px', fontWeight: 500 }}>
             {error}
           </div>
         )}
 
-        <a href={inviteToken ? `/portal/create-account?invite=${inviteToken}` : '/portal/create-account'} style={{ fontSize: '12px', color: 'rgba(255,255,255,0.75)', textAlign: 'center' as const, marginTop: '8px' }}>
-          Don't have an account? Create one
-        </a>
+        {step === 'form' && (
+          <a href={inviteToken ? `/portal/create-account?invite=${inviteToken}` : '/portal/create-account'} style={{ fontSize: '12px', color: 'rgba(255,255,255,0.75)', textAlign: 'center' as const, marginTop: '8px' }}>
+            Don't have an account? Create one
+          </a>
+        )}
       </div>
     </div>
   )

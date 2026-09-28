@@ -94,6 +94,11 @@ export default function PortalInvitePage() {
               Create an account with email
             </a>
 
+            <a href={`/portal/sign-in?invite=${token}`}
+              style={{ display: 'block', textAlign: 'center' as const, marginTop: '12px', color: '#64748B', fontSize: '12px' }}>
+              Already created an account with email? Sign in
+            </a>
+
             {error && (
               <div style={{ marginTop: '14px', background: '#FEF2F2', color: '#DC2626', padding: '10px 14px', borderRadius: '8px', fontSize: '12px', fontWeight: 500 }}>
                 {error}
