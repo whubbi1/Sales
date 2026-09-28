@@ -11,11 +11,10 @@
 // function entry point.
 //
 // Uses the raw Host/X-Forwarded-Host request headers, not request.nextUrl.hostname —
-// on Amplify Hosting the latter reflects an internal/origin hostname, not the actual
-// custom domain the browser requested, so a hostname.startsWith('portal.') check
-// against it was always false and every rewrite silently never fired (confirmed via a
-// temporary x-middleware-ran response header: present on every request, proving
-// middleware itself runs — only the host comparison was wrong).
+// on Amplify Hosting the latter is a placeholder ("0.0.0.0"), not the actual custom
+// domain the browser requested, confirmed via a temporary diagnostic header dump in
+// production. A hostname.startsWith('portal.') check against nextUrl.hostname was
+// therefore always false, so no rewrite ever fired.
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 
@@ -28,25 +27,17 @@ function isPortalHost(hostname: string): boolean {
   return hostname === 'portal.wcomply.com' || hostname.startsWith('portal.')
 }
 
-function withDiagnostics(res: NextResponse, request: NextRequest): NextResponse {
-  // TEMP — remove once the host-detection fix is confirmed in production.
-  res.headers.set('x-diag-nexturl-host', request.nextUrl.hostname)
-  res.headers.set('x-diag-host-header', request.headers.get('host') || '')
-  res.headers.set('x-diag-xfh-header', request.headers.get('x-forwarded-host') || '')
-  return res
-}
-
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
   const hostname = requestHostname(request)
 
   if (isPortalHost(hostname)) {
     if (pathname === '/portal' || pathname.startsWith('/portal/')) {
-      return withDiagnostics(NextResponse.next(), request)
+      return NextResponse.next()
     }
     const url = request.nextUrl.clone()
     url.pathname = `/portal${pathname === '/' ? '' : pathname}`
-    return withDiagnostics(NextResponse.rewrite(url), request)
+    return NextResponse.rewrite(url)
   }
 
   // Main WHUBBI domain — the portal route tree is only ever reached via
@@ -57,7 +48,7 @@ export function middleware(request: NextRequest) {
     return NextResponse.redirect(url)
   }
 
-  return withDiagnostics(NextResponse.next(), request)
+  return NextResponse.next()
 }
 
 export const config = {
