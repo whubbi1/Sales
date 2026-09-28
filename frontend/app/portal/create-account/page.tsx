@@ -6,6 +6,7 @@ import {
   portalSignInWithPassword, portalCompleteTotpSetup,
 } from '@/lib/portalCognitoAuth'
 import { finalizePortalSession } from '@/lib/portalAuth'
+import { TotpQrCode } from '@/components/portal/TotpQrCode'
 
 type Step = 'form' | 'confirm' | 'mfa-setup' | 'mfa-code'
 
@@ -139,11 +140,15 @@ function CreateAccountForm() {
 
         {step === 'mfa-setup' && totpInfo && (
           <>
-            <div style={{ background: 'rgba(255,255,255,0.08)', borderRadius: '10px', padding: '14px', wordBreak: 'break-all' as const }}>
-              <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.6)', marginBottom: '6px' }}>Manual entry key</div>
-              <div style={{ fontSize: '13px', color: 'white', fontFamily: 'monospace' }}>{totpInfo.sharedSecret}</div>
+            <div style={{ background: 'white', borderRadius: '10px', padding: '12px' }}>
+              <TotpQrCode otpauthUri={totpInfo.otpauthUri} />
             </div>
-            <a href={totpInfo.otpauthUri} style={{ fontSize: '12px', color: 'white', textAlign: 'center' as const }}>Open in authenticator app →</a>
+            <details style={{ fontSize: '12px', color: 'rgba(255,255,255,0.75)' }}>
+              <summary style={{ cursor: 'pointer' }}>Can't scan it? Enter this key manually</summary>
+              <div style={{ marginTop: '8px', background: 'rgba(255,255,255,0.08)', borderRadius: '10px', padding: '12px', wordBreak: 'break-all' as const, fontFamily: 'monospace', color: 'white' }}>
+                {totpInfo.sharedSecret}
+              </div>
+            </details>
             <label style={labelStyle}>6-digit code from your authenticator app
               <input value={code} onChange={e => setCode(e.target.value)} style={{ ...inputStyle, marginTop: '6px' }} autoFocus />
             </label>
