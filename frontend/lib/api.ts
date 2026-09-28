@@ -728,6 +728,7 @@ export const portalAPI = {
     fetchAPI('/portal/invitations', { method: 'POST', body: JSON.stringify({ contact_id, portal_type }) }),
   listInvitations: (contact_id?: string) => fetchAPI(`/portal/invitations${qs({ contact_id })}`),
   revokeInvitation: (id: string) => fetchAPI(`/portal/invitations/${id}/revoke`, { method: 'POST' }),
+  listUsers: (contact_id?: string) => fetchAPI(`/portal/users${qs({ contact_id })}`),
   revokeUser: (id: string) => fetchAPI(`/portal/users/${id}/revoke`, { method: 'POST' }),
 }
 

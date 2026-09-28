@@ -121,12 +121,47 @@ async def list_invitations(
     where = ""
     params = {}
     if contact_id:
-        where = "WHERE contact_id = CAST(:contact_id AS UUID)"
+        where = "WHERE pi.contact_id = CAST(:contact_id AS UUID)"
         params["contact_id"] = contact_id
     r = await db.execute(
-        text(f"SELECT * FROM portal_invitations {where} ORDER BY created_at DESC"), params
+        text(f"""
+            SELECT pi.*, c.first_name AS contact_first_name, c.last_name AS contact_last_name,
+                   c.email AS contact_email, co.name AS company_name
+            FROM portal_invitations pi
+            JOIN contacts c ON c.id = pi.contact_id
+            LEFT JOIN companies co ON co.id = c.company_id
+            {where}
+            ORDER BY pi.created_at DESC
+        """),
+        params,
     )
     return {"invitations": [_row(row) for row in r.fetchall()]}
+
+
+@router.get("/users")
+async def list_portal_users(
+    contact_id: str | None = None,
+    db: AsyncSession = Depends(get_db),
+    _: str = Depends(require_permission("sales", "contacts", "view")),
+):
+    where = ""
+    params = {}
+    if contact_id:
+        where = "WHERE pu.contact_id = CAST(:contact_id AS UUID)"
+        params["contact_id"] = contact_id
+    r = await db.execute(
+        text(f"""
+            SELECT pu.*, c.first_name AS contact_first_name, c.last_name AS contact_last_name,
+                   co.name AS company_name
+            FROM portal_users pu
+            JOIN contacts c ON c.id = pu.contact_id
+            LEFT JOIN companies co ON co.id = c.company_id
+            {where}
+            ORDER BY pu.created_at DESC
+        """),
+        params,
+    )
+    return {"users": [_row(row) for row in r.fetchall()]}
 
 
 @router.post("/invitations/{invitation_id}/revoke")
