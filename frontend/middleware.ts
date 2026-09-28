@@ -27,12 +27,19 @@ function isPortalHost(hostname: string): boolean {
   return hostname === 'portal.wcomply.com' || hostname.startsWith('portal.')
 }
 
+// Exact path-segment match — a plain pathname.startsWith('/portal') also matches
+// unrelated pages like /portal-management (a Sales admin page, not part of the portal
+// route tree), incorrectly redirecting them away on the main domain.
+function isPortalPath(pathname: string): boolean {
+  return pathname === '/portal' || pathname.startsWith('/portal/')
+}
+
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
   const hostname = requestHostname(request)
 
   if (isPortalHost(hostname)) {
-    if (pathname === '/portal' || pathname.startsWith('/portal/')) {
+    if (isPortalPath(pathname)) {
       return NextResponse.next()
     }
     const url = request.nextUrl.clone()
@@ -42,7 +49,7 @@ export function middleware(request: NextRequest) {
 
   // Main WHUBBI domain — the portal route tree is only ever reached via
   // portal.wcomply.com above.
-  if (pathname.startsWith('/portal')) {
+  if (isPortalPath(pathname)) {
     const url = request.nextUrl.clone()
     url.pathname = '/home'
     return NextResponse.redirect(url)
