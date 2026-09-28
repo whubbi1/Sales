@@ -24,11 +24,15 @@ export function middleware(request: NextRequest) {
 
   if (isPortalHost(request.nextUrl.hostname)) {
     if (pathname === '/portal' || pathname.startsWith('/portal/')) {
-      return NextResponse.next()
+      const res = NextResponse.next()
+      res.headers.set('x-middleware-ran', 'true') // TEMP diagnostic — remove once confirmed
+      return res
     }
     const url = request.nextUrl.clone()
     url.pathname = `/portal${pathname === '/' ? '' : pathname}`
-    return NextResponse.rewrite(url)
+    const res = NextResponse.rewrite(url)
+    res.headers.set('x-middleware-ran', 'true') // TEMP diagnostic — remove once confirmed
+    return res
   }
 
   // Main WHUBBI domain — the portal route tree is only ever reached via
@@ -39,7 +43,9 @@ export function middleware(request: NextRequest) {
     return NextResponse.redirect(url)
   }
 
-  return NextResponse.next()
+  const res = NextResponse.next()
+  res.headers.set('x-middleware-ran', 'true') // TEMP diagnostic — remove once confirmed
+  return res
 }
 
 export const config = {
