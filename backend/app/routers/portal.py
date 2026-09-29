@@ -193,6 +193,38 @@ async def revoke_portal_user(
 
 
 # ─── Public: invitation lookup, session exchange ────────────────────────────────
+@router.get("/invitations/check-email")
+async def check_invitation_by_email(email: str, portal_type: str, db: AsyncSession = Depends(get_db)):
+    # Lets the Create Account form reject an ineligible email immediately, before the
+    # person invests in confirming an email code and enrolling MFA only to be rejected
+    # by /portal/session at the very last step. Same public exposure level as the
+    # by-token lookup below (an email address is the only thing revealed, no contact
+    # details), just keyed by email instead of a token for the no-token entry point.
+    email = email.strip().lower()
+    if portal_type not in PORTAL_TYPES:
+        raise HTTPException(400, "portal_type must be 'partner'")
+
+    r = await db.execute(
+        text("SELECT 1 FROM portal_users WHERE email = :email AND portal_type = :portal_type AND status = 'active'"),
+        {"email": email, "portal_type": portal_type},
+    )
+    if r.fetchone():
+        return {"status": "already_active"}
+
+    r = await db.execute(
+        text("""
+            SELECT 1 FROM portal_invitations pi JOIN contacts c ON c.id = pi.contact_id
+            WHERE pi.portal_type = :portal_type AND pi.status = 'pending' AND pi.expires_at > NOW()
+              AND LOWER(c.email) = :email
+        """),
+        {"portal_type": portal_type, "email": email},
+    )
+    if r.fetchone():
+        return {"status": "invited"}
+
+    return {"status": "not_invited"}
+
+
 @router.get("/invitations/by-token/{token}")
 async def get_invitation_by_token(token: str, db: AsyncSession = Depends(get_db)):
     r = await db.execute(

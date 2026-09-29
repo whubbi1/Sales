@@ -6,7 +6,7 @@
 // it as a Bearer token on every API call.
 import { API_BASE } from './apiClient'
 
-const PORTAL_TYPE = 'partner' // the only portal the frontend exposes; backend still tracks it as a field
+export const PORTAL_TYPE = 'partner' // the only portal the frontend exposes; backend still tracks it as a field
 
 const STORAGE_KEY = 'whubbi_portal_user'
 

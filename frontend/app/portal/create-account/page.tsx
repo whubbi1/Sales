@@ -5,8 +5,15 @@ import {
   portalSignUp, portalConfirmSignUp, portalResendConfirmationCode,
   portalSignInWithPassword, portalConfirmTotpCode,
 } from '@/lib/portalCognitoAuth'
-import { finalizePortalSession } from '@/lib/portalAuth'
+import { finalizePortalSession, PORTAL_TYPE } from '@/lib/portalAuth'
 import { TotpQrCode } from '@/components/portal/TotpQrCode'
+import { API_BASE } from '@/lib/apiClient'
+
+async function checkInvitationEmail(email: string): Promise<'invited' | 'already_active' | 'not_invited'> {
+  const res = await fetch(`${API_BASE}/portal/invitations/check-email?${new URLSearchParams({ email, portal_type: PORTAL_TYPE })}`)
+  const data = await res.json()
+  return data.status
+}
 
 type Step = 'form' | 'confirm' | 'mfa-setup' | 'mfa-code'
 
@@ -47,6 +54,21 @@ function CreateAccountForm() {
     if (password.length < 8) { setError('Password must be at least 8 characters.'); return }
     setBusy(true); setError('')
     try {
+      // Check invite eligibility up front — rejecting this at the very end (after email
+      // confirmation and MFA enrollment) via /portal/session wastes the person's time on
+      // steps that were always going to be undone.
+      const eligibility = await checkInvitationEmail(email)
+      if (eligibility === 'not_invited') {
+        setError("This email hasn't been invited to the portal. Contact your WCOMPLY representative for an invitation.")
+        setBusy(false)
+        return
+      }
+      if (eligibility === 'already_active') {
+        setError('This email already has portal access — sign in instead of creating a new account.')
+        setBusy(false)
+        return
+      }
+
       await portalSignUp(email, password)
       setStep('confirm')
     } catch (err: any) {
