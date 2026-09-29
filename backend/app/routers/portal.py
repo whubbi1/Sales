@@ -8,6 +8,7 @@
 # from when customer/partner were separate portals, kept because renaming it end to
 # end (DB column, API field, stored rows) isn't worth it for a value that's purely
 # internal bookkeeping now; eligibility itself already covers both audiences.
+import json
 import secrets
 from datetime import datetime, timedelta
 
@@ -322,7 +323,10 @@ async def create_portal_session(data: dict, db: AsyncSession = Depends(get_db)):
 
 
 # ─── Portal user: self profile ("MyWHUBBI") ─────────────────────────────────────
-PORTAL_SELF_FIELDS = {"first_name", "last_name", "mobile_phone"}
+# job_name is "Job Title" in the portal's own wording — job_type (a separate, internal
+# CRM segmentation enum) is deliberately not exposed here.
+PORTAL_SELF_FIELDS = {"first_name", "last_name", "mobile_phone", "job_name", "preferred_language", "subscriptions"}
+VALID_SUBSCRIPTIONS = {"Marketing Information", "Customer Service Communication", "One to One", "Opted Out"}
 
 
 @router.get("/{portal_type}/me")
@@ -340,6 +344,8 @@ async def get_my_profile(
         "last_name": contact.get("last_name"),
         "mobile_phone": contact.get("mobile_phone"),
         "job_name": contact.get("job_name"),
+        "preferred_language": contact.get("preferred_language"),
+        "subscriptions": contact.get("subscriptions") or [],
         "company_name": contact.get("company_name"),
         "portal_type": portal_type,
     }
@@ -355,7 +361,19 @@ async def update_my_profile(
     updates = {k: v for k, v in data.items() if k in PORTAL_SELF_FIELDS}
     if not updates:
         raise HTTPException(400, "No editable fields supplied")
-    set_clause = ", ".join(f"{k} = :{k}" for k in updates)
+
+    # subscriptions is a JSONB column — asyncpg can't adapt a raw Python list, so it
+    # needs an explicit JSON-string + cast, unlike the plain text columns alongside it.
+    if "subscriptions" in updates:
+        subs = updates["subscriptions"]
+        if not isinstance(subs, list) or not all(s in VALID_SUBSCRIPTIONS for s in subs):
+            raise HTTPException(400, f"subscriptions must be a list of: {sorted(VALID_SUBSCRIPTIONS)}")
+        updates["subscriptions"] = json.dumps(subs)
+
+    set_clause = ", ".join(
+        f"{k} = CAST(:{k} AS JSONB)" if k == "subscriptions" else f"{k} = :{k}"
+        for k in updates
+    )
     updates["id"] = portal_user["contact_id"]
     await db.execute(text(f"UPDATE contacts SET {set_clause}, updated_at = NOW() WHERE id = :id"), updates)
     await db.commit()
