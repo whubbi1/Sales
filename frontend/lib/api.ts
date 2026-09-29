@@ -1,14 +1,25 @@
 // lib/api.ts
 import { getStoredUser } from './auth'
+import { getStoredPortalUser } from './portalAuth'
 
 const API_URL = 'https://api.whubbi.wcomply.com'
 
-async function fetchAPI(path: string, options: RequestInit = {}) {
+// Portal-hosted pages (e.g. the Operations tile reusing the Project Management UI) have
+// no internal stored user, only a portal session — fall back to its bearer token so every
+// existing pmAPI/etc. call works unmodified regardless of which side is signed in.
+function authHeaders(): Record<string, string> {
   const user = getStoredUser()
+  if (user?.email) return { 'X-User-Email': user.email }
+  const portalUser = getStoredPortalUser()
+  if (portalUser?.id_token) return { Authorization: `Bearer ${portalUser.id_token}` }
+  return {}
+}
+
+async function fetchAPI(path: string, options: RequestInit = {}) {
   const res = await fetch(`${API_URL}${path}`, {
     headers: {
       'Content-Type': 'application/json',
-      ...(user?.email ? { 'X-User-Email': user.email } : {}),
+      ...authHeaders(),
       ...options.headers,
     },
     ...options,
@@ -736,10 +747,9 @@ export const portalAPI = {
 // Multipart uploads can't go through fetchAPI (it forces a JSON Content-Type), so they
 // set the identity header themselves and let the browser pick the multipart boundary.
 async function uploadAPI(path: string, fields: Record<string, string | Blob>) {
-  const user = getStoredUser()
   const fd = new FormData()
   Object.entries(fields).forEach(([k, v]) => fd.append(k, v))
-  const res = await fetch(`${API_URL}${path}`, { method: 'POST', body: fd, headers: user?.email ? { 'X-User-Email': user.email } : {} })
+  const res = await fetch(`${API_URL}${path}`, { method: 'POST', body: fd, headers: authHeaders() })
   if (!res.ok) { const err = await res.json().catch(() => ({})); throw new Error(err.detail || 'Upload failed') }
   return res.json()
 }
@@ -784,8 +794,7 @@ export const pmAPI = {
   decideValidation:  (pid: string, mid: string, approve: boolean, comment?: string) =>
     fetchAPI(`${pm(pid)}/meetings/${mid}/validate`, { method: 'POST', body: JSON.stringify({ approve, comment }) }),
   exportMinutes: async (pid: string, mid: string) => {
-    const user = getStoredUser()
-    const res = await fetch(`${API_URL}${pm(pid)}/meetings/${mid}/export`, { headers: user?.email ? { 'X-User-Email': user.email } : {} })
+    const res = await fetch(`${API_URL}${pm(pid)}/meetings/${mid}/export`, { headers: authHeaders() })
     if (!res.ok) { const err = await res.json().catch(() => ({})); throw new Error(err.detail || 'Export failed') }
     const name = /filename="([^"]+)"/.exec(res.headers.get('Content-Disposition') || '')?.[1] || 'meeting_minutes.docx'
     return { blob: await res.blob(), name }

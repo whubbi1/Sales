@@ -14,7 +14,7 @@ import { TasksTab, ActionsTab, RisksTab, DecisionsTab } from '@/components/proje
 
 type Access = { is_manager: boolean; sections: Record<string, 'none' | 'view' | 'edit'> }
 
-function ProjectManagementContent() {
+export function ProjectManagementContent({ backHref = '/operations/project-management', onProjectLoaded }: { backHref?: string; onProjectLoaded?: (name: string) => void }) {
   const { id } = useParams<{ id: string }>()
   const router = useRouter()
   const [project, setProject] = useState<any>(null)
@@ -36,6 +36,7 @@ function ProjectManagementContent() {
     Promise.all([pmAPI.getProject(id), pmAPI.getAccess(id)])
       .then(([p, a]) => {
         setProject(p); setAccess(a)
+        onProjectLoaded?.(p.project_name)
         const first = SECTIONS.find(s => a.sections[s.key] !== 'none')
         if (first) setTab(first.label)
       })
@@ -64,7 +65,7 @@ function ProjectManagementContent() {
   return (
     <div style={{ padding: '24px 28px' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '16px', fontSize: '11px', color: '#9B9B9B' }}>
-        <button onClick={() => router.push('/operations/project-management')} style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#219BD6', fontWeight: 600, fontSize: '11px', padding: 0 }}>Project Management</button>
+        <button onClick={() => router.push(backHref)} style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#219BD6', fontWeight: 600, fontSize: '11px', padding: 0 }}>Project Management</button>
         <span>/</span><span style={{ color: '#3F3F3F', fontWeight: 600 }}>{project.project_name}</span>
       </div>
 

@@ -11,7 +11,7 @@ import os
 import time
 
 import httpx
-from fastapi import Depends, Header, HTTPException
+from fastapi import Depends, Header, HTTPException, Request
 from jose import jwt
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -90,6 +90,28 @@ async def get_verified_portal_email(
     token = _bearer_token(authorization)
     claims = await verify_portal_id_token(token)
     return claims["email"].strip().lower()
+
+
+async def try_portal_user_email(request: Request, db: AsyncSession) -> str | None:
+    """Best-effort portal identity check for internal routers that want to accept a
+    portal-authenticated caller as an alternate identity without requiring one (e.g.
+    Project Management, reached by both employees and PMMember-assigned portal
+    contacts). None if there's no bearer token, it doesn't verify, or there's no
+    active portal_users row for it — never raises."""
+    authorization = request.headers.get("authorization", "")
+    if not authorization or not authorization.lower().startswith("bearer "):
+        return None
+    try:
+        token = authorization.split(" ", 1)[1].strip()
+        claims = await verify_portal_id_token(token)
+        email = claims["email"].strip().lower()
+    except HTTPException:
+        return None
+    r = await db.execute(
+        text("SELECT 1 FROM portal_users WHERE email = :email AND portal_type = 'partner' AND status = 'active'"),
+        {"email": email},
+    )
+    return email if r.fetchone() else None
 
 
 async def require_portal_user(

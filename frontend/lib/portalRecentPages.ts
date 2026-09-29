@@ -17,6 +17,7 @@ interface PortalPageDef {
 
 const PORTAL_PAGES: PortalPageDef[] = [
   { href: '/portal/profile', label: 'Personal Profile' },
+  { href: '/portal/operations/project-management', label: 'Operations', isModuleMain: true },
 ]
 
 interface RecentEntry {
@@ -29,16 +30,20 @@ function storageKey(email: string): string {
   return `whubbi_portal_recent_${email}`
 }
 
-export function recordPortalPageVisit(email: string, href: string): void {
+export function recordPortalPageVisit(email: string, href: string, label?: string): void {
   if (typeof window === 'undefined' || !email) return
+  // Dynamic routes (e.g. a specific project's Operations detail page) aren't in the
+  // static registry — an explicit label records them anyway; otherwise fall back to it.
   const def = PORTAL_PAGES.find(p => p.href === href)
-  if (!def || def.isModuleMain || href === '/portal/home') return
+  if (!label && (!def || def.isModuleMain)) return
+  if (href === '/portal/home') return
+  const resolvedLabel = label || def!.label
 
   try {
     const raw = window.localStorage.getItem(storageKey(email))
     const existing: RecentEntry[] = raw ? JSON.parse(raw) : []
     const withoutThis = existing.filter(e => e.href !== href)
-    const updated = [{ href, label: def.label, visitedAt: Date.now() }, ...withoutThis].slice(0, 20)
+    const updated = [{ href, label: resolvedLabel, visitedAt: Date.now() }, ...withoutThis].slice(0, 20)
     window.localStorage.setItem(storageKey(email), JSON.stringify(updated))
   } catch {
     // Best-effort only — a full/blocked localStorage just means no history this session.

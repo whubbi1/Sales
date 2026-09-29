@@ -21,7 +21,7 @@ from uuid import UUID
 
 import boto3
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, status
+from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile, File, Form, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy import select, delete, func
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -29,6 +29,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.authz import get_current_user_email, access_mode, is_excluded, _LEVELS
+from app.services.portal_auth import try_portal_user_email
 from app.models.project import Project
 from app.models.project_management import (
     PM_SECTIONS, DEFAULT_ACTION_STATUSES, TEMPLATE_TYPES, PHASE_MAX_DEPTH,
@@ -58,12 +59,23 @@ MAX_TRANSCRIPT_CHARS = 1_500_000
 
 # ─── Access ──────────────────────────────────────────────────────────────────
 class PMUser:
-    def __init__(self, email: str, module_mode: str):
+    def __init__(self, email: str, module_mode: str, is_portal: bool = False):
         self.email = email
         self.is_manager = module_mode == "edit"
+        self.is_portal = is_portal
 
 
-async def pm_user(email: str = Depends(get_current_user_email), db: AsyncSession = Depends(get_db)) -> PMUser:
+async def pm_user(request: Request, db: AsyncSession = Depends(get_db)) -> PMUser:
+    # Portal contacts (added as a PMMember) reach this the same way employees do, just
+    # authenticated via the portal's Cognito bearer token instead of X-User-Email — they
+    # never carry the internal operations.project_management permission, so that check is
+    # skipped entirely for them; every actual read/write still goes through _require()
+    # below, which resolves their access purely from their PMMember.permissions.
+    portal_email = await try_portal_user_email(request, db)
+    if portal_email:
+        return PMUser(portal_email, "view", is_portal=True)
+
+    email = await get_current_user_email(request.headers.get("x-user-email"))
     if await is_excluded(email, db):
         raise HTTPException(403, "Access excluded")
     mode = await access_mode(email, "operations", "project_management", db)
@@ -156,18 +168,38 @@ def _safe_name(name: str | None) -> str:
 # ─── Projects list (same set as Projects Follow-Up) ──────────────────────────
 @router.get("/projects", response_model=List[ProjectResponse])
 async def list_pm_projects(db: AsyncSession = Depends(get_db), user: PMUser = Depends(pm_user)):
+    if user.is_portal:
+        # Never the full company list for a portal contact — only the project(s) they've
+        # been added to as a PMMember, same is_internal exclusion as the employee listing.
+        pids = (await db.execute(select(PMMember.project_id).where(PMMember.email == user.email).distinct())).scalars().all()
+        if not pids:
+            return []
+        projects = (await db.execute(
+            select(Project).where(Project.id.in_(pids), Project.is_internal.is_(False)).order_by(Project.project_name)
+        )).scalars().all()
+        await projects_router._attach_related(db, projects)
+        return projects
     projects = await projects_router.list_projects(skip=0, limit=500, search=None, is_internal=False, db=db, _="view")
     return projects
 
 
+async def _require_some_access(db: AsyncSession, project_id: UUID, user: PMUser) -> None:
+    # Portal contacts must never be able to probe an arbitrary project id they aren't a
+    # member of by guessing a UUID; internal users keep their existing broader visibility.
+    if user.is_portal and not any(v != "none" for v in (await _sections_for(db, project_id, user)).values()):
+        raise HTTPException(404, "Project not found")
+
+
 @router.get("/projects/{project_id}", response_model=ProjectResponse)
 async def get_pm_project(project_id: UUID, db: AsyncSession = Depends(get_db), user: PMUser = Depends(pm_user)):
+    await _require_some_access(db, project_id, user)
     return await projects_router.get_project(project_id, db=db, _="view")
 
 
 @router.get("/projects/{project_id}/access", response_model=AccessResponse)
 async def get_access(project_id: UUID, db: AsyncSession = Depends(get_db), user: PMUser = Depends(pm_user)):
     await _get_project(db, project_id)
+    await _require_some_access(db, project_id, user)
     return AccessResponse(is_manager=user.is_manager, sections=await _sections_for(db, project_id, user))
 
 
