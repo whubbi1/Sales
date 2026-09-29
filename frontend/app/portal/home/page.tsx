@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { getStoredPortalUser, clearStoredPortalUser } from '@/lib/portalAuth'
+import { portalCognitoSignOut } from '@/lib/portalCognitoAuth'
 
 export default function PortalHomePage() {
   const router = useRouter()
@@ -16,8 +17,11 @@ export default function PortalHomePage() {
     setUserName(user.name || user.email)
   }, [router])
 
-  const handleSignOut = () => {
+  // Clears Amplify's own Cognito session too, not just our stored token — otherwise a
+  // native email/password user's next sign-in attempt hits UserAlreadyAuthenticatedException.
+  const handleSignOut = async () => {
     clearStoredPortalUser()
+    await portalCognitoSignOut()
     router.push('/portal/login')
   }
 

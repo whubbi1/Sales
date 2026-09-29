@@ -1,7 +1,7 @@
 'use client'
 import { Suspense, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { portalSignInWithPassword, portalConfirmTotpChallenge, portalCompleteTotpSetup } from '@/lib/portalCognitoAuth'
+import { portalSignInWithPassword, portalConfirmTotpCode } from '@/lib/portalCognitoAuth'
 import { finalizePortalSession } from '@/lib/portalAuth'
 import { TotpQrCode } from '@/components/portal/TotpQrCode'
 
@@ -67,21 +67,12 @@ function PortalSignInForm() {
     setBusy(false)
   }
 
+  // Same handler for both steps — Amplify answers a first-time enrollment and a
+  // returning user's code through the identical confirmSignIn call.
   const handleConfirmTotp = async () => {
     setBusy(true); setError('')
     try {
-      const idToken = await portalConfirmTotpChallenge(code)
-      await finish(idToken)
-    } catch (err: any) {
-      setError(err?.message || 'Incorrect code — please try again.')
-    }
-    setBusy(false)
-  }
-
-  const handleCompleteTotpSetup = async () => {
-    setBusy(true); setError('')
-    try {
-      const idToken = await portalCompleteTotpSetup(code)
+      const idToken = await portalConfirmTotpCode(code)
       await finish(idToken)
     } catch (err: any) {
       setError(err?.message || 'Incorrect code — please try again.')
@@ -143,7 +134,7 @@ function PortalSignInForm() {
             <label style={labelStyle}>6-digit code from your authenticator app
               <input value={code} onChange={e => setCode(e.target.value)} style={{ ...inputStyle, marginTop: '6px' }} autoFocus />
             </label>
-            <button onClick={handleCompleteTotpSetup} disabled={busy || code.length < 6} style={buttonStyle(busy || code.length < 6)}>
+            <button onClick={handleConfirmTotp} disabled={busy || code.length < 6} style={buttonStyle(busy || code.length < 6)}>
               {busy ? 'Verifying…' : 'Confirm & finish'}
             </button>
           </>

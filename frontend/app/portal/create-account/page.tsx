@@ -3,7 +3,7 @@ import { Suspense, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import {
   portalSignUp, portalConfirmSignUp, portalResendConfirmationCode,
-  portalSignInWithPassword, portalCompleteTotpSetup,
+  portalSignInWithPassword, portalConfirmTotpCode,
 } from '@/lib/portalCognitoAuth'
 import { finalizePortalSession } from '@/lib/portalAuth'
 import { TotpQrCode } from '@/components/portal/TotpQrCode'
@@ -87,7 +87,7 @@ function CreateAccountForm() {
   const handleVerifyTotp = async () => {
     setBusy(true); setError('')
     try {
-      const idToken = await portalCompleteTotpSetup(code)
+      const idToken = await portalConfirmTotpCode(code)
       const result = await finalizePortalSession(idToken, inviteToken)
       if (!result.ok) { setError(result.error || 'Access denied.'); setBusy(false); return }
       router.push('/portal/home')

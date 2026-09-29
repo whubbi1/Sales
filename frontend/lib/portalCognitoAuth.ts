@@ -12,9 +12,6 @@ import {
   resendSignUpCode,
   signIn,
   confirmSignIn,
-  setUpTOTP,
-  verifyTOTPSetup,
-  updateMFAPreference,
   fetchAuthSession,
   signOut as amplifySignOut,
 } from 'aws-amplify/auth'
@@ -35,6 +32,15 @@ async function currentIdToken(): Promise<string> {
   const token = session.tokens?.idToken?.toString()
   if (!token) throw new Error('No session token available')
   return token
+}
+
+export async function portalCognitoSignOut(): Promise<void> {
+  configurePortalAmplify()
+  try {
+    await amplifySignOut()
+  } catch {
+    // Nothing signed in, or the session was already gone — nothing to clean up.
+  }
 }
 
 export async function portalSignUp(email: string, password: string): Promise<void> {
@@ -61,10 +67,13 @@ export type PortalSignInOutcome =
   | { status: 'TOTP_CHALLENGE' }
   | { status: 'TOTP_SETUP_REQUIRED'; sharedSecret: string; otpauthUri: string }
 
-// Right after a fresh sign-up, first sign-in always needs a TOTP_SETUP_REQUIRED step —
-// completePortalTotpSetup below finishes it. A returning user with TOTP already enrolled
-// instead gets TOTP_CHALLENGE — completePortalTotpChallenge finishes that one.
+// Either outcome is finished by portalConfirmTotpCode below. Amplify keeps its own
+// session state in storage independently of our whubbi_portal_user key, so a leftover
+// session (an abandoned half-finished sign-up, or a portal sign-out that only cleared
+// our key) would otherwise make signIn() throw UserAlreadyAuthenticatedException —
+// hence clearing it first.
 export async function portalSignInWithPassword(email: string, password: string): Promise<PortalSignInOutcome> {
+  await portalCognitoSignOut()
   configurePortalAmplify()
   const result = await signIn({ username: email, password })
 
@@ -88,31 +97,15 @@ export async function portalSignInWithPassword(email: string, password: string):
   }
 }
 
-export async function portalConfirmTotpChallenge(code: string): Promise<string> {
+// Answers BOTH TOTP challenges — first-time enrollment
+// (CONTINUE_SIGN_IN_WITH_TOTP_SETUP) and a returning user's code
+// (CONFIRM_SIGN_IN_WITH_TOTP_CODE) — because Amplify completes both the same way, by
+// responding to the pending sign-in challenge. Notably NOT verifyTOTPSetup(), which is
+// for an already-signed-in user enrolling MFA after the fact and fails mid-sign-in with
+// "User needs to be authenticated to call this API".
+export async function portalConfirmTotpCode(code: string): Promise<string> {
   configurePortalAmplify()
   const result = await confirmSignIn({ challengeResponse: code })
   if (!result.isSignedIn) throw new Error('Incorrect code — please try again.')
   return currentIdToken()
-}
-
-// Called once, right after sign-up's first sign-in returns TOTP_SETUP_REQUIRED — this is
-// what makes MFA mandatory for every self-registered account, since Cognito's own
-// MfaConfiguration is OPTIONAL at the pool level (shared with the federated IdPs, which
-// don't need it) and won't force this on its own.
-export async function portalSetUpTotp(email: string): Promise<{ sharedSecret: string; otpauthUri: string }> {
-  configurePortalAmplify()
-  const details = await setUpTOTP()
-  return { sharedSecret: details.sharedSecret, otpauthUri: details.getSetupUri('WHUBBI Portal', email).toString() }
-}
-
-export async function portalCompleteTotpSetup(code: string): Promise<string> {
-  configurePortalAmplify()
-  await verifyTOTPSetup({ code })
-  await updateMFAPreference({ totp: 'PREFERRED' })
-  return currentIdToken()
-}
-
-export async function portalCognitoSignOut(): Promise<void> {
-  configurePortalAmplify()
-  await amplifySignOut()
 }
