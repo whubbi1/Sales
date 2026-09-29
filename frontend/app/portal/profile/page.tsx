@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { getStoredPortalUser, portalApiJson } from '@/lib/portalAuth'
+import { recordPortalPageVisit } from '@/lib/portalRecentPages'
 
 interface PortalProfile {
   email: string
@@ -37,6 +38,7 @@ export default function PortalProfilePage() {
       router.replace('/portal/login')
       return
     }
+    recordPortalPageVisit(user.email, '/portal/profile')
     portalApiJson<PortalProfile>('/portal/partner/me')
       .then(data => {
         setProfile(data)

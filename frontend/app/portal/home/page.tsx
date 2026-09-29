@@ -3,10 +3,23 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { getStoredPortalUser, clearStoredPortalUser } from '@/lib/portalAuth'
 import { portalCognitoSignOut } from '@/lib/portalCognitoAuth'
+import { getRecentPortalPages } from '@/lib/portalRecentPages'
+
+interface RecentEntry { href: string; label: string; visitedAt: number }
+
+function fmtRelative(ts: number): string {
+  const mins = Math.round((Date.now() - ts) / 60000)
+  if (mins < 1) return 'just now'
+  if (mins < 60) return `${mins}m ago`
+  const hours = Math.round(mins / 60)
+  if (hours < 24) return `${hours}h ago`
+  return `${Math.round(hours / 24)}d ago`
+}
 
 export default function PortalHomePage() {
   const router = useRouter()
   const [userName, setUserName] = useState('')
+  const [recent, setRecent] = useState<RecentEntry[]>([])
 
   useEffect(() => {
     const user = getStoredPortalUser()
@@ -15,6 +28,7 @@ export default function PortalHomePage() {
       return
     }
     setUserName(user.name || user.email)
+    setRecent(getRecentPortalPages(user.email))
   }, [router])
 
   // Clears Amplify's own Cognito session too, not just our stored token — otherwise a
@@ -41,15 +55,39 @@ export default function PortalHomePage() {
         </div>
       </div>
 
-      <div style={{ padding: '48px 40px', maxWidth: '1000px', margin: '0 auto' }}>
-        <p style={{ fontSize: '12px', color: '#94A3B8', margin: '0 0 16px' }}>Select a tile to get started.</p>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '18px', maxWidth: '260px' }}>
-          <div onClick={() => router.push('/portal/profile')}
-            style={{ background: 'white', borderRadius: '14px', border: '1px solid #EDF2F7', padding: '24px', cursor: 'pointer', boxShadow: '0 1px 3px rgba(0,0,0,0.06)', position: 'relative', overflow: 'hidden' }}>
-            <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '3px', background: '#156082' }} />
-            <div style={{ width: '44px', height: '44px', borderRadius: '10px', background: '#45B6E418', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '20px', marginBottom: '14px' }}>⚙️</div>
-            <h2 style={{ fontSize: '13px', fontWeight: 800, color: '#156082', margin: '0 0 6px' }}>MyWHUBBI</h2>
-            <p style={{ fontSize: '11px', color: '#45B6E4', margin: 0, lineHeight: 1.6 }}>Manage your personal profile information.</p>
+      <div style={{ padding: '40px', maxWidth: '1000px', margin: '0 auto', display: 'grid', gridTemplateColumns: '220px 1fr', gap: '28px', alignItems: 'start' }}>
+
+        {/* Last Used — left column, same position/style as the employee home page's Company Links block */}
+        <div style={{ background: 'white', borderRadius: '14px', border: '1px solid #EDF2F7', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.06)', position: 'sticky', top: '24px' }}>
+          <div style={{ padding: '14px 16px', borderBottom: '1px solid #EDF2F7', background: '#F8FAFC' }}>
+            <div style={{ fontSize: '10px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', color: '#45B6E4' }}>🕘 Last Used</div>
+          </div>
+          <div style={{ padding: '8px' }}>
+            {recent.length === 0 ? (
+              <div style={{ padding: '16px 12px', fontSize: '11px', color: '#94A3B8', textAlign: 'center' as const }}>Nothing visited yet.</div>
+            ) : recent.map(entry => (
+              <button key={entry.href} onClick={() => router.push(entry.href)}
+                style={{ display: 'flex', width: '100%', flexDirection: 'column', alignItems: 'flex-start', gap: '2px', padding: '9px 12px', borderRadius: '8px', textDecoration: 'none', color: '#3F3F3F', background: 'transparent', border: 'none', cursor: 'pointer', fontFamily: 'Montserrat, sans-serif', textAlign: 'left' as const }}
+                onMouseEnter={e => (e.currentTarget.style.background = '#F0F7FF')}
+                onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
+                <span style={{ fontSize: '12px', fontWeight: 600 }}>{entry.label}</span>
+                <span style={{ fontSize: '10px', color: '#94A3B8' }}>{fmtRelative(entry.visitedAt)}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Modules grid */}
+        <div>
+          <p style={{ fontSize: '12px', color: '#94A3B8', margin: '0 0 16px' }}>Select a tile to get started.</p>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '18px', maxWidth: '260px' }}>
+            <div onClick={() => router.push('/portal/profile')}
+              style={{ background: 'white', borderRadius: '14px', border: '1px solid #EDF2F7', padding: '24px', cursor: 'pointer', boxShadow: '0 1px 3px rgba(0,0,0,0.06)', position: 'relative', overflow: 'hidden' }}>
+              <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '3px', background: '#156082' }} />
+              <div style={{ width: '44px', height: '44px', borderRadius: '10px', background: '#45B6E418', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '20px', marginBottom: '14px' }}>⚙️</div>
+              <h2 style={{ fontSize: '13px', fontWeight: 800, color: '#156082', margin: '0 0 6px' }}>MyWHUBBI</h2>
+              <p style={{ fontSize: '11px', color: '#45B6E4', margin: 0, lineHeight: 1.6 }}>Manage your personal profile information.</p>
+            </div>
           </div>
         </div>
       </div>
