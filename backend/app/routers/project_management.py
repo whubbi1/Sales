@@ -713,7 +713,7 @@ MINUTES_SCHEMA = {
 }
 
 
-async def _call_claude(system: str, prompt: str) -> dict:
+async def _call_claude(system: str, prompt: str, schema: dict = MINUTES_SCHEMA) -> dict:
     if not ANTHROPIC_API_KEY:
         raise HTTPException(500, "ANTHROPIC_API_KEY not configured")
     async with httpx.AsyncClient(timeout=600) as client:
@@ -729,7 +729,7 @@ async def _call_claude(system: str, prompt: str) -> dict:
                 "model": MINUTES_MODEL, "max_tokens": 16000,
                 "fallbacks": "default",
                 "thinking": {"type": "adaptive"},
-                "output_config": {"effort": "medium", "format": {"type": "json_schema", "schema": MINUTES_SCHEMA}},
+                "output_config": {"effort": "medium", "format": {"type": "json_schema", "schema": schema}},
                 "system": system,
                 "messages": [{"role": "user", "content": prompt}],
             },
@@ -760,15 +760,28 @@ Return:
 Linking to existing register entries: the user message lists the project's existing actions, decisions and risks with their numbers. When the meeting updates, closes, reschedules or re-discusses one of them, set existing_number to that entry's number and fill in its updated values; otherwise set existing_number to "".
 Use "" for any unknown field. Dates are YYYY-MM-DD. Action status and risk impact/probability/status must be one of the allowed values listed in the user message."""
 
+ACTIONS_SCHEMA = {
+    "type": "object", "additionalProperties": False,
+    "required": ["actions", "decisions", "risks"],
+    "properties": {k: MINUTES_SCHEMA["properties"][k] for k in ("actions", "decisions", "risks")},
+}
 
-@router.post("/projects/{project_id}/meetings/{meeting_id}/generate", response_model=MeetingResponse)
-async def generate_minutes(project_id: UUID, meeting_id: UUID, db: AsyncSession = Depends(get_db), user: PMUser = Depends(pm_user)):
-    proj = await _require(db, project_id, user, "meetings", "edit")
-    m = await _get_meeting(db, project_id, meeting_id)
-    _require_unlocked(m)
-    if not m.transcript_text:
-        raise HTTPException(400, "Upload the meeting transcript first")
-    s = await _settings(db, project_id)
+ACTIONS_SYSTEM = """You extract the action items, decisions and risks from a project meeting's finished, official minutes, for a consulting company's project management office.
+The minutes are already written and final — do not rewrite, summarize or second-guess them, only extract structured entries from what they say. Never invent anything not supported by the text.
+
+Return:
+- actions: every action item agreed in the meeting.
+- decisions: every decision taken in the meeting.
+- risks: every project risk raised in the meeting.
+
+Linking to existing register entries: the user message lists the project's existing actions, decisions and risks with their numbers. When the minutes update, close, reschedule or re-discuss one of them, set existing_number to that entry's number and fill in its updated values; otherwise set existing_number to "".
+Use "" for any unknown field. Dates are YYYY-MM-DD. Action status and risk impact/probability/status must be one of the allowed values listed in the user message."""
+
+
+async def _register_context(db: AsyncSession, project_id: UUID, s: PMSettings):
+    """Existing open actions/decisions/risks plus the project's configured status/impact/
+    probability values, formatted for a minutes-extraction prompt, and an existing_number ->
+    id lookup so the AI's references can be resolved back to real register entries."""
     actions = (await db.execute(select(PMAction).where(PMAction.project_id == project_id).order_by(PMAction.number))).scalars().all()
     decisions = (await db.execute(select(PMDecision).where(PMDecision.project_id == project_id).order_by(PMDecision.number))).scalars().all()
     risks = (await db.execute(select(PMRisk).where(PMRisk.project_id == project_id).order_by(PMRisk.number))).scalars().all()
@@ -786,6 +799,28 @@ async def generate_minutes(project_id: UUID, meeting_id: UUID, db: AsyncSession 
         "risk_probability": [l["level"] for l in s.probability_levels],
         "risk_status": ["Open", "Closed"],
     }
+    by_number = {"actions": {a.number: a.id for a in actions}, "decisions": {d.number: d.id for d in decisions}, "risks": {r.number: r.id for r in risks}}
+    return existing, allowed, by_number
+
+
+def _proposal_items(result: dict, kind: str, by_number: dict) -> list:
+    out = []
+    for it in result.get(kind, []):
+        it = {k: (v.strip() if isinstance(v, str) else v) for k, v in it.items()}
+        it["existing_id"] = by_number[kind].get(it.pop("existing_number", ""))
+        out.append({k: v for k, v in it.items() if v not in ("", None)} | {"title": it.get("title") or "(untitled)"})
+    return out
+
+
+@router.post("/projects/{project_id}/meetings/{meeting_id}/generate", response_model=MeetingResponse)
+async def generate_minutes(project_id: UUID, meeting_id: UUID, db: AsyncSession = Depends(get_db), user: PMUser = Depends(pm_user)):
+    proj = await _require(db, project_id, user, "meetings", "edit")
+    m = await _get_meeting(db, project_id, meeting_id)
+    _require_unlocked(m)
+    if not m.transcript_text:
+        raise HTTPException(400, "Upload the meeting transcript first")
+    s = await _settings(db, project_id)
+    existing, allowed, by_number = await _register_context(db, project_id, s)
     meeting_info = dict(project=proj.project_name, meeting_number=m.number, meeting_type=m.meeting_type or "", title=m.title,
                         date=m.meeting_date.date().isoformat() if m.meeting_date else "", attendees=m.attendees or [])
     prompt = (f"<meeting>\n{json.dumps(meeting_info, ensure_ascii=False)}\n</meeting>\n"
@@ -794,18 +829,34 @@ async def generate_minutes(project_id: UUID, meeting_id: UUID, db: AsyncSession 
               f"<transcript>\n{m.transcript_text}\n</transcript>")
     result = await _call_claude(MINUTES_SYSTEM, prompt)
 
-    by_number = {"actions": {a.number: a.id for a in actions}, "decisions": {d.number: d.id for d in decisions}, "risks": {r.number: r.id for r in risks}}
-
-    def _items(kind: str):
-        out = []
-        for it in result.get(kind, []):
-            it = {k: (v.strip() if isinstance(v, str) else v) for k, v in it.items()}
-            it["existing_id"] = by_number[kind].get(it.pop("existing_number", ""))
-            out.append({k: v for k, v in it.items() if v not in ("", None)} | {"title": it.get("title") or "(untitled)"})
-        return out
-
-    proposal = Proposal.model_validate({"actions": _items("actions"), "decisions": _items("decisions"), "risks": _items("risks")})
+    proposal = Proposal.model_validate({k: _proposal_items(result, k, by_number) for k in ("actions", "decisions", "risks")})
     m.minutes = result.get("minutes", "")
+    m.proposal = proposal.model_dump(mode="json")
+    m.status = "generated"
+    await db.execute(delete(PMMeetingValidation).where(PMMeetingValidation.meeting_id == m.id))
+    await db.commit()
+    await db.refresh(m, ["validations"])
+    return _meeting_out(m)
+
+
+@router.post("/projects/{project_id}/meetings/{meeting_id}/generate-actions", response_model=MeetingResponse)
+async def generate_actions_from_minutes(project_id: UUID, meeting_id: UUID, db: AsyncSession = Depends(get_db), user: PMUser = Depends(pm_user)):
+    """For minutes that were written or pasted directly rather than generated from a
+    transcript: extracts the action list, decision register and risk register from the
+    already-final minutes text, without touching that text."""
+    await _require(db, project_id, user, "meetings", "edit")
+    m = await _get_meeting(db, project_id, meeting_id)
+    _require_unlocked(m)
+    if not (m.minutes or "").strip():
+        raise HTTPException(400, "Write or generate the meeting minutes first")
+    s = await _settings(db, project_id)
+    existing, allowed, by_number = await _register_context(db, project_id, s)
+    prompt = (f"<allowed_values>\n{json.dumps(allowed, ensure_ascii=False)}\n</allowed_values>\n"
+              f"<existing_register_entries>\n{json.dumps(existing, ensure_ascii=False)}\n</existing_register_entries>\n"
+              f"<minutes>\n{m.minutes}\n</minutes>")
+    result = await _call_claude(ACTIONS_SYSTEM, prompt, ACTIONS_SCHEMA)
+
+    proposal = Proposal.model_validate({k: _proposal_items(result, k, by_number) for k in ("actions", "decisions", "risks")})
     m.proposal = proposal.model_dump(mode="json")
     m.status = "generated"
     await db.execute(delete(PMMeetingValidation).where(PMMeetingValidation.meeting_id == m.id))

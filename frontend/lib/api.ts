@@ -788,6 +788,7 @@ export const pmAPI = {
   getMeeting:        (pid: string, mid: string) => fetchAPI(`${pm(pid)}/meetings/${mid}`),
   uploadTranscript:  (pid: string, mid: string, file: File) => uploadAPI(`${pm(pid)}/meetings/${mid}/transcript`, { file }),
   generateMinutes:   (pid: string, mid: string) => fetchAPI(`${pm(pid)}/meetings/${mid}/generate`, { method: 'POST' }),
+  generateActions:   (pid: string, mid: string) => fetchAPI(`${pm(pid)}/meetings/${mid}/generate-actions`, { method: 'POST' }),
   saveReview:        (pid: string, mid: string, d: any) => fetchAPI(`${pm(pid)}/meetings/${mid}/review`, { method: 'PUT', body: JSON.stringify(d) }),
   requestValidation: (pid: string, mid: string, validators: { name: string; email?: string | null }[]) =>
     fetchAPI(`${pm(pid)}/meetings/${mid}/request-validation`, { method: 'POST', body: JSON.stringify({ validators }) }),

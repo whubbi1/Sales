@@ -119,6 +119,14 @@ function MeetingDetail({ projectId, meetingId, canEdit, settings, onBack, onChan
   const generate = () => (!m.minutes || confirm('Regenerate? Your edits to the minutes and action plan will be replaced.')) &&
     run(async () => apply(await pmAPI.generateMinutes(projectId, meetingId)))
   const saveReview = () => run(async () => apply(await pmAPI.saveReview(projectId, meetingId, draft)))
+  const generateActions = () => {
+    const hasProposal = ['actions', 'decisions', 'risks'].some(k => (draft.proposal[k] || []).length > 0)
+    if (hasProposal && !confirm('Regenerate the action items, decisions and risks from these minutes? Your current action plan will be replaced.')) return
+    run(async () => {
+      if (dirty) await pmAPI.saveReview(projectId, meetingId, draft)
+      apply(await pmAPI.generateActions(projectId, meetingId))
+    })
+  }
   const requestValidation = () => run(async () => {
     if (dirty) await pmAPI.saveReview(projectId, meetingId, draft)
     if (validators.length === 0 && !confirm('No validators selected — validate these minutes yourself now? The action list, decision register and risk register will be updated.')) return
@@ -150,7 +158,7 @@ function MeetingDetail({ projectId, meetingId, canEdit, settings, onBack, onChan
         )}
       </Card>
 
-      <Card title="1. Transcript">
+      <Card title="1. Transcript (optional — or write the minutes directly below)">
         <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
           <span style={{ fontSize: '12px', color: m.has_transcript ? '#059669' : '#9B9B9B' }}>{m.has_transcript ? `✓ ${m.transcript_filename}` : 'No transcript uploaded yet'}</span>
           {editable && <label className="btn-secondary" style={{ cursor: 'pointer' }}>{m.has_transcript ? 'Replace transcript' : 'Upload transcript'}<input type="file" hidden accept=".docx,.txt,.vtt,.srt,.md" onChange={e => upload(e.target.files?.[0])} /></label>}
@@ -159,12 +167,17 @@ function MeetingDetail({ projectId, meetingId, canEdit, settings, onBack, onChan
         </div>
       </Card>
 
-      {(m.status !== 'draft' || m.minutes) && (
+      {(m.status !== 'draft' || m.minutes || editable) && (
         <>
-          <Card title="2. Meeting minutes" action={editable && <button className="btn-primary" onClick={saveReview} disabled={busy || !dirty}>Save review</button>}>
-            <textarea className="form-input" rows={16} readOnly={!editable} value={draft.minutes} style={{ fontFamily: 'inherit', fontSize: '12px', lineHeight: 1.6 }}
+          <Card title="2. Meeting minutes" action={editable && (
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button className="btn-secondary" onClick={generateActions} disabled={busy || !draft.minutes.trim()}>{busy ? 'Working…' : '✨ Generate action items'}</button>
+              <button className="btn-primary" onClick={saveReview} disabled={busy || !dirty}>Save review</button>
+            </div>
+          )}>
+            <textarea className="form-input" rows={16} readOnly={!editable} placeholder={editable ? 'Write or paste the meeting minutes here…' : ''} value={draft.minutes} style={{ fontFamily: 'inherit', fontSize: '12px', lineHeight: 1.6 }}
               onChange={e => { setDraft({ ...draft, minutes: e.target.value }); setDirty(true) }} />
-            <div style={{ fontSize: '11px', color: '#94A3B8', marginTop: '4px' }}>Lines starting with “# ” become headings and “- ” bullet points in the exported document.</div>
+            <div style={{ fontSize: '11px', color: '#94A3B8', marginTop: '4px' }}>Lines starting with “# ” become headings and “- ” bullet points in the exported document. Once the minutes are final, “Generate action items” extracts the action list, decisions and risks below from this text.</div>
           </Card>
 
           <ProposalEditor kind="decisions" title="Decisions" items={draft.proposal.decisions} existing={registers.decisions} editable={editable} locked={locked} numberOf={numberOf}
