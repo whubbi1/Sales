@@ -94,7 +94,7 @@ class HelpdeskCtx:
         self.project_ids = project_ids  # only meaningful when is_portal
 
 
-def helpdesk_ctx(min_mode: str = "view"):
+def helpdesk_ctx(min_mode: str = "view", submodule: str = "tickets"):
     async def _dep(request: Request, db: AsyncSession = Depends(get_db)) -> HelpdeskCtx:
         portal_email = await try_portal_user_email(request, db)
         if portal_email:
@@ -105,9 +105,9 @@ def helpdesk_ctx(min_mode: str = "view"):
         email = await get_current_user_email(request.headers.get("x-user-email"))
         if await is_excluded(email, db):
             raise HTTPException(403, "Access excluded")
-        mode = await access_mode(email, "helpdesk", "tickets", db)
+        mode = await access_mode(email, "helpdesk", submodule, db)
         if _LEVELS.get(mode, 0) < _LEVELS[min_mode]:
-            raise HTTPException(403, f"No {min_mode} access to helpdesk.tickets")
+            raise HTTPException(403, f"No {min_mode} access to helpdesk.{submodule}")
         return HelpdeskCtx(email, False, set())
     return _dep
 
@@ -648,7 +648,7 @@ async def get_sla(db:AsyncSession=Depends(get_db), _: str = Depends(require_perm
 
 
 @router.get("/knowledge")
-async def list_articles(search:str=None,category:str=None,db:AsyncSession=Depends(get_db), _: str = Depends(require_permission("helpdesk", "knowledge", "view"))):
+async def list_articles(search:str=None,category:str=None,db:AsyncSession=Depends(get_db), ctx: HelpdeskCtx = Depends(helpdesk_ctx("view", submodule="knowledge"))):
     where,params=["published=true"],{}
     if search: where.append("(title ILIKE :s OR content ILIKE :s OR tags ILIKE :s)"); params["s"]=f"%{search}%"
     if category: where.append("category=:cat"); params["cat"]=category
@@ -657,7 +657,7 @@ async def list_articles(search:str=None,category:str=None,db:AsyncSession=Depend
 
 
 @router.get("/knowledge/{aid}")
-async def get_article(aid:str,db:AsyncSession=Depends(get_db), _: str = Depends(require_permission("helpdesk", "knowledge", "view"))):
+async def get_article(aid:str,db:AsyncSession=Depends(get_db), ctx: HelpdeskCtx = Depends(helpdesk_ctx("view", submodule="knowledge"))):
     await db.execute(text("UPDATE knowledge_articles SET views=views+1 WHERE id=CAST(:id AS uuid)"),{"id":aid})
     await db.commit()
     r=await db.execute(text("SELECT * FROM knowledge_articles WHERE id=CAST(:id AS uuid)"),{"id":aid})

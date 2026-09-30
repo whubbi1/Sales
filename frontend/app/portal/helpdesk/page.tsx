@@ -72,6 +72,14 @@ export default function PortalHelpdeskPage() {
           </button>
         </div>
 
+        <div style={{ display: 'flex', gap: '8px', marginBottom: '20px', borderBottom: '1px solid #EDF2F7' }}>
+          <div style={{ padding: '10px 4px', fontSize: '12px', fontWeight: 700, color: '#156082', borderBottom: '2px solid #156082' }}>🎫 Tickets</div>
+          <button onClick={() => router.push('/portal/helpdesk/knowledge')}
+            style={{ padding: '10px 4px', fontSize: '12px', fontWeight: 700, color: '#94A3B8', background: 'none', border: 'none', borderBottom: '2px solid transparent', cursor: 'pointer', fontFamily: 'Montserrat, sans-serif' }}>
+            📚 Knowledge Base
+          </button>
+        </div>
+
         {tickets === null ? (
           <div style={{ textAlign: 'center', color: '#94A3B8', fontSize: '13px', padding: '40px' }}>Loading…</div>
         ) : tickets.length === 0 ? (

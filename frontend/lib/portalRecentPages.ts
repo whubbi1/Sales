@@ -19,6 +19,7 @@ const PORTAL_PAGES: PortalPageDef[] = [
   { href: '/portal/profile', label: 'Personal Profile' },
   { href: '/portal/operations/project-management', label: 'Operations', isModuleMain: true },
   { href: '/portal/helpdesk', label: 'Helpdesk', isModuleMain: true },
+  { href: '/portal/helpdesk/knowledge', label: 'Knowledge Base' },
 ]
 
 interface RecentEntry {
