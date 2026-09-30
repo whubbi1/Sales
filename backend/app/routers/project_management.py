@@ -394,53 +394,6 @@ async def delete_member(project_id: UUID, member_id: UUID, db: AsyncSession = De
     await db.commit()
 
 
-@router.get("/projects/{project_id}/members/template/download")
-async def download_members_template(project_id: UUID, db: AsyncSession = Depends(get_db), user: PMUser = Depends(pm_user)):
-    await _require(db, project_id, user, "members")
-    content, filename = await _register_template_bytes(db, project_id, "members")
-    return StreamingResponse(io.BytesIO(content), media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'})
-
-
-@router.post("/projects/{project_id}/members/import/preview")
-async def import_preview_members(project_id: UUID, file: UploadFile = File(...), db: AsyncSession = Depends(get_db), user: PMUser = Depends(pm_user)):
-    await _require(db, project_id, user, "members")
-    _, rows = parse_xlsx(await _read_upload(file))
-    existing = (await db.execute(select(PMMember).where(PMMember.project_id == project_id))).scalars().all()
-    existing_by_email = {m.email: m for m in existing}
-    return _diff_register(existing_by_email, rows, "Email", IMPORT_FIELDS["members"],
-                           key_norm=lambda v: v.strip().lower(), create_when_unmatched=True)
-
-
-@router.post("/projects/{project_id}/members/import/apply")
-async def import_apply_members(project_id: UUID, body: ImportApplyRequest, db: AsyncSession = Depends(get_db), user: PMUser = Depends(pm_user)):
-    _require_manager(user)
-    field_keys = {f[0]: f[2] for f in IMPORT_FIELDS["members"]}
-    updated = created = 0
-    for item in body.changed:
-        obj = (await db.execute(select(PMMember).where(PMMember.id == item["id"], PMMember.project_id == project_id))).scalar_one_or_none()
-        if not obj:
-            continue
-        for k, v in item["row"].items():
-            if k in field_keys:
-                setattr(obj, k, _coerce_value(v, field_keys[k]))
-        updated += 1
-    for item in body.added:
-        email = (item.get("key") or "").strip().lower()
-        if not email:
-            continue
-        exists = (await db.execute(select(PMMember.id).where(PMMember.project_id == project_id, PMMember.email == email))).first()
-        if exists:
-            continue
-        values = {k: _coerce_value(v, field_keys[k]) for k, v in item["row"].items() if k in field_keys}
-        name = values.pop("name", None) or email
-        db.add(PMMember(project_id=project_id, email=email, name=name,
-                         permissions={s: "view" for s in PM_SECTIONS}, **values))
-        created += 1
-    await db.commit()
-    return {"updated": updated, "created": created}
-
-
 # ─── Planning ────────────────────────────────────────────────────────────────
 async def _check_phase_tree(db: AsyncSession, project_id: UUID, phase_id: UUID | None, parent_id: UUID | None):
     """Rejects a parent from another project, a cycle, or a tree deeper than PHASE_MAX_DEPTH
@@ -761,6 +714,53 @@ async def _register_template_bytes(db: AsyncSession, project_id: UUID, register:
     if tpl:
         return await _s3_get(tpl.file_ref), tpl.filename or f"{register}_template.xlsx"
     return await _standard_template_bytes(db, template_type), f"{register}_template.xlsx"
+
+
+@router.get("/projects/{project_id}/members/template/download")
+async def download_members_template(project_id: UUID, db: AsyncSession = Depends(get_db), user: PMUser = Depends(pm_user)):
+    await _require(db, project_id, user, "members")
+    content, filename = await _register_template_bytes(db, project_id, "members")
+    return StreamingResponse(io.BytesIO(content), media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'})
+
+
+@router.post("/projects/{project_id}/members/import/preview")
+async def import_preview_members(project_id: UUID, file: UploadFile = File(...), db: AsyncSession = Depends(get_db), user: PMUser = Depends(pm_user)):
+    await _require(db, project_id, user, "members")
+    _, rows = parse_xlsx(await _read_upload(file))
+    existing = (await db.execute(select(PMMember).where(PMMember.project_id == project_id))).scalars().all()
+    existing_by_email = {m.email: m for m in existing}
+    return _diff_register(existing_by_email, rows, "Email", IMPORT_FIELDS["members"],
+                           key_norm=lambda v: v.strip().lower(), create_when_unmatched=True)
+
+
+@router.post("/projects/{project_id}/members/import/apply")
+async def import_apply_members(project_id: UUID, body: ImportApplyRequest, db: AsyncSession = Depends(get_db), user: PMUser = Depends(pm_user)):
+    _require_manager(user)
+    field_keys = {f[0]: f[2] for f in IMPORT_FIELDS["members"]}
+    updated = created = 0
+    for item in body.changed:
+        obj = (await db.execute(select(PMMember).where(PMMember.id == item["id"], PMMember.project_id == project_id))).scalar_one_or_none()
+        if not obj:
+            continue
+        for k, v in item["row"].items():
+            if k in field_keys:
+                setattr(obj, k, _coerce_value(v, field_keys[k]))
+        updated += 1
+    for item in body.added:
+        email = (item.get("key") or "").strip().lower()
+        if not email:
+            continue
+        exists = (await db.execute(select(PMMember.id).where(PMMember.project_id == project_id, PMMember.email == email))).first()
+        if exists:
+            continue
+        values = {k: _coerce_value(v, field_keys[k]) for k, v in item["row"].items() if k in field_keys}
+        name = values.pop("name", None) or email
+        db.add(PMMember(project_id=project_id, email=email, name=name,
+                         permissions={s: "view" for s in PM_SECTIONS}, **values))
+        created += 1
+    await db.commit()
+    return {"updated": updated, "created": created}
 
 
 def _register_routes(register: str, cfg: dict):
