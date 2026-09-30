@@ -140,7 +140,6 @@ export default function HomePage() {
             </div>
             {userName && <div style={{ color:'rgba(255,255,255,0.85)', fontSize:'12px', fontWeight:'600', marginTop:'4px' }}>{userName}</div>}
           </div>
-          <img src="/wcomply-logo.png" alt="WCOMPLY" style={{ height:'40px', objectFit:'contain' }}/>
         </div>
       </div>
 

@@ -52,12 +52,15 @@ export default function PortalHomePage() {
   return (
     <div style={{ minHeight: '100vh', background: '#F5F7FA', fontFamily: 'Montserrat, sans-serif' }}>
       <div style={{ background: '#156082', padding: '16px 40px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <div>
-          <div style={{ color: 'white', fontSize: '17px', fontWeight: 800, letterSpacing: '0.04em' }}>WCOMPLY PORTAL</div>
-          <div style={{ color: 'rgba(255,255,255,0.65)', fontSize: '12px', marginTop: '2px' }}>Welcome back{userName ? `, ${userName}` : ''}</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+          <img src="/logo.png" alt="WHUBBI" style={{ height: '48px', objectFit: 'contain' }} />
+          <div>
+            <div style={{ color: 'white', fontSize: '17px', fontWeight: 800, letterSpacing: '0.04em' }}>WCOMPLY PORTAL</div>
+            <div style={{ color: 'rgba(255,255,255,0.65)', fontSize: '12px', marginTop: '2px' }}>Welcome back{userName ? `, ${userName}` : ''}</div>
+          </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
-          <img src="/wcomply-logo.png" alt="WCOMPLY" style={{ height: '40px', objectFit: 'contain' }} />
+          <img src="/wcomply-logo.png" alt="WCOMPLY" style={{ height: '24px', objectFit: 'contain' }} />
           <button onClick={handleSignOut}
             style={{ background: 'rgba(255,255,255,0.12)', color: 'white', border: 'none', borderRadius: '8px', padding: '8px 16px', fontSize: '12px', fontWeight: 700, cursor: 'pointer', fontFamily: 'Montserrat, sans-serif' }}>
             Sign out
@@ -88,9 +91,9 @@ export default function PortalHomePage() {
         </div>
 
         {/* Modules grid */}
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+        <div>
           <p style={{ fontSize: '12px', color: '#94A3B8', margin: '0 0 16px' }}>Select a tile to get started.</p>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '18px', maxWidth: '260px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '18px' }}>
             <div onClick={() => router.push('/portal/profile')}
               style={{ background: 'white', borderRadius: '14px', border: '1px solid #EDF2F7', padding: '24px', cursor: 'pointer', boxShadow: '0 1px 3px rgba(0,0,0,0.06)', position: 'relative', overflow: 'hidden' }}>
               <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '3px', background: '#156082' }} />
