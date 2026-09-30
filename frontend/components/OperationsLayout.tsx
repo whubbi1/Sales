@@ -13,6 +13,7 @@ const NAV = [
   { href: '/operations/licenses', icon: '🔑', label: 'Licenses', submodule: 'licenses' },
   { href: '/operations/staffing', icon: '👥', label: 'Staffing', submodule: 'staffing' },
   { href: '/operations/timesheets', icon: '🕒', label: 'Timesheets', submodule: 'timesheets' },
+  { href: '/operations/project-defaults', icon: '⚙️', label: 'Project Defaults', submodule: 'project_defaults' },
 ]
 
 type OperationsPerms = ModulePerms

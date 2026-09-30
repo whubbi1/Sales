@@ -3,6 +3,7 @@ import { Fragment, useEffect, useState } from 'react'
 import { pmAPI } from '@/lib/api'
 import { getStoredUser } from '@/lib/auth'
 import { Card, Table, TD, DEL_BTN, LINK_BTN, Modal, Field, ErrorBanner, useAction, fmtDate, toInput, fromInput, Badge, statusTone, PeopleEditor, Person, TabProps } from './shared'
+import { ExcelImportControls } from './ExcelImport'
 
 const VERSION_LABEL: Record<string, string> = { draft: 'Draft', in_approval: 'In approval', approved: 'Approved', rejected: 'Rejected' }
 const people = (ps?: Person[]) => (ps || []).map(p => p.name).join(', ') || '—'
@@ -40,7 +41,12 @@ export function DeliverablesTab({ projectId, canEdit }: TabProps) {
   const decide = (d: any, v: any, approve: boolean) => run(async () => { replace(await pmAPI.decideVersion(projectId, d.id, v.id, approve, comments[v.id])); setComments(c => ({ ...c, [v.id]: '' })) })
 
   return (
-    <Card title="Project deliverables" action={canEdit && <button className="btn-primary" onClick={() => setEditing({ name: '', description: '', owner: null, approvers: [], contributors: [], document_url: '' })}>+ Deliverable</button>}>
+    <Card title="Project deliverables" action={canEdit && (
+      <div style={{ display: 'flex', gap: '8px' }}>
+        <ExcelImportControls register="deliverables" projectId={projectId} onImported={load} />
+        <button className="btn-primary" onClick={() => setEditing({ name: '', description: '', owner: null, approvers: [], contributors: [], document_url: '' })}>+ Deliverable</button>
+      </div>
+    )}>
       <ErrorBanner error={editing || version ? '' : error} />
       <Table headers={['ID', 'Deliverable', 'Owner', 'Approvers', 'Contributors', 'Latest version', 'Document', '']} empty={items.length === 0}>
         {items.map(d => {

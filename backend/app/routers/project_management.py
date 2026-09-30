@@ -35,10 +35,12 @@ from app.models.opportunity import Opportunity
 from app.models.company import Company
 from app.models.project_management import (
     PM_SECTIONS, DEFAULT_ACTION_STATUSES, TEMPLATE_TYPES, PHASE_MAX_DEPTH,
-    PMSettings, PMTemplate, PMMember, PMPhase, PMTask, PMMeeting, PMMeetingValidation,
+    PMSettings, PMTemplate, PMDefaultTemplate, PMMember, PMPhase, PMTask, PMMeeting, PMMeetingValidation,
     PMAction, PMRisk, PMDecision, PMMeetingLink,
     PMDeliverable, PMDeliverableVersion, PMDeliverableApproval,
 )
+from app.services.excel_import import parse_xlsx, write_template_xlsx
+from pydantic import BaseModel
 from app.schemas.schemas import ProjectResponse
 from app.schemas.project_management import (
     SettingsUpdate, SettingsResponse, TemplateResponse, MemberIn, MemberResponse,
@@ -392,6 +394,53 @@ async def delete_member(project_id: UUID, member_id: UUID, db: AsyncSession = De
     await db.commit()
 
 
+@router.get("/projects/{project_id}/members/template/download")
+async def download_members_template(project_id: UUID, db: AsyncSession = Depends(get_db), user: PMUser = Depends(pm_user)):
+    await _require(db, project_id, user, "members")
+    content, filename = await _register_template_bytes(db, project_id, "members")
+    return StreamingResponse(io.BytesIO(content), media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'})
+
+
+@router.post("/projects/{project_id}/members/import/preview")
+async def import_preview_members(project_id: UUID, file: UploadFile = File(...), db: AsyncSession = Depends(get_db), user: PMUser = Depends(pm_user)):
+    await _require(db, project_id, user, "members")
+    _, rows = parse_xlsx(await _read_upload(file))
+    existing = (await db.execute(select(PMMember).where(PMMember.project_id == project_id))).scalars().all()
+    existing_by_email = {m.email: m for m in existing}
+    return _diff_register(existing_by_email, rows, "Email", IMPORT_FIELDS["members"],
+                           key_norm=lambda v: v.strip().lower(), create_when_unmatched=True)
+
+
+@router.post("/projects/{project_id}/members/import/apply")
+async def import_apply_members(project_id: UUID, body: ImportApplyRequest, db: AsyncSession = Depends(get_db), user: PMUser = Depends(pm_user)):
+    _require_manager(user)
+    field_keys = {f[0]: f[2] for f in IMPORT_FIELDS["members"]}
+    updated = created = 0
+    for item in body.changed:
+        obj = (await db.execute(select(PMMember).where(PMMember.id == item["id"], PMMember.project_id == project_id))).scalar_one_or_none()
+        if not obj:
+            continue
+        for k, v in item["row"].items():
+            if k in field_keys:
+                setattr(obj, k, _coerce_value(v, field_keys[k]))
+        updated += 1
+    for item in body.added:
+        email = (item.get("key") or "").strip().lower()
+        if not email:
+            continue
+        exists = (await db.execute(select(PMMember.id).where(PMMember.project_id == project_id, PMMember.email == email))).first()
+        if exists:
+            continue
+        values = {k: _coerce_value(v, field_keys[k]) for k, v in item["row"].items() if k in field_keys}
+        name = values.pop("name", None) or email
+        db.add(PMMember(project_id=project_id, email=email, name=name,
+                         permissions={s: "view" for s in PM_SECTIONS}, **values))
+        created += 1
+    await db.commit()
+    return {"updated": updated, "created": created}
+
+
 # ─── Planning ────────────────────────────────────────────────────────────────
 async def _check_phase_tree(db: AsyncSession, project_id: UUID, phase_id: UUID | None, parent_id: UUID | None):
     """Rejects a parent from another project, a cycle, or a tree deeper than PHASE_MAX_DEPTH
@@ -568,6 +617,152 @@ async def _serialize(db: AsyncSession, cfg: dict, items: list) -> list:
     return [cfg["schema_out"].model_validate(i).model_copy(update={"meeting_ids": links.get(i.id, [])}) for i in items]
 
 
+# ─── Bulk Excel import (Members, Actions, Decisions, Risks, Deliverables) ─────
+# One generic engine: upload -> preview (nothing written; added/changed-with-old-vs-new/
+# unmatched) -> apply (only the rows the caller still includes). A "template" is just a
+# nicely-formatted blank starting point to download — parsing an uploaded file matches
+# columns by header text, so the same parser works whether it started from a project's own
+# PMTemplate or the generated standard one; only the download path differs (see
+# _register_template_bytes).
+IMPORT_TEMPLATE_TYPE = {"actions": "action_list", "risks": "risk_register", "decisions": "decision_list",
+                        "members": "member_list", "deliverables": "deliverable_list"}
+MATCH_HEADER = {"actions": "Number", "risks": "Number", "decisions": "Number", "deliverables": "Number", "members": "Email"}
+
+# (field_key, Excel header, kind) — kind in {"str", "date", "list"} ("list" = comma-separated).
+IMPORT_FIELDS = {
+    "actions": [("title", "Title", "str"), ("description", "Description", "str"), ("owner", "Owner", "str"),
+                ("status", "Status", "str"), ("opening_date", "Opening Date", "date"), ("due_date", "Due Date", "date"),
+                ("closing_date", "Closing Date", "date"), ("comment", "Comment", "str")],
+    "risks": [("title", "Title", "str"), ("description", "Description", "str"), ("mitigation", "Mitigation", "str"),
+              ("owner", "Owner", "str"), ("impact", "Impact", "str"), ("probability", "Probability", "str"), ("status", "Status", "str")],
+    "decisions": [("decision_date", "Decision Date", "date"), ("title", "Title", "str"), ("description", "Description", "str"),
+                  ("decision_makers", "Decision Makers", "list")],
+    "members": [("name", "Name", "str"), ("phone", "Phone", "str"), ("project_role", "Project Role", "str"), ("company_role", "Company Role", "str")],
+    # owner/approvers/contributors are names only here (no email) — a simplification also
+    # already used for decisions' decision_makers; full {name,email} pairs still need the UI.
+    "deliverables": [("name", "Name", "str"), ("description", "Description", "str"), ("owner", "Owner", "str"),
+                      ("approvers", "Approvers", "list"), ("contributors", "Contributors", "list"), ("document_url", "Document URL", "str")],
+}
+TEMPLATE_COLUMNS = {
+    "action_list":      ["Number"] + [h for _, h, _ in IMPORT_FIELDS["actions"]],
+    "risk_register":    ["Number"] + [h for _, h, _ in IMPORT_FIELDS["risks"]],
+    "decision_list":     ["Number"] + [h for _, h, _ in IMPORT_FIELDS["decisions"]],
+    "member_list":       ["Email"] + [h for _, h, _ in IMPORT_FIELDS["members"]],
+    "deliverable_list":  ["Number", "Name", "Description", "Owner", "Approvers", "Contributors", "Document URL", "Current Status"],
+}
+
+
+class ImportApplyRequest(BaseModel):
+    changed: list[dict] = []
+    added: list[dict] = []
+
+
+def _coerce_value(raw, kind: str):
+    if raw is None:
+        return None
+    if kind == "list":
+        if isinstance(raw, list):
+            return raw
+        return [s.strip() for s in str(raw).split(",") if s.strip()]
+    if kind == "date":
+        if isinstance(raw, datetime):
+            return raw
+        s = str(raw).strip()
+        if not s:
+            return None
+        try:
+            return datetime.fromisoformat(s[:19])
+        except ValueError:
+            return None
+    s = str(raw).strip()
+    return s or None
+
+
+def _display_value(v) -> str:
+    if v is None:
+        return ""
+    if isinstance(v, list):
+        return ", ".join(str(x) for x in v)
+    if isinstance(v, datetime):
+        return v.date().isoformat()
+    return str(v)
+
+
+def _values_equal(a, b, kind: str) -> bool:
+    if kind == "list":
+        return list(a or []) == list(b or [])
+    if kind == "date":
+        da = a.date() if isinstance(a, datetime) else None
+        db_ = b.date() if isinstance(b, datetime) else None
+        return da == db_
+    return (a or None) == (b or None)
+
+
+def _diff_register(existing_by_key: dict, rows: list, match_header: str, fields: list,
+                    key_norm=lambda v: v, create_when_unmatched: bool = False) -> dict:
+    changed, added, unmatched = [], [], []
+    for row in rows:
+        raw_key = row.get(match_header)
+        key_val = str(raw_key).strip() if raw_key is not None else ""
+        parsed = {fkey: _coerce_value(row.get(header), kind) for fkey, header, kind in fields}
+        if key_val:
+            obj = existing_by_key.get(key_norm(key_val))
+            if obj:
+                diffs = {}
+                for fkey, _h, kind in fields:
+                    old = getattr(obj, fkey, None)
+                    new = parsed.get(fkey)
+                    if not _values_equal(old, new, kind):
+                        diffs[fkey] = {"old": _display_value(old), "new": _display_value(new)}
+                if diffs:
+                    changed.append({"key": key_val, "id": str(obj.id), "diffs": diffs, "row": parsed})
+                continue
+            (added if create_when_unmatched else unmatched).append({"key": key_val, "row": parsed})
+            continue
+        added.append({"row": parsed})
+    return {"changed": changed, "added": added, "unmatched": unmatched}
+
+
+async def _apply_register_import(db: AsyncSession, project_id: UUID, register: str, Model, prefix: str,
+                                  fields: list, body: ImportApplyRequest) -> dict:
+    field_keys = {f[0]: f[2] for f in fields}
+    updated = created = 0
+    for item in body.changed:
+        obj = (await db.execute(select(Model).where(Model.id == item["id"], Model.project_id == project_id))).scalar_one_or_none()
+        if not obj:
+            continue
+        values = {k: _coerce_value(v, field_keys[k]) for k, v in item["row"].items() if k in field_keys}
+        await _validate_register_fields(db, project_id, register, values)
+        for k, v in values.items():
+            setattr(obj, k, v)
+        updated += 1
+    for item in body.added:
+        values = {k: _coerce_value(v, field_keys[k]) for k, v in item["row"].items() if k in field_keys}
+        if not values.get("title") and register in ("actions", "risks", "decisions"):
+            continue
+        await _validate_register_fields(db, project_id, register, values)
+        db.add(Model(project_id=project_id, number=await _next_number(db, project_id, prefix), **values))
+        created += 1
+    return {"updated": updated, "created": created}
+
+
+async def _standard_template_bytes(db: AsyncSession, template_type: str) -> bytes:
+    default = (await db.execute(select(PMDefaultTemplate).where(PMDefaultTemplate.template_type == template_type))).scalar_one_or_none()
+    if default:
+        return await _s3_get(default.file_ref)
+    return write_template_xlsx(TEMPLATE_COLUMNS[template_type], sheet_title=template_type.replace("_", " ").title())
+
+
+async def _register_template_bytes(db: AsyncSession, project_id: UUID, register: str) -> tuple[bytes, str]:
+    """A project's own uploaded template for this register, else the standard one."""
+    template_type = IMPORT_TEMPLATE_TYPE[register]
+    tpl = (await db.execute(select(PMTemplate).where(PMTemplate.project_id == project_id, PMTemplate.template_type == template_type)
+                             .order_by(PMTemplate.created_at.desc()))).scalars().first()
+    if tpl:
+        return await _s3_get(tpl.file_ref), tpl.filename or f"{register}_template.xlsx"
+    return await _standard_template_bytes(db, template_type), f"{register}_template.xlsx"
+
+
 def _register_routes(register: str, cfg: dict):
     Model, SchemaIn, SchemaOut = cfg["model"], cfg["schema_in"], cfg["schema_out"]
     base = f"/projects/{{project_id}}/{register}"
@@ -607,10 +802,32 @@ def _register_routes(register: str, cfg: dict):
         await db.execute(delete(Model).where(Model.id == item_id, Model.project_id == project_id))
         await db.commit()
 
+    async def download_template(project_id: UUID, db: AsyncSession = Depends(get_db), user: PMUser = Depends(pm_user)):
+        await _require(db, project_id, user, register)
+        content, filename = await _register_template_bytes(db, project_id, register)
+        return StreamingResponse(io.BytesIO(content), media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'})
+
+    async def import_preview(project_id: UUID, file: UploadFile = File(...), db: AsyncSession = Depends(get_db), user: PMUser = Depends(pm_user)):
+        await _require(db, project_id, user, register)
+        _, rows = parse_xlsx(await _read_upload(file))
+        existing = (await db.execute(select(Model).where(Model.project_id == project_id))).scalars().all()
+        existing_by_key = {o.number: o for o in existing}
+        return _diff_register(existing_by_key, rows, MATCH_HEADER[register], IMPORT_FIELDS[register])
+
+    async def import_apply(project_id: UUID, body: ImportApplyRequest, db: AsyncSession = Depends(get_db), user: PMUser = Depends(pm_user)):
+        await _require(db, project_id, user, register, "edit")
+        result = await _apply_register_import(db, project_id, register, Model, cfg["prefix"], IMPORT_FIELDS[register], body)
+        await db.commit()
+        return result
+
     router.add_api_route(base, list_items, methods=["GET"], response_model=List[SchemaOut], name=f"list_{register}")
     router.add_api_route(base, create_item, methods=["POST"], response_model=SchemaOut, status_code=201, name=f"create_{register}")
     router.add_api_route(base + "/{item_id}", update_item, methods=["PUT"], response_model=SchemaOut, name=f"update_{register}")
     router.add_api_route(base + "/{item_id}", delete_item, methods=["DELETE"], status_code=204, name=f"delete_{register}")
+    router.add_api_route(base + "/template/download", download_template, methods=["GET"], name=f"download_template_{register}")
+    router.add_api_route(base + "/import/preview", import_preview, methods=["POST"], name=f"import_preview_{register}")
+    router.add_api_route(base + "/import/apply", import_apply, methods=["POST"], name=f"import_apply_{register}")
 
 
 for _name, _cfg in REGISTERS.items():
@@ -1241,6 +1458,93 @@ async def delete_deliverable(project_id: UUID, deliverable_id: UUID, db: AsyncSe
     await _require(db, project_id, user, "deliverables", "edit")
     await db.execute(delete(PMDeliverable).where(PMDeliverable.id == deliverable_id, PMDeliverable.project_id == project_id))
     await db.commit()
+
+
+@router.get("/projects/{project_id}/deliverables/template/download")
+async def download_deliverables_template(project_id: UUID, db: AsyncSession = Depends(get_db), user: PMUser = Depends(pm_user)):
+    await _require(db, project_id, user, "deliverables")
+    content, filename = await _register_template_bytes(db, project_id, "deliverables")
+    return StreamingResponse(io.BytesIO(content), media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'})
+
+
+def _people_names(people: list | None) -> list:
+    return [p.get("name", "") for p in (people or []) if p.get("name")]
+
+
+@router.post("/projects/{project_id}/deliverables/import/preview")
+async def import_preview_deliverables(project_id: UUID, file: UploadFile = File(...), db: AsyncSession = Depends(get_db), user: PMUser = Depends(pm_user)):
+    await _require(db, project_id, user, "deliverables")
+    _, rows = parse_xlsx(await _read_upload(file))
+    existing = (await db.execute(select(PMDeliverable).where(PMDeliverable.project_id == project_id))).scalars().all()
+    existing_by_number = {d.number: d for d in existing}
+    changed, added, unmatched = [], [], []
+    for row in rows:
+        number = str(row.get("Number") or "").strip()
+        parsed = {
+            "name": _coerce_value(row.get("Name"), "str"),
+            "description": _coerce_value(row.get("Description"), "str"),
+            "owner": _coerce_value(row.get("Owner"), "str"),
+            "approvers": _coerce_value(row.get("Approvers"), "list") or [],
+            "contributors": _coerce_value(row.get("Contributors"), "list") or [],
+            "document_url": _coerce_value(row.get("Document URL"), "str"),
+        }
+        if number:
+            obj = existing_by_number.get(number)
+            if obj:
+                diffs = {}
+                if (obj.name or None) != parsed["name"]:
+                    diffs["name"] = {"old": obj.name or "", "new": parsed["name"] or ""}
+                if (obj.description or None) != parsed["description"]:
+                    diffs["description"] = {"old": obj.description or "", "new": parsed["description"] or ""}
+                old_owner = (obj.owner or {}).get("name")
+                if old_owner != parsed["owner"]:
+                    diffs["owner"] = {"old": old_owner or "", "new": parsed["owner"] or ""}
+                if _people_names(obj.approvers) != parsed["approvers"]:
+                    diffs["approvers"] = {"old": ", ".join(_people_names(obj.approvers)), "new": ", ".join(parsed["approvers"])}
+                if _people_names(obj.contributors) != parsed["contributors"]:
+                    diffs["contributors"] = {"old": ", ".join(_people_names(obj.contributors)), "new": ", ".join(parsed["contributors"])}
+                if (obj.document_url or None) != parsed["document_url"]:
+                    diffs["document_url"] = {"old": obj.document_url or "", "new": parsed["document_url"] or ""}
+                if diffs:
+                    changed.append({"key": number, "id": str(obj.id), "diffs": diffs, "row": parsed})
+                continue
+            unmatched.append({"key": number, "row": parsed})
+            continue
+        added.append({"row": parsed})
+    return {"changed": changed, "added": added, "unmatched": unmatched}
+
+
+def _deliverable_import_values(row: dict) -> dict:
+    return {
+        "name": row.get("name"),
+        "description": row.get("description"),
+        "owner": {"name": row["owner"], "email": None} if row.get("owner") else None,
+        "approvers": [{"name": n, "email": None} for n in (row.get("approvers") or [])],
+        "contributors": [{"name": n, "email": None} for n in (row.get("contributors") or [])],
+        "document_url": row.get("document_url"),
+    }
+
+
+@router.post("/projects/{project_id}/deliverables/import/apply")
+async def import_apply_deliverables(project_id: UUID, body: ImportApplyRequest, db: AsyncSession = Depends(get_db), user: PMUser = Depends(pm_user)):
+    await _require(db, project_id, user, "deliverables", "edit")
+    updated = created = 0
+    for item in body.changed:
+        obj = (await db.execute(select(PMDeliverable).where(PMDeliverable.id == item["id"], PMDeliverable.project_id == project_id))).scalar_one_or_none()
+        if not obj:
+            continue
+        for k, v in _deliverable_import_values(item["row"]).items():
+            setattr(obj, k, v)
+        updated += 1
+    for item in body.added:
+        values = _deliverable_import_values(item["row"])
+        if not values.get("name"):
+            continue
+        db.add(PMDeliverable(project_id=project_id, number=await _next_number(db, project_id, "DEL"), **values))
+        created += 1
+    await db.commit()
+    return {"updated": updated, "created": created}
 
 
 @router.post("/projects/{project_id}/deliverables/{deliverable_id}/versions", response_model=DeliverableResponse, status_code=status.HTTP_201_CREATED)

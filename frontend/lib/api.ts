@@ -777,6 +777,16 @@ export const pmAPI = {
   templateUrl:    (pid: string, tid: string) => fetchAPI(`${pm(pid)}/templates/${tid}/download`),
   deleteTemplate: (pid: string, tid: string) => fetchAPI(`${pm(pid)}/templates/${tid}`, { method: 'DELETE' }),
 
+  downloadRegisterTemplate: async (pid: string, register: string) => {
+    const res = await fetch(`${API_URL}${pm(pid)}/${register}/template/download`, { headers: authHeaders() })
+    if (!res.ok) throw new Error('Could not download the template')
+    const name = /filename="([^"]+)"/.exec(res.headers.get('Content-Disposition') || '')?.[1] || `${register}_template.xlsx`
+    return { blob: await res.blob(), name }
+  },
+  importPreview: (pid: string, register: string, file: File) => uploadAPI(`${pm(pid)}/${register}/import/preview`, { file }),
+  importApply: (pid: string, register: string, body: { changed: any[]; added: any[] }) =>
+    fetchAPI(`${pm(pid)}/${register}/import/apply`, { method: 'POST', body: JSON.stringify(body) }),
+
   members:      pmCrud('members'),
   phases:       pmCrud('phases'),
   tasks:        pmCrud('tasks'),
@@ -808,4 +818,18 @@ export const pmAPI = {
   submitVersion: (pid: string, did: string, vid: string) => fetchAPI(`${pm(pid)}/deliverables/${did}/versions/${vid}/submit`, { method: 'POST' }),
   decideVersion: (pid: string, did: string, vid: string, approve: boolean, comment?: string) =>
     fetchAPI(`${pm(pid)}/deliverables/${did}/versions/${vid}/approve`, { method: 'POST', body: JSON.stringify({ approve, comment }) }),
+}
+
+// ─── Operations > Project Defaults (standard register-import templates) ───────
+export const projectDefaultsAPI = {
+  list: () => fetchAPI('/operations/project-defaults/templates'),
+  upload: (templateType: string, name: string, file: File) =>
+    uploadAPI(`/operations/project-defaults/templates/${templateType}`, { name, file }),
+  remove: (templateType: string) => fetchAPI(`/operations/project-defaults/templates/${templateType}`, { method: 'DELETE' }),
+  download: async (templateType: string) => {
+    const res = await fetch(`${API_URL}/operations/project-defaults/templates/${templateType}/download`, { headers: authHeaders() })
+    if (!res.ok) throw new Error('Could not download the template')
+    const name = /filename="([^"]+)"/.exec(res.headers.get('Content-Disposition') || '')?.[1] || `${templateType}.xlsx`
+    return { blob: await res.blob(), name }
+  },
 }

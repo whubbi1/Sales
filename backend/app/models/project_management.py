@@ -25,7 +25,12 @@ DEFAULT_LEVELS = [
     {"level": "Medium", "description": ""},
     {"level": "High", "description": ""},
 ]
-TEMPLATE_TYPES = ["project_status_report", "meeting_minutes", "action_list", "risk_register", "decision_list", "presentation", "other"]
+TEMPLATE_TYPES = ["project_status_report", "meeting_minutes", "action_list", "risk_register", "decision_list", "member_list", "deliverable_list", "presentation", "other"]
+
+# The 5 register types that get a bulk-Excel import (upload/preview/apply) and a
+# downloadable template — project-specific (PMTemplate, above) or, absent one, generated
+# on demand (see PMDefaultTemplate / write_template_xlsx in services/excel_import.py).
+IMPORT_REGISTERS = ["actions", "risks", "decisions", "members", "deliverables"]
 PHASE_MAX_DEPTH = 10  # top-level phase = depth 1, so up to 9 nested sub-phase levels below it
 
 
@@ -59,6 +64,21 @@ class PMTemplate(Base):
     content_type  = Column(String(255))
     uploaded_by   = Column(String(255))
     created_at    = Column(DateTime, default=datetime.utcnow)
+
+
+class PMDefaultTemplate(Base):
+    """Global (not per-project) admin-uploaded override of a standard register template —
+    Operations > Project Defaults. Absent a row here, the standard template is generated
+    on the fly by write_template_xlsx() instead."""
+    __tablename__ = "pm_default_templates"
+
+    template_type = Column(String(40), primary_key=True)  # one of TEMPLATE_TYPES (the 5 register ones)
+    name          = Column(String(255), nullable=False)
+    file_ref      = Column(String(1000), nullable=False)
+    filename      = Column(String(255))
+    content_type  = Column(String(255))
+    uploaded_by   = Column(String(255))
+    updated_at    = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
 class PMMember(Base):

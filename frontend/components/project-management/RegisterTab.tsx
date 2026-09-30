@@ -5,6 +5,7 @@
 import { useEffect, useState } from 'react'
 import { pmAPI } from '@/lib/api'
 import { Card, Table, TD, DEL_BTN, LINK_BTN, Modal, Field, ErrorBanner, useAction, fmtDate, toInput, fromInput, Badge, statusTone, MeetingPicker, MeetingRefs, TabProps } from './shared'
+import { ExcelImportControls } from './ExcelImport'
 
 type FieldDef = {
   key: string; label: string
@@ -16,9 +17,9 @@ type Crud = { list: (p: string) => Promise<any>; create: (p: string, d: any) => 
 
 const opts = (xs: string[]) => xs.map(x => ({ value: x, label: x }))
 
-function RegisterTab({ projectId, canEdit, title, singular, api, fields, defaults, linkMeetings, filterKey }: {
+function RegisterTab({ projectId, canEdit, title, singular, api, fields, defaults, linkMeetings, filterKey, importRegister }: {
   projectId: string; canEdit: boolean; title: string; singular: string; api: Crud; fields: FieldDef[]
-  defaults: Record<string, any>; linkMeetings: boolean; filterKey?: string
+  defaults: Record<string, any>; linkMeetings: boolean; filterKey?: string; importRegister?: string
 }) {
   const [items, setItems] = useState<any[]>([])
   const [meetings, setMeetings] = useState<any[]>([])
@@ -82,6 +83,7 @@ function RegisterTab({ projectId, canEdit, title, singular, api, fields, default
             {filterField.options!.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
           </select>
         )}
+        {canEdit && importRegister && <ExcelImportControls register={importRegister} projectId={projectId} onImported={load} />}
         {canEdit && <button className="btn-primary" onClick={() => openEdit()}>+ {singular}</button>}
       </div>
     }>
@@ -131,7 +133,7 @@ function RegisterTab({ projectId, canEdit, title, singular, api, fields, default
 
 export function ActionsTab({ projectId, canEdit, settings }: TabProps) {
   const statuses = opts(settings.action_statuses)
-  return <RegisterTab projectId={projectId} canEdit={canEdit} title="Action list" singular="Action" api={pmAPI.actions} linkMeetings filterKey="status"
+  return <RegisterTab projectId={projectId} canEdit={canEdit} title="Action list" singular="Action" api={pmAPI.actions} linkMeetings filterKey="status" importRegister="actions"
     defaults={{ status: 'Open', opening_date: new Date().toISOString() }}
     fields={[
       { key: 'title', label: 'Title', type: 'text', inTable: true, required: true, full: true },
@@ -149,7 +151,7 @@ export function RisksTab({ projectId, canEdit, settings }: TabProps) {
   const impacts = settings.impact_levels.map(l => ({ value: l.level, label: l.level }))
   const probs = settings.probability_levels.map(l => ({ value: l.level, label: l.level }))
   const mid = (xs: { value: string }[]) => xs[Math.floor(xs.length / 2)]?.value
-  return <RegisterTab projectId={projectId} canEdit={canEdit} title="Risk register" singular="Risk" api={pmAPI.risks} linkMeetings filterKey="status"
+  return <RegisterTab projectId={projectId} canEdit={canEdit} title="Risk register" singular="Risk" api={pmAPI.risks} linkMeetings filterKey="status" importRegister="risks"
     defaults={{ status: 'Open', impact: mid(impacts), probability: mid(probs) }}
     fields={[
       { key: 'title', label: 'Title', type: 'text', inTable: true, required: true, full: true },
@@ -163,7 +165,7 @@ export function RisksTab({ projectId, canEdit, settings }: TabProps) {
 }
 
 export function DecisionsTab({ projectId, canEdit }: TabProps) {
-  return <RegisterTab projectId={projectId} canEdit={canEdit} title="Decision register" singular="Decision" api={pmAPI.decisions} linkMeetings
+  return <RegisterTab projectId={projectId} canEdit={canEdit} title="Decision register" singular="Decision" api={pmAPI.decisions} linkMeetings importRegister="decisions"
     defaults={{ decision_date: new Date().toISOString(), decision_makers: [] }}
     fields={[
       { key: 'decision_date', label: 'Decision date', type: 'date', inTable: true },

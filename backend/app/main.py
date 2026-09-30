@@ -2064,6 +2064,20 @@ async def startup():
                 # Set once a portal user accepts the Terms & Conditions — null means a new
                 # user still needs to (gated on /portal/home).
                 "ALTER TABLE portal_users ADD COLUMN IF NOT EXISTS terms_accepted_at TIMESTAMP",
+
+                # Operations > Project Defaults — admin overrides of the generated standard
+                # register import templates (action_list, risk_register, decision_list,
+                # member_list, deliverable_list). One row per template_type; absent means
+                # "use the generated standard template".
+                """CREATE TABLE IF NOT EXISTS pm_default_templates (
+                    template_type VARCHAR(40) PRIMARY KEY,
+                    name VARCHAR(255) NOT NULL,
+                    file_ref VARCHAR(1000) NOT NULL,
+                    filename VARCHAR(255),
+                    content_type VARCHAR(255),
+                    uploaded_by VARCHAR(255),
+                    updated_at TIMESTAMP DEFAULT NOW()
+                )""",
             ]
             for sql in sqls:
                 try:
@@ -2257,6 +2271,7 @@ _include("app.routers.finance",        "/finance",      "Finance")
 _include("app.routers.finance_customers", "/finance",   "FinanceCustomers")
 _include("app.routers.projects",       "/projects",     "Projects")
 _include("app.routers.project_management", "/project-management", "ProjectManagement")
+_include("app.routers.project_defaults", "/operations/project-defaults", "ProjectDefaults")
 _include("app.routers.timesheets",     "/timesheets",   "Timesheets")
 _include("app.routers.leads",          "/leads",        "Leads")
 _include("app.routers.reporting",      "/reporting",    "Reporting")

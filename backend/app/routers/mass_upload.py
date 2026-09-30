@@ -18,6 +18,7 @@ from app.database import get_db
 from app.models.company import Company
 from app.models.contact import Contact
 from app.services.ids import next_internal_id
+from app.services.excel_import import parse_xlsx as _parse_xlsx
 
 router = APIRouter()
 
@@ -88,12 +89,6 @@ async def get_fields(entity_type: str):
     return {"fields": ENTITY_FIELDS[entity_type]}
 
 
-def _cell_to_json(v):
-    if isinstance(v, (datetime, date)):
-        return v.isoformat()
-    return v
-
-
 def _parse_csv(content: bytes):
     text_content = None
     for enc in ("utf-8-sig", "utf-8", "latin-1"):
@@ -118,24 +113,6 @@ def _parse_csv(content: bytes):
         if not any((c or "").strip() for c in r):
             continue
         rows.append({headers[i]: (r[i].strip() if i < len(r) and r[i] is not None else None) for i in range(len(headers))})
-    return headers, rows
-
-
-def _parse_xlsx(content: bytes):
-    import openpyxl
-    wb = openpyxl.load_workbook(io.BytesIO(content), read_only=True, data_only=True)
-    ws = wb.worksheets[0]
-    rows_iter = ws.iter_rows(values_only=True)
-    try:
-        header_row = next(rows_iter)
-    except StopIteration:
-        return [], []
-    headers = [str(h).strip() if h is not None else f"Column {i + 1}" for i, h in enumerate(header_row)]
-    rows = []
-    for r in rows_iter:
-        if r is None or all(c is None for c in r):
-            continue
-        rows.append({headers[i]: _cell_to_json(r[i]) if i < len(r) else None for i in range(len(headers))})
     return headers, rows
 
 

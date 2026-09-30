@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react'
 import { pmAPI, contactsAPI } from '@/lib/api'
 import { Card, Table, TD, DEL_BTN, LINK_BTN, Modal, Field, ErrorBanner, useAction, Badge } from './shared'
 import { LANGUAGES, NUMBER_FORMATS, CURRENCIES } from '@/lib/contactOptions'
+import { ExcelImportControls } from './ExcelImport'
 
 export const SECTIONS: { key: string; label: string }[] = [
   { key: 'basic_info', label: 'Project Setup' }, { key: 'members', label: 'Members' }, { key: 'planning', label: 'Planning' },
@@ -66,7 +67,12 @@ export function MembersTab({ projectId, isManager }: { projectId: string; isMana
   const setAll = (level: string) => setEditing({ ...editing, permissions: Object.fromEntries(SECTIONS.map(s => [s.key, s.key === 'members' && level === 'edit' ? 'view' : level])) })
 
   return (
-    <Card title="Project members" action={isManager && <button className="btn-primary" onClick={() => openMember({ ...EMPTY, permissions: { ...EMPTY.permissions } })}>+ Member</button>}>
+    <Card title="Project members" action={isManager && (
+      <div style={{ display: 'flex', gap: '8px' }}>
+        <ExcelImportControls register="members" projectId={projectId} onImported={load} />
+        <button className="btn-primary" onClick={() => openMember({ ...EMPTY, permissions: { ...EMPTY.permissions } })}>+ Member</button>
+      </div>
+    )}>
       <ErrorBanner error={editing ? '' : error} />
       {!isManager && <p style={{ fontSize: '11px', color: '#64748B', marginTop: 0 }}>Only project managers can add members or change their authorisations.</p>}
       <Table headers={['Name', 'Email', 'Phone', 'Project role', 'Company role', 'Authorisations', '']} empty={members.length === 0}>
