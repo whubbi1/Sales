@@ -124,20 +124,23 @@ export default function HomePage() {
       {/* Header */}
       <div style={{ background:'#156082', padding:'16px 40px', display:'flex', alignItems:'center', justifyContent:'space-between' }}>
         <div style={{ display:'flex', alignItems:'center', gap:'16px' }}>
-          <img src="/logo.png" alt="WCOMPLY" style={{ height:'72px', objectFit:'contain' }}/>
+          <div style={{ color:'white', fontSize:'26px', fontWeight:'900', letterSpacing:'0.04em' }}>WHUBBI</div>
           <div>
             <div style={{ color:'white', fontSize:'17px', fontWeight:'800', letterSpacing:'0.04em' }}>WCOMPLY BUSINESS PLATFORM</div>
             <div style={{ color:'rgba(255,255,255,0.65)', fontSize:'12px', marginTop:'2px' }}>Select a module to get started</div>
           </div>
         </div>
-        <div style={{ textAlign:'right' as const }}>
-          <div style={{ display:'flex', alignItems:'center', gap:'8px', justifyContent:'flex-end' }}>
-            <div style={{ width:'8px', height:'8px', borderRadius:'50%', background: backendStatus==='up'?'#10B981':backendStatus==='down'?'#EF4444':'#F59E0B' }}/>
-            <span style={{ color:'rgba(255,255,255,0.6)', fontSize:'11px' }}>
-              {backendStatus==='up'?'All systems operational':backendStatus==='down'?'Backend unavailable':'Checking...'}
-            </span>
+        <div style={{ display:'flex', alignItems:'center', gap:'20px' }}>
+          <div style={{ textAlign:'right' as const }}>
+            <div style={{ display:'flex', alignItems:'center', gap:'8px', justifyContent:'flex-end' }}>
+              <div style={{ width:'8px', height:'8px', borderRadius:'50%', background: backendStatus==='up'?'#10B981':backendStatus==='down'?'#EF4444':'#F59E0B' }}/>
+              <span style={{ color:'rgba(255,255,255,0.6)', fontSize:'11px' }}>
+                {backendStatus==='up'?'All systems operational':backendStatus==='down'?'Backend unavailable':'Checking...'}
+              </span>
+            </div>
+            {userName && <div style={{ color:'rgba(255,255,255,0.85)', fontSize:'12px', fontWeight:'600', marginTop:'4px' }}>{userName}</div>}
           </div>
-          {userName && <div style={{ color:'rgba(255,255,255,0.85)', fontSize:'12px', fontWeight:'600', marginTop:'4px' }}>{userName}</div>}
+          <img src="/logo.png" alt="WCOMPLY" style={{ height:'56px', objectFit:'contain' }}/>
         </div>
       </div>
 

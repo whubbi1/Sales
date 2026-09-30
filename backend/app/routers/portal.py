@@ -314,11 +314,16 @@ async def create_portal_session(data: dict, db: AsyncSession = Depends(get_db)):
         contact_id = portal_user["contact_id"]
 
     contact = await _get_contact_with_company(db, str(contact_id))
+    terms_row = (await db.execute(
+        text("SELECT terms_accepted_at FROM portal_users WHERE email = :email AND portal_type = :portal_type"),
+        {"email": email, "portal_type": portal_type},
+    )).fetchone()
     return {
         "email": email,
         "name": f"{contact.get('first_name','')} {contact.get('last_name','')}".strip(),
         "portal_type": portal_type,
         "company_name": contact.get("company_name"),
+        "terms_accepted_at": terms_row[0].isoformat() if terms_row and terms_row[0] else None,
     }
 
 
@@ -350,6 +355,7 @@ async def get_my_profile(
         "currency": contact.get("currency"),
         "company_name": contact.get("company_name"),
         "portal_type": portal_type,
+        "terms_accepted_at": portal_user["terms_accepted_at"].isoformat() if portal_user.get("terms_accepted_at") else None,
     }
 
 
@@ -380,3 +386,49 @@ async def update_my_profile(
     await db.execute(text(f"UPDATE contacts SET {set_clause}, updated_at = NOW() WHERE id = :id"), updates)
     await db.commit()
     return await get_my_profile(portal_type, db, portal_user)
+
+
+# ─── Terms & Conditions ──────────────────────────────────────────────────────
+# Content is a placeholder for now (title only) — a new portal user is required to
+# accept before reaching the rest of the portal; MyWHUBBI also links here so it can be
+# reviewed (and the PDF downloaded) any time afterwards.
+@router.post("/{portal_type}/accept-terms")
+async def accept_terms(
+    portal_type: str,
+    db: AsyncSession = Depends(get_db),
+    portal_user: dict = Depends(require_portal_user),
+):
+    await db.execute(text("UPDATE portal_users SET terms_accepted_at = NOW() WHERE id = :id"), {"id": portal_user["id"]})
+    await db.commit()
+    return {"terms_accepted_at": datetime.utcnow().isoformat()}
+
+
+def _generate_terms_pdf() -> bytes:
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.styles import ParagraphStyle
+    from reportlab.lib.units import cm
+    from reportlab.lib import colors
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, HRFlowable, Table, TableStyle
+    from io import BytesIO
+    buf = BytesIO()
+    pw = A4[0] - 5 * cm
+    doc = SimpleDocTemplate(buf, pagesize=A4, topMargin=2*cm, bottomMargin=2.5*cm, leftMargin=2.5*cm, rightMargin=2.5*cm)
+    s_title = ParagraphStyle('t', fontName='Helvetica-Bold', fontSize=22, textColor=colors.HexColor('#156082'), spaceAfter=8)
+    s_body = ParagraphStyle('b', fontName='Helvetica', fontSize=10, textColor=colors.HexColor('#3F3F3F'), leading=16)
+    story = [
+        Table([['']], colWidths=[pw], rowHeights=[0.8*cm], style=TableStyle([('BACKGROUND', (0, 0), (-1, -1), colors.HexColor('#156082'))])),
+        Paragraph('Terms and Conditions of Use', s_title),
+        HRFlowable(width='100%', thickness=1.5, color=colors.HexColor('#45B6E4'), spaceAfter=12),
+        Paragraph('This document is being prepared.', s_body),
+    ]
+    doc.build(story)
+    return buf.getvalue()
+
+
+@router.get("/{portal_type}/terms/pdf")
+async def download_terms_pdf(portal_type: str, portal_user: dict = Depends(require_portal_user)):
+    from fastapi.responses import StreamingResponse
+    from io import BytesIO
+    content = _generate_terms_pdf()
+    return StreamingResponse(BytesIO(content), media_type="application/pdf",
+        headers={"Content-Disposition": 'attachment; filename="WCOMPLY_Portal_Terms_and_Conditions.pdf"'})

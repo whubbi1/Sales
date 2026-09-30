@@ -2060,6 +2060,10 @@ async def startup():
                 # Optional link from a project Member back to the CRM contact they were
                 # picked/created from (Project Management > Members).
                 "ALTER TABLE pm_members ADD COLUMN IF NOT EXISTS contact_id UUID REFERENCES contacts(id) ON DELETE SET NULL",
+
+                # Set once a portal user accepts the Terms & Conditions — null means a new
+                # user still needs to (gated on /portal/home).
+                "ALTER TABLE portal_users ADD COLUMN IF NOT EXISTS terms_accepted_at TIMESTAMP",
             ]
             for sql in sqls:
                 try:

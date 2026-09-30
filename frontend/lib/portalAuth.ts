@@ -15,6 +15,7 @@ export interface StoredPortalUser {
   name: string
   id_token: string
   exp: number // JWT expiry, Unix seconds
+  terms_accepted_at: string | null
 }
 
 export function getStoredPortalUser(): StoredPortalUser | null {
@@ -119,6 +120,7 @@ export async function finalizePortalSession(idToken: string, inviteToken?: strin
     name: session.name || session.email,
     id_token: idToken,
     exp: payload.exp,
+    terms_accepted_at: session.terms_accepted_at || null,
   }
   setStoredPortalUser(user)
   return { ok: true, user }

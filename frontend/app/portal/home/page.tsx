@@ -29,6 +29,10 @@ export default function PortalHomePage() {
       router.replace('/portal/login')
       return
     }
+    if (!user.terms_accepted_at) {
+      router.replace('/portal/terms')
+      return
+    }
     setUserName(user.name || user.email)
     setRecent(getRecentPortalPages(user.email))
     pmAPI.listProjects().then((projects: any[]) => setHasOperationsAccess(projects.length > 0)).catch(() => {})
@@ -46,7 +50,7 @@ export default function PortalHomePage() {
     <div style={{ minHeight: '100vh', background: '#F5F7FA', fontFamily: 'Montserrat, sans-serif' }}>
       <div style={{ background: '#156082', padding: '16px 40px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div>
-          <div style={{ color: 'white', fontSize: '17px', fontWeight: 800, letterSpacing: '0.04em' }}>WHUBBI PORTAL</div>
+          <div style={{ color: 'white', fontSize: '17px', fontWeight: 800, letterSpacing: '0.04em' }}>WCOMPLY PORTAL</div>
           <div style={{ color: 'rgba(255,255,255,0.65)', fontSize: '12px', marginTop: '2px' }}>Welcome back{userName ? `, ${userName}` : ''}</div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
@@ -58,10 +62,10 @@ export default function PortalHomePage() {
         </div>
       </div>
 
-      <div style={{ padding: '40px', maxWidth: '1000px', margin: '0 auto', display: 'grid', gridTemplateColumns: '220px 1fr', gap: '28px', alignItems: 'start' }}>
+      <div style={{ padding: '40px', maxWidth: '1000px', margin: '0 auto', display: 'grid', gridTemplateColumns: '220px 1fr', gap: '28px', alignItems: 'center' }}>
 
         {/* Last Used — left column, same position/style as the employee home page's Company Links block */}
-        <div style={{ background: 'white', borderRadius: '14px', border: '1px solid #EDF2F7', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.06)', position: 'sticky', top: '24px' }}>
+        <div style={{ background: 'white', borderRadius: '14px', border: '1px solid #EDF2F7', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.06)', position: 'sticky', top: '24px', justifySelf: 'start' }}>
           <div style={{ padding: '14px 16px', borderBottom: '1px solid #EDF2F7', background: '#F8FAFC' }}>
             <div style={{ fontSize: '10px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', color: '#45B6E4' }}>🕘 Last Used</div>
           </div>
@@ -81,7 +85,7 @@ export default function PortalHomePage() {
         </div>
 
         {/* Modules grid */}
-        <div>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
           <p style={{ fontSize: '12px', color: '#94A3B8', margin: '0 0 16px' }}>Select a tile to get started.</p>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '18px', maxWidth: '260px' }}>
             <div onClick={() => router.push('/portal/profile')}
@@ -90,6 +94,7 @@ export default function PortalHomePage() {
               <div style={{ width: '44px', height: '44px', borderRadius: '10px', background: '#45B6E418', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '20px', marginBottom: '14px' }}>⚙️</div>
               <h2 style={{ fontSize: '13px', fontWeight: 800, color: '#156082', margin: '0 0 6px' }}>MyWHUBBI</h2>
               <p style={{ fontSize: '11px', color: '#45B6E4', margin: 0, lineHeight: 1.6 }}>Manage your personal profile information.</p>
+              <a href="/portal/terms" onClick={e => e.stopPropagation()} style={{ display: 'inline-block', marginTop: '10px', fontSize: '10px', color: '#156082', fontWeight: 700 }}>Terms &amp; Conditions →</a>
             </div>
 
             {hasOperationsAccess && (

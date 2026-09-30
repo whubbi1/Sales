@@ -41,7 +41,7 @@ export default function PortalInvitePage() {
   return (
     <div style={{ minHeight: '100vh', background: '#F5F7FA', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Montserrat, sans-serif', padding: '24px' }}>
       <div style={{ background: 'white', borderRadius: '16px', boxShadow: '0 8px 24px rgba(0,0,0,0.08)', maxWidth: '420px', width: '100%', padding: '40px' }}>
-        <img src="/logo.png" alt="WHUBBI" style={{ height: '48px', objectFit: 'contain', marginBottom: '20px' }} />
+        <img src="/logo.png" alt="WCOMPLY" style={{ height: '48px', objectFit: 'contain', marginBottom: '20px' }} />
 
         {info === null && <p style={{ color: '#94A3B8', fontSize: '13px' }}>Checking your invitation…</p>}
 
@@ -69,7 +69,7 @@ export default function PortalInvitePage() {
               Hi {info.contact_first_name || 'there'}, you've been invited
             </h1>
             <p style={{ fontSize: '13px', color: '#64748B', lineHeight: 1.6, marginBottom: '20px' }}>
-              Connect your Microsoft or Google account, or create an account with email and password, to access the WHUBBI Portal.
+              Connect your Microsoft or Google account, or create an account with email and password, to access the WCOMPLY Portal.
             </p>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
