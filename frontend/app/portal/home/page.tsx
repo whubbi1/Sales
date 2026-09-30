@@ -21,7 +21,10 @@ export default function PortalHomePage() {
   const router = useRouter()
   const [userName, setUserName] = useState('')
   const [recent, setRecent] = useState<RecentEntry[]>([])
-  const [hasOperationsAccess, setHasOperationsAccess] = useState(false)
+  // Both Operations and Helpdesk are gated on the same signal: does this contact have
+  // any PMMember-derived project at all (pmAPI.listProjects() already returns exactly
+  // that set for a portal caller).
+  const [hasProjectAccess, setHasProjectAccess] = useState(false)
 
   useEffect(() => {
     const user = getStoredPortalUser()
@@ -35,7 +38,7 @@ export default function PortalHomePage() {
     }
     setUserName(user.name || user.email)
     setRecent(getRecentPortalPages(user.email))
-    pmAPI.listProjects().then((projects: any[]) => setHasOperationsAccess(projects.length > 0)).catch(() => {})
+    pmAPI.listProjects().then((projects: any[]) => setHasProjectAccess(projects.length > 0)).catch(() => {})
   }, [router])
 
   // Clears Amplify's own Cognito session too, not just our stored token — otherwise a
@@ -97,13 +100,23 @@ export default function PortalHomePage() {
               <a href="/portal/terms" onClick={e => e.stopPropagation()} style={{ display: 'inline-block', marginTop: '10px', fontSize: '10px', color: '#156082', fontWeight: 700 }}>Terms &amp; Conditions →</a>
             </div>
 
-            {hasOperationsAccess && (
+            {hasProjectAccess && (
               <div onClick={() => router.push('/portal/operations/project-management')}
                 style={{ background: 'white', borderRadius: '14px', border: '1px solid #EDF2F7', padding: '24px', cursor: 'pointer', boxShadow: '0 1px 3px rgba(0,0,0,0.06)', position: 'relative', overflow: 'hidden' }}>
                 <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '3px', background: '#156082' }} />
                 <div style={{ width: '44px', height: '44px', borderRadius: '10px', background: '#45B6E418', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '20px', marginBottom: '14px' }}>🗂️</div>
                 <h2 style={{ fontSize: '13px', fontWeight: 800, color: '#156082', margin: '0 0 6px' }}>Operations</h2>
                 <p style={{ fontSize: '11px', color: '#45B6E4', margin: 0, lineHeight: 1.6 }}>Project Management for your project(s).</p>
+              </div>
+            )}
+
+            {hasProjectAccess && (
+              <div onClick={() => router.push('/portal/helpdesk')}
+                style={{ background: 'white', borderRadius: '14px', border: '1px solid #EDF2F7', padding: '24px', cursor: 'pointer', boxShadow: '0 1px 3px rgba(0,0,0,0.06)', position: 'relative', overflow: 'hidden' }}>
+                <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '3px', background: '#156082' }} />
+                <div style={{ width: '44px', height: '44px', borderRadius: '10px', background: '#45B6E418', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '20px', marginBottom: '14px' }}>🎫</div>
+                <h2 style={{ fontSize: '13px', fontWeight: 800, color: '#156082', margin: '0 0 6px' }}>Helpdesk</h2>
+                <p style={{ fontSize: '11px', color: '#45B6E4', margin: 0, lineHeight: 1.6 }}>Get support for your project(s).</p>
               </div>
             )}
           </div>

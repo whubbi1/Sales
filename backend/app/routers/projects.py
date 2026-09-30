@@ -2,6 +2,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, or_, text
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import selectinload
 from typing import List
 from uuid import UUID
@@ -19,6 +20,7 @@ from app.models.opportunity import Opportunity
 from app.models.opportunity_extra import OpportunityStaffing
 from app.models.company import Company
 from app.models.rfp import rfp_opportunity, RFPStaffingTask, RFPStaffingRole
+from app.models.helpdesk import ProjectSLA
 from app.schemas.schemas import (
     ProjectCreate, ProjectUpdate, ProjectResponse,
     ProjectCommentCreate, ProjectCommentResponse,
@@ -625,3 +627,36 @@ async def set_project_staffing_basic_months(project_id: UUID, staffing_id: UUID,
     await db.commit()
     r = await db.execute(select(ProjectStaffingBasic).options(selectinload(ProjectStaffingBasic.months)).where(ProjectStaffingBasic.id == staffing_id))
     return r.scalar_one()
+
+
+# ─── SLA (Projects Follow-Up > SLA tab) ────────────────────────────────────────
+_SLA_FIELDS = [
+    "priority_matrix", "sla_compliance_target_pct", "fcr_target_pct", "reopen_rate_target_pct",
+    "csat_enabled", "coverage_hours", "channels", "business_hours_only", "pause_on_client_wait",
+    "auto_closure_days", "escalation_rules", "exclusions",
+]
+
+
+def _sla_out(s: ProjectSLA) -> dict:
+    return {f: getattr(s, f) for f in _SLA_FIELDS} | {"project_id": s.project_id, "updated_at": s.updated_at}
+
+
+@router.get("/{project_id}/sla")
+async def get_project_sla(project_id: UUID, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("operations", "projects", "view"))):
+    # Lazily created on first read, same on_conflict_do_nothing pattern PMSettings uses.
+    await db.execute(pg_insert(ProjectSLA).values(project_id=project_id).on_conflict_do_nothing(index_elements=["project_id"]))
+    await db.commit()
+    r = await db.execute(select(ProjectSLA).where(ProjectSLA.project_id == project_id))
+    return _sla_out(r.scalar_one())
+
+
+@router.put("/{project_id}/sla")
+async def update_project_sla(project_id: UUID, data: dict, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("operations", "projects", "edit"))):
+    await db.execute(pg_insert(ProjectSLA).values(project_id=project_id).on_conflict_do_nothing(index_elements=["project_id"]))
+    r = await db.execute(select(ProjectSLA).where(ProjectSLA.project_id == project_id))
+    s = r.scalar_one()
+    for f in _SLA_FIELDS:
+        if f in data:
+            setattr(s, f, data[f])
+    await db.commit()
+    return _sla_out(s)

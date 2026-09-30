@@ -5,6 +5,7 @@ import HelpdeskLayout from '@/components/HelpdeskLayout'
 import { getStoredUser } from '@/lib/auth'
 import { API, STATUS_STYLE, PRIORITY_STYLE, BTN } from '../constants'
 import { apiFetch } from '@/lib/apiClient'
+import { projectsAPI } from '@/lib/api'
 
 const FILTER_STORAGE = (e: string) => `hd_filters_${e}`
 const LAYOUTS_STORAGE = (e: string) => `hd_layouts_${e}`
@@ -26,6 +27,7 @@ export default function TicketsPage() {
   const [tickets, setTickets] = useState<any[]>([])
   const [categories, setCategories] = useState<any[]>([])
   const [groups, setGroups] = useState<any[]>([])
+  const [projects, setProjects] = useState<any[]>([])
   const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
@@ -40,7 +42,7 @@ export default function TicketsPage() {
     priority: 'medium', ticket_type: '',
     requester_email: '', requester_name: '',
     requester_type: 'internal', assignee_name: '', group_id: '',
-    application: '',
+    application: '', project_id: '',
   })
   const [subcategories, setSubcategories] = useState<any[]>([])
   const [lookupLoading, setLookupLoading] = useState(false)
@@ -81,6 +83,7 @@ export default function TicketsPage() {
 
     apiFetch(`${API}/helpdesk/categories`).then(r => r.json()).then(d => setCategories(d.categories || []))
     apiFetch(`${API}/helpdesk/groups`).then(r => r.json()).then(d => setGroups(d.groups || []))
+    projectsAPI.list({ limit: 500 }).then(setProjects).catch(() => {})
     readyRef.current = true
   }, [])
 
@@ -346,6 +349,13 @@ export default function TicketsPage() {
                     </select>
                   </div>
                 </div>
+              </div>
+              <div>
+                <label className="form-label">Project</label>
+                <select className="form-input" value={form.project_id} onChange={e => setForm(p => ({ ...p, project_id: e.target.value }))}>
+                  <option value="">No project</option>
+                  {projects.map((p: any) => <option key={p.id} value={p.id}>{p.project_name}</option>)}
+                </select>
               </div>
               <div><label className="form-label">Title *</label><input className="form-input" value={form.title} onChange={e => setForm(p => ({ ...p, title: e.target.value }))} placeholder="Brief description of the issue" /></div>
               <div><label className="form-label">Description</label><textarea className="form-input" value={form.description} onChange={e => setForm(p => ({ ...p, description: e.target.value }))} rows={3} placeholder="Detailed description..." /></div>

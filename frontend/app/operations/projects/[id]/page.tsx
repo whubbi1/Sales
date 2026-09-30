@@ -99,6 +99,17 @@ function ProjectDetailContent() {
   const [editingNameField, setEditingNameField] = useState(false)
   const [editingField, setEditingField] = useState<string | null>(null)
 
+  const [sla, setSla] = useState<any>(null)
+  const [slaSaving, setSlaSaving] = useState(false)
+  const [slaMsg, setSlaMsg] = useState('')
+  useEffect(() => {
+    if (tab === 'SLA' && !sla && id) projectsAPI.getSLA(id as string).then(setSla).catch(() => {})
+  }, [tab, id, sla])
+  const saveSla = () => {
+    setSlaSaving(true)
+    projectsAPI.updateSLA(id as string, sla).then(setSla).then(() => { setSlaMsg('Saved'); setTimeout(() => setSlaMsg(''), 3000) }).catch(() => setSlaMsg('Could not save')).finally(() => setSlaSaving(false))
+  }
+
   const [activityLog, setActivityLog] = useState<any[]>([])
   const [comments, setComments] = useState<any[]>([])
   const [newComment, setNewComment] = useState('')
@@ -450,7 +461,7 @@ function ProjectDetailContent() {
 
           <div style={{ background: 'white', borderRadius: '10px', border: '1px solid #EDF2F7', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
             <div style={{ padding: '0 20px', background: '#FAFBFC', borderBottom: '2px solid #E2E8F0' }}>
-              <TabNav tabs={['Overview', 'Notes', 'Tasks', 'Documentation', 'Invoicing', 'Staffing', 'Expenses']} active={tab} onChange={setTab} />
+              <TabNav tabs={['Overview', 'Notes', 'Tasks', 'Documentation', 'Invoicing', 'Staffing', 'Expenses', 'SLA']} active={tab} onChange={setTab} />
             </div>
             <div style={{ padding: '20px' }}>
               {tab === 'Overview' && (
@@ -829,6 +840,104 @@ function ProjectDetailContent() {
                     )
                   })()}
                 </div>
+              )}
+
+              {tab === 'SLA' && (
+                !sla ? <p style={{ fontSize: '12px', color: '#94A3B8' }}>Loading…</p> : (
+                <div>
+                  <p style={{ fontSize: '12px', color: '#64748B', marginBottom: '16px' }}>
+                    Used to compute a Helpdesk ticket's SLA deadline for this project, and as the reference for the service commitments below. Business-hours clock, pause states, escalation triggers, auto-closure and CSAT sending are configured here but not yet automated.
+                  </p>
+
+                  <p className="section-label" style={{ marginBottom: '8px' }}>1 &amp; 2. Timing indicators &amp; priority matrix</p>
+                  <div style={{ overflowX: 'auto', marginBottom: '20px' }}>
+                    <table style={{ borderCollapse: 'collapse', fontSize: '12px', width: '100%', minWidth: '760px' }}>
+                      <thead><tr>
+                        {['Priority', 'Criteria', 'Response (h)', 'Qualification (h)', 'Workaround (h)', 'Resolution (h)', 'Update freq. (h)'].map(h => (
+                          <th key={h} style={{ textAlign: 'left', padding: '6px 8px', fontSize: '10px', fontWeight: 700, textTransform: 'uppercase', color: '#9B9B9B', borderBottom: '1px solid #E2E8F0' }}>{h}</th>
+                        ))}
+                      </tr></thead>
+                      <tbody>
+                        {(sla.priority_matrix || []).map((row: any, i: number) => (
+                          <tr key={i}>
+                            {['priority', 'criteria'].map(f => (
+                              <td key={f} style={{ padding: '4px' }}>
+                                <input className="form-input" style={{ fontSize: '12px' }} value={row[f] || ''}
+                                  onChange={e => setSla({ ...sla, priority_matrix: sla.priority_matrix.map((r: any, j: number) => j === i ? { ...r, [f]: e.target.value } : r) })} />
+                              </td>
+                            ))}
+                            {['response_hours', 'qualification_hours', 'workaround_hours', 'resolution_hours', 'update_frequency_hours'].map(f => (
+                              <td key={f} style={{ padding: '4px', width: '90px' }}>
+                                <input type="number" className="form-input" style={{ fontSize: '12px' }} value={row[f] ?? ''}
+                                  onChange={e => setSla({ ...sla, priority_matrix: sla.priority_matrix.map((r: any, j: number) => j === i ? { ...r, [f]: e.target.value === '' ? null : Number(e.target.value) } : r) })} />
+                              </td>
+                            ))}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  <p className="section-label" style={{ marginBottom: '8px' }}>3. Quality indicator targets</p>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px', marginBottom: '20px' }}>
+                    <label style={{ fontSize: '11px', fontWeight: 700, color: '#64748B' }}>SLA compliance target (%)
+                      <input type="number" className="form-input" style={{ marginTop: '4px' }} value={sla.sla_compliance_target_pct ?? ''} onChange={e => setSla({ ...sla, sla_compliance_target_pct: e.target.value === '' ? null : Number(e.target.value) })} />
+                    </label>
+                    <label style={{ fontSize: '11px', fontWeight: 700, color: '#64748B' }}>First contact resolution target (%)
+                      <input type="number" className="form-input" style={{ marginTop: '4px' }} value={sla.fcr_target_pct ?? ''} onChange={e => setSla({ ...sla, fcr_target_pct: e.target.value === '' ? null : Number(e.target.value) })} />
+                    </label>
+                    <label style={{ fontSize: '11px', fontWeight: 700, color: '#64748B' }}>Reopen rate target (%)
+                      <input type="number" className="form-input" style={{ marginTop: '4px' }} value={sla.reopen_rate_target_pct ?? ''} onChange={e => setSla({ ...sla, reopen_rate_target_pct: e.target.value === '' ? null : Number(e.target.value) })} />
+                    </label>
+                    <label style={{ fontSize: '11px', fontWeight: 700, color: '#64748B', display: 'flex', alignItems: 'center', gap: '8px', marginTop: '6px' }}>
+                      <input type="checkbox" checked={!!sla.csat_enabled} onChange={e => setSla({ ...sla, csat_enabled: e.target.checked })} /> Send CSAT survey when a ticket closes
+                    </label>
+                  </div>
+
+                  <p className="section-label" style={{ marginBottom: '8px' }}>4. Service availability</p>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '20px' }}>
+                    <label style={{ fontSize: '11px', fontWeight: 700, color: '#64748B' }}>Coverage hours
+                      <input className="form-input" style={{ marginTop: '4px' }} placeholder="e.g. Mon–Fri 9:00–18:00 CET" value={sla.coverage_hours || ''} onChange={e => setSla({ ...sla, coverage_hours: e.target.value })} />
+                    </label>
+                    <label style={{ fontSize: '11px', fontWeight: 700, color: '#64748B' }}>Channels (comma-separated)
+                      <input className="form-input" style={{ marginTop: '4px' }} placeholder="Portal, Email, Phone" value={(sla.channels || []).join(', ')} onChange={e => setSla({ ...sla, channels: e.target.value.split(',').map((s: string) => s.trim()).filter(Boolean) })} />
+                    </label>
+                  </div>
+
+                  <p className="section-label" style={{ marginBottom: '8px' }}>5. Measurement rules</p>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '10px' }}>
+                    <label style={{ fontSize: '11px', fontWeight: 700, color: '#64748B', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <input type="checkbox" checked={!!sla.business_hours_only} onChange={e => setSla({ ...sla, business_hours_only: e.target.checked })} /> Clock: business hours only
+                    </label>
+                    <label style={{ fontSize: '11px', fontWeight: 700, color: '#64748B', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <input type="checkbox" checked={!!sla.pause_on_client_wait} onChange={e => setSla({ ...sla, pause_on_client_wait: e.target.checked })} /> Pause while waiting on the client
+                    </label>
+                    <label style={{ fontSize: '11px', fontWeight: 700, color: '#64748B' }}>Auto-closure after (days, blank = never)
+                      <input type="number" className="form-input" style={{ marginTop: '4px' }} value={sla.auto_closure_days ?? ''} onChange={e => setSla({ ...sla, auto_closure_days: e.target.value === '' ? null : Number(e.target.value) })} />
+                    </label>
+                  </div>
+                  <label style={{ fontSize: '11px', fontWeight: 700, color: '#64748B', display: 'block', marginBottom: '10px' }}>Exclusions
+                    <textarea className="form-input" rows={2} style={{ marginTop: '4px' }} placeholder="Force majeure, third-party incidents, unauthorized client changes…" value={sla.exclusions || ''} onChange={e => setSla({ ...sla, exclusions: e.target.value })} />
+                  </label>
+                  <label style={{ fontSize: '11px', fontWeight: 700, color: '#64748B', display: 'block', marginBottom: '16px' }}>Escalation rules
+                    {(sla.escalation_rules || []).map((r: any, i: number) => (
+                      <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 2fr auto', gap: '6px', marginTop: '6px' }}>
+                        <input className="form-input" placeholder="Level (L1/L2/L3)" value={r.level || ''} onChange={e => setSla({ ...sla, escalation_rules: sla.escalation_rules.map((x: any, j: number) => j === i ? { ...x, level: e.target.value } : x) })} />
+                        <input className="form-input" placeholder="Contact name" value={r.contact_name || ''} onChange={e => setSla({ ...sla, escalation_rules: sla.escalation_rules.map((x: any, j: number) => j === i ? { ...x, contact_name: e.target.value } : x) })} />
+                        <input className="form-input" placeholder="Contact email" value={r.contact_email || ''} onChange={e => setSla({ ...sla, escalation_rules: sla.escalation_rules.map((x: any, j: number) => j === i ? { ...x, contact_email: e.target.value } : x) })} />
+                        <input className="form-input" placeholder="Trigger (e.g. 80% of time limit reached)" value={r.trigger_description || ''} onChange={e => setSla({ ...sla, escalation_rules: sla.escalation_rules.map((x: any, j: number) => j === i ? { ...x, trigger_description: e.target.value } : x) })} />
+                        <button style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#DC2626', fontSize: '15px' }} onClick={() => setSla({ ...sla, escalation_rules: sla.escalation_rules.filter((_: any, j: number) => j !== i) })}>×</button>
+                      </div>
+                    ))}
+                    <button className="btn-secondary" style={{ marginTop: '8px', fontSize: '11px', padding: '5px 10px' }} onClick={() => setSla({ ...sla, escalation_rules: [...(sla.escalation_rules || []), { level: '', contact_name: '', contact_email: '', trigger_description: '' }] })}>+ Add escalation rule</button>
+                  </label>
+
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                    <button className="btn-primary" onClick={saveSla} disabled={slaSaving}>{slaSaving ? 'Saving…' : 'Save SLA settings'}</button>
+                    {slaMsg && <span style={{ fontSize: '12px', color: '#059669' }}>{slaMsg}</span>}
+                  </div>
+                </div>
+                )
               )}
             </div>
           </div>

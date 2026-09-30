@@ -438,6 +438,9 @@ export const projectsAPI = {
   removeStaffingBasic:    (id: string, sid: string) => fetchAPI(`/projects/${id}/staffing-basic/${sid}/`, { method: 'DELETE' }),
   setStaffingBasicMonths: (id: string, sid: string, months: { month: string; days: number }[]) =>
     fetchAPI(`/projects/${id}/staffing-basic/${sid}/months`, { method: 'PUT', body: JSON.stringify({ months }) }),
+
+  getSLA:    (id: string) => fetchAPI(`/projects/${id}/sla`),
+  updateSLA: (id: string, d: any) => fetchAPI(`/projects/${id}/sla`, { method: 'PUT', body: JSON.stringify(d) }),
 }
 
 // ─── Reporting & Analytics ──────────────────────────────────────────────────────

@@ -1,16 +1,26 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
 from app.database import get_db
-from app.authz import require_permission
+from app.authz import require_permission, get_current_user_email, is_excluded, access_mode, _LEVELS
+from app.services.portal_auth import try_portal_user_email
 from datetime import datetime, timedelta
-import uuid, httpx, os
+import asyncio, uuid, httpx, os
 
 router = APIRouter()
 
 MS_TENANT_ID     = os.getenv("MS_TENANT_ID","")
 MS_CLIENT_ID     = os.getenv("MS_CLIENT_ID","")
 MS_CLIENT_SECRET = os.getenv("MS_CLIENT_SECRET","")
+
+GRAPH_BASE = "https://graph.microsoft.com/v1.0"
+HELPDESK_INBOX_ADDRESS = os.getenv("HELPDESK_INBOX_ADDRESS", "")
+HELPDESK_MAILBOX_SYNC_INTERVAL = 5 * 60        # tighter than social_influence's 20min — a support inbox is more time-sensitive
+HELPDESK_MAILBOX_SYNC_MAX_MESSAGES = 25
+# Positional mapping onto DEFAULT_PRIORITY_MATRIX's P1..P4 order — a project's SLA tab
+# uses its own free-text priority labels (P1-Critical, etc.), so the ticket's own
+# critical/high/medium/low enum is matched by row position, not by parsing the label.
+PRIORITY_MATRIX_ORDER = ["critical", "high", "medium", "low"]
 
 DEFAULT_CATEGORIES = [
     {"name":"Access & Security",  "color":"#DC2626","icon":"🔐"},
@@ -72,6 +82,262 @@ async def get_ms_user(email: str) -> dict:
     return {}
 
 
+# ─── Portal bridging ──────────────────────────────────────────────────────────
+# Same shape as Project Management's pm_user(): a portal contact is scoped to their own
+# PMMember-derived project(s) (the same set the Operations tile already uses — no second
+# assignment mechanism); an internal caller's existing require_permission behavior is
+# completely unchanged.
+class HelpdeskCtx:
+    def __init__(self, email: str, is_portal: bool, project_ids: set):
+        self.email = email
+        self.is_portal = is_portal
+        self.project_ids = project_ids  # only meaningful when is_portal
+
+
+def helpdesk_ctx(min_mode: str = "view"):
+    async def _dep(request: Request, db: AsyncSession = Depends(get_db)) -> HelpdeskCtx:
+        portal_email = await try_portal_user_email(request, db)
+        if portal_email:
+            r = await db.execute(text("SELECT DISTINCT project_id FROM pm_members WHERE email = :email"), {"email": portal_email})
+            project_ids = {str(row.project_id) for row in r.fetchall()}
+            return HelpdeskCtx(portal_email, True, project_ids)
+
+        email = await get_current_user_email(request.headers.get("x-user-email"))
+        if await is_excluded(email, db):
+            raise HTTPException(403, "Access excluded")
+        mode = await access_mode(email, "helpdesk", "tickets", db)
+        if _LEVELS.get(mode, 0) < _LEVELS[min_mode]:
+            raise HTTPException(403, f"No {min_mode} access to helpdesk.tickets")
+        return HelpdeskCtx(email, False, set())
+    return _dep
+
+
+def _portal_project_filter(ctx: HelpdeskCtx, where: list, params: dict):
+    """Hard-scopes a ticket query to the portal caller's own projects, overriding
+    whatever (if anything) the client asked for. Call sites must check
+    `not ctx.project_ids` themselves first (empty set = see nothing, no query needed)."""
+    placeholders = ",".join(f"CAST(:pf{i} AS uuid)" for i in range(len(ctx.project_ids)))
+    where.append(f"t.project_id IN ({placeholders})")
+    params.update({f"pf{i}": pid for i, pid in enumerate(ctx.project_ids)})
+
+
+async def _resolve_display_name(db: AsyncSession, email: str, is_portal: bool) -> str:
+    if is_portal:
+        r = await db.execute(text("""
+            SELECT c.first_name, c.last_name FROM contacts c JOIN portal_users pu ON pu.contact_id = c.id
+            WHERE pu.email = :email LIMIT 1
+        """), {"email": email})
+        row = r.fetchone()
+        if row:
+            name = f"{row.first_name or ''} {row.last_name or ''}".strip()
+            if name:
+                return name
+        return email
+    r = await db.execute(text("SELECT display_name, first_name, last_name FROM user_profiles WHERE email = :email"), {"email": email})
+    row = r.fetchone()
+    if row:
+        return row.display_name or f"{row.first_name or ''} {row.last_name or ''}".strip() or email
+    return email
+
+
+# ─── Email-to-ticket sender classification ────────────────────────────────────
+async def _classify_sender(db: AsyncSession, email: str) -> dict | None:
+    """user_profiles (employee) -> contacts+active portal_users (portal contact) -> None
+    (unrecognized — the caller must not create a ticket for this sender)."""
+    email = (email or "").strip().lower()
+    if not email:
+        return None
+    r = await db.execute(text("SELECT display_name, first_name, last_name FROM user_profiles WHERE email = :email"), {"email": email})
+    row = r.fetchone()
+    if row:
+        name = row.display_name or f"{row.first_name or ''} {row.last_name or ''}".strip() or email
+        return {"email": email, "name": name, "type": "internal", "project_ids": []}
+
+    r = await db.execute(text("""
+        SELECT c.first_name, c.last_name FROM contacts c JOIN portal_users pu ON pu.contact_id = c.id
+        WHERE pu.email = :email AND pu.portal_type = 'partner' AND pu.status = 'active' LIMIT 1
+    """), {"email": email})
+    row = r.fetchone()
+    if row:
+        name = f"{row.first_name or ''} {row.last_name or ''}".strip() or email
+        pr = await db.execute(text("SELECT DISTINCT project_id FROM pm_members WHERE email = :email"), {"email": email})
+        project_ids = [str(x.project_id) for x in pr.fetchall()]
+        return {"email": email, "name": name, "type": "external", "project_ids": project_ids}
+
+    return None
+
+
+async def _project_sla_hours(db: AsyncSession, project_id: str, priority: str):
+    """(response_hours, resolution_hours) from the project's configured priority matrix,
+    matched by position — (None, None) if the project has no SLA config, or its matrix
+    doesn't have a row for this priority's position."""
+    r = await db.execute(text("SELECT priority_matrix FROM project_slas WHERE project_id = CAST(:pid AS uuid)"), {"pid": project_id})
+    row = r.fetchone()
+    if not row or not row.priority_matrix:
+        return None, None
+    try:
+        idx = PRIORITY_MATRIX_ORDER.index(priority)
+    except ValueError:
+        return None, None
+    if idx >= len(row.priority_matrix):
+        return None, None
+    lvl = row.priority_matrix[idx] or {}
+    return lvl.get("response_hours"), lvl.get("resolution_hours")
+
+
+async def _insert_ticket(db: AsyncSession, data: dict) -> tuple[str, str]:
+    """The actual create-a-ticket logic (SLA lookup, group/assignee auto-resolution,
+    numbering, insert, notify) — shared by the HTTP POST /tickets endpoint and the
+    email-to-ticket poll loop so neither duplicates the other."""
+    tid = str(uuid.uuid4())
+    req_email = data.get("requester_email", "")
+    req_name = data.get("requester_name", "")
+    if not req_name and req_email.lower().endswith("@wcomply.com"):
+        ms = await get_ms_user(req_email)
+        req_name = ms.get("name", req_email.split("@")[0])
+
+    project_id = data.get("project_id") or None
+    resp_h, res_h = (None, None)
+    if project_id:
+        resp_h, res_h = await _project_sla_hours(db, project_id, data.get("priority", "medium"))
+    if res_h is None:
+        sla_r = await db.execute(text("SELECT resolution_time_hours FROM sla_policies WHERE priority=:p AND active=true LIMIT 1"), {"p": data.get("priority", "medium")})
+        sla_row = sla_r.fetchone()
+        res_h = sla_row.resolution_time_hours if sla_row else 24
+
+    group_id = data.get("group_id")
+    if not group_id:
+        cat_id = data.get("category_id") or data.get("subcategory_id")
+        if cat_id:
+            g_r = await db.execute(text("SELECT group_id FROM ticket_categories WHERE id=CAST(:id AS uuid)"), {"id": cat_id})
+            g_row = g_r.fetchone()
+            if g_row and g_row.group_id: group_id = str(g_row.group_id)
+        if not group_id:
+            ag = await db.execute(text("SELECT id FROM helpdesk_groups WHERE is_default=true ORDER BY created_at LIMIT 1"))
+            ag_row = ag.fetchone()
+            if not ag_row:
+                ag = await db.execute(text("SELECT id FROM helpdesk_groups ORDER BY created_at LIMIT 1"))
+                ag_row = ag.fetchone()
+            if ag_row: group_id = str(ag_row.id)
+    assignee_email = data.get("assignee_email", "")
+    assignee_name = data.get("assignee_name", "")
+    if group_id and not assignee_email:
+        members_r = await db.execute(text("SELECT user_email,user_name FROM helpdesk_group_members WHERE group_id=CAST(:gid AS uuid)"), {"gid": group_id})
+        members = members_r.fetchall()
+        if len(members) == 1: assignee_email = members[0].user_email; assignee_name = members[0].user_name
+    ticket_num = gen_ticket_number()
+    await db.execute(text("""
+        INSERT INTO tickets (id,ticket_number,title,description,category_id,subcategory_id,group_id,
+            priority,status,ticket_type,requester_email,requester_name,requester_type,
+            assignee_email,assignee_name,sla_deadline,application,project_id,source_message_id,created_at,updated_at)
+        VALUES (CAST(:id AS uuid),:tn,:title,:desc,
+            CAST(NULLIF(:cat_id,'') AS uuid),CAST(NULLIF(:sub_id,'') AS uuid),CAST(NULLIF(:group_id,'') AS uuid),
+            :prio,'new',:ticket_type,:req_email,:req_name,:req_type,
+            NULLIF(:ass_email,''),NULLIF(:ass_name,''),
+            :sla,:application,CAST(:project_id AS uuid),:source_message_id,NOW(),NOW())
+    """), {"id": tid, "tn": ticket_num, "title": data.get("title"), "desc": data.get("description", ""),
+          "cat_id": data.get("category_id", ""), "sub_id": data.get("subcategory_id", ""),
+          "group_id": group_id or "", "prio": data.get("priority", "medium"),
+          "ticket_type": data.get("ticket_type", "incident_request"),
+          "req_email": req_email, "req_name": req_name, "req_type": data.get("requester_type", "internal"),
+          "ass_email": assignee_email, "ass_name": assignee_name,
+          "sla": datetime.utcnow() + timedelta(hours=res_h),
+          "application": data.get("application", "") or None,
+          "project_id": project_id,
+          "source_message_id": data.get("source_message_id")})
+    await db.commit()
+
+    if not assignee_email and group_id:
+        resp_r = await db.execute(text("SELECT responsible_email,responsible_name,name FROM helpdesk_groups WHERE id=CAST(:id AS uuid)"), {"id": group_id})
+        resp = resp_r.fetchone()
+        if resp and resp.responsible_email:
+            try:
+                from app.routers.helpdesk_teams import notify_group_responsible
+                await notify_group_responsible({"ticket_number": ticket_num, "title": data.get("title"), "priority": data.get("priority", "medium"), "requester_name": req_name, "requester_email": req_email}, resp.name, resp.responsible_email, db)
+            except Exception as e: print(f"Notify error: {e}")
+
+    return tid, ticket_num
+
+
+def _parse_graph_datetime(value: str) -> datetime:
+    return datetime.strptime(value.split(".")[0].rstrip("Z"), "%Y-%m-%dT%H:%M:%S")
+
+
+async def helpdesk_mailbox_sync_loop():
+    """In-process poll loop, same idiom as social_influence.py's mailbox_sync_loop (started
+    via asyncio.create_task in main.py's startup event) — but app-only Graph auth (same
+    _get_app_only_token() portal_mail.py uses for sending) instead of a delegated
+    connect-a-mailbox flow, since this mailbox never needs a human to reconnect it."""
+    from app.database import AsyncSessionLocal
+    from app.services.portal_mail import _get_app_only_token
+    if not HELPDESK_INBOX_ADDRESS:
+        print("[Helpdesk] HELPDESK_INBOX_ADDRESS not set — mailbox sync loop not starting")
+        return
+    while True:
+        try:
+            async with AsyncSessionLocal() as db:
+                cur = await db.execute(text("SELECT last_synced_at FROM helpdesk_mailbox_sync WHERE id = 1"))
+                row = cur.fetchone()
+            since = (row.last_synced_at if row else None) or (datetime.utcnow() - timedelta(days=1))
+
+            access_token = await _get_app_only_token()
+            headers = {"Authorization": f"Bearer {access_token}"}
+            async with httpx.AsyncClient(timeout=30) as client:
+                resp = await client.get(
+                    f"{GRAPH_BASE}/users/{HELPDESK_INBOX_ADDRESS}/mailFolders/Inbox/messages",
+                    headers=headers,
+                    params={
+                        "$filter": f"receivedDateTime gt {since.strftime('%Y-%m-%dT%H:%M:%SZ')}",
+                        "$orderby": "receivedDateTime asc", "$top": HELPDESK_MAILBOX_SYNC_MAX_MESSAGES,
+                        "$select": "id,subject,body,from,receivedDateTime",
+                    },
+                )
+                resp.raise_for_status()
+                messages = resp.json().get("value", [])
+
+            latest = since
+            async with AsyncSessionLocal() as db:
+                for m in messages:
+                    received = m.get("receivedDateTime")
+                    if received:
+                        latest = max(latest, _parse_graph_datetime(received))
+                    sender = ((m.get("from") or {}).get("emailAddress") or {}).get("address", "")
+                    classified = await _classify_sender(db, sender)
+                    if not classified:
+                        continue  # unrecognized sender — no ticket, no error
+                    exists = await db.execute(text("SELECT 1 FROM tickets WHERE source_message_id = :mid"), {"mid": m["id"]})
+                    if exists.fetchone():
+                        continue
+                    project_ids = classified["project_ids"]
+                    await _insert_ticket(db, {
+                        "title": m.get("subject") or "(no subject)",
+                        "description": (m.get("body") or {}).get("content", ""),
+                        "priority": "medium",
+                        "ticket_type": "incident_request",
+                        "requester_email": classified["email"],
+                        "requester_name": classified["name"],
+                        "requester_type": classified["type"],
+                        "project_id": project_ids[0] if len(project_ids) == 1 else None,
+                        "source_message_id": m["id"],
+                    })
+
+                # _parse_graph_datetime truncates sub-second precision — bump one whole
+                # second past the newest processed message so next cycle's `gt {since}`
+                # filter doesn't re-match it (same fix social_influence.py's loop uses).
+                next_since = latest + timedelta(seconds=1) if latest > since else latest
+                await db.execute(text("UPDATE helpdesk_mailbox_sync SET last_synced_at = :ts, last_error = NULL WHERE id = 1"), {"ts": next_since})
+                await db.commit()
+        except Exception as e:
+            print(f"[Helpdesk] mailbox_sync_loop error: {e}")
+            try:
+                async with AsyncSessionLocal() as db:
+                    await db.execute(text("UPDATE helpdesk_mailbox_sync SET last_error = :err WHERE id = 1"), {"err": str(e)[:500]})
+                    await db.commit()
+            except Exception:
+                pass
+        await asyncio.sleep(HELPDESK_MAILBOX_SYNC_INTERVAL)
+
+
 @router.get("/dashboard")
 async def dashboard(db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("helpdesk", "tickets", "view"))):
     await seed(db)
@@ -100,10 +366,16 @@ async def dashboard(db: AsyncSession = Depends(get_db), _: str = Depends(require
 @router.get("/tickets")
 async def list_tickets(status:str=None,priority:str=None,group_id:str=None,
                        assignee_email:str=None,requester_email:str=None,search:str=None,
-                       ticket_type:str=None,
+                       ticket_type:str=None,project_id:str=None,
                        limit:int=50,offset:int=0,db:AsyncSession=Depends(get_db),
-                       _: str = Depends(require_permission("helpdesk", "tickets", "view"))):
+                       ctx: HelpdeskCtx = Depends(helpdesk_ctx("view"))):
+    if ctx.is_portal and not ctx.project_ids:
+        return {"tickets": [], "total": 0}
     where,params=["1=1"],{"limit":limit,"offset":offset}
+    if ctx.is_portal:
+        _portal_project_filter(ctx, where, params)  # overrides any client-supplied project_id
+    elif project_id:
+        where.append("t.project_id=CAST(:project_id AS uuid)"); params["project_id"]=project_id
     if status:   where.append("t.status=:status");    params["status"]=status
     if priority: where.append("t.priority=:priority"); params["priority"]=priority
     if group_id: where.append("t.group_id=CAST(:group_id AS uuid)"); params["group_id"]=group_id
@@ -118,7 +390,7 @@ async def list_tickets(status:str=None,priority:str=None,group_id:str=None,
         SELECT t.id,t.ticket_number,t.title,t.status,t.priority,t.ticket_type,
                t.requester_email,t.requester_name,t.requester_type,
                t.assignee_email,t.assignee_name,t.created_at,t.sla_deadline,
-               t.application,t.dev_pipeline_id,
+               t.application,t.dev_pipeline_id,t.project_id,
                c.name as category_name,c.color as category_color,c.icon as category_icon,
                sc.name as subcategory_name,g.name as group_name
         FROM tickets t
@@ -132,7 +404,7 @@ async def list_tickets(status:str=None,priority:str=None,group_id:str=None,
 
 
 @router.get("/tickets/{tid}")
-async def get_ticket(tid:str,db:AsyncSession=Depends(get_db), _: str = Depends(require_permission("helpdesk", "tickets", "view"))):
+async def get_ticket(tid:str,db:AsyncSession=Depends(get_db), ctx: HelpdeskCtx = Depends(helpdesk_ctx("view"))):
     t=await db.execute(text("""
         SELECT t.*,c.name as category_name,c.color as category_color,c.icon as category_icon,
                sc.name as subcategory_name,g.name as group_name,
@@ -144,71 +416,23 @@ async def get_ticket(tid:str,db:AsyncSession=Depends(get_db), _: str = Depends(r
     """),{"id":tid})
     ticket=t.fetchone()
     if not ticket: return {"error":"Not found"}
+    if ctx.is_portal and str(ticket.project_id) not in ctx.project_ids:
+        return {"error":"Not found"}
     coms=await db.execute(text("SELECT * FROM ticket_comments WHERE ticket_id=CAST(:id AS uuid) ORDER BY created_at"),{"id":tid})
-    return {"ticket":dict(ticket._mapping),"comments":[dict(c._mapping) for c in coms.fetchall()]}
+    comments = coms.fetchall()
+    if ctx.is_portal:
+        comments = [c for c in comments if not c.is_internal]
+    return {"ticket":dict(ticket._mapping),"comments":[dict(c._mapping) for c in comments]}
 
 
 @router.post("/tickets")
-async def create_ticket(data:dict,db:AsyncSession=Depends(get_db), _: str = Depends(require_permission("helpdesk", "tickets", "edit"))):
-    tid=str(uuid.uuid4())
-    req_email=data.get("requester_email","")
-    req_name=data.get("requester_name","")
-    if not req_name and req_email.lower().endswith("@wcomply.com"):
-        ms=await get_ms_user(req_email)
-        req_name=ms.get("name",req_email.split("@")[0])
-    sla_r=await db.execute(text("SELECT resolution_time_hours FROM sla_policies WHERE priority=:p AND active=true LIMIT 1"),{"p":data.get("priority","medium")})
-    sla_row=sla_r.fetchone()
-    sla_h=sla_row.resolution_time_hours if sla_row else 24
-    group_id=data.get("group_id")
-    if not group_id:
-        cat_id=data.get("category_id") or data.get("subcategory_id")
-        if cat_id:
-            g_r=await db.execute(text("SELECT group_id FROM ticket_categories WHERE id=CAST(:id AS uuid)"),{"id":cat_id})
-            g_row=g_r.fetchone()
-            if g_row and g_row.group_id: group_id=str(g_row.group_id)
-        if not group_id:
-            ag=await db.execute(text("SELECT id FROM helpdesk_groups WHERE is_default=true ORDER BY created_at LIMIT 1"))
-            ag_row=ag.fetchone()
-            if not ag_row:
-                ag=await db.execute(text("SELECT id FROM helpdesk_groups ORDER BY created_at LIMIT 1"))
-                ag_row=ag.fetchone()
-            if ag_row: group_id=str(ag_row.id)
-    assignee_email=data.get("assignee_email","")
-    assignee_name=data.get("assignee_name","")
-    if group_id and not assignee_email:
-        members_r=await db.execute(text("SELECT user_email,user_name FROM helpdesk_group_members WHERE group_id=CAST(:gid AS uuid)"),{"gid":group_id})
-        members=members_r.fetchall()
-        if len(members)==1: assignee_email=members[0].user_email; assignee_name=members[0].user_name
-    ticket_num=gen_ticket_number()
-    await db.execute(text("""
-        INSERT INTO tickets (id,ticket_number,title,description,category_id,subcategory_id,group_id,
-            priority,status,ticket_type,requester_email,requester_name,requester_type,
-            assignee_email,assignee_name,sla_deadline,application,created_at,updated_at)
-        VALUES (CAST(:id AS uuid),:tn,:title,:desc,
-            CAST(NULLIF(:cat_id,'') AS uuid),CAST(NULLIF(:sub_id,'') AS uuid),CAST(NULLIF(:group_id,'') AS uuid),
-            :prio,'new',:ticket_type,:req_email,:req_name,:req_type,
-            NULLIF(:ass_email,''),NULLIF(:ass_name,''),
-            :sla,:application,NOW(),NOW())
-    """),{"id":tid,"tn":ticket_num,"title":data.get("title"),"desc":data.get("description",""),
-          "cat_id":data.get("category_id",""),"sub_id":data.get("subcategory_id",""),
-          "group_id":group_id or "","prio":data.get("priority","medium"),
-          "ticket_type":data.get("ticket_type","incident_request"),
-          "req_email":req_email,"req_name":req_name,"req_type":data.get("requester_type","internal"),
-          "ass_email":assignee_email,"ass_name":assignee_name,
-          "sla":datetime.utcnow()+timedelta(hours=sla_h),
-          "application":data.get("application","") or None})
-    await db.commit()
-
-    # Notify group responsible if not auto-assigned
-    if not assignee_email and group_id:
-        resp_r=await db.execute(text("SELECT responsible_email,responsible_name,name FROM helpdesk_groups WHERE id=CAST(:id AS uuid)"),{"id":group_id})
-        resp=resp_r.fetchone()
-        if resp and resp.responsible_email:
-            try:
-                from app.routers.helpdesk_teams import notify_group_responsible
-                await notify_group_responsible({"ticket_number":ticket_num,"title":data.get("title"),"priority":data.get("priority","medium"),"requester_name":req_name,"requester_email":req_email},resp.name,resp.responsible_email,db)
-            except Exception as e: print(f"Notify error: {e}")
-
+async def create_ticket(data:dict,db:AsyncSession=Depends(get_db), ctx: HelpdeskCtx = Depends(helpdesk_ctx("edit"))):
+    if ctx.is_portal:
+        project_id = data.get("project_id")
+        if not project_id or project_id not in ctx.project_ids:
+            raise HTTPException(400, "A project you're assigned to is required")
+        data = {**data, "requester_email": ctx.email, "requester_name": await _resolve_display_name(db, ctx.email, True), "requester_type": "external"}
+    tid, ticket_num = await _insert_ticket(db, data)
     return {"status":"ok","id":tid,"ticket_number":ticket_num}
 
 
@@ -233,6 +457,7 @@ async def update_ticket(tid:str,data:dict,db:AsyncSession=Depends(get_db), _: st
             ticket_type=COALESCE(NULLIF(:ticket_type,''),ticket_type),
             category_id=CASE WHEN :category_id='' THEN category_id WHEN :category_id='__clear__' THEN NULL ELSE CAST(:category_id AS uuid) END,
             subcategory_id=CASE WHEN :subcategory_id='' THEN subcategory_id WHEN :subcategory_id='__clear__' THEN NULL ELSE CAST(:subcategory_id AS uuid) END,
+            project_id=CASE WHEN :project_id='' THEN project_id WHEN :project_id='__clear__' THEN NULL ELSE CAST(:project_id AS uuid) END,
             assignee_email=COALESCE(NULLIF(:assignee_email,''),assignee_email),
             assignee_name=COALESCE(NULLIF(:assignee_name,''),assignee_name),
             group_id=CASE WHEN :group_id='' THEN group_id WHEN :group_id='__clear__' THEN NULL ELSE CAST(:group_id AS uuid) END,
@@ -247,6 +472,7 @@ async def update_ticket(tid:str,data:dict,db:AsyncSession=Depends(get_db), _: st
         "ticket_type":data.get("ticket_type") or "",
         "category_id":data.get("category_id") or "",
         "subcategory_id":data.get("subcategory_id") or "",
+        "project_id":data.get("project_id") or "",
         "assignee_email":data.get("assignee_email") or "",
         "assignee_name":data.get("assignee_name") or "",
         "group_id":data.get("group_id") or "",
@@ -271,9 +497,19 @@ async def update_ticket(tid:str,data:dict,db:AsyncSession=Depends(get_db), _: st
 
 
 @router.post("/tickets/{tid}/comments")
-async def add_comment(tid:str,data:dict,db:AsyncSession=Depends(get_db), _: str = Depends(require_permission("helpdesk", "tickets", "edit"))):
+async def add_comment(tid:str,data:dict,db:AsyncSession=Depends(get_db), ctx: HelpdeskCtx = Depends(helpdesk_ctx("edit"))):
+    t = await db.execute(text("SELECT project_id FROM tickets WHERE id=CAST(:id AS uuid)"), {"id": tid})
+    ticket = t.fetchone()
+    if not ticket:
+        return {"status":"error","message":"Not found"}
+    if ctx.is_portal and str(ticket.project_id) not in ctx.project_ids:
+        return {"status":"error","message":"Not found"}
+    # Author is always the verified caller, never client-supplied — fixes a prior bug where
+    # the frontend hardcoded author_email/author_name for every internal reply too.
+    is_internal = False if ctx.is_portal else bool(data.get("is_internal", False))
+    author_name = await _resolve_display_name(db, ctx.email, ctx.is_portal)
     await db.execute(text("INSERT INTO ticket_comments (id,ticket_id,author_email,author_name,content,is_internal,created_at) VALUES (gen_random_uuid(),CAST(:tid AS uuid),:email,:name,:content,:internal,NOW())"),
-                     {"tid":tid,"email":data.get("author_email"),"name":data.get("author_name"),"content":data.get("content"),"internal":data.get("is_internal",False)})
+                     {"tid":tid,"email":ctx.email,"name":author_name,"content":data.get("content"),"internal":is_internal})
     await db.execute(text("UPDATE tickets SET updated_at=NOW() WHERE id=CAST(:id AS uuid)"),{"id":tid})
     await db.commit()
     return {"status":"ok"}

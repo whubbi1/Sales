@@ -2,10 +2,23 @@
 # Simplified model without FK constraints to avoid SQLAlchemy conflicts
 import uuid
 from datetime import datetime
-from sqlalchemy import Column, String, Text, DateTime, Integer, Boolean
+from sqlalchemy import Column, String, Text, DateTime, Integer, Boolean, Float, ForeignKey
 from sqlalchemy import Enum as SAEnum
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import UUID, JSONB
 from app.database import Base
+
+# Seeded into a project's priority_matrix the first time its SLA settings are read, if
+# empty — same P1-P4 example the business gave when asking for this feature.
+DEFAULT_PRIORITY_MATRIX = [
+    {"priority": "P1 - Critical", "criteria": "Production down, active security breach, many users affected",
+     "response_hours": 1, "qualification_hours": 1, "workaround_hours": 4, "resolution_hours": 24, "update_frequency_hours": 2},
+    {"priority": "P2 - Major", "criteria": "Important function degraded, no simple alternative",
+     "response_hours": 4, "qualification_hours": 4, "workaround_hours": 8, "resolution_hours": 48, "update_frequency_hours": 8},
+    {"priority": "P3 - Minor", "criteria": "Limited impact, a workaround exists",
+     "response_hours": 8, "qualification_hours": 8, "workaround_hours": 24, "resolution_hours": 120, "update_frequency_hours": 24},
+    {"priority": "P4 - Request / enhancement", "criteria": "Role creation, information request, improvement",
+     "response_hours": 24, "qualification_hours": 24, "workaround_hours": None, "resolution_hours": 240, "update_frequency_hours": 72},
+]
 
 class TicketCategory(Base):
     __tablename__ = "ticket_categories"
@@ -66,6 +79,12 @@ class Ticket(Base):
     category_id     = Column(UUID(as_uuid=True), nullable=True)
     subcategory_id  = Column(UUID(as_uuid=True), nullable=True)
     group_id        = Column(UUID(as_uuid=True), nullable=True)
+    # Optional link to Projects Follow-Up — drives portal visibility scoping and, when the
+    # project has SLA settings, its priority-matrix targets instead of the global default.
+    project_id      = Column(UUID(as_uuid=True), nullable=True)
+    # The Graph message id a ticket was created from by the email-to-ticket poll loop, for
+    # idempotency (never set for tickets created through the UI/API).
+    source_message_id = Column(String(500), nullable=True)
     priority        = Column(SAEnum('critical','high','medium','low', name='ticket_priority', create_type=False), default='medium')
     status          = Column(SAEnum('new','open','in_progress','pending','resolved','closed', name='ticket_status', create_type=False), default='new')
     requester_email = Column(String(255), nullable=False)
@@ -115,3 +134,36 @@ class TeamsSubscription(Base):
     subscription_id = Column(Text)
     expires_at      = Column(DateTime)
     created_at      = Column(DateTime, default=datetime.utcnow)
+
+class ProjectSLA(Base):
+    """Per-project SLA configuration, set up from Projects Follow-Up's own SLA tab. One
+    row per project; a ticket on this project uses its priority_matrix targets instead of
+    the global sla_policies default. Everything here is configuration/targets — the
+    business-hours-aware clock, auto-escalation, auto-closure, CSAT sending and the
+    compliance/FCR/reopen-rate/backlog dashboards are follow-up work, not built yet."""
+    __tablename__ = "project_slas"
+    project_id  = Column(UUID(as_uuid=True), ForeignKey("projects.id", ondelete="CASCADE"), primary_key=True)
+
+    # 1 & 2. Timing indicators + priority matrix, combined: one row per priority level with
+    # all five "core of the contract" timings for that severity.
+    priority_matrix = Column(JSONB, nullable=False, default=lambda: [dict(p) for p in DEFAULT_PRIORITY_MATRIX])
+
+    # 3. Quality indicators — contractual targets, not computed metrics (computing them
+    # from actual ticket history is follow-up work).
+    sla_compliance_target_pct = Column(Float, nullable=True)
+    fcr_target_pct            = Column(Float, nullable=True)
+    reopen_rate_target_pct    = Column(Float, nullable=True)
+    csat_enabled              = Column(Boolean, nullable=False, default=False)
+
+    # 4. Service availability.
+    coverage_hours = Column(String(255), nullable=True)
+    channels       = Column(JSONB, nullable=False, default=list)
+
+    # 5. Measurement rules.
+    business_hours_only  = Column(Boolean, nullable=False, default=True)
+    pause_on_client_wait  = Column(Boolean, nullable=False, default=True)
+    auto_closure_days     = Column(Integer, nullable=True, default=5)
+    escalation_rules      = Column(JSONB, nullable=False, default=list)
+    exclusions            = Column(Text, nullable=True)
+
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

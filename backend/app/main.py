@@ -2078,6 +2078,39 @@ async def startup():
                     uploaded_by VARCHAR(255),
                     updated_at TIMESTAMP DEFAULT NOW()
                 )""",
+
+                # Helpdesk: optional Project link (portal scoping + per-project SLA) and the
+                # email-to-ticket poll loop's idempotency key.
+                "ALTER TABLE tickets ADD COLUMN IF NOT EXISTS project_id UUID REFERENCES projects(id) ON DELETE SET NULL",
+                "ALTER TABLE tickets ADD COLUMN IF NOT EXISTS source_message_id VARCHAR(500)",
+
+                # Per-project SLA configuration (Projects Follow-Up > SLA tab).
+                """CREATE TABLE IF NOT EXISTS project_slas (
+                    project_id UUID PRIMARY KEY REFERENCES projects(id) ON DELETE CASCADE,
+                    priority_matrix JSONB NOT NULL DEFAULT '[]',
+                    sla_compliance_target_pct DOUBLE PRECISION,
+                    fcr_target_pct DOUBLE PRECISION,
+                    reopen_rate_target_pct DOUBLE PRECISION,
+                    csat_enabled BOOLEAN NOT NULL DEFAULT false,
+                    coverage_hours VARCHAR(255),
+                    channels JSONB NOT NULL DEFAULT '[]',
+                    business_hours_only BOOLEAN NOT NULL DEFAULT true,
+                    pause_on_client_wait BOOLEAN NOT NULL DEFAULT true,
+                    auto_closure_days INTEGER DEFAULT 5,
+                    escalation_rules JSONB NOT NULL DEFAULT '[]',
+                    exclusions TEXT,
+                    updated_at TIMESTAMP DEFAULT NOW()
+                )""",
+
+                # Email-to-ticket poll loop's sync cursor — single row, same role as
+                # social_influence_mailbox.last_synced_at.
+                """CREATE TABLE IF NOT EXISTS helpdesk_mailbox_sync (
+                    id INTEGER PRIMARY KEY DEFAULT 1,
+                    last_synced_at TIMESTAMP,
+                    last_error TEXT,
+                    CONSTRAINT single_row CHECK (id = 1)
+                )""",
+                "INSERT INTO helpdesk_mailbox_sync (id) VALUES (1) ON CONFLICT (id) DO NOTHING",
             ]
             for sql in sqls:
                 try:
@@ -2344,4 +2377,18 @@ try:
 except Exception as e:
     import traceback
     print(f"✗ ROUTER FAILED [SocialInfluence mailbox sync]: {e}")
+    traceback.print_exc()
+
+try:
+    from app.routers.helpdesk import helpdesk_mailbox_sync_loop as _helpdesk_mailbox_sync_loop
+
+    @app.on_event("startup")
+    async def _start_helpdesk_mailbox_sync():
+        import asyncio
+        asyncio.create_task(_helpdesk_mailbox_sync_loop())
+
+    print("✓ Helpdesk mailbox sync")
+except Exception as e:
+    import traceback
+    print(f"✗ ROUTER FAILED [Helpdesk mailbox sync]: {e}")
     traceback.print_exc()

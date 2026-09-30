@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import HelpdeskLayout from '@/components/HelpdeskLayout'
 import { API, STATUS_STYLE, PRIORITY_STYLE, BTN } from '../../constants'
 import { apiFetch } from '@/lib/apiClient'
+import { projectsAPI } from '@/lib/api'
 
 function EditableField({ label, display, editing, onStartEdit, children }: any) {
   return (
@@ -42,6 +43,7 @@ export default function TicketDetailPage() {
   const [saving, setSaving] = useState(false)
   const [saveMsg, setSaveMsg] = useState<{text:string;type:'success'|'error'}|null>(null)
   const [categories, setCategories] = useState<any[]>([])
+  const [projects, setProjects] = useState<any[]>([])
   const [editingField, setEditingField] = useState<string | null>(null)
 
   const TICKET_TYPE_LABELS: Record<string, string> = {
@@ -69,6 +71,7 @@ export default function TicketDetailPage() {
       ticket_type: tr.ticket?.ticket_type || '',
       category_id: tr.ticket?.category_id || '',
       subcategory_id: tr.ticket?.subcategory_id || '',
+      project_id: tr.ticket?.project_id || '',
       assignee_email: tr.ticket?.assignee_email || '',
       assignee_name: tr.ticket?.assignee_name || '',
       resolution: tr.ticket?.resolution || '',
@@ -77,14 +80,14 @@ export default function TicketDetailPage() {
     setLoading(false)
   }
 
-  useEffect(() => { load() }, [id])
+  useEffect(() => { load(); projectsAPI.list({ limit: 500 }).then(setProjects).catch(() => {}) }, [id])
 
   const addComment = async () => {
     if (!comment.trim()) return
     setSubmitting(true)
     await apiFetch(`${API}/helpdesk/tickets/${id}/comments`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ content: comment, is_internal: isInternal, author_email: 'admin@wcomply.com', author_name: 'Admin' })
+      body: JSON.stringify({ content: comment, is_internal: isInternal })
     })
     setComment(''); setSubmitting(false); load()
   }
@@ -384,6 +387,20 @@ export default function TicketDetailPage() {
                   </select>
                 </EditableField>
               )}
+
+              <EditableField
+                label="Project"
+                editing={editingField === 'project'}
+                onStartEdit={() => setEditingField('project')}
+                display={projects.find((p: any) => p.id === ticket.project_id)?.project_name || '—'}
+              >
+                <select autoFocus style={selectFieldStyle} value={ef.project_id}
+                  onChange={e => { patch({ project_id: e.target.value || '__clear__' }); setEditingField(null) }}
+                  onBlur={() => setEditingField(null)}>
+                  <option value="">No project</option>
+                  {projects.map((p: any) => <option key={p.id} value={p.id}>{p.project_name}</option>)}
+                </select>
+              </EditableField>
             </div>
 
             {/* Assignment */}
