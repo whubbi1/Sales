@@ -5,7 +5,7 @@ import { Card, Table, TD, DEL_BTN, LINK_BTN, Modal, Field, ErrorBanner, useActio
 import { LANGUAGES, NUMBER_FORMATS, CURRENCIES } from '@/lib/contactOptions'
 
 export const SECTIONS: { key: string; label: string }[] = [
-  { key: 'basic_info', label: 'Basic Information' }, { key: 'members', label: 'Members' }, { key: 'planning', label: 'Planning' },
+  { key: 'basic_info', label: 'Project Setup' }, { key: 'members', label: 'Members' }, { key: 'planning', label: 'Planning' },
   { key: 'tasks', label: 'Tasks' }, { key: 'meetings', label: 'Meetings' }, { key: 'actions', label: 'Action List' },
   { key: 'decisions', label: 'Decision Register' }, { key: 'risks', label: 'Risk Management' }, { key: 'deliverables', label: 'Deliverables' },
 ]

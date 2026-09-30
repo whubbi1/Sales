@@ -119,7 +119,7 @@ export function ProjectManagementContent({ backHref = '/operations/project-manag
           <TabNav tabs={visible.map(s => s.label)} active={tab} onChange={t => { setTab(t); setOpenMeetingId(undefined) }} />
           {tabProps && (
             <>
-              {tab === 'Basic Information' && <BasicInfoTab {...tabProps} />}
+              {tab === 'Project Setup' && <BasicInfoTab {...tabProps} />}
               {tab === 'Members' && <MembersTab projectId={id} isManager={access.is_manager} />}
               {tab === 'Planning' && <PlanningTab {...tabProps} />}
               {tab === 'Tasks' && <TasksTab {...tabProps} />}
