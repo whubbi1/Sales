@@ -22,7 +22,7 @@ export default function PortalProjectManagementDetailPage() {
     <div style={{ minHeight: '100vh', background: '#F5F7FA' }}>
       <div style={{ background: '#156082', padding: '16px 40px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div style={{ color: 'white', fontSize: '15px', fontWeight: 800, fontFamily: 'Montserrat, sans-serif' }}>Operations · Project Management</div>
-        <img src="/logo.png" alt="WCOMPLY" style={{ height: '48px', objectFit: 'contain' }} />
+        <img src="/wcomply-logo.png" alt="WCOMPLY" style={{ height: '40px', objectFit: 'contain' }} />
       </div>
       <ProjectManagementContent backHref="/portal/operations/project-management" onProjectLoaded={handleProjectLoaded} />
     </div>

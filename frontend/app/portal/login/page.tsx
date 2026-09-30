@@ -20,7 +20,7 @@ export default function PortalLoginPage() {
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', fontFamily: 'Montserrat, sans-serif', background: '#156082', padding: '24px' }}>
       <div style={{ maxWidth: '400px', width: '100%', textAlign: 'center' as const, marginBottom: '36px' }}>
-        <img src="/logo.png" alt="WCOMPLY" style={{ width: '120px', height: 'auto', objectFit: 'contain', marginBottom: '24px' }} />
+        <img src="/wcomply-logo.png" alt="WCOMPLY" style={{ width: '160px', height: 'auto', objectFit: 'contain', marginBottom: '24px' }} />
         <h1 style={{ fontSize: '32px', fontWeight: 900, letterSpacing: '-0.02em', lineHeight: 1.1, marginBottom: '12px', color: 'white' }}>WCOMPLY</h1>
         <p style={{ fontSize: '15px', color: 'rgba(255,255,255,0.75)', lineHeight: '1.7', fontWeight: 400 }}>
           Portal — sign in with your Microsoft or Google account.

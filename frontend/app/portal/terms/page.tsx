@@ -64,7 +64,7 @@ export default function PortalTermsPage() {
     <div style={{ minHeight: '100vh', background: '#F5F7FA', fontFamily: 'Montserrat, sans-serif' }}>
       <div style={{ background: '#156082', padding: '16px 40px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div style={{ color: 'white', fontSize: '15px', fontWeight: 800 }}>WCOMPLY PORTAL</div>
-        <img src="/logo.png" alt="WCOMPLY" style={{ height: '48px', objectFit: 'contain' }} />
+        <img src="/wcomply-logo.png" alt="WCOMPLY" style={{ height: '40px', objectFit: 'contain' }} />
       </div>
 
       <div style={{ padding: '32px 40px', maxWidth: '640px', margin: '0 auto' }}>

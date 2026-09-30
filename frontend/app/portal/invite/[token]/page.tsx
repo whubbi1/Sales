@@ -41,7 +41,7 @@ export default function PortalInvitePage() {
   return (
     <div style={{ minHeight: '100vh', background: '#F5F7FA', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Montserrat, sans-serif', padding: '24px' }}>
       <div style={{ background: 'white', borderRadius: '16px', boxShadow: '0 8px 24px rgba(0,0,0,0.08)', maxWidth: '420px', width: '100%', padding: '40px' }}>
-        <img src="/logo.png" alt="WCOMPLY" style={{ height: '48px', objectFit: 'contain', marginBottom: '20px' }} />
+        <img src="/wcomply-logo.png" alt="WCOMPLY" style={{ height: '40px', objectFit: 'contain', marginBottom: '20px' }} />
 
         {info === null && <p style={{ color: '#94A3B8', fontSize: '13px' }}>Checking your invitation…</p>}
 

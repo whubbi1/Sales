@@ -57,7 +57,7 @@ export default function PortalHomePage() {
           <div style={{ color: 'rgba(255,255,255,0.65)', fontSize: '12px', marginTop: '2px' }}>Welcome back{userName ? `, ${userName}` : ''}</div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
-          <img src="/logo.png" alt="WCOMPLY" style={{ height: '48px', objectFit: 'contain' }} />
+          <img src="/wcomply-logo.png" alt="WCOMPLY" style={{ height: '40px', objectFit: 'contain' }} />
           <button onClick={handleSignOut}
             style={{ background: 'rgba(255,255,255,0.12)', color: 'white', border: 'none', borderRadius: '8px', padding: '8px 16px', fontSize: '12px', fontWeight: 700, cursor: 'pointer', fontFamily: 'Montserrat, sans-serif' }}>
             Sign out
