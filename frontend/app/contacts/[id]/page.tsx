@@ -10,7 +10,7 @@ import { EntityTasks } from '@/components/tasks/EntityTasks'
 import { ActivityFeed } from '@/components/shared/ActivityFeed'
 import { EmailsTab } from '@/components/shared/EmailsTab'
 
-const SUB_LABELS: Record<string, string> = { 'Marketing Information': '📧', 'Customer Service Communication': '💬', 'One to One': '🤝', 'Opted Out': '🚫' }
+const SUB_LABELS: Record<string, string> = { 'Marketing Information': '📧', 'Customer Service Communication': '💬', 'One to One': '🤝', 'Operation': '🛠️', 'Opted Out': '🚫' }
 
 const DATA_SOURCE_OPTIONS = ['LinkedIn', 'Event', 'Project', 'Partner']
 

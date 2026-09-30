@@ -9,6 +9,7 @@ export type PMSettings = {
   project_id: string
   sharepoint_url?: string
   customer_logo_url?: string
+  has_custom_logo?: boolean
   action_statuses: string[]
   extra_action_statuses: string[]
   impact_levels: Level[]

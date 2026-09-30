@@ -771,6 +771,7 @@ export const pmAPI = {
   getSettings:    (pid: string) => fetchAPI(`${pm(pid)}/settings`),
   updateSettings: (pid: string, d: any) => fetchAPI(`${pm(pid)}/settings`, { method: 'PUT', body: JSON.stringify(d) }),
   uploadLogo:     (pid: string, file: File) => uploadAPI(`${pm(pid)}/logo`, { file }),
+  deleteLogo:     (pid: string) => fetchAPI(`${pm(pid)}/logo`, { method: 'DELETE' }),
   listTemplates:  (pid: string) => fetchAPI(`${pm(pid)}/templates`),
   uploadTemplate: (pid: string, templateType: string, name: string, file: File) => uploadAPI(`${pm(pid)}/templates`, { template_type: templateType, name, file }),
   templateUrl:    (pid: string, tid: string) => fetchAPI(`${pm(pid)}/templates/${tid}/download`),

@@ -2050,6 +2050,16 @@ async def startup():
                     UNIQUE(email, portal_type)
                 )""",
                 "CREATE INDEX IF NOT EXISTS idx_portal_users_contact ON portal_users(contact_id)",
+
+                # Contact regional preferences — used to format numbers/currency for this
+                # person; also filled in when a Contact is created from the "add project
+                # member" flow (Project Management > Members).
+                "ALTER TABLE contacts ADD COLUMN IF NOT EXISTS number_format VARCHAR(20) DEFAULT 'european'",
+                "ALTER TABLE contacts ADD COLUMN IF NOT EXISTS currency VARCHAR(10) DEFAULT 'EUR'",
+
+                # Optional link from a project Member back to the CRM contact they were
+                # picked/created from (Project Management > Members).
+                "ALTER TABLE pm_members ADD COLUMN IF NOT EXISTS contact_id UUID REFERENCES contacts(id) ON DELETE SET NULL",
             ]
             for sql in sqls:
                 try:

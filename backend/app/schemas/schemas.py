@@ -162,6 +162,8 @@ class ContactBase(BaseModel):
     lead_status: Optional[str] = "New"
     preferred_language: Optional[str] = None
     subscriptions: Optional[List[str]] = []
+    number_format: Optional[str] = "european"
+    currency: Optional[str] = "EUR"
     assigned_to: Optional[str] = None
     assigned_to_email: Optional[str] = None
     notes: Optional[str] = None

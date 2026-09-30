@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { getStoredPortalUser, portalApiJson } from '@/lib/portalAuth'
 import { recordPortalPageVisit } from '@/lib/portalRecentPages'
+import { LANGUAGES, SUBSCRIPTIONS, NUMBER_FORMATS, CURRENCIES, toggleSubscription } from '@/lib/contactOptions'
 
 interface PortalProfile {
   email: string
@@ -12,13 +13,10 @@ interface PortalProfile {
   job_name: string | null
   preferred_language: string | null
   subscriptions: string[]
+  number_format: string | null
+  currency: string | null
   company_name: string | null
 }
-
-// Same list/wording as the internal CRM's ContactModal, so a value set here reads
-// identically on the WHUBBI side.
-const LANGUAGES = ['Afrikaans','Albanian','Amharic','Arabic','Armenian','Azerbaijani','Basque','Belarusian','Bengali','Bosnian','Bulgarian','Catalan','Chinese (Simplified)','Chinese (Traditional)','Croatian','Czech','Danish','Dutch','English','Estonian','Finnish','French','Georgian','German','Greek','Gujarati','Hebrew','Hindi','Hungarian','Icelandic','Indonesian','Irish','Italian','Japanese','Kazakh','Korean','Latvian','Lithuanian','Macedonian','Malay','Maltese','Mongolian','Nepali','Norwegian','Persian','Polish','Portuguese','Romanian','Russian','Serbian','Slovak','Slovenian','Spanish','Swahili','Swedish','Tamil','Telugu','Thai','Turkish','Ukrainian','Urdu','Vietnamese','Welsh']
-const SUBSCRIPTIONS = ['Marketing Information', 'Customer Service Communication', 'One to One', 'Opted Out']
 
 const inputStyle: React.CSSProperties = { display: 'block', width: '100%', marginTop: '6px', padding: '10px 12px', borderRadius: '8px', border: '1px solid #E2E8F0', fontSize: '13px', fontFamily: 'Montserrat, sans-serif', boxSizing: 'border-box' as const }
 const labelStyle: React.CSSProperties = { fontSize: '11px', fontWeight: 700, color: '#64748B' }
@@ -27,7 +25,7 @@ export default function PortalProfilePage() {
   const router = useRouter()
 
   const [profile, setProfile] = useState<PortalProfile | null>(null)
-  const [form, setForm] = useState({ first_name: '', last_name: '', mobile_phone: '', job_name: '', preferred_language: '', subscriptions: [] as string[] })
+  const [form, setForm] = useState({ first_name: '', last_name: '', mobile_phone: '', job_name: '', preferred_language: '', subscriptions: [] as string[], number_format: 'european', currency: 'EUR' })
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null)
@@ -49,22 +47,13 @@ export default function PortalProfilePage() {
           job_name: data.job_name || '',
           preferred_language: data.preferred_language || '',
           subscriptions: data.subscriptions || [],
+          number_format: data.number_format || 'european',
+          currency: data.currency || 'EUR',
         })
       })
       .catch(() => setMessage({ text: 'Could not load your profile.', type: 'error' }))
       .finally(() => setLoading(false))
   }, [router])
-
-  const toggleSubscription = (sub: string) => {
-    setForm(p => {
-      const isOn = p.subscriptions.includes(sub)
-      let subscriptions = isOn ? p.subscriptions.filter(s => s !== sub) : [...p.subscriptions, sub]
-      // Mirrors the internal CRM form: Opted Out and Marketing Information are mutually exclusive.
-      if (sub === 'Opted Out' && !isOn) subscriptions = subscriptions.filter(s => s !== 'Marketing Information')
-      if (sub === 'Marketing Information' && !isOn) subscriptions = subscriptions.filter(s => s !== 'Opted Out')
-      return { ...p, subscriptions }
-    })
-  }
 
   const save = async () => {
     setSaving(true)
@@ -132,6 +121,16 @@ export default function PortalProfilePage() {
                 {LANGUAGES.map(l => <option key={l} value={l}>{l}</option>)}
               </select>
             </label>
+            <label style={labelStyle}>Number format
+              <select value={form.number_format} onChange={e => setForm({ ...form, number_format: e.target.value })} style={inputStyle}>
+                {NUMBER_FORMATS.map(f => <option key={f.value} value={f.value}>{f.label}</option>)}
+              </select>
+            </label>
+            <label style={labelStyle}>Currency
+              <select value={form.currency} onChange={e => setForm({ ...form, currency: e.target.value })} style={inputStyle}>
+                {CURRENCIES.map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </label>
 
             <div>
               <div style={labelStyle}>Subscriptions</div>
@@ -141,7 +140,7 @@ export default function PortalProfilePage() {
                   const isOptOut = sub === 'Opted Out'
                   return (
                     <label key={sub} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '9px 12px', border: `1.5px solid ${checked ? (isOptOut ? '#DC2626' : '#219BD6') : '#E2E8F0'}`, borderRadius: '8px', cursor: 'pointer', background: checked ? (isOptOut ? '#FEF2F2' : '#EFF8FD') : 'white' }}>
-                      <input type="checkbox" checked={checked} onChange={() => toggleSubscription(sub)}
+                      <input type="checkbox" checked={checked} onChange={() => setForm(p => ({ ...p, subscriptions: toggleSubscription(p.subscriptions, sub) }))}
                         style={{ accentColor: isOptOut ? '#DC2626' : '#219BD6', width: '14px', height: '14px' }} />
                       <span style={{ fontSize: '12px', fontWeight: 600, color: checked ? '#144766' : '#6B6B6B' }}>{sub}</span>
                     </label>

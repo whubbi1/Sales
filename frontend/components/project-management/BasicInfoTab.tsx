@@ -70,6 +70,7 @@ export function BasicInfoTab({ projectId, canEdit, settings, reloadSettings }: T
     reloadSettings()
   })
   const uploadLogo = (file?: File) => file && run(async () => { await pmAPI.uploadLogo(projectId, file); reloadSettings() })
+  const removeLogo = () => confirm('Remove this project\'s custom logo?') && run(async () => { await pmAPI.deleteLogo(projectId); reloadSettings() })
   const uploadTemplate = () => tplFile && run(async () => {
     await pmAPI.uploadTemplate(projectId, tplType, tplName || tplFile.name, tplFile)
     setTplName(''); setTplFile(null); loadTemplates()
@@ -97,7 +98,11 @@ export function BasicInfoTab({ projectId, canEdit, settings, reloadSettings }: T
                 ? <img src={settings.customer_logo_url} alt="Customer logo" style={{ maxHeight: '48px', maxWidth: '140px', objectFit: 'contain', border: '1px solid #EDF2F7', borderRadius: '6px', padding: '4px' }} />
                 : <span style={{ fontSize: '12px', color: '#9B9B9B' }}>No logo</span>}
               {canEdit && <label className="btn-secondary" style={{ cursor: 'pointer' }}>Upload<input type="file" accept="image/png,image/jpeg" hidden onChange={e => uploadLogo(e.target.files?.[0])} /></label>}
+              {canEdit && settings.has_custom_logo && <button style={LINK_BTN} onClick={removeLogo}>Remove</button>}
             </div>
+            {settings.customer_logo_url && !settings.has_custom_logo && (
+              <div style={{ fontSize: '11px', color: '#94A3B8', marginTop: '4px' }}>(from customer profile)</div>
+            )}
           </div>
         </div>
       </Card>

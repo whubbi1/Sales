@@ -2,11 +2,10 @@
 // components/contacts/ContactModal.tsx
 import { useState, useEffect } from 'react'
 import { contactsAPI, companiesAPI, partnersAPI, marketingAPI, projectsAPI } from '@/lib/api'
+import { LANGUAGES, SUBSCRIPTIONS, NUMBER_FORMATS, CURRENCIES, toggleSubscription } from '@/lib/contactOptions'
 
 const JOB_TYPES = ['CIO','CTO','CISO','SAP Manager','SAP Architect','SAP GRC','SAP Security Manager','SAP Technical Manager','Cybersecurity Architect','SOC Manager','Internal Audit','CFO','Partner','Buyer','Other']
-const SUBSCRIPTIONS = ['Marketing Information','Customer Service Communication','One to One','Opted Out']
 const DATA_SOURCE_OPTIONS = ['LinkedIn', 'Event', 'Project', 'Partner']
-const LANGUAGES = ['Afrikaans','Albanian','Amharic','Arabic','Armenian','Azerbaijani','Basque','Belarusian','Bengali','Bosnian','Bulgarian','Catalan','Chinese (Simplified)','Chinese (Traditional)','Croatian','Czech','Danish','Dutch','English','Estonian','Finnish','French','Georgian','German','Greek','Gujarati','Hebrew','Hindi','Hungarian','Icelandic','Indonesian','Irish','Italian','Japanese','Kazakh','Korean','Latvian','Lithuanian','Macedonian','Malay','Maltese','Mongolian','Nepali','Norwegian','Persian','Polish','Portuguese','Romanian','Russian','Serbian','Slovak','Slovenian','Spanish','Swahili','Swedish','Tamil','Telugu','Thai','Turkish','Ukrainian','Urdu','Vietnamese','Welsh']
 
 // FormField MUST be outside modal to avoid focus loss on re-render
 function FormField({ label, children, full }: { label: string; children: React.ReactNode; full?: boolean }) {
@@ -45,6 +44,8 @@ export function ContactModal({ contact, onClose, onSave }: any) {
     lead_status: contact?.lead_status || 'New',
     preferred_language: contact?.preferred_language || '',
     subscriptions: contact?.subscriptions || [],
+    number_format: contact?.number_format || 'european',
+    currency: contact?.currency || 'EUR',
     assigned_to: contact?.assigned_to || '',
     assigned_to_email: contact?.assigned_to_email || '',
     notes: contact?.notes || '',
@@ -113,17 +114,7 @@ export function ContactModal({ contact, onClose, onSave }: any) {
     setForm(p => ({ ...p, company_id: kind === 'company' ? id : '', partner_id: kind === 'partner' ? id : '' }))
   }
 
-  const toggleSub = (sub: string) => {
-    setForm(p => {
-      const isOn = p.subscriptions.includes(sub)
-      let subscriptions = isOn ? p.subscriptions.filter((s: string) => s !== sub) : [...p.subscriptions, sub]
-      // Opted Out and Marketing Information are mutually exclusive — activating one
-      // clears the other, since an opted-out contact can never receive marketing.
-      if (sub === 'Opted Out' && !isOn) subscriptions = subscriptions.filter((s: string) => s !== 'Marketing Information')
-      if (sub === 'Marketing Information' && !isOn) subscriptions = subscriptions.filter((s: string) => s !== 'Opted Out')
-      return { ...p, subscriptions }
-    })
-  }
+  const toggleSub = (sub: string) => setForm(p => ({ ...p, subscriptions: toggleSubscription(p.subscriptions, sub) }))
 
   const isOptedOut = form.subscriptions.includes('Opted Out')
   const optOutJustActivated = isOptedOut && !wasOptedOut
@@ -242,6 +233,16 @@ export function ContactModal({ contact, onClose, onSave }: any) {
                   {LANGUAGES.map(l => <option key={l} value={l}>{l}</option>)}
                 </select>
               </FormField>
+              <FormField label="Number Format">
+                <select className="form-input" value={form.number_format} onChange={e => setForm(p => ({ ...p, number_format: e.target.value }))}>
+                  {NUMBER_FORMATS.map(f => <option key={f.value} value={f.value}>{f.label}</option>)}
+                </select>
+              </FormField>
+              <FormField label="Currency">
+                <select className="form-input" value={form.currency} onChange={e => setForm(p => ({ ...p, currency: e.target.value }))}>
+                  {CURRENCIES.map(c => <option key={c} value={c}>{c}</option>)}
+                </select>
+              </FormField>
               <FormField label="Assigned To">
                 <select className="form-input" value={form.assigned_to_email} onChange={e => {
                   const u = users.find((uu: any) => uu.email === e.target.value)
@@ -258,7 +259,7 @@ export function ContactModal({ contact, onClose, onSave }: any) {
             <p className="section-label">Subscriptions</p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
               {SUBSCRIPTIONS.map(sub => {
-                const disabled = sub === 'Marketing Information' && isOptedOut
+                const disabled = (sub === 'Marketing Information' || sub === 'Operation') && isOptedOut
                 return (
                   <label key={sub} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '9px 12px', border: `1.5px solid ${form.subscriptions.includes(sub) ? (sub === 'Opted Out' ? '#DC2626' : '#219BD6') : '#E2E8F0'}`, borderRadius: '8px', cursor: disabled ? 'not-allowed' : 'pointer', background: disabled ? '#F8FAFC' : form.subscriptions.includes(sub) ? (sub === 'Opted Out' ? '#FEF2F2' : '#EFF8FD') : 'white' }}>
                     <input type="checkbox" checked={form.subscriptions.includes(sub)} disabled={disabled} onChange={() => toggleSub(sub)} style={{ accentColor: sub === 'Opted Out' ? '#DC2626' : '#219BD6', width: '14px', height: '14px' }} />

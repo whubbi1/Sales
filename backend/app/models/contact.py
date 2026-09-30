@@ -48,6 +48,8 @@ class Contact(Base):
     lead_status     = Column(SAEnum('New', 'Open', 'Connected', name='contact_lead_status'), default='New')
     preferred_language = Column(String(100))
     subscriptions   = Column(JSONB, default=list)  # ["Marketing Information", "Customer Service Communication", "One to One"]
+    number_format   = Column(String(20), default='european')  # 'european' (1.234,56) or 'us' (1,234.56)
+    currency        = Column(String(10), default='EUR')
 
     assigned_to     = Column(String(255))
     assigned_to_email = Column(String(255))

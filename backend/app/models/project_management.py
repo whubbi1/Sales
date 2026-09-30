@@ -67,6 +67,9 @@ class PMMember(Base):
 
     id           = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     project_id   = Column(UUID(as_uuid=True), ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
+    # Optional link to the CRM contact this member was picked/created from — name/email/phone
+    # above are still the source of truth for this project (copied in, not derived live).
+    contact_id   = Column(UUID(as_uuid=True), ForeignKey("contacts.id", ondelete="SET NULL"), nullable=True)
     name         = Column(String(255), nullable=False)
     email        = Column(String(255), nullable=False)  # stored lower-cased; matched against X-User-Email
     phone        = Column(String(50))

@@ -23,7 +23,7 @@ import boto3
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile, File, Form, status
 from fastapi.responses import StreamingResponse
-from sqlalchemy import select, delete, func
+from sqlalchemy import select, delete, func, text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -31,6 +31,8 @@ from app.database import get_db
 from app.authz import get_current_user_email, access_mode, is_excluded, _LEVELS
 from app.services.portal_auth import try_portal_user_email
 from app.models.project import Project
+from app.models.opportunity import Opportunity
+from app.models.company import Company
 from app.models.project_management import (
     PM_SECTIONS, DEFAULT_ACTION_STATUSES, TEMPLATE_TYPES, PHASE_MAX_DEPTH,
     PMSettings, PMTemplate, PMMember, PMPhase, PMTask, PMMeeting, PMMeetingValidation,
@@ -65,6 +67,18 @@ class PMUser:
         self.is_portal = is_portal
 
 
+async def _contact_has_operation_subscription(db: AsyncSession, email: str) -> bool:
+    """The 'Operation' subscription is mandatory for a portal contact to use Project
+    Management — a linked Contact without it is treated as having no access at all,
+    same as having no PMMember row."""
+    r = await db.execute(text("""
+        SELECT 1 FROM portal_users pu JOIN contacts c ON c.id = pu.contact_id
+        WHERE pu.email = :email AND pu.portal_type = 'partner' AND pu.status = 'active'
+        AND c.subscriptions @> '["Operation"]'::jsonb
+    """), {"email": email})
+    return r.fetchone() is not None
+
+
 async def pm_user(request: Request, db: AsyncSession = Depends(get_db)) -> PMUser:
     # Portal contacts (added as a PMMember) reach this the same way employees do, just
     # authenticated via the portal's Cognito bearer token instead of X-User-Email — they
@@ -73,6 +87,8 @@ async def pm_user(request: Request, db: AsyncSession = Depends(get_db)) -> PMUse
     # below, which resolves their access purely from their PMMember.permissions.
     portal_email = await try_portal_user_email(request, db)
     if portal_email:
+        if not await _contact_has_operation_subscription(db, portal_email):
+            raise HTTPException(403, "Your account needs the Operation subscription to use Project Management")
         return PMUser(portal_email, "view", is_portal=True)
 
     email = await get_current_user_email(request.headers.get("x-user-email"))
@@ -137,10 +153,25 @@ def _action_statuses(s: PMSettings) -> list[str]:
     return DEFAULT_ACTION_STATUSES + [x for x in (s.extra_action_statuses or []) if x not in DEFAULT_ACTION_STATUSES]
 
 
-async def _settings_response(s: PMSettings) -> SettingsResponse:
+async def _project_company_logo(db: AsyncSession, project_id: UUID) -> str | None:
+    """A project with no logo of its own falls back to its linked customer's logo."""
+    proj = (await db.execute(select(Project).where(Project.id == project_id))).scalar_one_or_none()
+    if not proj or not proj.opportunity_id:
+        return None
+    opp = (await db.execute(select(Opportunity).where(Opportunity.id == proj.opportunity_id))).scalar_one_or_none()
+    if not opp or not opp.company_id:
+        return None
+    company = (await db.execute(select(Company).where(Company.id == opp.company_id))).scalar_one_or_none()
+    if not company or not company.logo_url:
+        return None
+    return await s3_ref_to_presigned(company.logo_url) if company.logo_url.startswith("s3://") else company.logo_url
+
+
+async def _settings_response(s: PMSettings, fallback_logo_url: str | None = None) -> SettingsResponse:
     return SettingsResponse(
         project_id=s.project_id, sharepoint_url=s.sharepoint_url,
-        customer_logo_url=await s3_ref_to_presigned(s.customer_logo_ref) if s.customer_logo_ref else None,
+        customer_logo_url=(await s3_ref_to_presigned(s.customer_logo_ref) if s.customer_logo_ref else fallback_logo_url),
+        has_custom_logo=bool(s.customer_logo_ref),
         action_statuses=_action_statuses(s), extra_action_statuses=s.extra_action_statuses or [],
         impact_levels=s.impact_levels, probability_levels=s.probability_levels, meeting_types=s.meeting_types,
     )
@@ -213,7 +244,7 @@ async def get_settings(project_id: UUID, db: AsyncSession = Depends(get_db), use
         raise HTTPException(403, "No access to this project")
     s = await _settings(db, project_id)
     await db.commit()
-    return await _settings_response(s)
+    return await _settings_response(s, await _project_company_logo(db, project_id))
 
 
 @router.put("/projects/{project_id}/settings", response_model=SettingsResponse)
@@ -232,7 +263,7 @@ async def update_settings(project_id: UUID, data: SettingsUpdate, db: AsyncSessi
     for k, v in patch.items():
         setattr(s, k, v)
     await db.commit()
-    return await _settings_response(s)
+    return await _settings_response(s, await _project_company_logo(db, project_id))
 
 
 @router.post("/projects/{project_id}/logo", response_model=SettingsResponse)
@@ -244,7 +275,23 @@ async def upload_logo(project_id: UUID, file: UploadFile = File(...), db: AsyncS
     s = await _settings(db, project_id, lock=True)
     s.customer_logo_ref = await upload_to_s3(f"projects/{project_id}/pm/logo", content, file.content_type)
     await db.commit()
-    return await _settings_response(s)
+    return await _settings_response(s, await _project_company_logo(db, project_id))
+
+
+@router.delete("/projects/{project_id}/logo", response_model=SettingsResponse)
+async def delete_logo(project_id: UUID, db: AsyncSession = Depends(get_db), user: PMUser = Depends(pm_user)):
+    await _require(db, project_id, user, "basic_info", "edit")
+    s = await _settings(db, project_id, lock=True)
+    if s.customer_logo_ref and s.customer_logo_ref.startswith("s3://"):
+        bucket, _, key = s.customer_logo_ref[5:].partition("/")
+        try:
+            loop = asyncio.get_running_loop()
+            await loop.run_in_executor(None, lambda: boto3.client("s3", region_name=AWS_REGION).delete_object(Bucket=bucket, Key=key))
+        except Exception as e:
+            print(f"S3 delete error: {e}")
+    s.customer_logo_ref = None
+    await db.commit()
+    return await _settings_response(s, await _project_company_logo(db, project_id))
 
 
 @router.get("/projects/{project_id}/templates", response_model=List[TemplateResponse])

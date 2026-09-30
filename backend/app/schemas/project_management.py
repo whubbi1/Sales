@@ -33,6 +33,7 @@ class SettingsResponse(BaseModel):
     project_id: UUID
     sharepoint_url: Optional[str] = None
     customer_logo_url: Optional[str] = None
+    has_custom_logo: bool = False        # False when customer_logo_url is inherited from the linked company
     action_statuses: List[str]           # defaults + extras, in display order
     extra_action_statuses: List[str]
     impact_levels: List[LevelDef]
@@ -59,6 +60,7 @@ class MemberIn(BaseModel):
     phone: Optional[str] = None
     project_role: Optional[str] = None
     company_role: Optional[str] = None
+    contact_id: Optional[UUID] = None
     permissions: dict[str, Access] = Field(default_factory=dict)
 
 
@@ -69,6 +71,7 @@ class MemberResponse(_ORM):
     phone: Optional[str] = None
     project_role: Optional[str] = None
     company_role: Optional[str] = None
+    contact_id: Optional[UUID] = None
     permissions: dict
 
 
