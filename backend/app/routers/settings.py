@@ -238,6 +238,32 @@ async def sync_profile(email: str, db: AsyncSession = Depends(get_db)):
     return await sync_user_from_ms(email, db)
 
 
+# Self-service default formatting preferences — language/number/date/currency, read by
+# frontend/lib/appSettings.tsx at app-shell level. Everything else on user_profiles is
+# Microsoft-sync-owned; these four fields are the only ones a user edits directly.
+_PROFILE_PREF_FIELDS = ("preferred_language", "number_format", "date_format", "currency")
+
+
+@router.put("/profile/{email}")
+async def update_profile_preferences(
+    email: str,
+    data: dict,
+    db: AsyncSession = Depends(get_db),
+    caller: str = Depends(get_current_user_email),
+):
+    await require_self_or_permissions_admin(email, caller, db)
+    fields = {k: v for k, v in data.items() if k in _PROFILE_PREF_FIELDS}
+    if not fields:
+        raise HTTPException(status_code=400, detail=f"No recognized fields — expected one of {_PROFILE_PREF_FIELDS}")
+    set_clause = ", ".join(f"{k} = :{k}" for k in fields)
+    await db.execute(text(f"UPDATE user_profiles SET {set_clause}, updated_at = NOW() WHERE email = :email"),
+                      {**fields, "email": email})
+    await db.commit()
+    result = await db.execute(text("SELECT * FROM user_profiles WHERE email = :email"), {"email": email})
+    row = result.fetchone()
+    return dict(row._mapping) if row else {"error": "Profile not found"}
+
+
 # ─── Permissions ─────────────────────────────────────────────────────────────
 @router.get("/permissions/{email}")
 async def get_permissions(

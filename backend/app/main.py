@@ -2124,6 +2124,13 @@ async def startup():
                     UNIQUE(event_id, email)
                 )""",
 
+                # Default formatting preferences (MyWHUBBI > Profile) — read by
+                # frontend/lib/appSettings.tsx, applied through the shared formatting helpers.
+                "ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS preferred_language VARCHAR(10) DEFAULT 'English'",
+                "ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS number_format VARCHAR(20) DEFAULT 'european'",
+                "ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS date_format VARCHAR(20) DEFAULT 'DD/MM/YYYY'",
+                "ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS currency VARCHAR(10) DEFAULT 'EUR'",
+
                 # Meetings — create a real Teams meeting from WHUBBI (organizer's connected
                 # Outlook account) and poll Graph for its transcript afterward (transcript_sync_loop).
                 "ALTER TABLE pm_meetings ADD COLUMN IF NOT EXISTS duration_minutes INTEGER NOT NULL DEFAULT 60",

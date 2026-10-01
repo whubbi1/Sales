@@ -4,6 +4,7 @@
 import { ReactNode, useState } from 'react'
 import { getStoredUser } from '@/lib/auth'
 import { getStoredPortalUser } from '@/lib/portalAuth'
+import { formatDateGlobal } from '@/lib/appSettings'
 
 // These tabs are reused verbatim by both the internal app and the portal (same component,
 // different host page). "Who am I" for internal-vs-me comparisons (pending validations,
@@ -27,7 +28,9 @@ export type PMSettings = {
 }
 export type TabProps = { projectId: string; canEdit: boolean; settings: PMSettings; reloadSettings: () => void }
 
-export const fmtDate = (d?: string | null) => d ? new Date(d).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'
+// Respects the user's default date-format preference (MyWHUBBI > Profile) — see
+// lib/appSettings.tsx for the loading/applying mechanism and its known limitation.
+export const fmtDate = (d?: string | null) => formatDateGlobal(d)
 // <input type="date"> value ↔ API datetime
 export const toInput = (d?: string | null) => d ? d.slice(0, 10) : ''
 export const fromInput = (v: string) => v ? `${v}T00:00:00` : null

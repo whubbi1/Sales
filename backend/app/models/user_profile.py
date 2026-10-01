@@ -25,6 +25,13 @@ class UserProfile(Base):
     main_location_id   = Column(UUID(as_uuid=True))
     main_location_name = Column(String(255), default="All")
     is_excluded         = Column(Boolean, default=False)
+    # Default formatting preferences — read by frontend/lib/appSettings.tsx at app-shell level
+    # and applied through the shared formatting helpers (see shared.tsx's fmtDate). Same value
+    # vocabulary as the portal contact equivalent (frontend/lib/contactOptions.ts).
+    preferred_language = Column(String(10), default="English")
+    number_format      = Column(String(20), default="european")
+    date_format        = Column(String(20), default="DD/MM/YYYY")
+    currency           = Column(String(10), default="EUR")
     last_sync       = Column(DateTime)
     created_at      = Column(DateTime, default=datetime.utcnow)
     updated_at      = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

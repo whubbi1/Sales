@@ -2,15 +2,22 @@
 import { useState, useEffect } from 'react'
 import ProfileLayout from '@/components/ProfileLayout'
 import { getStoredUser } from '@/lib/auth'
+import { apiFetch } from '@/lib/apiClient'
+import { useAppSettings, DATE_FORMATS } from '@/lib/appSettings'
+import { LANGUAGES, NUMBER_FORMATS, CURRENCIES } from '@/lib/contactOptions'
 
-const API = 'https://api.whubbi.wcomply.com'
+const sel: React.CSSProperties = { fontSize: '13px', padding: '8px 11px', border: '1px solid #E2E8F0', borderRadius: '8px', fontFamily: 'Montserrat, sans-serif', background: 'white', width: '100%', boxSizing: 'border-box' as const }
+const prefLbl: React.CSSProperties = { fontSize: '10px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', color: '#45B6E4', marginBottom: '4px', display: 'block' }
 
 export default function PersonalProfilePage() {
+  const { refresh: refreshAppSettings } = useAppSettings()
   const [profile, setProfile] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [syncing, setSyncing] = useState(false)
+  const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null)
   const [email, setEmail] = useState('')
+  const [prefs, setPrefs] = useState({ preferred_language: 'English', number_format: 'european', date_format: 'DD/MM/YYYY', currency: 'EUR' })
 
   useEffect(() => {
     const user = getStoredUser()
@@ -25,9 +32,15 @@ export default function PersonalProfilePage() {
   const loadProfile = async (email: string) => {
     setLoading(true)
     try {
-      const res = await fetch(`${API}/settings/profile/${email}`)
+      const res = await apiFetch(`/settings/profile/${encodeURIComponent(email)}`)
       const data = await res.json()
       setProfile(data)
+      setPrefs({
+        preferred_language: data.preferred_language || 'English',
+        number_format: data.number_format || 'european',
+        date_format: data.date_format || 'DD/MM/YYYY',
+        currency: data.currency || 'EUR',
+      })
     } catch (e) { console.error(e) }
     setLoading(false)
   }
@@ -36,7 +49,7 @@ export default function PersonalProfilePage() {
     if (!email) return
     setSyncing(true)
     try {
-      const res = await fetch(`${API}/settings/profile/${email}/sync`, { method: 'POST' })
+      const res = await apiFetch(`/settings/profile/${encodeURIComponent(email)}/sync`, { method: 'POST' })
       const data = await res.json()
       if (!data.error) {
         setProfile(data)
@@ -46,6 +59,22 @@ export default function PersonalProfilePage() {
       }
     } catch (e: any) { setMessage({ text: e.message, type: 'error' }) }
     setSyncing(false)
+    setTimeout(() => setMessage(null), 4000)
+  }
+
+  const savePrefs = async () => {
+    if (!email) return
+    setSaving(true)
+    try {
+      await apiFetch(`/settings/profile/${encodeURIComponent(email)}`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(prefs),
+      })
+      refreshAppSettings()
+      setMessage({ text: 'Preferences saved.', type: 'success' })
+    } catch (e: any) {
+      setMessage({ text: e.message || 'Could not save preferences.', type: 'error' })
+    }
+    setSaving(false)
     setTimeout(() => setMessage(null), 4000)
   }
 
@@ -125,6 +154,37 @@ export default function PersonalProfilePage() {
                   </div>
                 </div>
               )}
+            </div>
+
+            {/* Default formatting preferences */}
+            <div style={{ gridColumn: '1 / -1', background: 'white', borderRadius: '14px', border: '1px solid #EDF2F7', padding: '28px', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
+              <h3 style={{ fontSize: '12px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', color: '#45B6E4', marginBottom: '4px' }}>Default Preferences</h3>
+              <p style={{ fontSize: '11px', color: '#94A3B8', margin: '0 0 16px' }}>Applied across WHUBBI wherever a page uses the shared formatting helpers.</p>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px' }}>
+                <label><span style={prefLbl}>Language</span>
+                  <select style={sel} value={prefs.preferred_language} onChange={e => setPrefs(p => ({ ...p, preferred_language: e.target.value }))}>
+                    {LANGUAGES.map(l => <option key={l} value={l}>{l}</option>)}
+                  </select>
+                </label>
+                <label><span style={prefLbl}>Number format</span>
+                  <select style={sel} value={prefs.number_format} onChange={e => setPrefs(p => ({ ...p, number_format: e.target.value }))}>
+                    {NUMBER_FORMATS.map(f => <option key={f.value} value={f.value}>{f.label}</option>)}
+                  </select>
+                </label>
+                <label><span style={prefLbl}>Date format</span>
+                  <select style={sel} value={prefs.date_format} onChange={e => setPrefs(p => ({ ...p, date_format: e.target.value }))}>
+                    {DATE_FORMATS.map(f => <option key={f.value} value={f.value}>{f.label}</option>)}
+                  </select>
+                </label>
+                <label><span style={prefLbl}>Currency</span>
+                  <select style={sel} value={prefs.currency} onChange={e => setPrefs(p => ({ ...p, currency: e.target.value }))}>
+                    {CURRENCIES.map(c => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                </label>
+              </div>
+              <button onClick={savePrefs} disabled={saving} style={{ marginTop: '18px', background: saving ? '#F5F7FA' : '#156082', color: saving ? '#848EA5' : 'white', border: 'none', padding: '9px 20px', borderRadius: '8px', fontSize: '12px', fontWeight: 700, cursor: saving ? 'not-allowed' : 'pointer', fontFamily: 'Montserrat, sans-serif' }}>
+                {saving ? 'Saving…' : 'Save preferences'}
+              </button>
             </div>
           </div>
         )}
