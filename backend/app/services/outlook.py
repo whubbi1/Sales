@@ -13,11 +13,15 @@ MS_CLIENT_SECRET = os.getenv("MS_CLIENT_SECRET")
 
 # Delegated scopes for the per-user mailbox connection (Outlook router) — distinct from the
 # app-only ".default" scope used by microsoft.py's client-credentials flow for org-wide data.
-# Calendars.ReadWrite/OnlineMeetings.ReadWrite.All/OnlineMeetingTranscript.Read.All back the
+# Calendars.ReadWrite/OnlineMeetings.ReadWrite/OnlineMeetingTranscript.Read.All back the
 # "create a Teams meeting from WHUBBI + pull its transcript back" feature — Azure AD can't
 # silently add scopes to an existing refresh token, so anyone already connected before these
 # were added must reconnect once via Settings > Integrations.
-DELEGATED_SCOPES = "Mail.Read Mail.ReadWrite Mail.Send Calendars.ReadWrite OnlineMeetings.ReadWrite.All OnlineMeetingTranscript.Read.All offline_access User.Read"
+# NOTE: OnlineMeetings.ReadWrite (no ".All") is the correct DELEGATED scope name — the ".All"
+# suffix only exists as an APPLICATION permission for this one (confirmed against the actual
+# Entra app registration's granted permissions after an AADSTS650053 on the ".All" delegated
+# request: Graph has no such delegated scope).
+DELEGATED_SCOPES = "Mail.Read Mail.ReadWrite Mail.Send Calendars.ReadWrite OnlineMeetings.ReadWrite OnlineMeetingTranscript.Read.All offline_access User.Read"
 
 async def get_access_token(user_refresh_token: str) -> dict:
     """Échanger un refresh token contre un nouvel access token Microsoft Graph.
