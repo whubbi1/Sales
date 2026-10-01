@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react'
 import { pmAPI } from '@/lib/api'
 import { Card, Table, TD, DEL_BTN, LINK_BTN, ErrorBanner, useAction, fmtDate, Level, TabProps } from './shared'
+import { LANGUAGES } from '@/lib/contactOptions'
 
 const TEMPLATE_LABELS: Record<string, string> = {
   project_status_report: 'Project status report', meeting_minutes: 'Meeting minutes', action_list: 'Action list',
@@ -66,6 +67,7 @@ export function BasicInfoTab({ projectId, canEdit, settings, reloadSettings }: T
       extra_action_statuses: form.extra_action_statuses,
       impact_levels: form.impact_levels, probability_levels: form.probability_levels,
       meeting_types: form.meeting_types,
+      project_language: form.project_language, documentation_language: form.documentation_language,
     })
     reloadSettings()
   })
@@ -82,6 +84,24 @@ export function BasicInfoTab({ projectId, canEdit, settings, reloadSettings }: T
     <div>
       <ErrorBanner error={error} />
       <Card title="Project links & customer" action={canEdit && <button className="btn-primary" onClick={save} disabled={busy}>Save</button>}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '20px' }}>
+          <div>
+            <span className="form-label">Project language</span>
+            <select className="form-input" value={form.project_language} disabled={!canEdit}
+              onChange={e => setForm({ ...form, project_language: e.target.value })}>
+              {LANGUAGES.map(l => <option key={l} value={l}>{l}</option>)}
+            </select>
+            <div style={{ fontSize: '11px', color: '#94A3B8', marginTop: '4px' }}>Default language for this project's meetings (each meeting can override it).</div>
+          </div>
+          <div>
+            <span className="form-label">Documentation language</span>
+            <select className="form-input" value={form.documentation_language} disabled={!canEdit}
+              onChange={e => setForm({ ...form, documentation_language: e.target.value })}>
+              {LANGUAGES.map(l => <option key={l} value={l}>{l}</option>)}
+            </select>
+            <div style={{ fontSize: '11px', color: '#94A3B8', marginTop: '4px' }}>Language used for generated document headings and register templates.</div>
+          </div>
+        </div>
         <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '20px', alignItems: 'start' }}>
           <div>
             <span className="form-label">SharePoint project folder</span>

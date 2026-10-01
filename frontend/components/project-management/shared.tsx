@@ -25,6 +25,8 @@ export type PMSettings = {
   impact_levels: Level[]
   probability_levels: Level[]
   meeting_types: string[]
+  project_language: string
+  documentation_language: string
 }
 export type TabProps = { projectId: string; canEdit: boolean; settings: PMSettings; reloadSettings: () => void }
 

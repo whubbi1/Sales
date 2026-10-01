@@ -27,6 +27,8 @@ class SettingsUpdate(BaseModel):
     impact_levels: Optional[List[LevelDef]] = None
     probability_levels: Optional[List[LevelDef]] = None
     meeting_types: Optional[List[str]] = None
+    project_language: Optional[str] = None
+    documentation_language: Optional[str] = None
 
 
 class SettingsResponse(BaseModel):
@@ -39,6 +41,8 @@ class SettingsResponse(BaseModel):
     impact_levels: List[LevelDef]
     probability_levels: List[LevelDef]
     meeting_types: List[str]
+    project_language: str = "English"
+    documentation_language: str = "English"
 
 
 class TemplateResponse(_ORM):
@@ -199,6 +203,7 @@ class MeetingIn(BaseModel):
     title: str
     meeting_date: Optional[datetime] = None
     duration_minutes: int = 60
+    language: Optional[str] = None
     location: Optional[str] = None
     attendees: List[Person] = Field(default_factory=list)
 
@@ -277,6 +282,7 @@ class MeetingSummary(_ORM):
 class MeetingResponse(MeetingSummary):
     location: Optional[str] = None
     duration_minutes: int = 60
+    language: Optional[str] = None
     attendees: List[Person] = []
     organizer_email: Optional[str] = None
     teams_join_url: Optional[str] = None

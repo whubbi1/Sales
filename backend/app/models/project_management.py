@@ -46,6 +46,11 @@ class PMSettings(Base):
     impact_levels      = Column(JSONB, nullable=False, default=lambda: [dict(l) for l in DEFAULT_LEVELS])
     probability_levels = Column(JSONB, nullable=False, default=lambda: [dict(l) for l in DEFAULT_LEVELS])
     meeting_types      = Column(JSONB, nullable=False, default=lambda: ["Kick-off", "Steering Committee", "Weekly Status", "Workshop"])
+    # project_language: meetings default here unless they set their own PMMeeting.language.
+    # documentation_language: static section headings/table headers in generated documents
+    # (meeting-minutes export, register templates) — see DOCUMENT_LABELS in the router.
+    project_language       = Column(String(20), nullable=False, default="English")
+    documentation_language = Column(String(20), nullable=False, default="English")
     # Last number issued per register prefix ({"A": 12, "R": 3, …}) — incremented under a
     # row lock, so numbers stay unique and are never reused after a deletion.
     counters          = Column(JSONB, nullable=False, default=dict)
@@ -146,6 +151,7 @@ class PMMeeting(Base):
     title        = Column(String(500), nullable=False)
     meeting_date = Column(DateTime)
     duration_minutes = Column(Integer, nullable=False, default=60)  # no separate end-time field
+    language = Column(String(20))  # unset = inherit PMSettings.project_language
     location     = Column(String(500))
     attendees    = Column(JSONB, nullable=False, default=list)  # [{name, email}]
 

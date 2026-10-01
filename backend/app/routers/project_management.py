@@ -178,6 +178,7 @@ async def _settings_response(s: PMSettings, fallback_logo_url: str | None = None
         has_custom_logo=bool(s.customer_logo_ref),
         action_statuses=_action_statuses(s), extra_action_statuses=s.extra_action_statuses or [],
         impact_levels=s.impact_levels, probability_levels=s.probability_levels, meeting_types=s.meeting_types,
+        project_language=s.project_language, documentation_language=s.documentation_language,
     )
 
 
@@ -606,6 +607,73 @@ TEMPLATE_COLUMNS = {
     "deliverable_list":  ["Number", "Name", "Description", "Owner", "Approvers", "Contributors", "Document URL", "Current Status"],
 }
 
+# Static translation of the document "chrome" (section headings / table and column headers)
+# generated from scratch by this router — register templates (TEMPLATE_COLUMNS) and the
+# meeting-minutes export's hardcoded labels (export_minutes). Deliberately NOT an AI call:
+# this is a small, fixed, enumerable label set — a dictionary is cheaper and never
+# mistranslates UI chrome. Covers WCOMPLY's actual working languages; any other
+# documentation_language value just falls back to the English source label (_tr below).
+DOCUMENT_LABELS: dict[str, dict[str, str]] = {
+    "French": {
+        "Number": "Numéro", "Title": "Titre", "Description": "Description", "Owner": "Responsable",
+        "Status": "Statut", "Opening Date": "Date d'ouverture", "Due Date": "Date d'échéance",
+        "Closing Date": "Date de clôture", "Comment": "Commentaire", "Mitigation": "Mesure d'atténuation",
+        "Impact": "Impact", "Probability": "Probabilité", "Decision Date": "Date de décision",
+        "Decision Makers": "Décideurs", "Email": "E-mail", "Name": "Nom", "Phone": "Téléphone",
+        "Project Role": "Rôle projet", "Company Role": "Rôle dans l'entreprise", "Approvers": "Approbateurs",
+        "Contributors": "Contributeurs", "Document URL": "URL du document", "Current Status": "Statut actuel",
+        "Meeting minutes": "Compte rendu de réunion", "Attendees": "Participants", "Minutes": "Compte rendu",
+        "Decisions": "Décisions", "Action items": "Actions", "Risks": "Risques", "Validation": "Validation",
+        "#": "N°", "Decision": "Décision", "Decision makers": "Décideurs", "Action": "Action",
+        "Due date": "Date d'échéance", "Risk": "Risque", "Validator": "Validateur", "Date": "Date",
+    },
+    "Dutch": {
+        "Number": "Nummer", "Title": "Titel", "Description": "Beschrijving", "Owner": "Eigenaar",
+        "Status": "Status", "Opening Date": "Openingsdatum", "Due Date": "Vervaldatum",
+        "Closing Date": "Afsluitdatum", "Comment": "Opmerking", "Mitigation": "Mitigatie",
+        "Impact": "Impact", "Probability": "Waarschijnlijkheid", "Decision Date": "Beslissingsdatum",
+        "Decision Makers": "Besluitvormers", "Email": "E-mail", "Name": "Naam", "Phone": "Telefoon",
+        "Project Role": "Projectrol", "Company Role": "Bedrijfsrol", "Approvers": "Goedkeurders",
+        "Contributors": "Bijdragers", "Document URL": "Document-URL", "Current Status": "Huidige status",
+        "Meeting minutes": "Vergaderverslag", "Attendees": "Aanwezigen", "Minutes": "Verslag",
+        "Decisions": "Beslissingen", "Action items": "Actiepunten", "Risks": "Risico's", "Validation": "Validatie",
+        "#": "Nr.", "Decision": "Beslissing", "Decision makers": "Besluitvormers", "Action": "Actie",
+        "Due date": "Vervaldatum", "Risk": "Risico", "Validator": "Validator", "Date": "Datum",
+    },
+    "German": {
+        "Number": "Nummer", "Title": "Titel", "Description": "Beschreibung", "Owner": "Verantwortlicher",
+        "Status": "Status", "Opening Date": "Eröffnungsdatum", "Due Date": "Fälligkeitsdatum",
+        "Closing Date": "Abschlussdatum", "Comment": "Kommentar", "Mitigation": "Risikominderung",
+        "Impact": "Auswirkung", "Probability": "Wahrscheinlichkeit", "Decision Date": "Entscheidungsdatum",
+        "Decision Makers": "Entscheidungsträger", "Email": "E-Mail", "Name": "Name", "Phone": "Telefon",
+        "Project Role": "Projektrolle", "Company Role": "Unternehmensrolle", "Approvers": "Genehmiger",
+        "Contributors": "Mitwirkende", "Document URL": "Dokument-URL", "Current Status": "Aktueller Status",
+        "Meeting minutes": "Besprechungsprotokoll", "Attendees": "Teilnehmer", "Minutes": "Protokoll",
+        "Decisions": "Entscheidungen", "Action items": "Maßnahmen", "Risks": "Risiken", "Validation": "Validierung",
+        "#": "Nr.", "Decision": "Entscheidung", "Decision makers": "Entscheidungsträger", "Action": "Maßnahme",
+        "Due date": "Fälligkeitsdatum", "Risk": "Risiko", "Validator": "Prüfer", "Date": "Datum",
+    },
+    "Spanish": {
+        "Number": "Número", "Title": "Título", "Description": "Descripción", "Owner": "Responsable",
+        "Status": "Estado", "Opening Date": "Fecha de apertura", "Due Date": "Fecha de vencimiento",
+        "Closing Date": "Fecha de cierre", "Comment": "Comentario", "Mitigation": "Mitigación",
+        "Impact": "Impacto", "Probability": "Probabilidad", "Decision Date": "Fecha de decisión",
+        "Decision Makers": "Responsables de decisión", "Email": "Correo electrónico", "Name": "Nombre",
+        "Phone": "Teléfono", "Project Role": "Rol en el proyecto", "Company Role": "Rol en la empresa",
+        "Approvers": "Aprobadores", "Contributors": "Colaboradores", "Document URL": "URL del documento",
+        "Current Status": "Estado actual", "Meeting minutes": "Acta de reunión", "Attendees": "Asistentes",
+        "Minutes": "Acta", "Decisions": "Decisiones", "Action items": "Acciones", "Risks": "Riesgos",
+        "Validation": "Validación", "#": "N.º", "Decision": "Decisión", "Decision makers": "Responsables de decisión",
+        "Action": "Acción", "Due date": "Fecha de vencimiento", "Risk": "Riesgo", "Validator": "Validador", "Date": "Fecha",
+    },
+}
+
+
+def _tr(label: str, language: str | None) -> str:
+    """English source label -> documentation_language. Falls back to the English label
+    untranslated for English itself or any language not in DOCUMENT_LABELS."""
+    return DOCUMENT_LABELS.get(language or "", {}).get(label, label)
+
 
 class ImportApplyRequest(BaseModel):
     changed: list[dict] = []
@@ -701,21 +769,24 @@ async def _apply_register_import(db: AsyncSession, project_id: UUID, register: s
     return {"updated": updated, "created": created}
 
 
-async def _standard_template_bytes(db: AsyncSession, template_type: str) -> bytes:
+async def _standard_template_bytes(db: AsyncSession, template_type: str, language: str = "English") -> bytes:
     default = (await db.execute(select(PMDefaultTemplate).where(PMDefaultTemplate.template_type == template_type))).scalar_one_or_none()
     if default:
         return await _s3_get(default.file_ref)
-    return write_template_xlsx(TEMPLATE_COLUMNS[template_type], sheet_title=template_type.replace("_", " ").title())
+    columns = [_tr(c, language) for c in TEMPLATE_COLUMNS[template_type]]
+    return write_template_xlsx(columns, sheet_title=template_type.replace("_", " ").title())
 
 
 async def _register_template_bytes(db: AsyncSession, project_id: UUID, register: str) -> tuple[bytes, str]:
-    """A project's own uploaded template for this register, else the standard one."""
+    """A project's own uploaded template for this register, else the generated standard one
+    (translated into the project's documentation language)."""
     template_type = IMPORT_TEMPLATE_TYPE[register]
     tpl = (await db.execute(select(PMTemplate).where(PMTemplate.project_id == project_id, PMTemplate.template_type == template_type)
                              .order_by(PMTemplate.created_at.desc()))).scalars().first()
     if tpl:
         return await _s3_get(tpl.file_ref), tpl.filename or f"{register}_template.xlsx"
-    return await _standard_template_bytes(db, template_type), f"{register}_template.xlsx"
+    s = await _settings(db, project_id)
+    return await _standard_template_bytes(db, template_type, s.documentation_language), f"{register}_template.xlsx"
 
 
 @router.get("/projects/{project_id}/members/template/download")
@@ -1105,7 +1176,7 @@ async def _call_claude(system: str, prompt: str, schema: dict = MINUTES_SCHEMA) 
 
 
 MINUTES_SYSTEM = """You write the official minutes of project meetings from their transcripts, for a consulting company's project management office.
-Write factual, neutral, professional minutes in the language used in the transcript. Never invent content that isn't supported by the transcript.
+Write factual, neutral, professional minutes in the language given in the <meeting> block's "language" field — translate as needed if the transcript itself is written in a different language. Never mix languages in the output, and never invent content that isn't supported by the transcript.
 
 Return:
 - minutes: the meeting minutes as plain text. Use lines starting with "# " for section headings (e.g. Context, Topics discussed, Next steps) and lines starting with "- " for bullet points. Do not repeat the action items, decisions and risks in full — they are listed separately.
@@ -1178,7 +1249,8 @@ async def generate_minutes(project_id: UUID, meeting_id: UUID, db: AsyncSession 
     s = await _settings(db, project_id)
     existing, allowed, by_number = await _register_context(db, project_id, s)
     meeting_info = dict(project=proj.project_name, meeting_number=m.number, meeting_type=m.meeting_type or "", title=m.title,
-                        date=m.meeting_date.date().isoformat() if m.meeting_date else "", attendees=m.attendees or [])
+                        date=m.meeting_date.date().isoformat() if m.meeting_date else "", attendees=m.attendees or [],
+                        language=m.language or s.project_language or "English")
     prompt = (f"<meeting>\n{json.dumps(meeting_info, ensure_ascii=False)}\n</meeting>\n"
               f"<allowed_values>\n{json.dumps(allowed, ensure_ascii=False)}\n</allowed_values>\n"
               f"<existing_register_entries>\n{json.dumps(existing, ensure_ascii=False)}\n</existing_register_entries>\n"
@@ -1444,14 +1516,14 @@ async def export_minutes(project_id: UUID, meeting_id: UUID, db: AsyncSession = 
                 header_p.add_run().add_picture(io.BytesIO(await _s3_get(s.customer_logo_ref)), height=Cm(1.5))
             except Exception as e:  # a broken logo shouldn't block the export
                 print(f"PM export: logo skipped: {e}")
-        doc.add_heading(f"Meeting minutes — {m.title}", level=0)
+        doc.add_heading(f"{_tr('Meeting minutes', s.documentation_language)} — {m.title}", level=0)
         doc.add_paragraph(f"{proj.project_name} ({proj.project_number or ''}) · {m.number} · {m.meeting_type or ''} · {date_str}")
 
-    doc.add_heading("Attendees", level=1)
+    doc.add_heading(_tr("Attendees", s.documentation_language), level=1)
     for a in m.attendees or []:
         doc.add_paragraph(f"{a.get('name', '')}{' — ' + a['email'] if a.get('email') else ''}", style="List Bullet")
 
-    doc.add_heading("Minutes", level=1)
+    doc.add_heading(_tr("Minutes", s.documentation_language), level=1)
     for line in (m.minutes or "").splitlines():
         if line.startswith("# "):
             doc.add_heading(line[2:].strip(), level=2)
@@ -1466,21 +1538,22 @@ async def export_minutes(project_id: UUID, meeting_id: UUID, db: AsyncSession = 
         ids = [i.applied_id for i in items if i.applied_id]
         if ids:
             numbers.update({row.id: row.number for row in (await db.execute(select(model.id, model.number).where(model.id.in_(ids)))).all()})
+    dl = s.documentation_language
     if proposal.decisions:
-        doc.add_heading("Decisions", level=1)
-        _add_table(doc, ["#", "Decision", "Description", "Decision makers"],
+        doc.add_heading(_tr("Decisions", dl), level=1)
+        _add_table(doc, [_tr("#", dl), _tr("Decision", dl), _tr("Description", dl), _tr("Decision makers", dl)],
                    [[numbers.get(d.applied_id, ""), d.title, d.description, ", ".join(d.decision_makers)] for d in proposal.decisions])
     if proposal.actions:
-        doc.add_heading("Action items", level=1)
-        _add_table(doc, ["#", "Action", "Owner", "Due date", "Status"],
+        doc.add_heading(_tr("Action items", dl), level=1)
+        _add_table(doc, [_tr("#", dl), _tr("Action", dl), _tr("Owner", dl), _tr("Due date", dl), _tr("Status", dl)],
                    [[numbers.get(a.applied_id, ""), a.title + (f"\n{a.description}" if a.description else ""), a.owner, a.due_date, a.status] for a in proposal.actions])
     if proposal.risks:
-        doc.add_heading("Risks", level=1)
-        _add_table(doc, ["#", "Risk", "Mitigation", "Impact", "Probability"],
+        doc.add_heading(_tr("Risks", dl), level=1)
+        _add_table(doc, [_tr("#", dl), _tr("Risk", dl), _tr("Mitigation", dl), _tr("Impact", dl), _tr("Probability", dl)],
                    [[numbers.get(r.applied_id, ""), r.title, r.mitigation, r.impact, r.probability] for r in proposal.risks])
     if m.validations:
-        doc.add_heading("Validation", level=1)
-        _add_table(doc, ["Validator", "Status", "Date", "Comment"],
+        doc.add_heading(_tr("Validation", dl), level=1)
+        _add_table(doc, [_tr("Validator", dl), _tr("Status", dl), _tr("Date", dl), _tr("Comment", dl)],
                    [[v.validator_name or v.validator_email, v.status, v.decided_at.strftime("%d/%m/%Y") if v.decided_at else "", v.comment] for v in m.validations])
 
     buf = io.BytesIO()

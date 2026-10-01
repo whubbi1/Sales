@@ -2158,6 +2158,12 @@ async def startup():
                 """UPDATE employee_cv_experience e SET cv_id = (
                     SELECT id FROM employee_cv c WHERE c.email = e.user_email AND c.is_main = true LIMIT 1
                 ) WHERE e.cv_id IS NULL""",
+
+                # Project Setup — project/documentation language; meetings may override language
+                # per-meeting (unset = inherit the project's).
+                "ALTER TABLE pm_settings ADD COLUMN IF NOT EXISTS project_language VARCHAR(20) NOT NULL DEFAULT 'English'",
+                "ALTER TABLE pm_settings ADD COLUMN IF NOT EXISTS documentation_language VARCHAR(20) NOT NULL DEFAULT 'English'",
+                "ALTER TABLE pm_meetings ADD COLUMN IF NOT EXISTS language VARCHAR(20)",
             ]
             for sql in sqls:
                 try:

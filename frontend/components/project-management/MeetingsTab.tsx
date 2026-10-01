@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react'
 import { pmAPI } from '@/lib/api'
 import { Card, Table, TD, TH, DEL_BTN, LINK_BTN, Modal, Field, ErrorBanner, useAction, fmtDate, toInput, Badge, statusTone, PeopleEditor, downloadBlob, Person, TabProps, currentPmUserEmail } from './shared'
+import { LANGUAGES } from '@/lib/contactOptions'
 
 const STATUS_LABEL: Record<string, string> = { draft: 'Draft', generated: 'Minutes to review', in_review: 'Awaiting validation', validated: 'Validated' }
 type Registers = { actions: any[]; decisions: any[]; risks: any[] }
@@ -58,14 +59,14 @@ export function MeetingsTab({ projectId, canEdit, settings, openMeetingId, onCha
       {creating && (
         <Modal title="New meeting" onClose={() => setCreating(null)} onSave={create} saving={busy} saveLabel="Create">
           <div style={{ gridColumn: '1 / -1' }}><ErrorBanner error={error} /></div>
-          <MeetingFields value={creating} onChange={setCreating} meetingTypes={settings.meeting_types} projectId={projectId} />
+          <MeetingFields value={creating} onChange={setCreating} meetingTypes={settings.meeting_types} projectId={projectId} projectLanguage={settings.project_language} />
         </Modal>
       )}
     </Card>
   )
 }
 
-function MeetingFields({ value, onChange, meetingTypes, projectId }: { value: any; onChange: (v: any) => void; meetingTypes: string[]; projectId: string }) {
+function MeetingFields({ value, onChange, meetingTypes, projectId, projectLanguage }: { value: any; onChange: (v: any) => void; meetingTypes: string[]; projectId: string; projectLanguage?: string }) {
   const [members, setMembers] = useState<any[]>([])
   const [suggestions, setSuggestions] = useState<{ start: string; end: string; confidence?: number }[] | null>(null)
   const [findError, setFindError] = useState('')
@@ -101,6 +102,12 @@ function MeetingFields({ value, onChange, meetingTypes, projectId }: { value: an
       <Field label="Date"><input type="date" className="form-input" value={value.meeting_date || ''} onChange={e => onChange({ ...value, meeting_date: e.target.value })} /></Field>
       <Field label="Time"><input type="time" className="form-input" value={value.meeting_time || ''} onChange={e => onChange({ ...value, meeting_time: e.target.value })} /></Field>
       <Field label="Duration (minutes)"><input type="number" min={15} step={15} className="form-input" value={value.duration_minutes ?? 60} onChange={e => onChange({ ...value, duration_minutes: parseInt(e.target.value) || 60 })} /></Field>
+      <Field label="Language">
+        <select className="form-input" value={value.language || ''} onChange={e => onChange({ ...value, language: e.target.value || null })}>
+          <option value="">Project default{projectLanguage ? ` (${projectLanguage})` : ''}</option>
+          {LANGUAGES.map(l => <option key={l} value={l}>{l}</option>)}
+        </select>
+      </Field>
       <Field label="Location / link" full><input className="form-input" value={value.location || ''} onChange={e => onChange({ ...value, location: e.target.value })} /></Field>
       <Field label="Attendees" full><PeopleEditor value={value.attendees || []} onChange={v => onChange({ ...value, attendees: v })} members={members} /></Field>
       <div style={{ gridColumn: '1 / -1' }}>
@@ -149,6 +156,7 @@ function MeetingDetail({ projectId, meetingId, canEdit, settings, onBack, onChan
       meeting_date: toInput(meeting.meeting_date),
       meeting_time: dt ? dt.toTimeString().slice(0, 5) : '09:00',
       duration_minutes: meeting.duration_minutes ?? 60,
+      language: meeting.language || null,
       location: meeting.location, attendees: meeting.attendees,
     })
     setDirty(false)
@@ -205,7 +213,7 @@ function MeetingDetail({ projectId, meetingId, canEdit, settings, onBack, onChan
       <Card title={`${m.number} — ${m.title}`} action={<Badge value={STATUS_LABEL[m.status] || m.status} tone={statusTone(m.status)} />}>
         {editable ? (
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
-            <MeetingFields value={info} onChange={setInfo} meetingTypes={settings.meeting_types} projectId={projectId} />
+            <MeetingFields value={info} onChange={setInfo} meetingTypes={settings.meeting_types} projectId={projectId} projectLanguage={settings.project_language} />
             <div style={{ gridColumn: '1 / -1', textAlign: 'right' }}><button className="btn-secondary" onClick={saveInfo} disabled={busy}>Save meeting details</button></div>
           </div>
         ) : (
