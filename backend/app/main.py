@@ -2123,6 +2123,15 @@ async def startup():
                     created_at TIMESTAMP DEFAULT NOW(),
                     UNIQUE(event_id, email)
                 )""",
+
+                # Meetings — create a real Teams meeting from WHUBBI (organizer's connected
+                # Outlook account) and poll Graph for its transcript afterward (transcript_sync_loop).
+                "ALTER TABLE pm_meetings ADD COLUMN IF NOT EXISTS duration_minutes INTEGER NOT NULL DEFAULT 60",
+                "ALTER TABLE pm_meetings ADD COLUMN IF NOT EXISTS organizer_email VARCHAR(255)",
+                "ALTER TABLE pm_meetings ADD COLUMN IF NOT EXISTS outlook_event_id VARCHAR(255)",
+                "ALTER TABLE pm_meetings ADD COLUMN IF NOT EXISTS teams_join_url VARCHAR(1000)",
+                "ALTER TABLE pm_meetings ADD COLUMN IF NOT EXISTS online_meeting_id VARCHAR(255)",
+                "ALTER TABLE pm_meetings ADD COLUMN IF NOT EXISTS transcript_synced_at TIMESTAMP",
             ]
             for sql in sqls:
                 try:
@@ -2403,4 +2412,18 @@ try:
 except Exception as e:
     import traceback
     print(f"✗ ROUTER FAILED [Helpdesk mailbox sync]: {e}")
+    traceback.print_exc()
+
+try:
+    from app.routers.project_management import transcript_sync_loop as _transcript_sync_loop
+
+    @app.on_event("startup")
+    async def _start_transcript_sync():
+        import asyncio
+        asyncio.create_task(_transcript_sync_loop())
+
+    print("✓ Meeting transcript sync")
+except Exception as e:
+    import traceback
+    print(f"✗ ROUTER FAILED [Meeting transcript sync]: {e}")
     traceback.print_exc()

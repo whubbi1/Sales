@@ -13,7 +13,11 @@ MS_CLIENT_SECRET = os.getenv("MS_CLIENT_SECRET")
 
 # Delegated scopes for the per-user mailbox connection (Outlook router) — distinct from the
 # app-only ".default" scope used by microsoft.py's client-credentials flow for org-wide data.
-DELEGATED_SCOPES = "Mail.Read Mail.ReadWrite Mail.Send offline_access User.Read"
+# Calendars.ReadWrite/OnlineMeetings.ReadWrite.All/OnlineMeetingTranscript.Read.All back the
+# "create a Teams meeting from WHUBBI + pull its transcript back" feature — Azure AD can't
+# silently add scopes to an existing refresh token, so anyone already connected before these
+# were added must reconnect once via Settings > Integrations.
+DELEGATED_SCOPES = "Mail.Read Mail.ReadWrite Mail.Send Calendars.ReadWrite OnlineMeetings.ReadWrite.All OnlineMeetingTranscript.Read.All offline_access User.Read"
 
 async def get_access_token(user_refresh_token: str) -> dict:
     """Échanger un refresh token contre un nouvel access token Microsoft Graph.
@@ -148,3 +152,80 @@ async def create_calendar_event(
         )
         response.raise_for_status()
         return response.json()
+
+
+async def create_teams_meeting(
+    access_token: str,
+    subject: str,
+    start: datetime,
+    end: datetime,
+    attendees: list[str],
+    body: str = "",
+) -> dict:
+    """Same as create_calendar_event, but asks Graph to attach a Teams meeting to it —
+    the response's onlineMeeting.joinUrl is what resolve_online_meeting_id() later needs
+    to find the meeting's transcripts (the transcript API is keyed by online-meeting id,
+    not the calendar event id)."""
+    event = {
+        "subject": subject,
+        "body": {"contentType": "HTML", "content": body},
+        "start": {"dateTime": start.isoformat(), "timeZone": "Europe/Paris"},
+        "end": {"dateTime": end.isoformat(), "timeZone": "Europe/Paris"},
+        "attendees": [{"emailAddress": {"address": addr}, "type": "required"} for addr in attendees],
+        "isOnlineMeeting": True,
+        "onlineMeetingProvider": "teamsForBusiness",
+    }
+    async with httpx.AsyncClient() as client:
+        response = await client.post(
+            f"{GRAPH_BASE}/me/events",
+            headers={"Authorization": f"Bearer {access_token}", "Content-Type": "application/json"},
+            json=event,
+        )
+        response.raise_for_status()
+        return response.json()
+
+
+async def resolve_online_meeting_id(access_token: str, join_url: str) -> Optional[str]:
+    async with httpx.AsyncClient() as client:
+        response = await client.get(
+            f"{GRAPH_BASE}/me/onlineMeetings",
+            headers={"Authorization": f"Bearer {access_token}"},
+            params={"$filter": f"JoinWebUrl eq '{join_url}'"},
+        )
+        response.raise_for_status()
+        results = response.json().get("value", [])
+        return results[0]["id"] if results else None
+
+
+async def get_transcripts(access_token: str, online_meeting_id: str) -> list[dict]:
+    async with httpx.AsyncClient() as client:
+        response = await client.get(
+            f"{GRAPH_BASE}/me/onlineMeetings/{online_meeting_id}/transcripts",
+            headers={"Authorization": f"Bearer {access_token}"},
+        )
+        if response.status_code == 404:
+            return []  # no transcript produced (yet, or at all — e.g. transcription was off)
+        response.raise_for_status()
+        return response.json().get("value", [])
+
+
+def _vtt_to_text(vtt: str) -> str:
+    """Strips WEBVTT cue numbers/timestamps down to plain speaker-labeled lines."""
+    lines = []
+    for line in vtt.splitlines():
+        line = line.strip()
+        if not line or line == "WEBVTT" or "-->" in line or line.isdigit():
+            continue
+        lines.append(line)
+    return "\n".join(lines)
+
+
+async def get_transcript_text(access_token: str, online_meeting_id: str, transcript_id: str) -> str:
+    async with httpx.AsyncClient() as client:
+        response = await client.get(
+            f"{GRAPH_BASE}/me/onlineMeetings/{online_meeting_id}/transcripts/{transcript_id}/content",
+            headers={"Authorization": f"Bearer {access_token}"},
+            params={"$format": "text/vtt"},
+        )
+        response.raise_for_status()
+        return _vtt_to_text(response.text)

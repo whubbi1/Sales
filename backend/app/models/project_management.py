@@ -145,8 +145,18 @@ class PMMeeting(Base):
     meeting_type = Column(String(255))
     title        = Column(String(500), nullable=False)
     meeting_date = Column(DateTime)
+    duration_minutes = Column(Integer, nullable=False, default=60)  # no separate end-time field
     location     = Column(String(500))
     attendees    = Column(JSONB, nullable=False, default=list)  # [{name, email}]
+
+    # Set once "Create Teams meeting" has run — organizer_email is whichever internal user's
+    # connected Outlook account (outlook_connections) created it, used by transcript_sync_loop
+    # to know whose token to refresh when polling for this meeting's transcript.
+    organizer_email  = Column(String(255))
+    outlook_event_id = Column(String(255))
+    teams_join_url   = Column(String(1000))
+    online_meeting_id = Column(String(255))
+    transcript_synced_at = Column(DateTime)
 
     transcript_ref      = Column(String(1000))
     transcript_filename = Column(String(255))

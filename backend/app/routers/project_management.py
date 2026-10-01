@@ -15,7 +15,7 @@ import asyncio
 import io
 import json
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import List
 from uuid import UUID
 
@@ -52,6 +52,8 @@ from app.schemas.project_management import (
 )
 from app.routers.hr import upload_to_s3, s3_ref_to_presigned, AWS_REGION
 from app.routers import projects as projects_router
+from app.routers.outlook import _get_connection as _get_outlook_connection, _get_valid_access_token as _get_outlook_access_token
+from app.services.outlook import create_teams_meeting, resolve_online_meeting_id, get_transcripts, get_transcript_text
 
 router = APIRouter()
 
@@ -922,6 +924,79 @@ async def delete_meeting(project_id: UUID, meeting_id: UUID, db: AsyncSession = 
     await _require(db, project_id, user, "meetings", "edit")
     await db.execute(delete(PMMeeting).where(PMMeeting.id == meeting_id, PMMeeting.project_id == project_id))
     await db.commit()
+
+
+@router.post("/projects/{project_id}/meetings/{meeting_id}/create-in-outlook", response_model=MeetingResponse)
+async def create_meeting_in_outlook(project_id: UUID, meeting_id: UUID, db: AsyncSession = Depends(get_db), user: PMUser = Depends(pm_user)):
+    """Creates a real Teams meeting on the acting user's connected Outlook calendar for this
+    meeting, so transcript_sync_loop() can later pull its transcript back into transcript_text."""
+    await _require(db, project_id, user, "meetings", "edit")
+    m = await _get_meeting(db, project_id, meeting_id)
+    _require_unlocked(m)
+    if m.teams_join_url:
+        raise HTTPException(400, "A Teams meeting was already created for this meeting")
+    if not m.meeting_date:
+        raise HTTPException(400, "Set the meeting date before creating it in Outlook")
+    conn = await _get_outlook_connection(db, user.email)
+    if not conn:
+        raise HTTPException(400, "Connect your Outlook account first (Settings > Integrations) to create this as a Teams meeting")
+
+    access_token = await _get_outlook_access_token(db, user.email)
+    attendee_emails = [a.get("email") for a in (m.attendees or []) if a.get("email")]
+    end = m.meeting_date + timedelta(minutes=m.duration_minutes or 60)
+    event = await create_teams_meeting(access_token, subject=f"{m.number} — {m.title}", start=m.meeting_date, end=end,
+                                        attendees=attendee_emails, body=m.location or "")
+
+    m.organizer_email = user.email
+    m.outlook_event_id = event.get("id")
+    m.teams_join_url = (event.get("onlineMeeting") or {}).get("joinUrl")
+    await db.commit()
+    await db.refresh(m, ["validations"])
+    return _meeting_out(m)
+
+
+async def transcript_sync_loop():
+    """Background poll — same idiom as social_influence.py's mailbox_sync_loop (started via
+    asyncio.create_task in main.py's startup event): runs forever, swallows per-item errors so
+    one bad meeting/token never kills the loop. Only meetings whose Teams call plausibly
+    finished (30min past their start) and that don't have a transcript yet are considered;
+    most cycles do nothing."""
+    from app.database import AsyncSessionLocal
+    while True:
+        try:
+            async with AsyncSessionLocal() as db:
+                r = await db.execute(text("""
+                    SELECT id, project_id, teams_join_url, online_meeting_id, organizer_email
+                    FROM pm_meetings
+                    WHERE teams_join_url IS NOT NULL AND transcript_text IS NULL
+                      AND meeting_date < NOW() - INTERVAL '30 minutes'
+                """))
+                for row in r.fetchall():
+                    try:
+                        conn = await _get_outlook_connection(db, row.organizer_email)
+                        if not conn:
+                            continue
+                        access_token = await _get_outlook_access_token(db, row.organizer_email)
+                        online_meeting_id = row.online_meeting_id
+                        if not online_meeting_id:
+                            online_meeting_id = await resolve_online_meeting_id(access_token, row.teams_join_url)
+                            if not online_meeting_id:
+                                continue
+                            await db.execute(text("UPDATE pm_meetings SET online_meeting_id = :omid WHERE id = :id"),
+                                              {"omid": online_meeting_id, "id": row.id})
+                            await db.commit()
+                        transcripts = await get_transcripts(access_token, online_meeting_id)
+                        if not transcripts:
+                            continue
+                        text_content = await get_transcript_text(access_token, online_meeting_id, transcripts[0]["id"])
+                        await db.execute(text("UPDATE pm_meetings SET transcript_text = :t, transcript_synced_at = NOW() WHERE id = :id"),
+                                          {"t": text_content, "id": row.id})
+                        await db.commit()
+                    except Exception as e:
+                        print(f"[transcript_sync_loop] meeting {row.id} error: {e}")
+        except Exception as e:
+            print(f"[transcript_sync_loop] error: {e}")
+        await asyncio.sleep(20 * 60)
 
 
 def _transcript_text(filename: str, content: bytes) -> str:

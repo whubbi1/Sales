@@ -808,6 +808,7 @@ export const pmAPI = {
     fetchAPI(`${pm(pid)}/meetings/${mid}/request-validation`, { method: 'POST', body: JSON.stringify({ validators }) }),
   decideValidation:  (pid: string, mid: string, approve: boolean, comment?: string) =>
     fetchAPI(`${pm(pid)}/meetings/${mid}/validate`, { method: 'POST', body: JSON.stringify({ approve, comment }) }),
+  createInOutlook:   (pid: string, mid: string) => fetchAPI(`${pm(pid)}/meetings/${mid}/create-in-outlook`, { method: 'POST' }),
   exportMinutes: async (pid: string, mid: string) => {
     const res = await fetch(`${API_URL}${pm(pid)}/meetings/${mid}/export`, { headers: authHeaders() })
     if (!res.ok) { const err = await res.json().catch(() => ({})); throw new Error(err.detail || 'Export failed') }

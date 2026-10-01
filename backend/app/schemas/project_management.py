@@ -198,6 +198,7 @@ class MeetingIn(BaseModel):
     meeting_type: Optional[str] = None
     title: str
     meeting_date: Optional[datetime] = None
+    duration_minutes: int = 60
     location: Optional[str] = None
     attendees: List[Person] = Field(default_factory=list)
 
@@ -275,7 +276,10 @@ class MeetingSummary(_ORM):
 
 class MeetingResponse(MeetingSummary):
     location: Optional[str] = None
+    duration_minutes: int = 60
     attendees: List[Person] = []
+    organizer_email: Optional[str] = None
+    teams_join_url: Optional[str] = None
     transcript_filename: Optional[str] = None
     has_transcript: bool = False
     minutes: Optional[str] = None

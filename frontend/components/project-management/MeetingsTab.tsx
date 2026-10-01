@@ -1,10 +1,13 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { pmAPI } from '@/lib/api'
-import { Card, Table, TD, TH, DEL_BTN, LINK_BTN, Modal, Field, ErrorBanner, useAction, fmtDate, toInput, fromInput, Badge, statusTone, PeopleEditor, downloadBlob, Person, TabProps, currentPmUserEmail } from './shared'
+import { Card, Table, TD, TH, DEL_BTN, LINK_BTN, Modal, Field, ErrorBanner, useAction, fmtDate, toInput, Badge, statusTone, PeopleEditor, downloadBlob, Person, TabProps, currentPmUserEmail } from './shared'
 
 const STATUS_LABEL: Record<string, string> = { draft: 'Draft', generated: 'Minutes to review', in_review: 'Awaiting validation', validated: 'Validated' }
 type Registers = { actions: any[]; decisions: any[]; risks: any[] }
+// meeting_date carries a naive wall-clock datetime (no timezone handling anywhere in this
+// app) — the date/time inputs are combined into/split out of it client-side only.
+const combineDateTime = (date?: string, time?: string) => date ? `${date}T${time || '00:00'}:00` : null
 
 // onChange: a validation decision was made (the page refreshes its "waiting for you" panel).
 // onExit: replaces "back to the list" — for validators who can't see the list at all.
@@ -19,7 +22,8 @@ export function MeetingsTab({ projectId, canEdit, settings, openMeetingId, onCha
   useEffect(() => { load() }, [projectId])
 
   const create = () => run(async () => {
-    const m = await pmAPI.meetings.create(projectId, { ...creating, meeting_date: fromInput(creating.meeting_date) })
+    const { meeting_time, ...body } = creating
+    const m = await pmAPI.meetings.create(projectId, { ...body, meeting_date: combineDateTime(creating.meeting_date, meeting_time) })
     setCreating(null); await load(); setOpenId(m.id)
   })
   const remove = (m: any) => confirm(`Delete meeting ${m.number} "${m.title}"? Register entries created from it are kept.`) && run(async () => { await pmAPI.meetings.remove(projectId, m.id); load() })
@@ -35,7 +39,7 @@ export function MeetingsTab({ projectId, canEdit, settings, openMeetingId, onCha
           <option value="">All meeting types</option>
           {settings.meeting_types.map(t => <option key={t}>{t}</option>)}
         </select>
-        {canEdit && <button className="btn-primary" onClick={() => setCreating({ title: '', meeting_type: settings.meeting_types[0] || '', meeting_date: new Date().toISOString().slice(0, 10), location: '', attendees: [] })}>+ Meeting</button>}
+        {canEdit && <button className="btn-primary" onClick={() => setCreating({ title: '', meeting_type: settings.meeting_types[0] || '', meeting_date: new Date().toISOString().slice(0, 10), meeting_time: '09:00', duration_minutes: 60, location: '', attendees: [] })}>+ Meeting</button>}
       </div>
     }>
       <ErrorBanner error={creating ? '' : error} />
@@ -74,6 +78,8 @@ function MeetingFields({ value, onChange, meetingTypes, projectId }: { value: an
         </select>
       </Field>
       <Field label="Date"><input type="date" className="form-input" value={value.meeting_date || ''} onChange={e => onChange({ ...value, meeting_date: e.target.value })} /></Field>
+      <Field label="Time"><input type="time" className="form-input" value={value.meeting_time || ''} onChange={e => onChange({ ...value, meeting_time: e.target.value })} /></Field>
+      <Field label="Duration (minutes)"><input type="number" min={15} step={15} className="form-input" value={value.duration_minutes ?? 60} onChange={e => onChange({ ...value, duration_minutes: parseInt(e.target.value) || 60 })} /></Field>
       <Field label="Location / link" full><input className="form-input" value={value.location || ''} onChange={e => onChange({ ...value, location: e.target.value })} /></Field>
       <Field label="Attendees" full><PeopleEditor value={value.attendees || []} onChange={v => onChange({ ...value, attendees: v })} members={members} /></Field>
     </>
@@ -95,7 +101,14 @@ function MeetingDetail({ projectId, meetingId, canEdit, settings, onBack, onChan
   const apply = (meeting: any) => {
     setM(meeting)
     setDraft({ minutes: meeting.minutes || '', proposal: meeting.proposal })
-    setInfo({ title: meeting.title, meeting_type: meeting.meeting_type, meeting_date: toInput(meeting.meeting_date), location: meeting.location, attendees: meeting.attendees })
+    const dt = meeting.meeting_date ? new Date(meeting.meeting_date) : null
+    setInfo({
+      title: meeting.title, meeting_type: meeting.meeting_type,
+      meeting_date: toInput(meeting.meeting_date),
+      meeting_time: dt ? dt.toTimeString().slice(0, 5) : '09:00',
+      duration_minutes: meeting.duration_minutes ?? 60,
+      location: meeting.location, attendees: meeting.attendees,
+    })
     setDirty(false)
   }
   const loadRegisters = () => Promise.all([
@@ -113,7 +126,11 @@ function MeetingDetail({ projectId, meetingId, canEdit, settings, onBack, onChan
   const editable = canEdit && !locked
   const myPending = m.status === 'in_review' && m.validations.some((v: any) => v.validator_email === me && v.status === 'pending')
 
-  const saveInfo = () => run(async () => apply(await pmAPI.meetings.update(projectId, meetingId, { ...info, meeting_date: fromInput(info.meeting_date) })))
+  const saveInfo = () => run(async () => {
+    const { meeting_time, ...body } = info
+    apply(await pmAPI.meetings.update(projectId, meetingId, { ...body, meeting_date: combineDateTime(info.meeting_date, meeting_time) }))
+  })
+  const createInOutlook = () => run(async () => apply(await pmAPI.createInOutlook(projectId, meetingId)))
   const upload = (file?: File) => file && run(async () => apply(await pmAPI.uploadTranscript(projectId, meetingId, file)))
   const generate = () => (!m.minutes || confirm('Regenerate? Your edits to the minutes and action plan will be replaced.')) &&
     run(async () => apply(await pmAPI.generateMinutes(projectId, meetingId)))
@@ -155,6 +172,16 @@ function MeetingDetail({ projectId, meetingId, canEdit, settings, onBack, onChan
             <div><b>Attendees:</b> {(m.attendees || []).map((a: Person) => a.name).join(', ') || '—'}</div>
           </div>
         )}
+        <div style={{ marginTop: '12px', paddingTop: '12px', borderTop: '1px solid #F1F5F9', display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+          {m.teams_join_url ? (
+            <>
+              <a href={m.teams_join_url} target="_blank" rel="noopener noreferrer" style={LINK_BTN}>🔗 Join Teams meeting</a>
+              <span style={{ fontSize: '11px', color: '#94A3B8' }}>Organizer: {m.organizer_email}{m.has_transcript ? ' · transcript received' : ' · transcript not received yet'}</span>
+            </>
+          ) : editable && (
+            <button className="btn-secondary" onClick={createInOutlook} disabled={busy || !m.meeting_date}>📅 Create Teams meeting</button>
+          )}
+        </div>
       </Card>
 
       <Card title="1. Transcript (optional — or write the minutes directly below)">
