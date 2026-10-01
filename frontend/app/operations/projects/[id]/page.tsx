@@ -427,7 +427,7 @@ function ProjectDetailContent() {
   return (
     <div style={{ padding: '24px 28px' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '16px', fontSize: '11px', color: '#9B9B9B' }}>
-        <button onClick={() => router.push('/operations/projects')} style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#219BD6', fontWeight: '600', fontSize: '11px', padding: 0 }}>Projects Follow-Up</button>
+        <button onClick={() => router.push('/operations/projects')} style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#219BD6', fontWeight: '600', fontSize: '11px', padding: 0 }}>Contract Management</button>
         <span>/</span><span style={{ color: '#3F3F3F', fontWeight: '600' }}>{project.project_name}</span>
       </div>
 

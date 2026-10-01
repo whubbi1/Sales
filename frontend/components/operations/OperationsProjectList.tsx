@@ -77,7 +77,7 @@ export function OperationsProjectList({ mode }: { mode: 'customer' | 'internal' 
   return (
     <div style={{ padding: '24px 28px' }}>
       <PageHeader
-        title={mode === 'internal' ? '🏠 Internal Projects' : mode === 'license' ? '🔑 Licenses' : mode === 'management' ? '🗂️ Project Management' : '📁 Projects Follow-Up'}
+        title={mode === 'internal' ? '🏠 Internal Projects' : mode === 'license' ? '🔑 License Management' : mode === 'management' ? '🗂️ Project Management' : '📁 Contract Management'}
         count={reported.length}
         search={{ value: search, onChange: setSearch }}
         action={
