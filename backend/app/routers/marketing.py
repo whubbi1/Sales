@@ -3,16 +3,52 @@
 # and Mailings (a template sent to a chosen group of contacts, assigned to an event).
 # Company Website / Competitor Analysis / Social Marketing / Marketing Plan
 # are nav placeholders only for now — no backend endpoints for those yet.
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
 from app.database import get_db
-from app.authz import require_permission
+from app.authz import require_permission, get_current_user_email, is_excluded, access_mode, _LEVELS
+from app.services.portal_auth import try_portal_user_email
 from app.routers.hr import upload_to_s3, s3_ref_to_presigned
 import uuid
 import json
 
 router = APIRouter()
+
+
+class MarketingPortalCtx:
+    def __init__(self, email: str, is_portal: bool, event_ids: set):
+        self.email = email
+        self.is_portal = is_portal
+        self.event_ids = event_ids  # only meaningful when is_portal
+
+
+def marketing_portal_ctx(min_mode: str = "view", submodule: str = "events"):
+    """Portal-bridging dependency for Marketing, same shape as helpdesk.py's helpdesk_ctx()
+    and project_management.py's pm_user(): a portal contact explicitly marked as "support"
+    on one or more events (marketing_event_support) sees only those events, read-only,
+    bypassing the internal permission check entirely; an internal caller falls through to
+    the existing require_permission("marketing", submodule, mode) check, unchanged."""
+    async def _dep(request: Request, db: AsyncSession = Depends(get_db)) -> MarketingPortalCtx:
+        portal_email = await try_portal_user_email(request, db)
+        if portal_email:
+            r = await db.execute(text("SELECT DISTINCT event_id FROM marketing_event_support WHERE email = :email"), {"email": portal_email})
+            event_ids = {str(row.event_id) for row in r.fetchall()}
+            return MarketingPortalCtx(portal_email, True, event_ids)
+
+        email = await get_current_user_email(request.headers.get("x-user-email"))
+        if await is_excluded(email, db):
+            raise HTTPException(403, "Access excluded")
+        mode = await access_mode(email, "marketing", submodule, db)
+        if _LEVELS.get(mode, 0) < _LEVELS[min_mode]:
+            raise HTTPException(403, f"No {min_mode} access to marketing.{submodule}")
+        return MarketingPortalCtx(email, False, set())
+    return _dep
+
+
+# Admin-only financial fields stripped from an event's response for portal ("support")
+# callers — they get the same visibility an internal contributor has, minus these.
+_EVENT_FINANCIAL_FIELDS = ("estimated_budget", "approved_budget", "real_costs")
 
 EVENT_TYPES = {"webinar", "physical", "mailing", "other"}
 EVENT_STATUSES = {"To be planned", "Planned", "Under preparation", "Finished"}
@@ -40,11 +76,26 @@ async def _get_event(db: AsyncSession, event_id: str) -> dict | None:
 
 # ─── Events ──────────────────────────────────────────────────────────────────────
 @router.get("/events")
-async def list_events(event_type: str = None, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("marketing", "events", "view"))):
-    where = "WHERE event_type = :t" if event_type else ""
-    params = {"t": event_type} if event_type else {}
+async def list_events(event_type: str = None, db: AsyncSession = Depends(get_db), ctx: MarketingPortalCtx = Depends(marketing_portal_ctx("view"))):
+    if ctx.is_portal and not ctx.event_ids:
+        return {"events": []}
+    where_clauses = []
+    params = {}
+    if event_type:
+        where_clauses.append("event_type = :t")
+        params["t"] = event_type
+    if ctx.is_portal:
+        placeholders = ",".join(f"CAST(:ev{i} AS uuid)" for i in range(len(ctx.event_ids)))
+        where_clauses.append(f"id IN ({placeholders})")
+        params.update({f"ev{i}": eid for i, eid in enumerate(ctx.event_ids)})
+    where = f"WHERE {' AND '.join(where_clauses)}" if where_clauses else ""
     r = await db.execute(text(f"SELECT * FROM marketing_events {where} ORDER BY event_date DESC NULLS LAST, created_at DESC"), params)
-    return {"events": [await _presign_logo(_row(dict(row._mapping))) for row in r.fetchall()]}
+    events = [await _presign_logo(_row(dict(row._mapping))) for row in r.fetchall()]
+    if ctx.is_portal:
+        for e in events:
+            for f in _EVENT_FINANCIAL_FIELDS:
+                e.pop(f, None)
+    return {"events": events}
 
 
 @router.post("/events")
@@ -144,11 +195,14 @@ async def get_event_kpis_details(kind: str, db: AsyncSession = Depends(get_db), 
 
 
 @router.get("/events/{event_id}")
-async def get_event(event_id: str, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("marketing", "events", "view"))):
+async def get_event(event_id: str, db: AsyncSession = Depends(get_db), ctx: MarketingPortalCtx = Depends(marketing_portal_ctx("view"))):
+    if ctx.is_portal and event_id not in ctx.event_ids:
+        raise HTTPException(status_code=404, detail="Event not found")
     event = await _get_event(db, event_id)
     if not event:
         raise HTTPException(status_code=404, detail="Event not found")
     contributors = await db.execute(text("SELECT * FROM marketing_event_contributors WHERE event_id = CAST(:id AS UUID) ORDER BY created_at"), {"id": event_id})
+    support = await db.execute(text("SELECT * FROM marketing_event_support WHERE event_id = CAST(:id AS UUID) ORDER BY created_at"), {"id": event_id})
     urls = await db.execute(text("SELECT * FROM marketing_event_urls WHERE event_id = CAST(:id AS UUID) ORDER BY created_at"), {"id": event_id})
     partners = await db.execute(text("""
         SELECT p.id, p.name, p.status FROM marketing_event_partners ep
@@ -159,12 +213,14 @@ async def get_event(event_id: str, db: AsyncSession = Depends(get_db), _: str = 
         JOIN contacts c ON c.id = ec.contact_id WHERE ec.event_id = CAST(:id AS UUID) ORDER BY c.first_name, c.last_name
     """), {"id": event_id})
     files = await db.execute(text("SELECT * FROM marketing_event_files WHERE event_id = CAST(:id AS UUID) ORDER BY created_at DESC"), {"id": event_id})
-    costs = await db.execute(text("SELECT * FROM marketing_event_costs WHERE event_id = CAST(:id AS UUID) ORDER BY purchase_date DESC NULLS LAST, created_at DESC"), {"id": event_id})
     event["contributors"] = [_row(dict(r._mapping)) for r in contributors.fetchall()]
+    event["support"] = [_row(dict(r._mapping)) for r in support.fetchall()]
     event["urls"] = [_row(dict(r._mapping)) for r in urls.fetchall()]
     event["partners"] = [_row(dict(r._mapping)) for r in partners.fetchall()]
     event["contacts"] = [_row(dict(r._mapping)) for r in contacts.fetchall()]
-    event["costs"] = [_row(dict(r._mapping)) for r in costs.fetchall()]
+    if not ctx.is_portal:
+        costs = await db.execute(text("SELECT * FROM marketing_event_costs WHERE event_id = CAST(:id AS UUID) ORDER BY purchase_date DESC NULLS LAST, created_at DESC"), {"id": event_id})
+        event["costs"] = [_row(dict(r._mapping)) for r in costs.fetchall()]
     event["files"] = []
     for f in files.fetchall():
         f = _row(dict(f._mapping))
@@ -191,6 +247,9 @@ async def get_event(event_id: str, db: AsyncSession = Depends(get_db), _: str = 
     event["leads_to_opportunity_count"] = srow.leads_to_opportunity_count
     event["opportunities_count"] = srow.opportunities_count
     event["won_deals_count"] = wrow.won_deals_count
+    if ctx.is_portal:
+        for f in _EVENT_FINANCIAL_FIELDS:
+            event.pop(f, None)
     return event
 
 
@@ -345,6 +404,36 @@ async def add_contributor(event_id: str, data: dict, db: AsyncSession = Depends(
 async def remove_contributor(event_id: str, contributor_id: str, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("marketing", "events", "edit"))):
     await db.execute(text("DELETE FROM marketing_event_contributors WHERE id = CAST(:id AS UUID) AND event_id = CAST(:eid AS UUID)"),
                       {"id": contributor_id, "eid": event_id})
+    await db.commit()
+    return {"status": "ok"}
+
+
+# ─── Portal "support" contacts ───────────────────────────────────────────────────
+# A contact listed here gets read-only portal access to this one event (see
+# marketing_portal_ctx()) — distinct from marketing_event_contacts, which is just a
+# plain link with no portal-access meaning.
+@router.post("/events/{event_id}/support")
+async def add_event_support(event_id: str, data: dict, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("marketing", "events", "edit"))):
+    if not data.get("contact_id"):
+        raise HTTPException(status_code=400, detail="contact_id is required")
+    r = await db.execute(text("SELECT first_name, last_name, email FROM contacts WHERE id = CAST(:id AS UUID)"), {"id": data["contact_id"]})
+    contact = r.fetchone()
+    if not contact:
+        raise HTTPException(status_code=404, detail="Contact not found")
+    sid = str(uuid.uuid4())
+    await db.execute(text("""
+        INSERT INTO marketing_event_support (id, event_id, contact_id, email, name, created_at)
+        VALUES (CAST(:id AS UUID), CAST(:eid AS UUID), CAST(:cid AS UUID), :email, :name, NOW())
+        ON CONFLICT (event_id, email) DO NOTHING
+    """), {"id": sid, "eid": event_id, "cid": data["contact_id"], "email": contact.email, "name": f"{contact.first_name or ''} {contact.last_name or ''}".strip()})
+    await db.commit()
+    return {"status": "ok", "id": sid}
+
+
+@router.delete("/events/{event_id}/support/{support_id}")
+async def remove_event_support(event_id: str, support_id: str, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("marketing", "events", "edit"))):
+    await db.execute(text("DELETE FROM marketing_event_support WHERE id = CAST(:id AS UUID) AND event_id = CAST(:eid AS UUID)"),
+                      {"id": support_id, "eid": event_id})
     await db.commit()
     return {"status": "ok"}
 

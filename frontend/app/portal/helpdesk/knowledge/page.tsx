@@ -3,6 +3,12 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { getStoredPortalUser, portalApiJson } from '@/lib/portalAuth'
 import { recordPortalPageVisit } from '@/lib/portalRecentPages'
+import PortalModuleLayout from '@/components/portal/PortalModuleLayout'
+
+const HELPDESK_NAV = [
+  { href: '/portal/helpdesk', label: 'Tickets', icon: '🎫' },
+  { href: '/portal/helpdesk/knowledge', label: 'Knowledge Base', icon: '📚' },
+]
 
 interface Article { id: string; title: string; category: string | null; excerpt: string; author_name: string; views: number }
 
@@ -31,26 +37,8 @@ export default function PortalKnowledgeBasePage() {
   }, [search])
 
   return (
-    <div style={{ minHeight: '100vh', background: '#F5F7FA', fontFamily: 'Montserrat, sans-serif' }}>
-      <div style={{ background: '#156082', padding: '16px 40px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <div style={{ color: 'white', fontSize: '15px', fontWeight: 800 }}>Helpdesk</div>
-        <img src="/wcomply-logo.png" alt="WCOMPLY" style={{ height: '40px', objectFit: 'contain' }} />
-      </div>
-
+    <PortalModuleLayout moduleLabel="Helpdesk" moduleIcon="🎧" navItems={HELPDESK_NAV}>
       <div style={{ padding: '32px 40px', maxWidth: '760px', margin: '0 auto' }}>
-        <button onClick={() => router.push('/portal/home')}
-          style={{ background: 'none', border: 'none', color: '#156082', fontSize: '12px', fontWeight: 700, cursor: 'pointer', padding: 0, marginBottom: '16px' }}>
-          ← Back
-        </button>
-
-        <div style={{ display: 'flex', gap: '8px', marginBottom: '20px', borderBottom: '1px solid #EDF2F7' }}>
-          <button onClick={() => router.push('/portal/helpdesk')}
-            style={{ padding: '10px 4px', fontSize: '12px', fontWeight: 700, color: '#94A3B8', background: 'none', border: 'none', borderBottom: '2px solid transparent', cursor: 'pointer', fontFamily: 'Montserrat, sans-serif' }}>
-            🎫 Tickets
-          </button>
-          <div style={{ padding: '10px 4px', fontSize: '12px', fontWeight: 700, color: '#156082', borderBottom: '2px solid #156082' }}>📚 Knowledge Base</div>
-        </div>
-
         <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search articles…"
           style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1px solid #E2E8F0', fontSize: '13px', fontFamily: 'Montserrat, sans-serif', marginBottom: '20px', boxSizing: 'border-box' }} />
 
@@ -74,6 +62,6 @@ export default function PortalKnowledgeBasePage() {
           </div>
         )}
       </div>
-    </div>
+    </PortalModuleLayout>
   )
 }

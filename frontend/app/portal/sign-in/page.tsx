@@ -83,7 +83,7 @@ function PortalSignInForm() {
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', fontFamily: 'Montserrat, sans-serif', background: '#156082', padding: '24px' }}>
       <div style={{ maxWidth: '400px', width: '100%', textAlign: 'center' as const, marginBottom: '28px' }}>
-        <img src="/wcomply-logo.png" alt="WCOMPLY" style={{ width: '100px', height: 'auto', objectFit: 'contain', marginBottom: '18px' }} />
+        <img src="/wcomply-logo.png" alt="WCOMPLY" style={{ width: '200px', height: 'auto', objectFit: 'contain', marginBottom: '18px' }} />
         <h1 style={{ fontSize: '24px', fontWeight: 900, color: 'white', margin: '0 0 8px' }}>Sign in</h1>
         <p style={{ fontSize: '13px', color: 'rgba(255,255,255,0.75)', lineHeight: 1.6 }}>
           {step === 'form' && 'Sign in with your email and password.'}

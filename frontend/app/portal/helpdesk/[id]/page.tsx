@@ -3,6 +3,12 @@ import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { getStoredPortalUser, portalApiJson } from '@/lib/portalAuth'
 import { recordPortalPageVisit } from '@/lib/portalRecentPages'
+import PortalModuleLayout from '@/components/portal/PortalModuleLayout'
+
+const HELPDESK_NAV = [
+  { href: '/portal/helpdesk', label: 'Tickets', icon: '🎫' },
+  { href: '/portal/helpdesk/knowledge', label: 'Knowledge Base', icon: '📚' },
+]
 
 const PRIORITY_LABEL: Record<string, string> = { critical: 'Critical', high: 'High', medium: 'Medium', low: 'Low' }
 const STATUS_LABEL: Record<string, string> = { new: 'New', open: 'Open', in_progress: 'In Progress', pending: 'Pending', resolved: 'Resolved', closed: 'Closed' }

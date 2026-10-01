@@ -2111,6 +2111,18 @@ async def startup():
                     CONSTRAINT single_row CHECK (id = 1)
                 )""",
                 "INSERT INTO helpdesk_mailbox_sync (id) VALUES (1) ON CONFLICT (id) DO NOTHING",
+
+                # Marketing Events — portal contacts explicitly marked as "support" for an
+                # event get read-only portal access to it (see marketing_portal_ctx()).
+                """CREATE TABLE IF NOT EXISTS marketing_event_support (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    event_id UUID NOT NULL REFERENCES marketing_events(id) ON DELETE CASCADE,
+                    contact_id UUID REFERENCES contacts(id),
+                    email VARCHAR(255) NOT NULL,
+                    name VARCHAR(255),
+                    created_at TIMESTAMP DEFAULT NOW(),
+                    UNIQUE(event_id, email)
+                )""",
             ]
             for sql in sqls:
                 try:

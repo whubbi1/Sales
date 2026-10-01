@@ -3,6 +3,12 @@ import { useEffect, useState } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import { getStoredPortalUser, portalApiJson } from '@/lib/portalAuth'
 import { recordPortalPageVisit } from '@/lib/portalRecentPages'
+import PortalModuleLayout from '@/components/portal/PortalModuleLayout'
+
+const HELPDESK_NAV = [
+  { href: '/portal/helpdesk', label: 'Tickets', icon: '🎫' },
+  { href: '/portal/helpdesk/knowledge', label: 'Knowledge Base', icon: '📚' },
+]
 
 interface Article { id: string; title: string; content: string; category: string | null; tags: string | null; author_name: string; views: number }
 
@@ -27,12 +33,7 @@ export default function PortalKnowledgeArticlePage() {
   const tags = (article?.tags || '').split(',').map(t => t.trim()).filter(Boolean)
 
   return (
-    <div style={{ minHeight: '100vh', background: '#F5F7FA', fontFamily: 'Montserrat, sans-serif' }}>
-      <div style={{ background: '#156082', padding: '16px 40px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <div style={{ color: 'white', fontSize: '15px', fontWeight: 800 }}>Helpdesk</div>
-        <img src="/wcomply-logo.png" alt="WCOMPLY" style={{ height: '40px', objectFit: 'contain' }} />
-      </div>
-
+    <PortalModuleLayout moduleLabel="Helpdesk" moduleIcon="🎧" navItems={HELPDESK_NAV}>
       <div style={{ padding: '32px 40px', maxWidth: '760px', margin: '0 auto' }}>
         <button onClick={() => router.push('/portal/helpdesk/knowledge')}
           style={{ background: 'none', border: 'none', color: '#156082', fontSize: '12px', fontWeight: 700, cursor: 'pointer', padding: 0, marginBottom: '16px' }}>
@@ -59,6 +60,6 @@ export default function PortalKnowledgeArticlePage() {
           </div>
         )}
       </div>
-    </div>
+    </PortalModuleLayout>
   )
 }
