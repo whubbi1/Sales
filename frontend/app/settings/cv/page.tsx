@@ -2,8 +2,14 @@
 import { useState, useEffect } from 'react'
 import ProfileLayout from '@/components/ProfileLayout'
 import { getStoredUser } from '@/lib/auth'
+import { apiFetch } from '@/lib/apiClient'
 
-const API = 'https://api.whubbi.wcomply.com'
+function downloadBlob(blob: Blob, name: string) {
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url; a.download = name; a.click()
+  URL.revokeObjectURL(url)
+}
 
 const inp: React.CSSProperties = {
   fontSize: '12px', padding: '7px 11px', border: '1px solid #E2E8F0',
@@ -81,7 +87,7 @@ export default function CurriculumVitaePage() {
 
   const load = async (email: string) => {
     setLoading(true)
-    const d = await fetch(`${API}/cv/${encodeURIComponent(email)}`).then(r => r.json()).catch(() => null)
+    const d = await apiFetch(`/cv/${encodeURIComponent(email)}`).then(r => r.json()).catch(() => null)
     setCv(d?.cv || null)
     setLoading(false)
   }
@@ -93,7 +99,7 @@ export default function CurriculumVitaePage() {
       ...fields,
     }
     setCv((c: any) => ({ ...c, ...fields }))
-    await fetch(`${API}/cv/${encodeURIComponent(email)}`, {
+    await apiFetch(`/cv/${encodeURIComponent(email)}`, {
       method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
     })
     setEditingField(null)
@@ -111,11 +117,11 @@ export default function CurriculumVitaePage() {
     if (!expForm.job_title.trim()) return
     setSaving(true)
     if (editingExp) {
-      await fetch(`${API}/cv/${encodeURIComponent(email)}/experience/${editingExp.id}`, {
+      await apiFetch(`/cv/${encodeURIComponent(email)}/experience/${editingExp.id}`, {
         method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(expForm),
       })
     } else {
-      await fetch(`${API}/cv/${encodeURIComponent(email)}/experience`, {
+      await apiFetch(`/cv/${encodeURIComponent(email)}/experience`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(expForm),
       })
     }
@@ -126,8 +132,15 @@ export default function CurriculumVitaePage() {
 
   const deleteExp = async (exp: any) => {
     if (!confirm(`Delete "${exp.job_title}" at ${exp.company}?`)) return
-    await fetch(`${API}/cv/${encodeURIComponent(email)}/experience/${exp.id}`, { method: 'DELETE' })
+    await apiFetch(`/cv/${encodeURIComponent(email)}/experience/${exp.id}`, { method: 'DELETE' })
     load(email)
+  }
+
+  const downloadExport = async (kind: 'word' | 'pptx') => {
+    const res = await apiFetch(`/cv/${encodeURIComponent(email)}/export/${kind}`)
+    if (!res.ok) return
+    const name = /filename="([^"]+)"/.exec(res.headers.get('Content-Disposition') || '')?.[1] || `cv.${kind === 'word' ? 'docx' : 'pptx'}`
+    downloadBlob(await res.blob(), name)
   }
 
   return (
@@ -140,8 +153,8 @@ export default function CurriculumVitaePage() {
           </div>
           {email && !loading && (
             <div style={{ display: 'flex', gap: '8px' }}>
-              <a href={`${API}/cv/${encodeURIComponent(email)}/export/word`} style={{ padding: '9px 16px', background: '#156082', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '700', fontFamily: 'Montserrat, sans-serif', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>📄 Download Word CV</a>
-              <a href={`${API}/cv/${encodeURIComponent(email)}/export/pptx`} style={{ padding: '9px 16px', background: '#EFF6FF', color: '#156082', border: '1.5px solid #156082', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '700', fontFamily: 'Montserrat, sans-serif', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>📊 Download Summary (PPT)</a>
+              <button onClick={() => downloadExport('word')} style={{ padding: '9px 16px', background: '#156082', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '700', fontFamily: 'Montserrat, sans-serif', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>📄 Download Word CV</button>
+              <button onClick={() => downloadExport('pptx')} style={{ padding: '9px 16px', background: '#EFF6FF', color: '#156082', border: '1.5px solid #156082', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '700', fontFamily: 'Montserrat, sans-serif', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>📊 Download Summary (PPT)</button>
             </div>
           )}
         </div>
