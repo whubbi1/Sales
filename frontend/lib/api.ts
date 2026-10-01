@@ -809,6 +809,8 @@ export const pmAPI = {
   decideValidation:  (pid: string, mid: string, approve: boolean, comment?: string) =>
     fetchAPI(`${pm(pid)}/meetings/${mid}/validate`, { method: 'POST', body: JSON.stringify({ approve, comment }) }),
   createInOutlook:   (pid: string, mid: string) => fetchAPI(`${pm(pid)}/meetings/${mid}/create-in-outlook`, { method: 'POST' }),
+  findMeetingTimes:  (pid: string, body: { attendees: { email?: string | null }[]; duration_minutes: number; window_start?: string; window_end?: string }) =>
+    fetchAPI(`${pm(pid)}/meetings/find-times`, { method: 'POST', body: JSON.stringify(body) }),
   exportMinutes: async (pid: string, mid: string) => {
     const res = await fetch(`${API_URL}${pm(pid)}/meetings/${mid}/export`, { headers: authHeaders() })
     if (!res.ok) { const err = await res.json().catch(() => ({})); throw new Error(err.detail || 'Export failed') }

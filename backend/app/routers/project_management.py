@@ -53,7 +53,7 @@ from app.schemas.project_management import (
 from app.routers.hr import upload_to_s3, s3_ref_to_presigned, AWS_REGION
 from app.routers import projects as projects_router
 from app.routers.outlook import _get_connection as _get_outlook_connection, _get_valid_access_token as _get_outlook_access_token
-from app.services.outlook import create_teams_meeting, resolve_online_meeting_id, get_transcripts, get_transcript_text
+from app.services.outlook import create_teams_meeting, resolve_online_meeting_id, get_transcripts, get_transcript_text, find_meeting_times
 
 router = APIRouter()
 
@@ -924,6 +924,23 @@ async def delete_meeting(project_id: UUID, meeting_id: UUID, db: AsyncSession = 
     await _require(db, project_id, user, "meetings", "edit")
     await db.execute(delete(PMMeeting).where(PMMeeting.id == meeting_id, PMMeeting.project_id == project_id))
     await db.commit()
+
+
+@router.post("/projects/{project_id}/meetings/find-times")
+async def find_meeting_times_endpoint(project_id: UUID, data: dict, db: AsyncSession = Depends(get_db), user: PMUser = Depends(pm_user)):
+    """Scheduling Assistant for a not-yet-created or not-yet-scheduled meeting — body:
+    {attendees: [{email}], duration_minutes, window_start, window_end} (window in ISO,
+    defaults to now..+14 days client-side). Best-effort: an attendee outside WCOMPLY's
+    tenant just can't be checked, not an error."""
+    await _require(db, project_id, user, "meetings", "edit")
+    conn = await _get_outlook_connection(db, user.email)
+    if not conn:
+        raise HTTPException(400, "Connect your Outlook account first (Settings > Integrations) to find a time")
+    access_token = await _get_outlook_access_token(db, user.email)
+    attendee_emails = [a.get("email") for a in (data.get("attendees") or []) if a.get("email")]
+    window_start = datetime.fromisoformat(data["window_start"]) if data.get("window_start") else datetime.utcnow()
+    window_end = datetime.fromisoformat(data["window_end"]) if data.get("window_end") else window_start + timedelta(days=14)
+    return await find_meeting_times(access_token, attendee_emails, data.get("duration_minutes") or 60, window_start, window_end)
 
 
 @router.post("/projects/{project_id}/meetings/{meeting_id}/create-in-outlook", response_model=MeetingResponse)

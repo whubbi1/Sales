@@ -67,7 +67,28 @@ export function MeetingsTab({ projectId, canEdit, settings, openMeetingId, onCha
 
 function MeetingFields({ value, onChange, meetingTypes, projectId }: { value: any; onChange: (v: any) => void; meetingTypes: string[]; projectId: string }) {
   const [members, setMembers] = useState<any[]>([])
+  const [suggestions, setSuggestions] = useState<{ start: string; end: string; confidence?: number }[] | null>(null)
+  const [findError, setFindError] = useState('')
+  const [finding, setFinding] = useState(false)
   useEffect(() => { pmAPI.members.list(projectId).then(setMembers).catch(() => {}) }, [projectId])
+
+  const findTime = async () => {
+    setFinding(true); setFindError(''); setSuggestions(null)
+    try {
+      const res = await pmAPI.findMeetingTimes(projectId, { attendees: value.attendees || [], duration_minutes: value.duration_minutes || 60 })
+      if (!res.suggestions?.length) setFindError(res.empty_reason ? `No free slot found (${res.empty_reason}).` : 'No free slot found for these attendees.')
+      else setSuggestions(res.suggestions)
+    } catch (e: any) {
+      setFindError(e?.message || 'Could not check availability.')
+    }
+    setFinding(false)
+  }
+  const pickSuggestion = (s: { start: string }) => {
+    const dt = new Date(s.start)
+    onChange({ ...value, meeting_date: dt.toISOString().slice(0, 10), meeting_time: dt.toTimeString().slice(0, 5) })
+    setSuggestions(null)
+  }
+
   return (
     <>
       <Field label="Title *" full><input className="form-input" value={value.title} onChange={e => onChange({ ...value, title: e.target.value })} /></Field>
@@ -82,6 +103,27 @@ function MeetingFields({ value, onChange, meetingTypes, projectId }: { value: an
       <Field label="Duration (minutes)"><input type="number" min={15} step={15} className="form-input" value={value.duration_minutes ?? 60} onChange={e => onChange({ ...value, duration_minutes: parseInt(e.target.value) || 60 })} /></Field>
       <Field label="Location / link" full><input className="form-input" value={value.location || ''} onChange={e => onChange({ ...value, location: e.target.value })} /></Field>
       <Field label="Attendees" full><PeopleEditor value={value.attendees || []} onChange={v => onChange({ ...value, attendees: v })} members={members} /></Field>
+      <div style={{ gridColumn: '1 / -1' }}>
+        <button type="button" className="btn-secondary" onClick={findTime} disabled={finding || !(value.attendees || []).length}>
+          {finding ? 'Checking…' : '🔍 Find a time'}
+        </button>
+        {!(value.attendees || []).length && <span style={{ fontSize: '11px', color: '#94A3B8', marginLeft: '8px' }}>Add attendees first</span>}
+        {findError && <div style={{ fontSize: '12px', color: '#B91C1C', marginTop: '6px' }}>{findError}</div>}
+        {suggestions && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginTop: '8px' }}>
+            {suggestions.map((s, i) => {
+              const start = new Date(s.start), end = new Date(s.end)
+              return (
+                <button type="button" key={i} onClick={() => pickSuggestion(s)}
+                  style={{ textAlign: 'left', background: '#F8FAFC', border: '1px solid #EDF2F7', borderRadius: '8px', padding: '8px 12px', fontSize: '12px', cursor: 'pointer', fontFamily: 'Montserrat, sans-serif' }}>
+                  {start.toLocaleDateString()} · {start.toTimeString().slice(0, 5)}–{end.toTimeString().slice(0, 5)}
+                  {typeof s.confidence === 'number' && <span style={{ color: '#94A3B8' }}> · {Math.round(s.confidence)}% confidence</span>}
+                </button>
+              )
+            })}
+          </div>
+        )}
+      </div>
     </>
   )
 }

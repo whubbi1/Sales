@@ -229,3 +229,45 @@ async def get_transcript_text(access_token: str, online_meeting_id: str, transcr
         )
         response.raise_for_status()
         return _vtt_to_text(response.text)
+
+
+async def find_meeting_times(
+    access_token: str,
+    attendees: list[str],
+    duration_minutes: int,
+    window_start: datetime,
+    window_end: datetime,
+) -> dict:
+    """Graph's Scheduling Assistant — suggests times where the organizer + attendees are
+    free. Works under the organizer's own Calendars.Read(Write) permission for attendees in
+    the same tenant (standard Exchange free/busy sharing); an external attendee's calendar
+    simply can't be checked this way, so Graph treats them as having unknown availability
+    rather than erroring."""
+    async with httpx.AsyncClient() as client:
+        response = await client.post(
+            f"{GRAPH_BASE}/me/findMeetingTimes",
+            headers={"Authorization": f"Bearer {access_token}", "Content-Type": "application/json"},
+            json={
+                "attendees": [{"emailAddress": {"address": addr}, "type": "required"} for addr in attendees],
+                "timeConstraint": {
+                    "timeslots": [{
+                        "start": {"dateTime": window_start.isoformat(), "timeZone": "Europe/Paris"},
+                        "end": {"dateTime": window_end.isoformat(), "timeZone": "Europe/Paris"},
+                    }],
+                },
+                "meetingDuration": f"PT{duration_minutes}M",
+                "returnSuggestionReasons": True,
+                "minimumAttendeePercentage": 100,
+            },
+        )
+        response.raise_for_status()
+        data = response.json()
+        suggestions = [
+            {
+                "start": s["meetingTimeSlot"]["start"]["dateTime"],
+                "end": s["meetingTimeSlot"]["end"]["dateTime"],
+                "confidence": s.get("confidence"),
+            }
+            for s in data.get("meetingTimeSuggestions", [])[:5]
+        ]
+        return {"suggestions": suggestions, "empty_reason": data.get("emptySuggestionsReason")}
