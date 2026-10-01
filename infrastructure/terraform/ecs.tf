@@ -74,6 +74,14 @@ resource "aws_lb" "main" {
   security_groups    = [aws_security_group.alb.id]
   subnets            = aws_subnet.public[*].id
 
+  # AWS default is 60s — too short for synchronous AI-generation endpoints (meeting
+  # minutes, etc.) that call Claude and can legitimately take over a minute on a long
+  # transcript. The backend's own httpx client already allows up to 600s for that call
+  # (app/routers/project_management.py's _call_claude); this just stops the ALB from
+  # closing the connection (502 to the client, surfaced in the browser as "Failed to
+  # fetch") before the backend gets a chance to respond.
+  idle_timeout = 620
+
   tags = { Name = "whubbi-alb" }
 }
 

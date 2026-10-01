@@ -1,15 +1,14 @@
 'use client'
 import { Fragment, useEffect, useState } from 'react'
 import { pmAPI } from '@/lib/api'
-import { getStoredUser } from '@/lib/auth'
-import { Card, Table, TD, DEL_BTN, LINK_BTN, Modal, Field, ErrorBanner, useAction, fmtDate, toInput, fromInput, Badge, statusTone, PeopleEditor, Person, TabProps } from './shared'
+import { Card, Table, TD, DEL_BTN, LINK_BTN, Modal, Field, ErrorBanner, useAction, fmtDate, toInput, fromInput, Badge, statusTone, PeopleEditor, Person, TabProps, currentPmUserEmail } from './shared'
 import { ExcelImportControls } from './ExcelImport'
 
 const VERSION_LABEL: Record<string, string> = { draft: 'Draft', in_approval: 'In approval', approved: 'Approved', rejected: 'Rejected' }
 const people = (ps?: Person[]) => (ps || []).map(p => p.name).join(', ') || '—'
 
 export function DeliverablesTab({ projectId, canEdit }: TabProps) {
-  const me = (getStoredUser()?.email || '').toLowerCase()
+  const me = currentPmUserEmail()
   const [items, setItems] = useState<any[]>([])
   const [members, setMembers] = useState<any[]>([])
   const [editing, setEditing] = useState<any>(null)

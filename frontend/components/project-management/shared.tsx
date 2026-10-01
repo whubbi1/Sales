@@ -2,6 +2,15 @@
 // Shared building blocks for the Project Management tabs — same inline-style vocabulary as
 // the rest of the Operations module (form-input / btn-primary / modal classes from globals).
 import { ReactNode, useState } from 'react'
+import { getStoredUser } from '@/lib/auth'
+import { getStoredPortalUser } from '@/lib/portalAuth'
+
+// These tabs are reused verbatim by both the internal app and the portal (same component,
+// different host page). "Who am I" for internal-vs-me comparisons (pending validations,
+// pending approvals, ...) must resolve whichever of the two login sessions is actually
+// active — getStoredUser() alone only ever matches an internal caller, silently hiding
+// every "this is addressed to you" action from a portal contact.
+export const currentPmUserEmail = () => (getStoredPortalUser()?.email || getStoredUser()?.email || '').toLowerCase()
 
 export type Person = { name: string; email?: string | null }
 export type Level = { level: string; description?: string }

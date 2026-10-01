@@ -1,8 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { pmAPI } from '@/lib/api'
-import { getStoredUser } from '@/lib/auth'
-import { Card, Table, TD, TH, DEL_BTN, LINK_BTN, Modal, Field, ErrorBanner, useAction, fmtDate, toInput, fromInput, Badge, statusTone, PeopleEditor, downloadBlob, Person, TabProps } from './shared'
+import { Card, Table, TD, TH, DEL_BTN, LINK_BTN, Modal, Field, ErrorBanner, useAction, fmtDate, toInput, fromInput, Badge, statusTone, PeopleEditor, downloadBlob, Person, TabProps, currentPmUserEmail } from './shared'
 
 const STATUS_LABEL: Record<string, string> = { draft: 'Draft', generated: 'Minutes to review', in_review: 'Awaiting validation', validated: 'Validated' }
 type Registers = { actions: any[]; decisions: any[]; risks: any[] }
@@ -82,7 +81,7 @@ function MeetingFields({ value, onChange, meetingTypes, projectId }: { value: an
 }
 
 function MeetingDetail({ projectId, meetingId, canEdit, settings, onBack, onChange }: { projectId: string; meetingId: string; canEdit: boolean; settings: any; onBack: () => void; onChange?: () => void }) {
-  const me = (getStoredUser()?.email || '').toLowerCase()
+  const me = currentPmUserEmail()
   const [m, setM] = useState<any>(null)
   const [draft, setDraft] = useState<any>(null)        // editable minutes + proposal
   const [info, setInfo] = useState<any>(null)          // editable header fields
