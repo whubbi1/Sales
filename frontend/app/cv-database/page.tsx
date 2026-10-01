@@ -3,10 +3,24 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { Sidebar } from '@/components/Sidebar'
 import { getStoredUser } from '@/lib/auth'
+import { apiFetch } from '@/lib/apiClient'
 import { useReportBuilder, applyReport, ReportPanel, ReportColumn, ColumnResizeHandle, SortArrow, Pagination } from '@/components/it/ReportBuilder'
 import { PageHeader } from '@/components/shared/RecordLayout'
 
-const API = 'https://api.whubbi.wcomply.com'
+function downloadBlob(blob: Blob, name: string) {
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url; a.download = name; a.click()
+  URL.revokeObjectURL(url)
+}
+
+async function downloadCvExport(email: string, kind: 'word' | 'pptx', experienceIds?: string[]) {
+  const qs = experienceIds ? `?experience_ids=${experienceIds.join(',')}` : ''
+  const res = await apiFetch(`/cv/${encodeURIComponent(email)}/export/${kind}${qs}`)
+  if (!res.ok) return
+  const name = /filename="([^"]+)"/.exec(res.headers.get('Content-Disposition') || '')?.[1] || `cv.${kind === 'word' ? 'docx' : 'pptx'}`
+  downloadBlob(await res.blob(), name)
+}
 
 const COLUMNS: ReportColumn[] = [
   { key: 'employee_name', label: 'Employee', filterable: 'text' },
@@ -26,14 +40,13 @@ function ShortCvModal({ user, onClose }: any) {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    fetch(`${API}/cv/${encodeURIComponent(user.email)}`).then(r => r.json()).then(d => { setCv(d.cv); setLoading(false) }).catch(() => setLoading(false))
+    apiFetch(`/cv/${encodeURIComponent(user.email)}`).then(r => r.json()).then(d => { setCv(d.cv); setLoading(false) }).catch(() => setLoading(false))
   }, [])
 
   const toggle = (id: string) => setSelected(s => s.includes(id) ? s.filter(x => x !== id) : [...s, id])
 
-  const download = () => {
-    const url = `${API}/cv/${encodeURIComponent(user.email)}/export/word?experience_ids=${selected.join(',')}`
-    window.open(url, '_blank')
+  const download = async () => {
+    await downloadCvExport(user.email, 'word', selected)
     onClose()
   }
 
@@ -84,7 +97,7 @@ function FullCvModal({ user, onClose }: any) {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    fetch(`${API}/cv/${encodeURIComponent(user.email)}`).then(r => r.json()).then(d => { setCv(d.cv); setLoading(false) }).catch(() => setLoading(false))
+    apiFetch(`/cv/${encodeURIComponent(user.email)}`).then(r => r.json()).then(d => { setCv(d.cv); setLoading(false) }).catch(() => setLoading(false))
   }, [])
 
   const name = cv ? `${cv.first_name} ${cv.last_name}`.trim() || user.email : user.employee_name
@@ -195,7 +208,7 @@ function CvDatabaseContent() {
   const rb = useReportBuilder('cv_database', COLUMNS, userEmail)
 
   useEffect(() => {
-    fetch(`${API}/cv`).then(r => r.json()).then(d => { setUsers(d.users || []); setLoading(false) }).catch(() => setLoading(false))
+    apiFetch(`/cv`).then(r => r.json()).then(d => { setUsers(d.users || []); setLoading(false) }).catch(() => setLoading(false))
     const u = getStoredUser()
     if (u?.email) setUserEmail(u.email)
   }, [])
@@ -250,8 +263,8 @@ function CvDatabaseContent() {
                 {isVisible('experience_count') && <td style={{ padding: '10px 16px' }}>{u.experience_count}</td>}
                 <td style={{ padding: '10px 16px' }}>
                   <div style={{ display: 'flex', gap: '6px' }}>
-                    <a href={`${API}/cv/${encodeURIComponent(u.email)}/export/word`} style={{ padding: '5px 10px', background: '#EFF6FF', borderRadius: '6px', fontSize: '11px', color: '#3B82F6', fontWeight: '700', fontFamily: 'Montserrat, sans-serif', textDecoration: 'none' }}>Word</a>
-                    <a href={`${API}/cv/${encodeURIComponent(u.email)}/export/pptx`} style={{ padding: '5px 10px', background: '#F5F3FF', borderRadius: '6px', fontSize: '11px', color: '#7C3AED', fontWeight: '700', fontFamily: 'Montserrat, sans-serif', textDecoration: 'none' }}>PPT</a>
+                    <button onClick={() => downloadCvExport(u.email, 'word')} style={{ padding: '5px 10px', background: '#EFF6FF', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '11px', color: '#3B82F6', fontWeight: '700', fontFamily: 'Montserrat, sans-serif' }}>Word</button>
+                    <button onClick={() => downloadCvExport(u.email, 'pptx')} style={{ padding: '5px 10px', background: '#F5F3FF', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '11px', color: '#7C3AED', fontWeight: '700', fontFamily: 'Montserrat, sans-serif' }}>PPT</button>
                     {u.experience_count > 0 && (
                       <button onClick={() => setShortCvUser(u)} style={{ padding: '5px 10px', background: '#FFF7ED', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '11px', color: '#D97706', fontWeight: '700', fontFamily: 'Montserrat, sans-serif' }}>Short CV</button>
                     )}
@@ -277,7 +290,7 @@ export default function CvDatabasePage() {
   useEffect(() => {
     const user = getStoredUser()
     if (!user) { router.push('/auth/login'); return }
-    fetch(`${API}/settings/permissions/${encodeURIComponent(user.email)}`)
+    apiFetch(`/settings/permissions/${encodeURIComponent(user.email)}`)
       .then(r => r.json())
       .then(d => {
         const p = d.permissions?.sales?.cv_database

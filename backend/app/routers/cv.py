@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
@@ -15,13 +15,18 @@ async def _table_exists(db: AsyncSession, name: str) -> bool:
 
 @router.get("")
 async def list_all_cvs(db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("sales", "cv_database", "view"))):
+    """Org-wide CV directory — always reflects each person's main ('Work') version,
+    regardless of how many other named versions they've since created."""
     from app.routers.settings import list_users as _list_users
     users_resp = await _list_users(db)
     users = users_resp.get("users", [])
 
-    cr = await db.execute(text("SELECT email, title FROM employee_cv"))
+    cr = await db.execute(text("SELECT email, title FROM employee_cv WHERE is_main = true"))
     cv_titles = {row.email: row.title for row in cr.fetchall()}
-    er = await db.execute(text("SELECT user_email, COUNT(*) AS c FROM employee_cv_experience GROUP BY user_email"))
+    er = await db.execute(text("""
+        SELECT c.email AS user_email, COUNT(*) AS c FROM employee_cv_experience e
+        JOIN employee_cv c ON c.id = e.cv_id WHERE c.is_main = true GROUP BY c.email
+    """))
     exp_counts = {row.user_email: row.c for row in er.fetchall()}
 
     result = []
@@ -35,40 +40,85 @@ async def list_all_cvs(db: AsyncSession = Depends(get_db), _: str = Depends(requ
         })
     return {"users": result}
 
-async def _get_cv_data(email: str, db: AsyncSession) -> dict:
-    r = await db.execute(text("SELECT * FROM employee_cv WHERE email = :email"), {"email": email})
+
+async def _resolve_main_cv_id(email: str, db: AsyncSession) -> str:
+    """Get-or-create this person's main ('Work') CV — every employee always has exactly
+    one, auto-created (pre-filled from user_profiles) on first touch, same UX as before
+    versioning existed."""
+    r = await db.execute(text("SELECT id FROM employee_cv WHERE email = :email AND is_main = true"), {"email": email})
     row = r.fetchone()
     if row:
-        cv = dict(row._mapping)
-        cv["id"] = str(cv["id"])
+        return str(row.id)
+    return await _create_cv_version(email, "Work", True, None, db)
+
+
+async def _create_cv_version(email: str, version_name: str, is_main: bool, duplicate_from: str | None, db: AsyncSession) -> str:
+    cv_id = str(uuid.uuid4())
+    if duplicate_from:
+        src = await _get_cv_version_row(duplicate_from, db)
+        if not src or src["email"] != email:
+            raise HTTPException(404, "Source version not found")
+        first_name, last_name, title, short_description = src["first_name"], src["last_name"], src["title"], src["short_description"]
+        skills, languages = src["skills"], src["languages"]
     else:
-        # Pre-fill from user_profiles if this employee hasn't set up a CV yet
         pr = await db.execute(text("SELECT first_name, last_name, job_title FROM user_profiles WHERE email = :email"), {"email": email})
         p = pr.fetchone()
-        cv = {
-            "id": None,
-            "email": email,
-            "first_name": p.first_name if p else "",
-            "last_name": p.last_name if p else "",
-            "title": p.job_title if p else "",
-            "short_description": "",
-            "skills": [],
-            "languages": [],
-        }
+        first_name, last_name, title = (p.first_name if p else "") or "", (p.last_name if p else "") or "", (p.job_title if p else "") or ""
+        short_description, skills, languages = "", [], []
+
+    await db.execute(text("""
+        INSERT INTO employee_cv (id, email, version_name, is_main, first_name, last_name, title, short_description, skills, languages, created_at, updated_at)
+        VALUES (CAST(:id AS UUID), :email, :version_name, :is_main, :first_name, :last_name, :title, :short_description, CAST(:skills AS JSON), CAST(:languages AS JSON), NOW(), NOW())
+    """), {
+        "id": cv_id, "email": email, "version_name": version_name, "is_main": is_main,
+        "first_name": first_name, "last_name": last_name, "title": title,
+        "short_description": short_description, "skills": json.dumps(skills), "languages": json.dumps(languages),
+    })
+    if duplicate_from:
+        er = await db.execute(text("SELECT * FROM employee_cv_experience WHERE cv_id = CAST(:id AS UUID) ORDER BY sort_order ASC"), {"id": duplicate_from})
+        for exp in er.fetchall():
+            d = dict(exp._mapping)
+            await db.execute(text("""
+                INSERT INTO employee_cv_experience (id, cv_id, user_email, job_title, company, start_date, end_date, location, description, sort_order, created_at, updated_at)
+                VALUES (gen_random_uuid(), CAST(:cv_id AS UUID), :email, :job_title, :company, :start_date, :end_date, :location, :description, :sort_order, NOW(), NOW())
+            """), {"cv_id": cv_id, "email": email, "job_title": d["job_title"], "company": d["company"], "start_date": d["start_date"],
+                   "end_date": d["end_date"], "location": d["location"], "description": d["description"], "sort_order": d["sort_order"]})
+    await db.commit()
+    return cv_id
+
+
+async def _get_cv_version_row(cv_id: str, db: AsyncSession) -> dict | None:
+    r = await db.execute(text("SELECT * FROM employee_cv WHERE id = CAST(:id AS UUID)"), {"id": cv_id})
+    row = r.fetchone()
+    if not row:
+        return None
+    d = dict(row._mapping)
+    d["id"] = str(d["id"])
+    return d
+
+
+async def _require_cv_access(email: str, caller: str, db: AsyncSession, mode: str = "view"):
+    await require_self_or_permission(email, caller, "sales", "cv_database", db, mode)
+
+
+async def _get_cv_version_data(cv_id: str, db: AsyncSession) -> dict:
+    cv = await _get_cv_version_row(cv_id, db)
+    if not cv:
+        raise HTTPException(404, "CV version not found")
+    email = cv["email"]
 
     er = await db.execute(text("""
-        SELECT * FROM employee_cv_experience
-        WHERE user_email = :email
-        ORDER BY sort_order ASC, start_date DESC
-    """), {"email": email})
+        SELECT * FROM employee_cv_experience WHERE cv_id = CAST(:id AS UUID) ORDER BY sort_order ASC, start_date DESC
+    """), {"id": cv_id})
     experiences = []
     for exp in er.fetchall():
         d = dict(exp._mapping)
         d["id"] = str(d["id"])
+        d["cv_id"] = str(d["cv_id"])
         experiences.append(d)
     cv["experiences"] = experiences
 
-    # Read-only reflections from Training / Certifications (Phase 3). Tables may not exist yet.
+    # Read-only reflections from Training / Certifications — person-level, not per-version.
     trainings, certifications = [], []
     if await _table_exists(db, "trainings"):
         tr = await db.execute(text("SELECT * FROM trainings WHERE user_email = :email ORDER BY training_date DESC"), {"email": email})
@@ -78,110 +128,153 @@ async def _get_cv_data(email: str, db: AsyncSession) -> dict:
         certifications = [dict(c._mapping) for c in cr.fetchall()]
     cv["trainings"] = trainings
     cv["certifications"] = certifications
+    return cv
 
-    return {"cv": cv}
 
-@router.get("/{email}")
-async def get_cv(
-    email: str,
-    db: AsyncSession = Depends(get_db),
-    caller: str = Depends(get_current_user_email),
-):
-    await require_self_or_permission(email, caller, "sales", "cv_database", db, "view")
-    return await _get_cv_data(email, db)
+# ─── Versions ─────────────────────────────────────────────────────────────────
+@router.get("/{email}/versions")
+async def list_cv_versions(email: str, db: AsyncSession = Depends(get_db), caller: str = Depends(get_current_user_email)):
+    await _require_cv_access(email, caller, db, "view")
+    await _resolve_main_cv_id(email, db)  # ensures at least the Work version exists
+    r = await db.execute(text("""
+        SELECT id, version_name, is_main, title, updated_at FROM employee_cv
+        WHERE email = :email ORDER BY is_main DESC, created_at ASC
+    """), {"email": email})
+    return {"versions": [{**dict(row._mapping), "id": str(row.id)} for row in r.fetchall()]}
 
-@router.put("/{email}")
-async def update_cv(
-    email: str,
-    data: dict,
-    db: AsyncSession = Depends(get_db),
-    caller: str = Depends(get_current_user_email),
-):
-    await require_self_or_permission(email, caller, "sales", "cv_database", db, "edit")
+
+@router.post("/{email}/versions")
+async def create_cv_version(email: str, data: dict, db: AsyncSession = Depends(get_db), caller: str = Depends(get_current_user_email)):
+    await _require_cv_access(email, caller, db, "edit")
+    version_name = (data.get("version_name") or "").strip()
+    if not version_name:
+        raise HTTPException(400, "version_name is required")
+    cv_id = await _create_cv_version(email, version_name, False, data.get("duplicate_from"), db)
+    return await _get_cv_version_data(cv_id, db)
+
+
+@router.get("/{email}/versions/{cv_id}")
+async def get_cv_version(email: str, cv_id: str, db: AsyncSession = Depends(get_db), caller: str = Depends(get_current_user_email)):
+    await _require_cv_access(email, caller, db, "view")
+    return {"cv": await _get_cv_version_data(cv_id, db)}
+
+
+@router.put("/{email}/versions/{cv_id}")
+async def update_cv_version(email: str, cv_id: str, data: dict, db: AsyncSession = Depends(get_db), caller: str = Depends(get_current_user_email)):
+    await _require_cv_access(email, caller, db, "edit")
+    cv = await _get_cv_version_row(cv_id, db)
+    if not cv or cv["email"] != email:
+        raise HTTPException(404, "CV version not found")
     await db.execute(text("""
-        INSERT INTO employee_cv (id, email, first_name, last_name, title, short_description, skills, languages, created_at, updated_at)
-        VALUES (gen_random_uuid(), :email, :first_name, :last_name, :title, :short_description, CAST(:skills AS JSON), CAST(:languages AS JSON), NOW(), NOW())
-        ON CONFLICT (email) DO UPDATE SET
-            first_name = EXCLUDED.first_name,
-            last_name = EXCLUDED.last_name,
-            title = EXCLUDED.title,
-            short_description = EXCLUDED.short_description,
-            skills = EXCLUDED.skills,
-            languages = EXCLUDED.languages,
+        UPDATE employee_cv SET
+            version_name = :version_name, first_name = :first_name, last_name = :last_name, title = :title,
+            short_description = :short_description, skills = CAST(:skills AS JSON), languages = CAST(:languages AS JSON),
             updated_at = NOW()
+        WHERE id = CAST(:id AS UUID)
     """), {
-        "email": email,
-        "first_name": data.get("first_name", ""),
-        "last_name": data.get("last_name", ""),
-        "title": data.get("title", ""),
+        "id": cv_id, "version_name": data.get("version_name") or cv["version_name"],
+        "first_name": data.get("first_name", ""), "last_name": data.get("last_name", ""), "title": data.get("title", ""),
         "short_description": data.get("short_description", ""),
-        "skills": json.dumps(data.get("skills") or []),
-        "languages": json.dumps(data.get("languages") or []),
+        "skills": json.dumps(data.get("skills") or []), "languages": json.dumps(data.get("languages") or []),
     })
     await db.commit()
     return {"status": "ok"}
 
-@router.post("/{email}/experience")
-async def create_experience(email: str, data: dict, db: AsyncSession = Depends(get_db), caller: str = Depends(get_current_user_email)):
-    await require_self_or_permission(email, caller, "sales", "cv_database", db, "edit")
+
+@router.delete("/{email}/versions/{cv_id}")
+async def delete_cv_version(email: str, cv_id: str, db: AsyncSession = Depends(get_db), caller: str = Depends(get_current_user_email)):
+    await _require_cv_access(email, caller, db, "edit")
+    cv = await _get_cv_version_row(cv_id, db)
+    if not cv or cv["email"] != email:
+        raise HTTPException(404, "CV version not found")
+    if cv["is_main"]:
+        raise HTTPException(400, "The main (Work) CV can't be deleted")
+    await db.execute(text("DELETE FROM employee_cv WHERE id = CAST(:id AS UUID)"), {"id": cv_id})
+    await db.commit()
+    return {"status": "ok"}
+
+
+@router.post("/{email}/versions/{cv_id}/experience")
+async def create_version_experience(email: str, cv_id: str, data: dict, db: AsyncSession = Depends(get_db), caller: str = Depends(get_current_user_email)):
+    await _require_cv_access(email, caller, db, "edit")
     exp_id = str(uuid.uuid4())
     await db.execute(text("""
         INSERT INTO employee_cv_experience
-            (id, user_email, job_title, company, start_date, end_date, location, description, sort_order, created_at, updated_at)
+            (id, cv_id, user_email, job_title, company, start_date, end_date, location, description, sort_order, created_at, updated_at)
         VALUES
-            (CAST(:id AS UUID), :email, :job_title, :company, :start_date, :end_date, :location, :description, :sort_order, NOW(), NOW())
+            (CAST(:id AS UUID), CAST(:cv_id AS UUID), :email, :job_title, :company, :start_date, :end_date, :location, :description, :sort_order, NOW(), NOW())
     """), {
-        "id": exp_id,
-        "email": email,
-        "job_title": data.get("job_title", ""),
-        "company": data.get("company", ""),
-        "start_date": data.get("start_date", ""),
-        "end_date": data.get("end_date", ""),
-        "location": data.get("location", ""),
-        "description": data.get("description", ""),
+        "id": exp_id, "cv_id": cv_id, "email": email,
+        "job_title": data.get("job_title", ""), "company": data.get("company", ""),
+        "start_date": data.get("start_date", ""), "end_date": data.get("end_date", ""),
+        "location": data.get("location", ""), "description": data.get("description", ""),
         "sort_order": data.get("sort_order", 0),
     })
     await db.commit()
     return {"status": "ok", "id": exp_id}
 
-@router.put("/{email}/experience/{eid}")
-async def update_experience(email: str, eid: str, data: dict, db: AsyncSession = Depends(get_db), caller: str = Depends(get_current_user_email)):
-    await require_self_or_permission(email, caller, "sales", "cv_database", db, "edit")
+
+@router.put("/{email}/versions/{cv_id}/experience/{eid}")
+async def update_version_experience(email: str, cv_id: str, eid: str, data: dict, db: AsyncSession = Depends(get_db), caller: str = Depends(get_current_user_email)):
+    await _require_cv_access(email, caller, db, "edit")
     await db.execute(text("""
         UPDATE employee_cv_experience SET
-            job_title = :job_title,
-            company = :company,
-            start_date = :start_date,
-            end_date = :end_date,
-            location = :location,
-            description = :description,
-            updated_at = NOW()
-        WHERE id = CAST(:id AS UUID) AND user_email = :email
+            job_title = :job_title, company = :company, start_date = :start_date, end_date = :end_date,
+            location = :location, description = :description, updated_at = NOW()
+        WHERE id = CAST(:id AS UUID) AND cv_id = CAST(:cv_id AS UUID)
     """), {
-        "id": eid,
-        "email": email,
-        "job_title": data.get("job_title", ""),
-        "company": data.get("company", ""),
-        "start_date": data.get("start_date", ""),
-        "end_date": data.get("end_date", ""),
-        "location": data.get("location", ""),
-        "description": data.get("description", ""),
+        "id": eid, "cv_id": cv_id,
+        "job_title": data.get("job_title", ""), "company": data.get("company", ""),
+        "start_date": data.get("start_date", ""), "end_date": data.get("end_date", ""),
+        "location": data.get("location", ""), "description": data.get("description", ""),
     })
     await db.commit()
     return {"status": "ok"}
 
-@router.delete("/{email}/experience/{eid}")
-async def delete_experience(email: str, eid: str, db: AsyncSession = Depends(get_db), caller: str = Depends(get_current_user_email)):
-    await require_self_or_permission(email, caller, "sales", "cv_database", db, "edit")
-    await db.execute(text("DELETE FROM employee_cv_experience WHERE id = CAST(:id AS UUID) AND user_email = :email"), {"id": eid, "email": email})
+
+@router.delete("/{email}/versions/{cv_id}/experience/{eid}")
+async def delete_version_experience(email: str, cv_id: str, eid: str, db: AsyncSession = Depends(get_db), caller: str = Depends(get_current_user_email)):
+    await _require_cv_access(email, caller, db, "edit")
+    await db.execute(text("DELETE FROM employee_cv_experience WHERE id = CAST(:id AS UUID) AND cv_id = CAST(:cv_id AS UUID)"), {"id": eid, "cv_id": cv_id})
     await db.commit()
     return {"status": "ok"}
 
-# ─── Export: Word (complete or curated) and PowerPoint (summary) ──────────────
-async def _load_cv_for_export(email: str, db: AsyncSession) -> dict:
-    resp = await _get_cv_data(email, db)
-    return resp["cv"]
 
+# ─── Backward-compatible bare-email endpoints — always the main ('Work') version ──────
+# Used by the org-wide CV database (frontend/app/cv-database/page.tsx) and kept exactly as
+# before so that page needs no changes for multi-version support to ship.
+@router.get("/{email}")
+async def get_cv(email: str, db: AsyncSession = Depends(get_db), caller: str = Depends(get_current_user_email)):
+    await _require_cv_access(email, caller, db, "view")
+    cv_id = await _resolve_main_cv_id(email, db)
+    return {"cv": await _get_cv_version_data(cv_id, db)}
+
+@router.put("/{email}")
+async def update_cv(email: str, data: dict, db: AsyncSession = Depends(get_db), caller: str = Depends(get_current_user_email)):
+    await _require_cv_access(email, caller, db, "edit")
+    cv_id = await _resolve_main_cv_id(email, db)
+    return await update_cv_version(email, cv_id, data, db, caller)
+
+@router.post("/{email}/experience")
+async def create_experience(email: str, data: dict, db: AsyncSession = Depends(get_db), caller: str = Depends(get_current_user_email)):
+    await _require_cv_access(email, caller, db, "edit")
+    cv_id = await _resolve_main_cv_id(email, db)
+    return await create_version_experience(email, cv_id, data, db, caller)
+
+@router.put("/{email}/experience/{eid}")
+async def update_experience(email: str, eid: str, data: dict, db: AsyncSession = Depends(get_db), caller: str = Depends(get_current_user_email)):
+    await _require_cv_access(email, caller, db, "edit")
+    cv_id = await _resolve_main_cv_id(email, db)
+    return await update_version_experience(email, cv_id, eid, data, db, caller)
+
+@router.delete("/{email}/experience/{eid}")
+async def delete_experience(email: str, eid: str, db: AsyncSession = Depends(get_db), caller: str = Depends(get_current_user_email)):
+    await _require_cv_access(email, caller, db, "edit")
+    cv_id = await _resolve_main_cv_id(email, db)
+    return await delete_version_experience(email, cv_id, eid, db, caller)
+
+
+# ─── Export: Word (complete or curated) and PowerPoint (summary) ──────────────
 def _cv_full_name(cv: dict) -> str:
     return f"{cv.get('first_name','')} {cv.get('last_name','')}".strip() or cv.get("email", "")
 
@@ -367,23 +460,35 @@ def _generate_cv_pptx(cv: dict) -> bytes:
     prs.save(buf)
     return buf.getvalue()
 
-@router.get("/{email}/export/word")
-async def export_word(email: str, experience_ids: str = None, db: AsyncSession = Depends(get_db), caller: str = Depends(get_current_user_email)):
-    await require_self_or_permission(email, caller, "sales", "cv_database", db, "view")
-    cv = await _load_cv_for_export(email, db)
+@router.get("/{email}/versions/{cv_id}/export/word")
+async def export_version_word(email: str, cv_id: str, experience_ids: str = None, db: AsyncSession = Depends(get_db), caller: str = Depends(get_current_user_email)):
+    await _require_cv_access(email, caller, db, "view")
+    cv = await _get_cv_version_data(cv_id, db)
     ids = experience_ids.split(",") if experience_ids else None
     content = _generate_cv_docx(cv, ids)
-    fname = f"{_cv_full_name(cv).replace(' ', '_') or 'CV'}.docx"
+    fname = f"{_cv_full_name(cv).replace(' ', '_') or 'CV'}_{cv.get('version_name','')}.docx"
     return StreamingResponse(BytesIO(content),
         media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         headers={"Content-Disposition": f'attachment; filename="{fname}"'})
 
-@router.get("/{email}/export/pptx")
-async def export_pptx(email: str, db: AsyncSession = Depends(get_db), caller: str = Depends(get_current_user_email)):
-    await require_self_or_permission(email, caller, "sales", "cv_database", db, "view")
-    cv = await _load_cv_for_export(email, db)
+@router.get("/{email}/versions/{cv_id}/export/pptx")
+async def export_version_pptx(email: str, cv_id: str, db: AsyncSession = Depends(get_db), caller: str = Depends(get_current_user_email)):
+    await _require_cv_access(email, caller, db, "view")
+    cv = await _get_cv_version_data(cv_id, db)
     content = _generate_cv_pptx(cv)
-    fname = f"{_cv_full_name(cv).replace(' ', '_') or 'CV'}_Summary.pptx"
+    fname = f"{_cv_full_name(cv).replace(' ', '_') or 'CV'}_{cv.get('version_name','')}_Summary.pptx"
     return StreamingResponse(BytesIO(content),
         media_type="application/vnd.openxmlformats-officedocument.presentationml.presentation",
         headers={"Content-Disposition": f'attachment; filename="{fname}"'})
+
+@router.get("/{email}/export/word")
+async def export_word(email: str, experience_ids: str = None, db: AsyncSession = Depends(get_db), caller: str = Depends(get_current_user_email)):
+    await _require_cv_access(email, caller, db, "view")
+    cv_id = await _resolve_main_cv_id(email, db)
+    return await export_version_word(email, cv_id, experience_ids, db, caller)
+
+@router.get("/{email}/export/pptx")
+async def export_pptx(email: str, db: AsyncSession = Depends(get_db), caller: str = Depends(get_current_user_email)):
+    await _require_cv_access(email, caller, db, "view")
+    cv_id = await _resolve_main_cv_id(email, db)
+    return await export_version_pptx(email, cv_id, db, caller)

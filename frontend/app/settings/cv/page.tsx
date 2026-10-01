@@ -71,6 +71,8 @@ function TagEditor({ label, tags, onAdd, onRemove }: any) {
 
 export default function CurriculumVitaePage() {
   const [email, setEmail] = useState('')
+  const [versions, setVersions] = useState<any[]>([])
+  const [activeCvId, setActiveCvId] = useState<string | null>(null)
   const [cv, setCv] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [editingField, setEditingField] = useState<string | null>(null)
@@ -78,32 +80,47 @@ export default function CurriculumVitaePage() {
   const [editingExp, setEditingExp] = useState<any>(null)
   const [expForm, setExpForm] = useState<any>(EMPTY_EXP)
   const [saving, setSaving] = useState(false)
+  const [showVersionModal, setShowVersionModal] = useState(false)
+  const [versionForm, setVersionForm] = useState({ version_name: '', duplicate_from: '' })
 
   useEffect(() => {
     const user = getStoredUser()
-    if (user?.email) { setEmail(user.email); load(user.email) }
+    if (user?.email) { setEmail(user.email); loadVersions(user.email) }
     else setLoading(false)
   }, [])
 
-  const load = async (email: string) => {
+  const base = (e: string, cvId: string) => `/cv/${encodeURIComponent(e)}/versions/${cvId}`
+
+  const loadVersions = async (email: string, selectId?: string) => {
+    const d = await apiFetch(`/cv/${encodeURIComponent(email)}/versions`).then(r => r.json()).catch(() => ({ versions: [] }))
+    const list = d.versions || []
+    setVersions(list)
+    const chosen = selectId || list.find((v: any) => v.is_main)?.id || list[0]?.id || null
+    setActiveCvId(chosen)
+    if (chosen) await load(email, chosen)
+    else setLoading(false)
+  }
+
+  const load = async (email: string, cvId: string) => {
     setLoading(true)
-    const d = await apiFetch(`/cv/${encodeURIComponent(email)}`).then(r => r.json()).catch(() => null)
+    const d = await apiFetch(base(email, cvId)).then(r => r.json()).catch(() => null)
     setCv(d?.cv || null)
     setLoading(false)
   }
 
   const patch = async (fields: any) => {
+    if (!activeCvId) return
     const payload = {
       first_name: cv.first_name, last_name: cv.last_name, title: cv.title,
       short_description: cv.short_description, skills: cv.skills, languages: cv.languages,
       ...fields,
     }
     setCv((c: any) => ({ ...c, ...fields }))
-    await apiFetch(`/cv/${encodeURIComponent(email)}`, {
+    await apiFetch(base(email, activeCvId), {
       method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
     })
     setEditingField(null)
-    load(email)
+    load(email, activeCvId)
   }
 
   const openAddExp = () => { setExpForm(EMPTY_EXP); setEditingExp(null); setShowExpModal(true) }
@@ -114,33 +131,53 @@ export default function CurriculumVitaePage() {
   }
 
   const saveExp = async () => {
-    if (!expForm.job_title.trim()) return
+    if (!expForm.job_title.trim() || !activeCvId) return
     setSaving(true)
     if (editingExp) {
-      await apiFetch(`/cv/${encodeURIComponent(email)}/experience/${editingExp.id}`, {
+      await apiFetch(`${base(email, activeCvId)}/experience/${editingExp.id}`, {
         method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(expForm),
       })
     } else {
-      await apiFetch(`/cv/${encodeURIComponent(email)}/experience`, {
+      await apiFetch(`${base(email, activeCvId)}/experience`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(expForm),
       })
     }
     setSaving(false)
     setShowExpModal(false)
-    load(email)
+    load(email, activeCvId)
   }
 
   const deleteExp = async (exp: any) => {
-    if (!confirm(`Delete "${exp.job_title}" at ${exp.company}?`)) return
-    await apiFetch(`/cv/${encodeURIComponent(email)}/experience/${exp.id}`, { method: 'DELETE' })
-    load(email)
+    if (!activeCvId || !confirm(`Delete "${exp.job_title}" at ${exp.company}?`)) return
+    await apiFetch(`${base(email, activeCvId)}/experience/${exp.id}`, { method: 'DELETE' })
+    load(email, activeCvId)
   }
 
   const downloadExport = async (kind: 'word' | 'pptx') => {
-    const res = await apiFetch(`/cv/${encodeURIComponent(email)}/export/${kind}`)
+    if (!activeCvId) return
+    const res = await apiFetch(`${base(email, activeCvId)}/export/${kind}`)
     if (!res.ok) return
     const name = /filename="([^"]+)"/.exec(res.headers.get('Content-Disposition') || '')?.[1] || `cv.${kind === 'word' ? 'docx' : 'pptx'}`
     downloadBlob(await res.blob(), name)
+  }
+
+  const createVersion = async () => {
+    if (!versionForm.version_name.trim()) return
+    setSaving(true)
+    const res = await apiFetch(`/cv/${encodeURIComponent(email)}/versions`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ version_name: versionForm.version_name, duplicate_from: versionForm.duplicate_from || undefined }),
+    }).then(r => r.json()).catch(() => null)
+    setSaving(false)
+    setShowVersionModal(false)
+    setVersionForm({ version_name: '', duplicate_from: '' })
+    if (res?.id) await loadVersions(email, res.id)
+  }
+
+  const deleteVersion = async (v: any) => {
+    if (v.is_main || !confirm(`Delete the "${v.version_name}" CV version? This can't be undone.`)) return
+    await apiFetch(`/cv/${encodeURIComponent(email)}/versions/${v.id}`, { method: 'DELETE' })
+    await loadVersions(email)
   }
 
   return (
@@ -158,6 +195,27 @@ export default function CurriculumVitaePage() {
             </div>
           )}
         </div>
+
+        {email && versions.length > 0 && (
+          <div style={{ display: 'flex', gap: '8px', marginBottom: '20px', flexWrap: 'wrap', alignItems: 'center' }}>
+            {versions.map(v => (
+              <div key={v.id} style={{ display: 'flex', alignItems: 'center', gap: '4px', background: v.id === activeCvId ? '#156082' : 'white', border: `1.5px solid ${v.id === activeCvId ? '#156082' : '#E2E8F0'}`, borderRadius: '20px', padding: '6px 6px 6px 14px' }}>
+                <button onClick={() => load(email, v.id).then(() => setActiveCvId(v.id))}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '12px', fontWeight: 700, color: v.id === activeCvId ? 'white' : '#156082', fontFamily: 'Montserrat, sans-serif' }}>
+                  {v.is_main && '⭐ '}{v.version_name}
+                </button>
+                {!v.is_main && (
+                  <button onClick={() => deleteVersion(v)} title="Delete this version"
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '13px', color: v.id === activeCvId ? 'rgba(255,255,255,0.7)' : '#94A3B8', padding: '2px 6px' }}>×</button>
+                )}
+              </div>
+            ))}
+            <button onClick={() => { setVersionForm({ version_name: '', duplicate_from: activeCvId || '' }); setShowVersionModal(true) }}
+              style={{ background: 'none', border: '1.5px dashed #94A3B8', borderRadius: '20px', padding: '7px 14px', cursor: 'pointer', fontSize: '12px', fontWeight: 700, color: '#64748B', fontFamily: 'Montserrat, sans-serif' }}>
+              + New version
+            </button>
+          </div>
+        )}
 
         {loading && <div style={{ textAlign: 'center', padding: '48px', color: '#45B6E4' }}>Loading...</div>}
 
@@ -307,6 +365,41 @@ export default function CurriculumVitaePage() {
                   <button onClick={saveExp} disabled={saving || !expForm.job_title.trim()}
                     style={{ padding: '9px 18px', background: saving || !expForm.job_title.trim() ? '#94A3B8' : '#156082', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '700', fontFamily: 'Montserrat, sans-serif' }}>
                     {saving ? 'Saving…' : editingExp ? 'Save Changes' : 'Add Experience'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* New Version Modal */}
+        {showVersionModal && (
+          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+            onClick={e => { if (e.target === e.currentTarget) setShowVersionModal(false) }}>
+            <div style={{ background: 'white', borderRadius: '14px', width: '440px', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
+              <div style={{ padding: '20px 24px', borderBottom: '1px solid #EDF2F7', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <h2 style={{ fontSize: '15px', fontWeight: '800', color: '#156082', margin: 0 }}>New CV Version</h2>
+                <button onClick={() => setShowVersionModal(false)} style={{ background: 'none', border: 'none', fontSize: '20px', cursor: 'pointer', color: '#94A3B8' }}>×</button>
+              </div>
+              <div style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                <div>
+                  <label style={lbl}>Name *</label>
+                  <input autoFocus style={{ ...inp, width: '100%', boxSizing: 'border-box' as const }} placeholder="e.g. Employer, Entrepreneur, Project"
+                    value={versionForm.version_name} onChange={e => setVersionForm(f => ({ ...f, version_name: e.target.value }))} />
+                </div>
+                <div>
+                  <label style={lbl}>Start from</label>
+                  <select style={{ ...inp, width: '100%', boxSizing: 'border-box' as const }} value={versionForm.duplicate_from}
+                    onChange={e => setVersionForm(f => ({ ...f, duplicate_from: e.target.value }))}>
+                    <option value="">Blank</option>
+                    {versions.map(v => <option key={v.id} value={v.id}>Copy of {v.version_name}</option>)}
+                  </select>
+                </div>
+                <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+                  <button onClick={() => setShowVersionModal(false)} style={{ padding: '9px 18px', background: '#F1F5F9', color: '#64748B', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '700', fontFamily: 'Montserrat, sans-serif' }}>Cancel</button>
+                  <button onClick={createVersion} disabled={saving || !versionForm.version_name.trim()}
+                    style={{ padding: '9px 18px', background: saving || !versionForm.version_name.trim() ? '#94A3B8' : '#156082', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '700', fontFamily: 'Montserrat, sans-serif' }}>
+                    {saving ? 'Creating…' : 'Create'}
                   </button>
                 </div>
               </div>

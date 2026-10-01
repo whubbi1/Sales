@@ -2139,6 +2139,25 @@ async def startup():
                 "ALTER TABLE pm_meetings ADD COLUMN IF NOT EXISTS teams_join_url VARCHAR(1000)",
                 "ALTER TABLE pm_meetings ADD COLUMN IF NOT EXISTS online_meeting_id VARCHAR(255)",
                 "ALTER TABLE pm_meetings ADD COLUMN IF NOT EXISTS transcript_synced_at TIMESTAMP",
+
+                # CV — multiple independent named versions per person (a permanent 'Work' one
+                # plus optional custom ones) instead of exactly one CV per email.
+                "ALTER TABLE employee_cv DROP CONSTRAINT IF EXISTS employee_cv_email_key",
+                "ALTER TABLE employee_cv ADD COLUMN IF NOT EXISTS version_name VARCHAR(100) NOT NULL DEFAULT 'Work'",
+                "ALTER TABLE employee_cv ADD COLUMN IF NOT EXISTS is_main BOOLEAN NOT NULL DEFAULT false",
+                "ALTER TABLE employee_cv ADD CONSTRAINT uq_employee_cv_email_version UNIQUE(email, version_name)",
+                # Backfill: any email with zero main-flagged rows yet (i.e. every pre-versioning
+                # row) has its oldest CV promoted to main — safe to re-run, a no-op once every
+                # email has exactly one main row (which app logic then maintains going forward).
+                """UPDATE employee_cv SET is_main = true WHERE id IN (
+                    SELECT DISTINCT ON (email) id FROM employee_cv
+                    WHERE email NOT IN (SELECT email FROM employee_cv WHERE is_main = true)
+                    ORDER BY email, created_at ASC
+                )""",
+                "ALTER TABLE employee_cv_experience ADD COLUMN IF NOT EXISTS cv_id UUID REFERENCES employee_cv(id) ON DELETE CASCADE",
+                """UPDATE employee_cv_experience e SET cv_id = (
+                    SELECT id FROM employee_cv c WHERE c.email = e.user_email AND c.is_main = true LIMIT 1
+                ) WHERE e.cv_id IS NULL""",
             ]
             for sql in sqls:
                 try:
