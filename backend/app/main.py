@@ -2164,6 +2164,16 @@ async def startup():
                 "ALTER TABLE pm_settings ADD COLUMN IF NOT EXISTS project_language VARCHAR(20) NOT NULL DEFAULT 'English'",
                 "ALTER TABLE pm_settings ADD COLUMN IF NOT EXISTS documentation_language VARCHAR(20) NOT NULL DEFAULT 'English'",
                 "ALTER TABLE pm_meetings ADD COLUMN IF NOT EXISTS language VARCHAR(20)",
+
+                # Contacts — rename the 'Operation' subscription value to 'Operations' inside
+                # the existing subscriptions JSONB array (a plain list of strings, not objects —
+                # rebuilt via jsonb_agg/jsonb_array_elements since there's no in-place JSONB
+                # array element rename). Idempotent: once no row contains the literal
+                # "Operation" element, the WHERE clause matches nothing on a re-run.
+                """UPDATE contacts SET subscriptions = (
+                    SELECT jsonb_agg(CASE WHEN elem = '"Operation"' THEN '"Operations"'::jsonb ELSE elem END)
+                    FROM jsonb_array_elements(subscriptions) elem
+                ) WHERE subscriptions @> '["Operation"]'::jsonb""",
             ]
             for sql in sqls:
                 try:

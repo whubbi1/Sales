@@ -259,7 +259,7 @@ export function ContactModal({ contact, onClose, onSave }: any) {
             <p className="section-label">Subscriptions</p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
               {SUBSCRIPTIONS.map(sub => {
-                const disabled = (sub === 'Marketing Information' || sub === 'Operation') && isOptedOut
+                const disabled = (sub === 'Marketing Information' || sub === 'Operations') && isOptedOut
                 return (
                   <label key={sub} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '9px 12px', border: `1.5px solid ${form.subscriptions.includes(sub) ? (sub === 'Opted Out' ? '#DC2626' : '#219BD6') : '#E2E8F0'}`, borderRadius: '8px', cursor: disabled ? 'not-allowed' : 'pointer', background: disabled ? '#F8FAFC' : form.subscriptions.includes(sub) ? (sub === 'Opted Out' ? '#FEF2F2' : '#EFF8FD') : 'white' }}>
                     <input type="checkbox" checked={form.subscriptions.includes(sub)} disabled={disabled} onChange={() => toggleSub(sub)} style={{ accentColor: sub === 'Opted Out' ? '#DC2626' : '#219BD6', width: '14px', height: '14px' }} />

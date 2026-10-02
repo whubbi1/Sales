@@ -331,7 +331,7 @@ async def create_portal_session(data: dict, db: AsyncSession = Depends(get_db)):
 # job_name is "Job Title" in the portal's own wording — job_type (a separate, internal
 # CRM segmentation enum) is deliberately not exposed here.
 PORTAL_SELF_FIELDS = {"first_name", "last_name", "mobile_phone", "job_name", "preferred_language", "subscriptions", "number_format", "currency"}
-VALID_SUBSCRIPTIONS = {"Marketing Information", "Customer Service Communication", "One to One", "Operation", "Opted Out"}
+VALID_SUBSCRIPTIONS = {"Marketing Information", "Customer Service Communication", "One to One", "Operations", "Opted Out"}
 
 
 @router.get("/{portal_type}/me")

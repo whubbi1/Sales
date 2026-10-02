@@ -5,14 +5,14 @@
 // backend's VALID_SUBSCRIPTIONS (backend/app/routers/portal.py).
 export const LANGUAGES = ['Afrikaans','Albanian','Amharic','Arabic','Armenian','Azerbaijani','Basque','Belarusian','Bengali','Bosnian','Bulgarian','Catalan','Chinese (Simplified)','Chinese (Traditional)','Croatian','Czech','Danish','Dutch','English','Estonian','Finnish','French','Georgian','German','Greek','Gujarati','Hebrew','Hindi','Hungarian','Icelandic','Indonesian','Irish','Italian','Japanese','Kazakh','Korean','Latvian','Lithuanian','Macedonian','Malay','Maltese','Mongolian','Nepali','Norwegian','Persian','Polish','Portuguese','Romanian','Russian','Serbian','Slovak','Slovenian','Spanish','Swahili','Swedish','Tamil','Telugu','Thai','Turkish','Ukrainian','Urdu','Vietnamese','Welsh']
 
-// 'Operation' is mandatory to use Project Management via the portal (see pm_user() in
+// 'Operations' is mandatory to use Project Management via the portal (see pm_user() in
 // backend/app/routers/project_management.py) — a contact without it is treated as having
 // no access at all, same as having no PMMember row.
-export const SUBSCRIPTIONS = ['Marketing Information', 'Customer Service Communication', 'One to One', 'Operation', 'Opted Out']
+export const SUBSCRIPTIONS = ['Marketing Information', 'Customer Service Communication', 'One to One', 'Operations', 'Opted Out']
 
 // Mutually exclusive with 'Opted Out', in both directions — an opted-out contact can't
 // receive marketing, and can't be marked as using the tool operationally either.
-const CLEARED_BY_OPT_OUT = ['Marketing Information', 'Operation']
+const CLEARED_BY_OPT_OUT = ['Marketing Information', 'Operations']
 
 export function toggleSubscription(current: string[], sub: string): string[] {
   const isOn = current.includes(sub)

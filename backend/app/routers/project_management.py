@@ -71,14 +71,14 @@ class PMUser:
         self.is_portal = is_portal
 
 
-async def _contact_has_operation_subscription(db: AsyncSession, email: str) -> bool:
-    """The 'Operation' subscription is mandatory for a portal contact to use Project
+async def _contact_has_operations_subscription(db: AsyncSession, email: str) -> bool:
+    """The 'Operations' subscription is mandatory for a portal contact to use Project
     Management — a linked Contact without it is treated as having no access at all,
     same as having no PMMember row."""
     r = await db.execute(text("""
         SELECT 1 FROM portal_users pu JOIN contacts c ON c.id = pu.contact_id
         WHERE pu.email = :email AND pu.portal_type = 'partner' AND pu.status = 'active'
-        AND c.subscriptions @> '["Operation"]'::jsonb
+        AND c.subscriptions @> '["Operations"]'::jsonb
     """), {"email": email})
     return r.fetchone() is not None
 
@@ -91,8 +91,8 @@ async def pm_user(request: Request, db: AsyncSession = Depends(get_db)) -> PMUse
     # below, which resolves their access purely from their PMMember.permissions.
     portal_email = await try_portal_user_email(request, db)
     if portal_email:
-        if not await _contact_has_operation_subscription(db, portal_email):
-            raise HTTPException(403, "Your account needs the Operation subscription to use Project Management")
+        if not await _contact_has_operations_subscription(db, portal_email):
+            raise HTTPException(403, "Your account needs the Operations subscription to use Project Management")
         return PMUser(portal_email, "view", is_portal=True)
 
     email = await get_current_user_email(request.headers.get("x-user-email"))

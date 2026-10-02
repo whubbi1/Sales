@@ -11,7 +11,7 @@ export const SECTIONS: { key: string; label: string }[] = [
   { key: 'decisions', label: 'Decision Register' }, { key: 'risks', label: 'Risk Management' }, { key: 'deliverables', label: 'Deliverables' },
 ]
 const EMPTY = { name: '', email: '', phone: '', project_role: '', company_role: '', contact_id: null as string | null, permissions: Object.fromEntries(SECTIONS.map(s => [s.key, 'view'])) as Record<string, string> }
-// Optional subscriptions offered in the inline "create new contact" form. 'Operation' is
+// Optional subscriptions offered in the inline "create new contact" form. 'Operations' is
 // mandatory there (it's what grants Operations/Project Management portal access) and
 // 'Opted Out' is deliberately omitted — the two are mutually exclusive, so offering an
 // opt-out next to a mandatory subscription would be contradictory.
@@ -51,7 +51,7 @@ export function MembersTab({ projectId, isManager }: { projectId: string; isMana
     if (!creatingContact.first_name.trim() || !creatingContact.last_name.trim()) throw new Error('First and last name are required')
     const created = await contactsAPI.create({
       ...creatingContact,
-      subscriptions: [...creatingContact.subscriptions, 'Operation'],
+      subscriptions: [...creatingContact.subscriptions, 'Operations'],
       data_source: 'Project', data_source_ref_type: 'projects', data_source_ref_id: projectId,
     })
     applyContact(created)
@@ -155,7 +155,7 @@ export function MembersTab({ projectId, isManager }: { projectId: string; isMana
                 </Field>
                 <Field label="Subscriptions" full>
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px' }}>
-                    <span style={{ fontSize: '11px', background: '#EFF8FD', color: '#144766', fontWeight: 700, padding: '4px 8px', borderRadius: '6px' }}>✓ Operation (required)</span>
+                    <span style={{ fontSize: '11px', background: '#EFF8FD', color: '#144766', fontWeight: 700, padding: '4px 8px', borderRadius: '6px' }}>✓ Operations (required)</span>
                     {NEW_CONTACT_SUBSCRIPTIONS.map(sub => (
                       <label key={sub} style={{ fontSize: '11px', display: 'flex', alignItems: 'center', gap: '4px' }}>
                         <input type="checkbox" checked={creatingContact.subscriptions.includes(sub)}
