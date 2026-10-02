@@ -206,7 +206,7 @@ export function OpportunityModal({ opportunity, duplicateFrom, fromLead, initial
               <FormField label="Partner">
                 <select className="form-input" value={form.partner_id} onChange={e => setForm(p => ({ ...p, partner_id: e.target.value }))}>
                   <option value="">No partner</option>
-                  {partners.map((p: any) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                  {partners.slice().sort((a: any, b: any) => a.name.localeCompare(b.name)).map((p: any) => <option key={p.id} value={p.id}>{p.name}</option>)}
                 </select>
               </FormField>
               <FormField label="Opportunity Type">
