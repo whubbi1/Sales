@@ -17,6 +17,7 @@ const COLUMNS: ReportColumn[] = [
   { key: 'country', label: 'Country', filterable: 'text' },
   { key: 'status', label: 'Status', filterable: 'select', options: ['active', 'inactive'] },
   { key: 'assigned_to', label: 'Assigned', filterable: 'text' },
+  { key: 'updated_at', label: 'Last Updated' },
 ]
 
 export default function PartnersPage() {
@@ -27,7 +28,7 @@ export default function PartnersPage() {
   const [userEmail, setUserEmail] = useState('')
   const [nameSearch, setNameSearch] = useState('')
 
-  const rb = useReportBuilder('partner', COLUMNS, userEmail, 'updated_at', 'desc')
+  const rb = useReportBuilder('partner', COLUMNS, userEmail, 'updated_at', 'desc', 'last_updated_default')
 
   const load = async () => {
     try {
@@ -118,6 +119,9 @@ export default function PartnersPage() {
                     )}
                     {isVisible('assigned_to') && (
                       <td style={{ padding: '12px 16px', borderBottom: '1px solid #F1F5F9', ...REPORT_CELL_STYLE }}>{partner.assigned_to || '—'}</td>
+                    )}
+                    {isVisible('updated_at') && (
+                      <td style={{ padding: '12px 16px', borderBottom: '1px solid #F1F5F9', ...REPORT_CELL_STYLE }}>{partner.updated_at ? new Date(partner.updated_at).toLocaleDateString() : '—'}</td>
                     )}
                   </tr>
                 ))}

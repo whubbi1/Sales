@@ -21,6 +21,7 @@ const COLUMNS: ReportColumn[] = [
   { key: 'hosting_display', label: 'Hosting' },
   { key: 'status', label: 'Status', filterable: 'select', options: ['lead', 'prospect', 'client', 'partner'] },
   { key: 'assigned_to', label: 'Assigned', filterable: 'text' },
+  { key: 'updated_at', label: 'Last Updated' },
 ]
 
 // table-layout:fixed (needed so resized column widths actually stick) divides unset columns
@@ -28,7 +29,7 @@ const COLUMNS: ReportColumn[] = [
 // the first-ever render sane proportions until a user drags a column to their own preference.
 const DEFAULT_COLUMN_WIDTHS: Record<string, number> = {
   name: 260, level_label: 110, main_contact_display: 170, domains_display: 170,
-  main_erp_display: 150, hosting_display: 150, status: 110, assigned_to: 150,
+  main_erp_display: 150, hosting_display: 150, status: 110, assigned_to: 150, updated_at: 130,
 }
 
 export default function CompaniesPage() {
@@ -40,7 +41,7 @@ export default function CompaniesPage() {
   const [stats, setStats] = useState<any>(null)
   const [nameSearch, setNameSearch] = useState('')
 
-  const rb = useReportBuilder('company', COLUMNS, userEmail, 'updated_at', 'desc')
+  const rb = useReportBuilder('company', COLUMNS, userEmail, 'updated_at', 'desc', 'last_updated_default')
 
   const load = async () => {
     try {
@@ -75,9 +76,8 @@ export default function CompaniesPage() {
     hosting_display: (c.sap_hosting_partner || []).join(', '),
   }))
 
-  // Flat list, sorted like any other report — default sortField is 'name' (COLUMNS[0]),
-  // so alphabetical is the out-of-the-box view, and clicking any column header re-sorts
-  // by that column same as everywhere else.
+  // Flat list, sorted like any other report — default sort is Last Updated (newest first, see
+  // the useReportBuilder call above), and clicking any column header re-sorts by that column.
   const searched = withDisplay.filter(c => !nameSearch.trim() || c.name.toLowerCase().includes(nameSearch.trim().toLowerCase()))
   const reported = applyReport(searched, COLUMNS, rb.filters, rb.sortField, rb.sortDir)
   const pageRows = reported.slice((rb.page - 1) * 20, rb.page * 20)
@@ -187,6 +187,9 @@ export default function CompaniesPage() {
                     )}
                     {isVisible('assigned_to') && (
                       <td style={{ padding: '12px 16px', borderBottom: '1px solid #F1F5F9', ...REPORT_CELL_STYLE }}>{company.assigned_to || '—'}</td>
+                    )}
+                    {isVisible('updated_at') && (
+                      <td style={{ padding: '12px 16px', borderBottom: '1px solid #F1F5F9', ...REPORT_CELL_STYLE }}>{company.updated_at ? new Date(company.updated_at).toLocaleDateString() : '—'}</td>
                     )}
                   </tr>
                 ))}

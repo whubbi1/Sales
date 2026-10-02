@@ -34,6 +34,7 @@ const COLUMNS: ReportColumn[] = [
   { key: 'email', label: 'Email', filterable: 'text' },
   { key: 'lead_status', label: 'Lead Status', filterable: 'select', options: ['New', 'Open', 'Connected'] },
   { key: 'preferred_language', label: 'Language', filterable: 'text' },
+  { key: 'updated_at', label: 'Last Updated' },
 ]
 
 // table-layout:fixed (needed so resized column widths actually stick) divides unset columns
@@ -41,7 +42,7 @@ const COLUMNS: ReportColumn[] = [
 // the first-ever render sane proportions until a user drags a column to their own preference.
 const DEFAULT_COLUMN_WIDTHS: Record<string, number> = {
   internal_id: 100, contact_name: 220, company_name: 180, job_name: 160,
-  job_type: 150, email: 200, lead_status: 110, preferred_language: 120,
+  job_type: 150, email: 200, lead_status: 110, preferred_language: 120, updated_at: 130,
 }
 
 export default function ContactsPage() {
@@ -80,7 +81,7 @@ export default function ContactsPage() {
     setAiResult(result); setAiLoading(false)
   }
 
-  const rb = useReportBuilder('contact', COLUMNS, userEmail, 'updated_at', 'desc')
+  const rb = useReportBuilder('contact', COLUMNS, userEmail, 'updated_at', 'desc', 'last_updated_default')
 
   const load = async () => {
     try {
@@ -190,6 +191,9 @@ export default function ContactsPage() {
                     )}
                     {isVisible('preferred_language') && (
                       <td style={{ padding: '11px 16px', borderBottom: '1px solid #F1F5F9', ...REPORT_CELL_STYLE }}>{contact.preferred_language || '—'}</td>
+                    )}
+                    {isVisible('updated_at') && (
+                      <td style={{ padding: '11px 16px', borderBottom: '1px solid #F1F5F9', ...REPORT_CELL_STYLE }}>{contact.updated_at ? new Date(contact.updated_at).toLocaleDateString() : '—'}</td>
                     )}
                     <td style={{ padding: '11px 16px', borderBottom: '1px solid #F1F5F9' }}>
                       <button onClick={e => { e.stopPropagation(); setSelectedContact(contact); setAiResult(''); setShowWebSearch(true) }}

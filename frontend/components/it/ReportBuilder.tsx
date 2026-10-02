@@ -16,11 +16,16 @@ export const REPORT_CELL_STYLE: React.CSSProperties = {
   fontFamily: 'Montserrat, sans-serif', fontSize: '12px', color: '#3F3F3F', fontWeight: 400,
 }
 
-function storageKeyFor(module: string, userEmail: string) {
-  return userEmail ? `it_report_state_${module}_${userEmail}` : ''
+function storageKeyFor(module: string, userEmail: string, storageVersion?: string) {
+  if (!userEmail) return ''
+  return `it_report_state_${module}${storageVersion ? `_${storageVersion}` : ''}_${userEmail}`
 }
 
-export function useReportBuilder(module: string, columns: ReportColumn[], userEmail: string, defaultSortField?: string, defaultSortDir?: 'asc' | 'desc') {
+// storageVersion: bump this (any new string) to make every user's saved view for this module
+// start fresh from defaultSortField/defaultSortDir — their old localStorage entry is simply
+// abandoned under its previous key, nothing is deleted. Server-side saved views (named, via
+// saveView) are keyed by `module` alone and are unaffected either way.
+export function useReportBuilder(module: string, columns: ReportColumn[], userEmail: string, defaultSortField?: string, defaultSortDir?: 'asc' | 'desc', storageVersion?: string) {
   const allKeys = columns.map(c => c.key)
   const initialSortField = defaultSortField || columns[0]?.key || ''
   const initialSortDir = defaultSortDir || 'asc'
@@ -50,7 +55,7 @@ export function useReportBuilder(module: string, columns: ReportColumn[], userEm
   // state (the restore's setState calls hadn't committed yet) and immediately clobber whatever
   // was in localStorage with those defaults, on every single page load.
   useEffect(() => {
-    const key = storageKeyFor(module, userEmail)
+    const key = storageKeyFor(module, userEmail, storageVersion)
     if (key) {
       try {
         const raw = localStorage.getItem(key)
@@ -71,10 +76,10 @@ export function useReportBuilder(module: string, columns: ReportColumn[], userEm
 
   useEffect(() => {
     if (!restored) return
-    const key = storageKeyFor(module, userEmail)
+    const key = storageKeyFor(module, userEmail, storageVersion)
     if (!key) return
     localStorage.setItem(key, JSON.stringify({ visibleCols, filters, sortField, sortDir, columnWidths, activeViewId }))
-  }, [restored, module, userEmail, visibleCols, filters, sortField, sortDir, columnWidths, activeViewId])
+  }, [restored, module, userEmail, storageVersion, visibleCols, filters, sortField, sortDir, columnWidths, activeViewId])
 
   const toggleCol = (key: string) => {
     setVisibleCols(v => v.includes(key) ? v.filter(k => k !== key) : [...v, key])

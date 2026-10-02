@@ -23,11 +23,12 @@ const BASE_COLUMNS: ReportColumn[] = [
   { key: 'status', label: 'Status', filterable: 'select', options: STATUS_OPTIONS },
   { key: 'start_date', label: 'Start' },
   { key: 'end_date', label: 'End' },
+  { key: 'updated_at', label: 'Last Updated' },
 ]
 
 const DEFAULT_COLUMN_WIDTHS: Record<string, number> = {
   lead_number: 110, title: 240, company_name: 170, partners_names: 170,
-  origin: 130, status: 160, start_date: 120, end_date: 120,
+  origin: 130, status: 160, start_date: 120, end_date: 120, updated_at: 130,
   main_operational_team_name: 170, sales_team_name: 170,
 }
 
@@ -66,7 +67,7 @@ function LeadsContent() {
     { key: 'sales_team_name', label: 'Sales Team', filterable: 'select', options: salesTeams.map((t: any) => t.title) },
   ], [operationalTeams, salesTeams])
 
-  const rb = useReportBuilder('leads', COLUMNS, userEmail, 'updated_at', 'desc')
+  const rb = useReportBuilder('leads', COLUMNS, userEmail, 'updated_at', 'desc', 'last_updated_default')
 
   const load = async () => {
     try {
@@ -162,6 +163,7 @@ function LeadsContent() {
                     )}
                     {isVisible('start_date') && <td style={{ padding: '11px 16px', borderBottom: '1px solid #F1F5F9', ...REPORT_CELL_STYLE }}>{fmt(l.start_date)}</td>}
                     {isVisible('end_date') && <td style={{ padding: '11px 16px', borderBottom: '1px solid #F1F5F9', ...REPORT_CELL_STYLE }}>{fmt(l.end_date)}</td>}
+                    {isVisible('updated_at') && <td style={{ padding: '11px 16px', borderBottom: '1px solid #F1F5F9', ...REPORT_CELL_STYLE }}>{fmt(l.updated_at)}</td>}
                     {isVisible('main_operational_team_name') && <td style={{ padding: '11px 16px', borderBottom: '1px solid #F1F5F9', ...REPORT_CELL_STYLE }}>{l.main_operational_team_name || '—'}</td>}
                     {isVisible('sales_team_name') && <td style={{ padding: '11px 16px', borderBottom: '1px solid #F1F5F9', ...REPORT_CELL_STYLE }}>{l.sales_team_name || '—'}</td>}
                   </tr>
