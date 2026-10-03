@@ -37,10 +37,12 @@ function EditableCell({ display, editing, canEdit, onStartEdit, children }: any)
   )
 }
 
-function TaskRow({ task, onValidated }: { task: any; onValidated: () => void }) {
+function TaskRow({ task, caseId, canEdit, caseClosed, onValidated }: { task: any; caseId: string; canEdit: boolean; caseClosed: boolean; onValidated: () => void }) {
   const router = useRouter()
   const [showComment, setShowComment] = useState(false)
   const [comment, setComment] = useState('')
+  const [showNotRelevant, setShowNotRelevant] = useState(false)
+  const [reason, setReason] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const me = getStoredUser()?.email || ''
@@ -60,22 +62,52 @@ function TaskRow({ task, onValidated }: { task: any; onValidated: () => void }) 
     finally { setSaving(false) }
   }
 
+  const setRelevance = async (notRelevant: boolean) => {
+    if (notRelevant && !reason.trim()) { setError('Please give the reason this task is not relevant.'); return }
+    setSaving(true); setError('')
+    try {
+      await hrChecklistAPI.setTaskRelevance(caseId, task.id, { not_relevant: notRelevant, reason: reason.trim() })
+      setShowNotRelevant(false); setReason('')
+      onValidated()
+    } catch (e: any) { setError(e.message) }
+    finally { setSaving(false) }
+  }
+
   return (
-    <div style={{ border: '1px solid #EDF2F7', borderRadius: '8px', padding: '12px 14px', marginBottom: '8px' }}>
+    <div style={{ border: '1px solid #EDF2F7', borderRadius: '8px', padding: '12px 14px', marginBottom: '8px', background: task.not_relevant ? '#FAFBFC' : undefined }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
         <div style={{ flex: 1, cursor: 'pointer' }} onClick={() => router.push(`/task-manager/${task.id}`)}>
-          <div style={{ fontSize: '12px', fontWeight: '700', color: '#156082' }}>{task.title}</div>
+          <div style={{ fontSize: '12px', fontWeight: '700', color: task.not_relevant ? '#94A3B8' : '#156082', textDecoration: task.not_relevant ? 'line-through' : undefined }}>{task.title}</div>
           <div style={{ fontSize: '10px', color: '#94A3B8', marginTop: '2px' }}>
             {task.task_number} · Assigned to {task.assignee_name || task.assignee_email || '—'}
           </div>
         </div>
-        <span style={{ background: TASK_STATUS_COLOR[task.status]?.bg, color: TASK_STATUS_COLOR[task.status]?.color, padding: '2px 9px', borderRadius: '10px', fontSize: '10px', fontWeight: '700', flexShrink: 0 }}>{task.status}</span>
+        {task.not_relevant
+          ? <span style={{ background: '#F1F5F9', color: '#64748B', padding: '2px 9px', borderRadius: '10px', fontSize: '10px', fontWeight: '700', flexShrink: 0 }}>not relevant</span>
+          : <span style={{ background: TASK_STATUS_COLOR[task.status]?.bg, color: TASK_STATUS_COLOR[task.status]?.color, padding: '2px 9px', borderRadius: '10px', fontSize: '10px', fontWeight: '700', flexShrink: 0 }}>{task.status}</span>}
       </div>
-      {!done && (
+      {task.not_relevant && (
+        <div style={{ marginTop: '8px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <div style={{ flex: 1, fontSize: '11px', color: '#64748B' }}>
+            <b>Reason:</b> {task.not_relevant_reason}
+            {task.not_relevant_by && <span style={{ color: '#94A3B8' }}> · marked by {task.not_relevant_by}</span>}
+          </div>
+          {canEdit && !caseClosed && <button onClick={() => setRelevance(false)} disabled={saving} style={{ ...btn, background: '#F1F5F9', color: '#64748B' }}>{saving ? 'Saving…' : 'Undo'}</button>}
+        </div>
+      )}
+      {!done && showNotRelevant && (
+        <div style={{ marginTop: '10px', display: 'flex', gap: '8px' }}>
+          <input autoFocus style={{ ...inp, flex: 1 }} placeholder="Why is this task not relevant for this person? (required)" value={reason} onChange={e => setReason(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') setRelevance(true) }} />
+          <button onClick={() => setRelevance(true)} disabled={saving} style={{ ...btn, background: '#64748B', color: 'white' }}>{saving ? 'Saving…' : 'Confirm'}</button>
+          <button onClick={() => { setShowNotRelevant(false); setReason(''); setError('') }} style={{ ...btn, background: '#F1F5F9', color: '#64748B' }}>Cancel</button>
+        </div>
+      )}
+      {!done && !showNotRelevant && (
         <div style={{ marginTop: '10px' }}>
           {!showComment ? (
             <div style={{ display: 'flex', gap: '8px' }}>
               <button onClick={() => setShowComment(true)} style={{ ...btn, background: '#ECFDF5', color: '#059669' }}>✓ Validate</button>
+              {canEdit && !caseClosed && <button onClick={() => { setShowNotRelevant(true); setError('') }} style={{ ...btn, background: '#F8FAFC', color: '#64748B', border: '1px solid #E2E8F0' }}>⊘ Not relevant</button>}
               <button onClick={() => router.push(`/task-manager/${task.id}`)} style={{ ...btn, background: '#F1F5F9', color: '#64748B' }}>Open Task</button>
             </div>
           ) : (
@@ -88,6 +120,7 @@ function TaskRow({ task, onValidated }: { task: any; onValidated: () => void }) 
           {error && <div style={{ marginTop: '8px', background: '#FEF2F2', color: '#DC2626', padding: '8px 12px', borderRadius: '6px', fontSize: '11px' }}>{error}</div>}
         </div>
       )}
+      {error && (showNotRelevant || task.not_relevant) && <div style={{ marginTop: '8px', background: '#FEF2F2', color: '#DC2626', padding: '8px 12px', borderRadius: '6px', fontSize: '11px' }}>{error}</div>}
     </div>
   )
 }
@@ -273,7 +306,7 @@ function ChecklistCaseContent() {
         {tasks.length === 0 ? (
           <p style={{ fontSize: '12px', color: '#94A3B8', margin: 0 }}>No tasks were generated for this case.</p>
         ) : (
-          tasks.map((t: any) => <TaskRow key={t.id} task={t} onValidated={load} />)
+          tasks.map((t: any) => <TaskRow key={t.id} task={t} caseId={caseData.id} canEdit={perm.canEdit} caseClosed={caseData.status === 'closed'} onValidated={load} />)
         )}
       </div>
 

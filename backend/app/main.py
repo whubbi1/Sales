@@ -289,6 +289,7 @@ async def startup():
                     doc_type VARCHAR(50) DEFAULT 'document',
                     uploaded_at TIMESTAMP DEFAULT NOW()
                 )""",
+                "ALTER TABLE hr_profile_documents ADD COLUMN IF NOT EXISTS description TEXT",
                 # Job positions + interview assignments
                 """CREATE TABLE IF NOT EXISTS hr_job_positions (
                     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -1071,6 +1072,11 @@ async def startup():
                     task_id UUID NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
                     created_at TIMESTAMP DEFAULT NOW()
                 )""",
+                # A case task can be marked "not relevant" for that person, with the reason
+                "ALTER TABLE hr_checklist_case_tasks ADD COLUMN IF NOT EXISTS not_relevant BOOLEAN DEFAULT false",
+                "ALTER TABLE hr_checklist_case_tasks ADD COLUMN IF NOT EXISTS not_relevant_reason TEXT",
+                "ALTER TABLE hr_checklist_case_tasks ADD COLUMN IF NOT EXISTS not_relevant_by VARCHAR(255)",
+                "ALTER TABLE hr_checklist_case_tasks ADD COLUMN IF NOT EXISTS not_relevant_at TIMESTAMP",
 
                 # MCP personal access tokens — lets a WHUBBI user connect an MCP client
                 # (Claude Code/Desktop) to the same permission-gated tools the Teams bot uses.

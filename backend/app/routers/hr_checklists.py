@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
 from app.database import get_db
-from app.authz import require_any_permission
+from app.authz import require_any_permission, get_current_user_email
 import uuid
 
 router = APIRouter()
@@ -285,7 +285,8 @@ async def get_checklist_case(case_id: str, db: AsyncSession = Depends(get_db), _
     case = _row(dict(row._mapping))
 
     tasks = await db.execute(text("""
-        SELECT t.* FROM hr_checklist_case_tasks ct
+        SELECT t.*, ct.not_relevant, ct.not_relevant_reason, ct.not_relevant_by, ct.not_relevant_at
+        FROM hr_checklist_case_tasks ct
         JOIN tasks t ON t.id = ct.task_id
         WHERE ct.case_id = CAST(:id AS UUID)
         ORDER BY t.created_at ASC
@@ -309,6 +310,43 @@ async def update_checklist_case(case_id: str, data: dict, db: AsyncSession = Dep
     """), {"id": case_id, "responsible_email": responsible_email, "responsible_name": responsible_name})
     await db.commit()
     return await _get_case(db, case_id)
+
+
+@router.put("/checklist-cases/{case_id}/tasks/{task_id}/relevance")
+async def set_case_task_relevance(
+    case_id: str, task_id: str, data: dict, db: AsyncSession = Depends(get_db),
+    _: str = Depends(require_any_permission(_ONBOARDING_OR_OFFBOARDING, "edit")),
+    caller: str = Depends(get_current_user_email),
+):
+    """Mark a case task as not relevant for this person (with a reason), or undo it.
+    The underlying Task Manager task is closed (or reopened) and the reason is logged
+    on it, so it leaves the assignee's to-do list with an explanation."""
+    from app.routers.task_manager import _log_comment
+    case = await _get_case(db, case_id)
+    if not case:
+        raise HTTPException(status_code=404, detail="Case not found")
+    if case.get("status") == "closed":
+        raise HTTPException(status_code=400, detail="This case is closed")
+    not_relevant = bool(data.get("not_relevant"))
+    reason = (data.get("reason") or "").strip()
+    if not_relevant and not reason:
+        raise HTTPException(status_code=400, detail="A reason is required")
+    r = await db.execute(text("""
+        UPDATE hr_checklist_case_tasks SET not_relevant = :nr, not_relevant_reason = :reason,
+            not_relevant_by = :by, not_relevant_at = CASE WHEN :nr THEN NOW() ELSE NULL END
+        WHERE case_id = CAST(:case_id AS UUID) AND task_id = CAST(:task_id AS UUID)
+    """), {"nr": not_relevant, "reason": reason if not_relevant else None, "by": caller if not_relevant else None,
+           "case_id": case_id, "task_id": task_id})
+    if not r.rowcount:
+        raise HTTPException(status_code=404, detail="Task not found in this case")
+    if not_relevant:
+        await db.execute(text("UPDATE tasks SET status = 'closed', closed_at = NOW(), updated_at = NOW() WHERE id = CAST(:id AS UUID)"), {"id": task_id})
+        await _log_comment(db, task_id, f"Marked as not relevant for {case.get('user_name') or case.get('user_email')} by {caller}. Reason: {reason}")
+    else:
+        await db.execute(text("UPDATE tasks SET status = 'open', closed_at = NULL, updated_at = NOW() WHERE id = CAST(:id AS UUID)"), {"id": task_id})
+        await _log_comment(db, task_id, f"Marked as relevant again by {caller}; task reopened.")
+    await db.commit()
+    return {"status": "ok"}
 
 
 @router.put("/checklist-cases/{case_id}/close")

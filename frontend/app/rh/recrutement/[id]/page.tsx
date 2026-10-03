@@ -503,13 +503,31 @@ export default function CandidateDetail() {
     setExtracting(false); load()
   }
 
-  const uploadDocument = async (file: File) => {
+  // Picking a file opens a small form so a description can be added before uploading.
+  const [pendingDoc, setPendingDoc] = useState<File | null>(null)
+  const [pendingDocDesc, setPendingDocDesc] = useState('')
+  const uploadDocument = async () => {
+    if (!pendingDoc) return
     setDocUploading(true)
-    const fd = new FormData(); fd.append('file', file)
+    const fd = new FormData(); fd.append('file', pendingDoc); fd.append('description', pendingDocDesc)
     try {
-      await apiFetch(`/hr/recruitment/${id}/documents`, { method:'POST', body:fd })
-      loadDocs()
-    } finally { setDocUploading(false) }
+      const r = await apiFetch(`/hr/recruitment/${id}/documents`, { method:'POST', body:fd })
+      if (!r.ok) { alert(`The document could not be saved (error ${r.status}).`); return }
+      setPendingDoc(null); setPendingDocDesc(''); loadDocs()
+    } finally { setDocUploading(false); if (docFileRef.current) docFileRef.current.value = '' }
+  }
+  const editDocumentDescription = async (doc: any) => {
+    const description = prompt('Description', doc.description || '')
+    if (description === null) return
+    const r = await apiFetch(`/hr/recruitment/${id}/documents/${doc.id}`, { method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ description }) })
+    if (!r.ok) alert(`The description could not be saved (error ${r.status}).`)
+    loadDocs()
+  }
+  const deleteDocument = async (doc: any) => {
+    if (!confirm(`Delete "${doc.filename}"?`)) return
+    const r = await apiFetch(`/hr/recruitment/${id}/documents/${doc.id}`, { method:'DELETE' })
+    if (!r.ok) alert(`The document could not be deleted (error ${r.status}).`)
+    loadDocs()
   }
 
   const updateStatus = async (status: string) => {
@@ -729,19 +747,39 @@ export default function CandidateDetail() {
                 )}
               </div>
               {documents.map((doc:any) => (
-                <a key={doc.id} href={doc.sharepoint_url} target="_blank"
-                  style={{ border:'1px solid #EDF2F7', borderRadius:'8px', padding:'8px 14px', display:'flex', alignItems:'center', gap:'6px', background:'#FAFBFC', textDecoration:'none', minWidth:'120px' }}>
+                <div key={doc.id}
+                  style={{ border:'1px solid #EDF2F7', borderRadius:'8px', padding:'8px 14px', display:'flex', alignItems:'center', gap:'8px', background:'#FAFBFC', minWidth:'160px', maxWidth:'320px' }}>
                   <span style={{ fontSize:'16px' }}>📎</span>
-                  <span style={{ fontSize:'12px', fontWeight:'600', color:'#156082' }}>{doc.filename}</span>
-                </a>
+                  <div style={{ minWidth:0, flex:1 }}>
+                    <a href={doc.sharepoint_url} target="_blank" style={{ fontSize:'12px', fontWeight:'600', color:'#156082', textDecoration:'none', display:'block', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{doc.filename}</a>
+                    {doc.description && <span style={{ fontSize:'10px', color:'#64748B', display:'block' }}>{doc.description}</span>}
+                  </div>
+                  {canEdit && <>
+                    <button title="Edit description" onClick={() => editDocumentDescription(doc)} style={{ background:'none', border:'none', cursor:'pointer', padding:'0 2px', fontSize:'12px', color:'#94A3B8' }}>✏️</button>
+                    <button title="Delete document" onClick={() => deleteDocument(doc)} style={{ background:'none', border:'none', cursor:'pointer', padding:'0 2px', fontSize:'15px', color:'#DC2626' }}>×</button>
+                  </>}
+                </div>
               ))}
-              <div style={{ border:'1.5px dashed #EDF2F7', borderRadius:'8px', padding:'8px 14px', display:'flex', alignItems:'center', gap:'6px', cursor:'pointer', minWidth:'140px' }}
-                onClick={() => docFileRef.current?.click()}
-                onMouseEnter={e=>(e.currentTarget as HTMLDivElement).style.borderColor='#45B6E4'}
-                onMouseLeave={e=>(e.currentTarget as HTMLDivElement).style.borderColor='#EDF2F7'}>
-                <input ref={docFileRef} type="file" accept=".pdf,.doc,.docx,.odt,.rtf,.xls,.xlsx,.png,.jpg,.jpeg" style={{ display:'none' }} onChange={e => e.target.files?.[0] && uploadDocument(e.target.files[0])}/>
-                {docUploading ? <span style={{ color:'#45B6E4', fontSize:'12px' }}>Uploading…</span> : <span style={{ color:'#94A3B8', fontSize:'12px' }}>+ Add document</span>}
-              </div>
+              {canEdit && (pendingDoc ? (
+                <div style={{ border:'1.5px solid #45B6E4', borderRadius:'8px', padding:'8px 12px', display:'flex', alignItems:'center', gap:'8px', background:'white' }}>
+                  <span style={{ fontSize:'12px', fontWeight:'600', color:'#156082', maxWidth:'160px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>📎 {pendingDoc.name}</span>
+                  <input autoFocus placeholder="Description (e.g. diploma, reference letter)" value={pendingDocDesc} onChange={e => setPendingDocDesc(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') uploadDocument() }}
+                    style={{ fontSize:'12px', padding:'5px 8px', border:'1px solid #E2E8F0', borderRadius:'6px', fontFamily:'Montserrat, sans-serif', outline:'none', width:'240px' }}/>
+                  <button onClick={uploadDocument} disabled={docUploading}
+                    style={{ padding:'5px 12px', background:'#156082', color:'white', border:'none', borderRadius:'6px', fontSize:'11px', fontWeight:'700', cursor: docUploading ? 'not-allowed' : 'pointer', fontFamily:'Montserrat, sans-serif' }}>{docUploading ? 'Uploading…' : 'Upload'}</button>
+                  <button title="Cancel" onClick={() => { setPendingDoc(null); setPendingDocDesc(''); if (docFileRef.current) docFileRef.current.value = '' }} disabled={docUploading}
+                    style={{ background:'none', border:'none', cursor:'pointer', padding:'0 2px', fontSize:'15px', color:'#94A3B8' }}>×</button>
+                </div>
+              ) : (
+                <div style={{ border:'1.5px dashed #EDF2F7', borderRadius:'8px', padding:'8px 14px', display:'flex', alignItems:'center', gap:'6px', cursor:'pointer', minWidth:'140px' }}
+                  onClick={() => docFileRef.current?.click()}
+                  onMouseEnter={e=>(e.currentTarget as HTMLDivElement).style.borderColor='#45B6E4'}
+                  onMouseLeave={e=>(e.currentTarget as HTMLDivElement).style.borderColor='#EDF2F7'}>
+                  <span style={{ color:'#94A3B8', fontSize:'12px' }}>+ Add document</span>
+                </div>
+              ))}
+              <input ref={docFileRef} type="file" accept=".pdf,.doc,.docx,.odt,.rtf,.xls,.xlsx,.png,.jpg,.jpeg" style={{ display:'none' }} onChange={e => { const file = e.target.files?.[0]; if (file) { setPendingDoc(file); setPendingDocDesc('') } }}/>
             </div>
           </div>
         </div>

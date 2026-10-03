@@ -589,6 +589,7 @@ export const hrChecklistAPI = {
   startCase:  (d: any) => fetchAPI('/hr/checklist-cases', { method: 'POST', body: JSON.stringify(d) }),
   updateCase: (id: string, d: any) => fetchAPI(`/hr/checklist-cases/${id}`, { method: 'PUT', body: JSON.stringify(d) }),
   closeCase:  (id: string) => fetchAPI(`/hr/checklist-cases/${id}/close`, { method: 'PUT' }),
+  setTaskRelevance: (caseId: string, taskId: string, d: { not_relevant: boolean; reason?: string }) => fetchAPI(`/hr/checklist-cases/${caseId}/tasks/${taskId}/relevance`, { method: 'PUT', body: JSON.stringify(d) }),
 
   getCaseEquipments:  (id: string) => fetchAPI(`/hr/checklist-cases/${id}/equipments`),
   assignEquipment:    (id: string, equipmentId: string) => fetchAPI(`/hr/checklist-cases/${id}/equipments/${equipmentId}`, { method: 'POST' }),

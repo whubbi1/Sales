@@ -420,38 +420,78 @@ async def upload_cv(profile_id: str, file: UploadFile = File(...), db: AsyncSess
 @router.get("/recruitment/{profile_id}/documents")
 async def get_profile_documents(profile_id: str, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("hr", "recrutement", "view"))):
     rows = await db.execute(text("""
-        SELECT id, filename, sharepoint_url, doc_type, uploaded_at
+        SELECT id, filename, description, sharepoint_url, doc_type, uploaded_at
         FROM hr_profile_documents WHERE profile_id = CAST(:id AS UUID)
         ORDER BY uploaded_at DESC
     """), {"id": profile_id})
     docs = [dict(r._mapping) for r in rows.fetchall()]
-    for d in docs: d["id"] = str(d["id"])
+    for d in docs:
+        d["id"] = str(d["id"])
+        d["sharepoint_url"] = await s3_ref_to_presigned(d.get("sharepoint_url") or "")
     return {"documents": docs}
 
 @router.post("/recruitment/{profile_id}/documents")
-async def upload_profile_document(profile_id: str, file: UploadFile = File(...), db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("hr", "recrutement", "edit"))):
-    content = await file.read()
-    token = await get_ms_token()
+async def upload_profile_document(
+    profile_id: str,
+    file: UploadFile = File(...),
+    description: str = Form(""),
+    db: AsyncSession = Depends(get_db),
+    _: str = Depends(require_permission("hr", "recrutement", "edit")),
+):
     row = await db.execute(
-        text("SELECT first_name, last_name, country FROM hr_profiles WHERE id=CAST(:id AS UUID)"),
+        text("SELECT first_name, last_name, country FROM hr_profiles WHERE id=CAST(:id AS UUID) AND profile_type='internal'"),
         {"id": profile_id}
     )
     profile = row.fetchone()
-    url = ""
-    if profile:
+    if not profile:
+        raise HTTPException(404, "Not found")
+    content = await file.read()
+    doc_id = str(uuid.uuid4())
+    safe_fn = file.filename.replace(" ", "_")
+    try:
+        s3_ref = await upload_to_s3(f"hr/recruitment/{profile_id}/documents/{doc_id}_{safe_fn}", content, file.content_type or "application/octet-stream")
+    except Exception as e:
+        print(f"S3 upload error: {e}")
+        raise HTTPException(500, f"Upload failed: {e}")
+    await db.execute(text("""
+        INSERT INTO hr_profile_documents (id, profile_id, filename, description, sharepoint_url, doc_type, uploaded_at)
+        VALUES (CAST(:id AS UUID), CAST(:pid AS UUID), :fn, :description, :url, 'document', NOW())
+    """), {"id": doc_id, "pid": profile_id, "fn": file.filename, "description": description.strip(), "url": s3_ref})
+    await db.commit()
+    # Keep the recruitment SharePoint folder in sync when it is reachable; WHUBBI holds the file regardless.
+    try:
+        token = await get_ms_token()
         name_folder = f"{profile.first_name} {profile.last_name}".strip() or profile_id
         country = (profile.country or "unknown").replace(" ", "_")
-        subfolder = f"{country}/{name_folder}"
-        url = await upload_to_sharepoint_folder(token, SHAREPOINT_RECRUITMENT_URL, subfolder, file.filename, content)
-    if url:
-        await db.execute(text("""
-            INSERT INTO hr_profile_documents (id, profile_id, filename, sharepoint_url, uploaded_at)
-            VALUES (gen_random_uuid(), CAST(:pid AS UUID), :fn, :url, NOW())
-        """), {"pid": profile_id, "fn": file.filename, "url": url})
-        await db.commit()
-    return {"status": "ok" if url else "upload_failed", "sharepoint_url": url}
+        await upload_to_sharepoint_folder(token, SHAREPOINT_RECRUITMENT_URL, f"{country}/{name_folder}", file.filename, content)
+    except Exception as e:
+        print(f"SharePoint document copy skipped: {e}")
+    return {"status": "ok", "id": doc_id}
 
-# ─── Freelancers ────────────────────────────────────────────────────────────────
+@router.put("/recruitment/{profile_id}/documents/{doc_id}")
+async def update_profile_document(profile_id: str, doc_id: str, data: dict, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("hr", "recrutement", "edit"))):
+    r = await db.execute(text("""
+        UPDATE hr_profile_documents SET description = :description
+        WHERE id = CAST(:id AS UUID) AND profile_id = CAST(:pid AS UUID)
+    """), {"description": (data.get("description") or "").strip(), "id": doc_id, "pid": profile_id})
+    if not r.rowcount:
+        raise HTTPException(404, "Not found")
+    await db.commit()
+    return {"status": "ok"}
+
+@router.delete("/recruitment/{profile_id}/documents/{doc_id}")
+async def delete_profile_document(profile_id: str, doc_id: str, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("hr", "recrutement", "edit"))):
+    row = await db.execute(text(
+        "SELECT sharepoint_url FROM hr_profile_documents WHERE id=CAST(:id AS UUID) AND profile_id=CAST(:pid AS UUID)"
+    ), {"id": doc_id, "pid": profile_id})
+    doc = row.fetchone()
+    if not doc:
+        raise HTTPException(404, "Not found")
+    await db.execute(text("DELETE FROM hr_profile_documents WHERE id=CAST(:id AS UUID)"), {"id": doc_id})
+    await db.commit()
+    await delete_s3_ref(doc.sharepoint_url)
+    return {"status": "ok"}
+
 @router.get("/freelancers")
 async def list_freelancers(db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("hr", "freelancers", "view"))):
     result = await db.execute(text("""
@@ -709,12 +749,14 @@ async def create_candidate(data: dict, db: AsyncSession = Depends(get_db), _: st
     pid = str(uuid.uuid4())
     await db.execute(text("""
         INSERT INTO hr_profiles (id, profile_type, first_name, last_name, email, phone, linkedin_url,
-            country, language, current_title, skills, years_experience, recruitment_status,
+            country, language, current_title, skills, years_experience, recruitment_status, job_position_id,
             cv_filename, cv_sharepoint_url, cv_extracted, created_at, updated_at, created_by)
         VALUES (CAST(:id AS UUID), 'internal', :first_name, :last_name, :email, :phone, :linkedin_url,
             :country, :language, :current_title, CAST(:skills AS JSON), :years_experience, :recruitment_status,
+            CAST(NULLIF(:job_position_id, '') AS UUID),
             :cv_filename, :cv_sharepoint_url, :cv_extracted, NOW(), NOW(), :created_by)
     """), {
+        "job_position_id": data.get("job_position_id") or "",
         "id": pid, "first_name": data.get("first_name",""), "last_name": data.get("last_name",""),
         "email": data.get("email",""), "phone": data.get("phone",""), "linkedin_url": data.get("linkedin_url",""),
         "country": data.get("country","france"), "language": data.get("language","fr"),
@@ -799,6 +841,7 @@ async def delete_candidate(profile_id: str, db: AsyncSession = Depends(get_db), 
     row = await db.execute(text("SELECT cv_sharepoint_url FROM hr_profiles WHERE id=CAST(:id AS UUID) AND profile_type='internal'"), {"id": profile_id})
     candidate = row.fetchone()
     if not candidate: raise HTTPException(404, "Not found")
+    doc_refs = [d.sharepoint_url for d in (await db.execute(text("SELECT sharepoint_url FROM hr_profile_documents WHERE profile_id=CAST(:id AS UUID)"), {"id": profile_id})).fetchall()]
     # Children first (some have FKs without ON DELETE CASCADE). SharePoint files are
     # left in place: the folder is named after the candidate, so another candidate
     # with the same name and country may share it.
@@ -810,7 +853,8 @@ async def delete_candidate(profile_id: str, db: AsyncSession = Depends(get_db), 
     await db.execute(text("DELETE FROM linked_emails WHERE entity_type='candidate' AND entity_id=CAST(:id AS UUID)"), params)
     await db.execute(text("DELETE FROM hr_profiles WHERE id=CAST(:id AS UUID)"), params)
     await db.commit()
-    await delete_s3_ref(candidate.cv_sharepoint_url)
+    for ref in [candidate.cv_sharepoint_url, *doc_refs]:
+        await delete_s3_ref(ref)
     return {"status": "ok"}
 
 @router.post("/recruitment/{profile_id}/comments")
