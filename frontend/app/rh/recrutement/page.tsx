@@ -2,6 +2,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { HRLayout, useHRPerm } from '@/components/HRLayout'
+import { apiFetch } from '@/lib/apiClient'
 
 const API = 'https://api.whubbi.wcomply.com'
 const FLAG: Record<string,string> = { france:'🇫🇷', portugal:'🇵🇹', czech_republic:'🇨🇿', romania:'🇷🇴', spain:'🇪🇸' }
@@ -106,7 +107,7 @@ export default function RecruitmentPage() {
 
   const load = () => {
     const url = filterStatus !== 'all' ? `${API}/hr/recruitment?status=${filterStatus}` : `${API}/hr/recruitment`
-    fetch(url).then(r=>r.json()).then(d=>setCandidates(d.candidates||[])).finally(()=>setLoading(false))
+    apiFetch(url).then(r=>r.json()).then(d=>setCandidates(d.candidates||[])).finally(()=>setLoading(false))
   }
   useEffect(() => { load() }, [filterStatus])
 
@@ -114,7 +115,7 @@ export default function RecruitmentPage() {
     setCvFile(file); setExtracting(true)
     const fd = new FormData(); fd.append('file', file)
     try {
-      const r = await fetch(`${API}/hr/cv/extract`, { method:'POST', body:fd })
+      const r = await apiFetch(`/hr/cv/extract`, { method:'POST', body:fd })
       const d = await r.json()
       setExtracted(d.extracted || {})
     } catch { setExtracted({}) }
@@ -126,12 +127,12 @@ export default function RecruitmentPage() {
   const handleSave = async (data: any) => {
     setSaving(true); setSaveError('')
     try {
-      const r = await fetch(`${API}/hr/recruitment`, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(data) })
+      const r = await apiFetch(`/hr/recruitment`, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(data) })
       if (!r.ok) throw new Error(`Server error ${r.status}`)
       const d = await r.json()
       if (cvFile && d.id) {
         const fd = new FormData(); fd.append('file', cvFile)
-        await fetch(`${API}/hr/cv/upload/${d.id}`, { method:'POST', body:fd })
+        await apiFetch(`/hr/cv/upload/${d.id}`, { method:'POST', body:fd })
       }
       closeModal(); load()
     } catch (e: any) { setSaveError(e.message || 'Failed to save candidate') }

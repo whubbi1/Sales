@@ -1,6 +1,7 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { HRLayout, useHRPerm } from '@/components/HRLayout'
+import { apiFetch } from '@/lib/apiClient'
 
 const API = 'https://api.whubbi.wcomply.com'
 
@@ -29,22 +30,22 @@ export default function JobsPage() {
 
   const load = () => {
     setLoading(true)
-    fetch(`${API}/hr/jobs`).then(r => r.json()).then(d => setJobs(d.jobs || [])).finally(() => setLoading(false))
+    apiFetch(`/hr/jobs`).then(r => r.json()).then(d => setJobs(d.jobs || [])).finally(() => setLoading(false))
   }
 
   useEffect(() => {
     load()
-    fetch(`${API}/hr/settings/company-description`).then(r => r.json()).then(d => setCompanyDesc(d.description || ''))
+    apiFetch(`/hr/settings/company-description`).then(r => r.json()).then(d => setCompanyDesc(d.description || ''))
   }, [])
 
   const del = async (id: string) => {
     if (!confirm('Delete this job description?')) return
-    await fetch(`${API}/hr/jobs/${id}`, { method: 'DELETE' })
+    await apiFetch(`/hr/jobs/${id}`, { method: 'DELETE' })
     load()
   }
 
   const downloadExport = async (job: any, format: 'pdf'|'docx') => {
-    const res = await fetch(`${API}/hr/jobs/${job.id}/export?format=${format}`)
+    const res = await apiFetch(`/hr/jobs/${job.id}/export?format=${format}`)
     if (!res.ok) { alert('Export failed'); return }
     const blob = await res.blob()
     const url = URL.createObjectURL(blob)
@@ -57,7 +58,7 @@ export default function JobsPage() {
 
   const saveCompanyDesc = async () => {
     setDescSaving(true)
-    await fetch(`${API}/hr/settings/company-description`, {
+    await apiFetch(`/hr/settings/company-description`, {
       method: 'PUT', headers: {'Content-Type':'application/json'},
       body: JSON.stringify({ description: companyDesc })
     })
@@ -209,7 +210,7 @@ export default function JobsPage() {
               onSave={async (data: any) => {
                 const url    = editJob ? `${API}/hr/jobs/${editJob.id}` : `${API}/hr/jobs`
                 const method = editJob ? 'PUT' : 'POST'
-                const r = await fetch(url, { method, headers:{'Content-Type':'application/json'}, body: JSON.stringify(data) })
+                const r = await apiFetch(url, { method, headers:{'Content-Type':'application/json'}, body: JSON.stringify(data) })
                 if (!r.ok) throw new Error(`Server error ${r.status}`)
                 setShowModal(false); setEditJob(null); load()
               }}

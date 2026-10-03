@@ -2,8 +2,8 @@
 import { useState, useEffect, useRef } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import { HRLayout, useHRPerm } from '@/components/HRLayout'
+import { apiFetch } from '@/lib/apiClient'
 
-const API = 'https://api.whubbi.wcomply.com'
 const FLAG: Record<string,string> = { france:'🇫🇷', portugal:'🇵🇹', czech_republic:'🇨🇿', romania:'🇷🇴', spain:'🇪🇸' }
 const COUNTRIES = ['france','portugal','czech_republic','romania','spain']
 const LANGS: Record<string,string> = { france:'fr', portugal:'pt', czech_republic:'cs', romania:'ro', spain:'es' }
@@ -111,7 +111,7 @@ export default function FreelancerDetail() {
   const docRef = useRef<HTMLInputElement>(null)
 
   const load = () => {
-    fetch(`${API}/hr/freelancers/${id}`).then(r=>r.json()).then(d=>setProfile(d)).finally(()=>setLoading(false))
+    apiFetch(`/hr/freelancers/${id}`).then(r=>r.json()).then(d=>setProfile(d)).finally(()=>setLoading(false))
   }
   useEffect(() => { load() }, [id])
 
@@ -121,7 +121,7 @@ export default function FreelancerDetail() {
     try {
       const updated = { ...profile, [field]: value }
       if (field === 'country') updated.language = LANGS[value] || 'fr'
-      await fetch(`${API}/hr/freelancers/${id}`, {
+      await apiFetch(`/hr/freelancers/${id}`, {
         method:'PUT', headers:{'Content-Type':'application/json'},
         body: JSON.stringify({ ...updated, language: updated.language || LANGS[profile.country] || 'fr' })
       })
@@ -143,7 +143,7 @@ export default function FreelancerDetail() {
     setCvExtracting(true); setUploadError('')
     const fd = new FormData(); fd.append('file', file)
     try {
-      const r = await fetch(`${API}/hr/cv/extract`, { method:'POST', body:fd })
+      const r = await apiFetch(`/hr/cv/extract`, { method:'POST', body:fd })
       const d = await r.json()
       const ex = d.extracted || {}
       const updates: any = {}
@@ -158,7 +158,7 @@ export default function FreelancerDetail() {
       if (ex.skills?.length)   updates.skills = ex.skills
       if (Object.keys(updates).length > 0) {
         setAutoSaving(true)
-        await fetch(`${API}/hr/freelancers/${id}`, {
+        await apiFetch(`/hr/freelancers/${id}`, {
           method:'PUT', headers:{'Content-Type':'application/json'},
           body: JSON.stringify({ ...profile, ...updates, language: LANGS[profile.country]||'fr' })
         })
@@ -167,7 +167,7 @@ export default function FreelancerDetail() {
       }
     } catch {}
     const fd2 = new FormData(); fd2.append('file', file)
-    const uploadRes = await fetch(`${API}/hr/cv/upload/${id}`, { method:'POST', body:fd2 })
+    const uploadRes = await apiFetch(`/hr/cv/upload/${id}`, { method:'POST', body:fd2 })
     if (!uploadRes.ok) {
       const err = await uploadRes.json().catch(() => ({}))
       setUploadError(`CV upload failed: ${err.detail || uploadRes.status}`)
@@ -179,7 +179,7 @@ export default function FreelancerDetail() {
     setDocUploading(true); setUploadError('')
     const fd = new FormData(); fd.append('file', file); fd.append('doc_type', docType)
     try {
-      const res = await fetch(`${API}/hr/freelancers/${id}/documents`, { method:'POST', body:fd })
+      const res = await apiFetch(`/hr/freelancers/${id}/documents`, { method:'POST', body:fd })
       if (!res.ok) {
         const err = await res.json().catch(() => ({}))
         setUploadError(`Upload failed: ${err.detail || res.status}`)
@@ -193,19 +193,19 @@ export default function FreelancerDetail() {
 
   const deleteDocument = async (docId: string) => {
     if (!confirm('Delete this document? It will also be removed from S3.')) return
-    await fetch(`${API}/hr/freelancers/${id}/documents/${docId}`, { method:'DELETE' })
+    await apiFetch(`/hr/freelancers/${id}/documents/${docId}`, { method:'DELETE' })
     load()
   }
 
   const addComment = async () => {
     if (!comment.content.trim()) return
-    await fetch(`${API}/hr/freelancers/${id}/comments`, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(comment) })
+    await apiFetch(`/hr/freelancers/${id}/comments`, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(comment) })
     setComment(c=>({...c, content:''})); load()
   }
 
   const handleDelete = async () => {
     setDeleting(true)
-    await fetch(`${API}/hr/freelancers/${id}`, { method:'DELETE' })
+    await apiFetch(`/hr/freelancers/${id}`, { method:'DELETE' })
     router.push('/rh/freelancers')
   }
 

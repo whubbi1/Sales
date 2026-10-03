@@ -3,8 +3,8 @@ import { useState, useEffect } from 'react'
 import { HRLayout, useHRPerm } from '@/components/HRLayout'
 import { getStoredUser } from '@/lib/auth'
 import { PayfitTestPanel } from '@/components/payfit/PayfitTestPanel'
+import { apiFetch } from '@/lib/apiClient'
 
-const API = 'https://api.whubbi.wcomply.com'
 
 const ABSENCE_STATUS_COLOR: Record<string, { bg: string; text: string }> = {
   synced:       { bg: '#ECFDF5', text: '#059669' },
@@ -37,15 +37,15 @@ export default function PayfitSyncPage() {
 
   const loadStatus = () => {
     setLoadingStatus(true)
-    fetch(`${API}/payfit/status`).then(r => r.json()).then(setStatus).finally(() => setLoadingStatus(false))
+    apiFetch(`/payfit/status`).then(r => r.json()).then(setStatus).finally(() => setLoadingStatus(false))
   }
 
   const loadCollaborators = () => {
-    fetch(`${API}/payfit/collaborators`).then(r => r.json()).then(d => setCollaborators(d.collaborators || [])).catch(() => {})
+    apiFetch(`/payfit/collaborators`).then(r => r.json()).then(d => setCollaborators(d.collaborators || [])).catch(() => {})
   }
 
   const loadAbsences = () => {
-    fetch(`${API}/payfit/absences`).then(r => r.json()).then(d => setAbsences(d.absences || [])).catch(() => {})
+    apiFetch(`/payfit/absences`).then(r => r.json()).then(d => setAbsences(d.absences || [])).catch(() => {})
   }
 
   const flash = (text: string, type: 'success' | 'error') => {
@@ -56,7 +56,7 @@ export default function PayfitSyncPage() {
   const syncCollaborators = async () => {
     setSyncingCollaborators(true)
     try {
-      const r = await fetch(`${API}/payfit/sync/collaborators?triggered_by=${encodeURIComponent(userEmail)}`, { method: 'POST' })
+      const r = await apiFetch(`/payfit/sync/collaborators?triggered_by=${encodeURIComponent(userEmail)}`, { method: 'POST' })
       const d = await r.json()
       if (!r.ok) throw new Error(d.detail || 'Sync failed')
       flash(`Synced ${d.synced} collaborator(s) from PayFit`, 'success')
@@ -70,7 +70,7 @@ export default function PayfitSyncPage() {
   const syncAbsences = async () => {
     setSyncingAbsences(true)
     try {
-      const r = await fetch(`${API}/payfit/sync/absences?triggered_by=${encodeURIComponent(userEmail)}`, { method: 'POST' })
+      const r = await apiFetch(`/payfit/sync/absences?triggered_by=${encodeURIComponent(userEmail)}`, { method: 'POST' })
       const d = await r.json()
       if (!r.ok) throw new Error(d.detail || 'Sync failed')
       flash(`Synced ${d.synced} absence(s) from PayFit`, 'success')
@@ -87,7 +87,7 @@ export default function PayfitSyncPage() {
     }
     setCreatingAbsence(true)
     try {
-      const r = await fetch(`${API}/payfit/absences`, {
+      const r = await apiFetch(`/payfit/absences`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...newAbsence, created_by: userEmail }),
       })
@@ -106,7 +106,7 @@ export default function PayfitSyncPage() {
   const cancelAbsence = async (id: string) => {
     if (!confirm('Cancel this absence? This also cancels it in PayFit if already synced.')) return
     try {
-      const r = await fetch(`${API}/payfit/absences/${id}`, { method: 'DELETE' })
+      const r = await apiFetch(`/payfit/absences/${id}`, { method: 'DELETE' })
       if (!r.ok) { const d = await r.json(); throw new Error(d.detail || 'Could not cancel') }
       flash('Absence cancelled', 'success')
       loadAbsences()
@@ -120,7 +120,7 @@ export default function PayfitSyncPage() {
     setExpandedId(next)
     if (next && !contracts[c.id] && !loadingContract[c.id]) {
       setLoadingContract(prev => ({ ...prev, [c.id]: true }))
-      fetch(`${API}/payfit/collaborators/${c.id}/contract`)
+      apiFetch(`/payfit/collaborators/${c.id}/contract`)
         .then(r => r.json())
         .then(d => setContracts(prev => ({ ...prev, [c.id]: d })))
         .catch(() => setContracts(prev => ({ ...prev, [c.id]: { available: false, reason: 'Could not reach PayFit' } })))

@@ -3,8 +3,8 @@ import { useState, useEffect, useRef } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import { getStoredUser } from '@/lib/auth'
 import { HRLayout, useHRPerm } from '@/components/HRLayout'
+import { apiFetch } from '@/lib/apiClient'
 
-const API = 'https://api.whubbi.wcomply.com'
 const FLAG: Record<string,string> = { france:'🇫🇷', portugal:'🇵🇹', czech_republic:'🇨🇿', romania:'🇷🇴', spain:'🇪🇸' }
 const STATUSES = ['new','screening','interview_1','technical_test','offer','hired','rejected','on_hold']
 const STATUS_LABEL: Record<string,string> = { new:'New', screening:'Screening', interview_1:'Interview', technical_test:'Tech Test', offer:'Offer', hired:'Hired', rejected:'Rejected', on_hold:'On Hold' }
@@ -242,7 +242,7 @@ function InterviewResultsModal({ candidateName, candidateSkills, candidateCountr
 
   useEffect(() => {
     // Load admin questions for country
-    fetch(`${API}/hr/admin/interview-questions?country=${candidateCountry || 'global'}`)
+    apiFetch(`/hr/admin/interview-questions?country=${candidateCountry || 'global'}`)
       .then(r => r.json())
       .then(d => {
         const qs = (d.questions || []).map((q: any) => q.question_text)
@@ -251,7 +251,7 @@ function InterviewResultsModal({ candidateName, candidateSkills, candidateCountr
       .catch(() => {})
 
     // Load admin skills for country + merge with candidate skills
-    fetch(`${API}/hr/admin/interview-skills?country=${candidateCountry || 'global'}`)
+    apiFetch(`/hr/admin/interview-skills?country=${candidateCountry || 'global'}`)
       .then(r => r.json())
       .then(d => {
         const adminSkills = (d.skills || []).map((s: any) => s.skill_name)
@@ -428,16 +428,16 @@ export default function CandidateDetail() {
   const docFileRef = useRef<HTMLInputElement>(null)
 
   const load = () => {
-    fetch(`${API}/hr/recruitment/${id}`).then(r=>r.json()).then(d=>{ setProfile(d) }).finally(()=>setLoading(false))
+    apiFetch(`/hr/recruitment/${id}`).then(r=>r.json()).then(d=>{ setProfile(d) }).finally(()=>setLoading(false))
   }
   const loadDocs = () => {
-    fetch(`${API}/hr/recruitment/${id}/documents`).then(r=>r.json()).then(d=>setDocuments(d.documents||[]))
+    apiFetch(`/hr/recruitment/${id}/documents`).then(r=>r.json()).then(d=>setDocuments(d.documents||[]))
   }
   const loadPositions = () => {
-    fetch(`${API}/hr/positions`).then(r=>r.json()).then(d=>setPositions(d.positions||[]))
+    apiFetch(`/hr/positions`).then(r=>r.json()).then(d=>setPositions(d.positions||[]))
   }
   const loadInterviewResults = () => {
-    fetch(`${API}/hr/recruitment/${id}/interview-results`).then(r=>r.json()).then(d=>setInterviewResultsList(d.results||[]))
+    apiFetch(`/hr/recruitment/${id}/interview-results`).then(r=>r.json()).then(d=>setInterviewResultsList(d.results||[]))
   }
   useEffect(() => {
     load(); loadDocs(); loadPositions(); loadInterviewResults()
@@ -452,7 +452,7 @@ export default function CandidateDetail() {
     try {
       const updated = { ...profile, [field]: value }
       if (field === 'country') updated.language = LANGS[value] || 'fr'
-      await fetch(`${API}/hr/recruitment/${id}`, {
+      await apiFetch(`/hr/recruitment/${id}`, {
         method:'PUT', headers:{'Content-Type':'application/json'},
         body: JSON.stringify({ ...updated, language: updated.language || LANGS[profile.country] || 'fr' })
       })
@@ -474,7 +474,7 @@ export default function CandidateDetail() {
     setCvFile(file); setExtracting(true)
     const fd = new FormData(); fd.append('file', file)
     try {
-      const r = await fetch(`${API}/hr/cv/extract`, { method:'POST', body:fd })
+      const r = await apiFetch(`/hr/cv/extract`, { method:'POST', body:fd })
       const d = await r.json()
       const ex = d.extracted || {}
       const updates: any = {}
@@ -488,7 +488,7 @@ export default function CandidateDetail() {
       if (ex.skills?.length)   updates.skills = ex.skills
       if (Object.keys(updates).length > 0) {
         setAutoSaving(true)
-        await fetch(`${API}/hr/recruitment/${id}`, {
+        await apiFetch(`/hr/recruitment/${id}`, {
           method:'PUT', headers:{'Content-Type':'application/json'},
           body: JSON.stringify({ ...profile, ...updates, language: LANGS[profile.country]||'fr' })
         })
@@ -497,7 +497,7 @@ export default function CandidateDetail() {
       }
     } catch {}
     const fd2 = new FormData(); fd2.append('file', file)
-    await fetch(`${API}/hr/cv/upload/${id}`, { method:'POST', body:fd2 })
+    await apiFetch(`/hr/cv/upload/${id}`, { method:'POST', body:fd2 })
     setExtracting(false); load()
   }
 
@@ -505,7 +505,7 @@ export default function CandidateDetail() {
     setDocUploading(true)
     const fd = new FormData(); fd.append('file', file)
     try {
-      await fetch(`${API}/hr/recruitment/${id}/documents`, { method:'POST', body:fd })
+      await apiFetch(`/hr/recruitment/${id}/documents`, { method:'POST', body:fd })
       loadDocs()
     } finally { setDocUploading(false) }
   }
@@ -515,7 +515,7 @@ export default function CandidateDetail() {
       setShowInterviewModal(true)
       return
     }
-    await fetch(`${API}/hr/recruitment/${id}/status`, {
+    await apiFetch(`/hr/recruitment/${id}/status`, {
       method:'PUT', headers:{'Content-Type':'application/json'},
       body:JSON.stringify({ status, updated_by_email: currentUser.email, updated_by_name: currentUser.name })
     })
@@ -525,7 +525,7 @@ export default function CandidateDetail() {
 
   const handleInterviewAssign = async (interviewers: {email:string,name:string}[]) => {
     setShowInterviewModal(false)
-    await fetch(`${API}/hr/recruitment/${id}/assign-interview`, {
+    await apiFetch(`/hr/recruitment/${id}/assign-interview`, {
       method:'POST', headers:{'Content-Type':'application/json'},
       body: JSON.stringify({ interviewers, assigned_by: currentUser.email, assigned_by_name: currentUser.name })
     })
@@ -534,18 +534,18 @@ export default function CandidateDetail() {
 
   const addComment = async () => {
     if (!comment.content.trim()) return
-    await fetch(`${API}/hr/recruitment/${id}/comments`, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(comment) })
+    await apiFetch(`/hr/recruitment/${id}/comments`, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(comment) })
     setComment(c=>({...c, content:''})); load()
   }
 
   const createProposal = async () => {
     setSending(true)
-    const r = await fetch(`${API}/hr/recruitment/${id}/proposals`, {
+    const r = await apiFetch(`/hr/recruitment/${id}/proposals`, {
       method:'POST', headers:{'Content-Type':'application/json'},
       body:JSON.stringify({ role:proposal.role, responsibilities:proposal.responsibilities, salary:parseInt(proposal.salary)||0, advantages:proposal.advantages, start_date:proposal.start_date, country:proposal.country, created_by_email: currentUser.email, created_by_name: currentUser.name })
     })
     const d = await r.json()
-    const prev = await fetch(`${API}/hr/proposals/${d.id}/preview`).then(r=>r.json())
+    const prev = await apiFetch(`/hr/proposals/${d.id}/preview`).then(r=>r.json())
     setProposalPreview({...prev, id:d.id})
     setSending(false)
   }
@@ -553,12 +553,12 @@ export default function CandidateDetail() {
   const sendProposal = async () => {
     if (!proposalPreview?.id) return
     setSending(true)
-    await fetch(`${API}/hr/proposals/${proposalPreview.id}/send`, { method:'POST' })
+    await apiFetch(`/hr/proposals/${proposalPreview.id}/send`, { method:'POST' })
     setSending(false); setShowProposal(false); setProposalPreview(null); load()
   }
 
   const handleRequestInterview = async (data: any) => {
-    await fetch(`${API}/hr/recruitment/${id}/request-interview`, {
+    await apiFetch(`/hr/recruitment/${id}/request-interview`, {
       method:'POST', headers:{'Content-Type':'application/json'},
       body: JSON.stringify({ ...data, requested_by: currentUser.email, requested_by_name: currentUser.name })
     })
@@ -567,7 +567,7 @@ export default function CandidateDetail() {
   }
 
   const handleSaveInterviewResults = async (data: any) => {
-    await fetch(`${API}/hr/recruitment/${id}/interview-results`, {
+    await apiFetch(`/hr/recruitment/${id}/interview-results`, {
       method:'POST', headers:{'Content-Type':'application/json'},
       body: JSON.stringify(data)
     })

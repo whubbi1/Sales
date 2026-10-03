@@ -4,8 +4,8 @@ import { useParams, useRouter } from 'next/navigation'
 import { HRLayout, useHRPerm } from '@/components/HRLayout'
 import { hrChecklistAPI, taskManagerAPI } from '@/lib/api'
 import { getStoredUser } from '@/lib/auth'
+import { apiFetch } from '@/lib/apiClient'
 
-const API = 'https://api.whubbi.wcomply.com'
 
 const KIND_META: Record<string, { title: string; icon: string }> = {
   onboarding: { title: 'Onboarding', icon: '🎒' },
@@ -108,7 +108,7 @@ function EquipmentCard({ caseData, canEdit, onChanged }: any) {
 
   useEffect(() => {
     load()
-    fetch(`${API}/it/equipments`).then(r => r.json()).then(d => setAllEquipments(d.equipments || [])).catch(() => {})
+    apiFetch(`/it/equipments`).then(r => r.json()).then(d => setAllEquipments(d.equipments || [])).catch(() => {})
   }, [caseData.id])
 
   const assign = async () => {
@@ -184,7 +184,7 @@ function ChecklistCaseContent() {
   }
 
   useEffect(() => { load() }, [id])
-  useEffect(() => { fetch(`${API}/settings/users`).then(r => r.json()).then(d => setUsers(d.users || [])).catch(() => {}) }, [])
+  useEffect(() => { apiFetch(`/settings/users`).then(r => r.json()).then(d => setUsers(d.users || [])).catch(() => {}) }, [])
 
   const updateResponsible = async (email: string) => {
     const u = users.find((u: any) => u.email === email)

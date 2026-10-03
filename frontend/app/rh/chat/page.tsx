@@ -2,8 +2,8 @@
 import { useState, useEffect, useCallback } from 'react'
 import { HRLayout, useHRPerm } from '@/components/HRLayout'
 import { getStoredUser } from '@/lib/auth'
+import { apiFetch } from '@/lib/apiClient'
 
-const API = 'https://api.whubbi.wcomply.com'
 
 const MODULE_LABELS: Record<string, string> = {
   sales: '💼 Sales', finance: '💰 Finance', hr: '👥 HR',
@@ -94,7 +94,7 @@ function ComposeTab({ users, groups, loadingUsers, onSent }: {
 
   useEffect(() => {
     if (rMode === 'group' && selGroup) {
-      fetch(`${API}/hr/chat/group-members?module=${selGroup}`)
+      apiFetch(`/hr/chat/group-members?module=${selGroup}`)
         .then(r => r.json())
         .then(d => setGroupMembers((d.members || []).map((m: { user_email: string }) => m.user_email)))
         .catch(() => setGroupMembers([]))
@@ -126,7 +126,7 @@ function ComposeTab({ users, groups, loadingUsers, onSent }: {
     setSending(true); setErr('')
     try {
       if (delivery === 'instant') {
-        const r = await fetch(`${API}/hr/chat/send`, {
+        const r = await apiFetch(`/hr/chat/send`, {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ message, recipients, sender_email: senderInfo.email, sender_name: senderInfo.name }),
         })
@@ -136,7 +136,7 @@ function ComposeTab({ users, groups, loadingUsers, onSent }: {
           recur === 'weekly'  ? { type: recur, weekday } :
           recur === 'monthly' ? { type: recur, day: monthDay } :
           { type: recur }
-        const r = await fetch(`${API}/hr/chat/schedule`, {
+        const r = await apiFetch(`/hr/chat/schedule`, {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             message, recipients,
@@ -460,19 +460,19 @@ export default function ChatPage() {
 
   const loadUsers = useCallback(() => {
     setLoadingUsers(true)
-    fetch(`${API}/settings/users`)
+    apiFetch(`/settings/users`)
       .then(r => r.json()).then(d => setUsers(d.users || [])).catch(() => {})
       .finally(() => setLoadingUsers(false))
   }, [])
 
   const loadGroups = useCallback(() => {
-    fetch(`${API}/hr/chat/groups`)
+    apiFetch(`/hr/chat/groups`)
       .then(r => r.json()).then(d => setGroups(d.groups || [])).catch(() => {})
   }, [])
 
   const loadHistory = useCallback(() => {
     setLoadingHistory(true)
-    fetch(`${API}/hr/chat/history`)
+    apiFetch(`/hr/chat/history`)
       .then(r => r.json()).then(d => setHistory(d.messages || [])).catch(() => {})
       .finally(() => setLoadingHistory(false))
   }, [])
@@ -483,7 +483,7 @@ export default function ChatPage() {
   const scheduledMessages = history.filter(m => m.status === 'scheduled')
 
   const cancelScheduled = async (id: string) => {
-    await fetch(`${API}/hr/chat/scheduled/${id}`, { method: 'DELETE' })
+    await apiFetch(`/hr/chat/scheduled/${id}`, { method: 'DELETE' })
     loadHistory()
   }
 

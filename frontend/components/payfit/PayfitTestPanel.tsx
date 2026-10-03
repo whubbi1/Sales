@@ -1,5 +1,6 @@
 'use client'
 import { useState } from 'react'
+import { apiFetch } from '@/lib/apiClient'
 
 const API = 'https://api.whubbi.wcomply.com'
 
@@ -29,7 +30,7 @@ export function PayfitTestPanel() {
   const runTest = async (key: string) => {
     setRunning(prev => ({ ...prev, [key]: true }))
     try {
-      const r = await fetch(`${API}/payfit/test/${key}`)
+      const r = await apiFetch(`/payfit/test/${key}`)
       const d: TestResult = await r.json()
       setResults(prev => ({ ...prev, [key]: d }))
     } catch (e: any) {

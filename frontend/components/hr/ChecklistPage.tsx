@@ -5,8 +5,8 @@ import { HRLayout, useHRPerm } from '@/components/HRLayout'
 import { useReportBuilder, applyReport, ReportPanel, ReportColumn } from '@/components/it/ReportBuilder'
 import { hrChecklistAPI } from '@/lib/api'
 import { getStoredUser } from '@/lib/auth'
+import { apiFetch } from '@/lib/apiClient'
 
-const API = 'https://api.whubbi.wcomply.com'
 
 const KIND_META: Record<string, { title: string; icon: string; verb: string }> = {
   onboarding: { title: 'Onboarding', icon: '🎒', verb: 'Onboard' },
@@ -143,8 +143,8 @@ function ChecklistContent({ kind }: { kind: 'onboarding' | 'offboarding' }) {
   const rb = useReportBuilder(`hr_${kind}_cases`, CASE_COLUMNS, userEmail)
 
   useEffect(() => {
-    fetch(`${API}/legal/locations`).then(r => r.json()).then(d => setLocations(d.locations || [])).catch(() => {})
-    fetch(`${API}/settings/users`).then(r => r.json()).then(d => setUsers(d.users || [])).catch(() => {})
+    apiFetch(`/legal/locations`).then(r => r.json()).then(d => setLocations(d.locations || [])).catch(() => {})
+    apiFetch(`/settings/users`).then(r => r.json()).then(d => setUsers(d.users || [])).catch(() => {})
     const u = getStoredUser()
     if (u?.email) setUserEmail(u.email)
   }, [])
@@ -203,7 +203,7 @@ function ChecklistContent({ kind }: { kind: 'onboarding' | 'offboarding' }) {
     setStartTasks([]); setOverrides({}); setStartError(''); setStartWarning('')
     if (!email) { setStartLocationId(''); return }
     try {
-      const loc = await fetch(`${API}/settings/main-location/${encodeURIComponent(email)}`).then(r => r.json())
+      const loc = await apiFetch(`/settings/main-location/${encodeURIComponent(email)}`).then(r => r.json())
       setStartLocationId(loc.main_location_id || '')
       if (loc.main_location_id) {
         const d = await hrChecklistAPI.listTasks({ kind, location_id: loc.main_location_id })

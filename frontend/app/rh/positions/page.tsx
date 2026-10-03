@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { HRLayout, useHRPerm } from '@/components/HRLayout'
+import { apiFetch } from '@/lib/apiClient'
 
 const API = 'https://api.whubbi.wcomply.com'
 const FLAG: Record<string,string> = { france:'🇫🇷', portugal:'🇵🇹', czech_republic:'🇨🇿', romania:'🇷🇴', spain:'🇪🇸' }
@@ -33,8 +34,8 @@ export default function JobPositionsPage() {
   const load = async () => {
     setLoading(true)
     const [posRes, jobRes] = await Promise.all([
-      fetch(`${API}/hr/positions`).then(r=>r.json()),
-      fetch(`${API}/hr/jobs`).then(r=>r.json()),
+      apiFetch(`/hr/positions`).then(r=>r.json()),
+      apiFetch(`/hr/jobs`).then(r=>r.json()),
     ])
     setPositions(posRes.positions || [])
     setJobs(jobRes.jobs || [])
@@ -58,7 +59,7 @@ export default function JobPositionsPage() {
       const body = { ...form, job_description_id: form.job_description_id || null }
       const url = editingPos ? `${API}/hr/positions/${editingPos.id}` : `${API}/hr/positions`
       const method = editingPos ? 'PUT' : 'POST'
-      const res = await fetch(url, { method, headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) })
+      const res = await apiFetch(url, { method, headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) })
       if (!res.ok) {
         const err = await res.json().catch(() => ({}))
         setSaveError(err.detail || `Server error ${res.status}`)
@@ -74,7 +75,7 @@ export default function JobPositionsPage() {
 
   const deletePos = async (id: string) => {
     if (!confirm('Delete this position?')) return
-    await fetch(`${API}/hr/positions/${id}`, { method:'DELETE' })
+    await apiFetch(`/hr/positions/${id}`, { method:'DELETE' })
     load()
   }
 

@@ -2,8 +2,8 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { HRLayout } from '@/components/HRLayout'
+import { apiFetch } from '@/lib/apiClient'
 
-const API = 'https://api.whubbi.wcomply.com'
 const FLAG: Record<string,string> = { france:'🇫🇷', portugal:'🇵🇹', czech_republic:'🇨🇿', romania:'🇷🇴', spain:'🇪🇸', '':'🌍' }
 const STATUS_COLOR: Record<string,string> = { new:'#45B6E4', screening:'#D97706', interview_1:'#7C3AED', interview_2:'#059669', technical_test:'#e97132', offer:'#156082', hired:'#059669', rejected:'#DC2626', on_hold:'#94A3B8' }
 
@@ -13,7 +13,7 @@ export default function HRDashboard() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    fetch(`${API}/hr/dashboard`).then(r=>r.json()).then(setData).finally(()=>setLoading(false))
+    apiFetch(`/hr/dashboard`).then(r=>r.json()).then(setData).finally(()=>setLoading(false))
   }, [])
 
   return (

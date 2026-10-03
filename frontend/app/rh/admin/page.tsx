@@ -3,8 +3,8 @@ import { useState, useEffect } from 'react'
 import { getStoredUser } from '@/lib/auth'
 import { HRLayout } from '@/components/HRLayout'
 import { PayfitTestPanel } from '@/components/payfit/PayfitTestPanel'
+import { apiFetch } from '@/lib/apiClient'
 
-const API = 'https://api.whubbi.wcomply.com'
 const COUNTRIES = [
   { value: 'global', label: '🌍 Global (all countries)' },
   { value: 'france', label: '🇫🇷 France' },
@@ -39,13 +39,13 @@ export default function AdminCockpit() {
   }, [])
 
   const loadSkills = () => {
-    fetch(`${API}/hr/admin/interview-skills?country=${country}`)
+    apiFetch(`/hr/admin/interview-skills?country=${country}`)
       .then(r => r.json())
       .then(d => setSkills(d.skills || []))
   }
 
   const loadQuestions = () => {
-    fetch(`${API}/hr/admin/interview-questions?country=${country}`)
+    apiFetch(`/hr/admin/interview-questions?country=${country}`)
       .then(r => r.json())
       .then(d => setQuestions(d.questions || []))
   }
@@ -55,7 +55,7 @@ export default function AdminCockpit() {
   const addSkill = async () => {
     if (!newSkillName.trim()) return
     setSkillSaving(true)
-    await fetch(`${API}/hr/admin/interview-skills`, {
+    await apiFetch(`/hr/admin/interview-skills`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ skill_name: newSkillName.trim(), country: newSkillCountry, created_by: currentUserEmail })
     })
@@ -63,14 +63,14 @@ export default function AdminCockpit() {
   }
 
   const deleteSkill = async (id: string) => {
-    await fetch(`${API}/hr/admin/interview-skills/${id}`, { method: 'DELETE' })
+    await apiFetch(`/hr/admin/interview-skills/${id}`, { method: 'DELETE' })
     loadSkills()
   }
 
   const addQuestion = async () => {
     if (!newQuestionText.trim()) return
     setQuestionSaving(true)
-    await fetch(`${API}/hr/admin/interview-questions`, {
+    await apiFetch(`/hr/admin/interview-questions`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ question_text: newQuestionText.trim(), country: newQuestionCountry, created_by: currentUserEmail })
     })
@@ -78,7 +78,7 @@ export default function AdminCockpit() {
   }
 
   const deleteQuestion = async (id: string) => {
-    await fetch(`${API}/hr/admin/interview-questions/${id}`, { method: 'DELETE' })
+    await apiFetch(`/hr/admin/interview-questions/${id}`, { method: 'DELETE' })
     loadQuestions()
   }
 

@@ -2,8 +2,8 @@
 import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { HRLayout, useHRPerm } from '@/components/HRLayout'
+import { apiFetch } from '@/lib/apiClient'
 
-const API = 'https://api.whubbi.wcomply.com'
 const FLAG: Record<string,string> = { france:'🇫🇷', portugal:'🇵🇹', czech_republic:'🇨🇿', romania:'🇷🇴', spain:'🇪🇸' }
 const COUNTRIES = ['france','portugal','czech_republic','romania','spain']
 const LANGS: Record<string,string> = { france:'fr', portugal:'pt', czech_republic:'cs', romania:'ro', spain:'es' }
@@ -96,7 +96,7 @@ export default function FreelancersPage() {
   }, [])
 
   const load = () => {
-    fetch(`${API}/hr/freelancers`).then(r=>r.json()).then(d=>setFreelancers(d.freelancers||[])).finally(()=>setLoading(false))
+    apiFetch(`/hr/freelancers`).then(r=>r.json()).then(d=>setFreelancers(d.freelancers||[])).finally(()=>setLoading(false))
   }
   useEffect(() => { load() }, [])
 
@@ -132,7 +132,7 @@ export default function FreelancersPage() {
     setCvFile(file); setExtracting(true); setExtractError('')
     try {
       const fd = new FormData(); fd.append('file', file)
-      const r = await fetch(`${API}/hr/cv/extract`, { method:'POST', body:fd })
+      const r = await apiFetch(`/hr/cv/extract`, { method:'POST', body:fd })
       const d = await r.json()
       if (d.error) { setExtractError(d.error); setExtracted({}) }
       else setExtracted(d.extracted || {})
@@ -274,12 +274,12 @@ export default function FreelancersPage() {
                 onCvUpload={handleCvUpload} fileRef={fileRef}
                 onSave={async (data:any) => {
                   try {
-                    const r = await fetch(`${API}/hr/freelancers`, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(data) })
+                    const r = await apiFetch(`/hr/freelancers`, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(data) })
                     if (!r.ok) throw new Error(`Server error ${r.status}`)
                     const d = await r.json()
                     if (cvFile && d.id) {
                       const fd = new FormData(); fd.append('file', cvFile)
-                      await fetch(`${API}/hr/cv/upload/${d.id}`, { method:'POST', body:fd })
+                      await apiFetch(`/hr/cv/upload/${d.id}`, { method:'POST', body:fd })
                     }
                     setShowModal(false); setExtracted(null); setCvFile(null); setExtractError(''); load()
                   } catch (e: any) { alert(`Save failed: ${e.message}`) }
