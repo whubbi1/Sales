@@ -1,4 +1,5 @@
 'use client'
+import { apiFetch } from '@/lib/apiClient'
 import { useState, useEffect } from 'react'
 import ITLayout, { useITPerm } from '@/components/ITLayout'
 import { useReportBuilder, applyReport, ReportPanel, ReportColumn, ColumnResizeHandle, SortArrow, Pagination } from '@/components/it/ReportBuilder'
@@ -147,7 +148,7 @@ function CompanyLinksContent() {
 
   useEffect(() => {
     load()
-    fetch(`${API}/legal/locations`).then(r => r.json()).then(d => setLocations(d.locations || [])).catch(() => {})
+    apiFetch(`${API}/legal/locations`).then(r => r.json()).then(d => setLocations(d.locations || [])).catch(() => {})
     const u = getStoredUser()
     if (u?.email) setUserEmail(u.email)
   }, [])
@@ -156,7 +157,7 @@ function CompanyLinksContent() {
 
   const load = async () => {
     setLoading(true)
-    const d = await fetch(`${API}/settings/company-links/all`).then(r => r.json()).catch(() => ({ links: [] }))
+    const d = await apiFetch(`${API}/settings/company-links/all`).then(r => r.json()).catch(() => ({ links: [] }))
     setLinks(d.links || [])
     setLoading(false)
   }
@@ -167,13 +168,13 @@ function CompanyLinksContent() {
   const isVisible = (key: string) => rb.visibleCols.includes(key)
 
   const createItem = async (form: any) => {
-    await fetch(`${API}/settings/company-links`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form) })
+    await apiFetch(`${API}/settings/company-links`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form) })
     setShowNew(false)
     load()
   }
 
   const patchItem = async (item: any, fields: any) => {
-    await fetch(`${API}/settings/company-links/${item.id}`, {
+    await apiFetch(`${API}/settings/company-links/${item.id}`, {
       method: 'PUT', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ label: item.label, url: item.url, icon: item.icon, active: item.active, sort_order: item.sort_order, location_id: item.location_id, location_name: item.location_name, category: item.category, ...fields }),
     })
@@ -183,7 +184,7 @@ function CompanyLinksContent() {
 
   const deleteItem = async (item: any) => {
     if (!confirm(`Delete "${item.label}"? This cannot be undone.`)) return
-    await fetch(`${API}/settings/company-links/${item.id}`, { method: 'DELETE' })
+    await apiFetch(`${API}/settings/company-links/${item.id}`, { method: 'DELETE' })
     load()
   }
 

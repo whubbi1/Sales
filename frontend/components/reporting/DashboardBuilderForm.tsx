@@ -1,4 +1,5 @@
 'use client'
+import { apiFetch } from '@/lib/apiClient'
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { reportingAPI } from '@/lib/api'
@@ -34,7 +35,7 @@ export function DashboardBuilderForm({ dashboard }: { dashboard?: any }) {
       setUserEmail(u.email)
       reportingAPI.listReports(u.email).then(setReports).catch(() => {})
     }
-    fetch(`${API}/settings/users`).then(r => r.json()).then(d => setUsers(d.users || [])).catch(() => {})
+    apiFetch(`${API}/settings/users`).then(r => r.json()).then(d => setUsers(d.users || [])).catch(() => {})
   }, [])
 
   const employeeName = (u: any) => u.display_name || `${u.first_name} ${u.last_name}`

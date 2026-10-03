@@ -1,4 +1,5 @@
 'use client'
+import { apiFetch } from '@/lib/apiClient'
 import { useState, useEffect } from 'react'
 import TrainingLayout, { useTrainingPerm } from '@/components/TrainingLayout'
 import { useReportBuilder, applyReport, ReportPanel, ReportColumn, ColumnResizeHandle, SortArrow, Pagination } from '@/components/it/ReportBuilder'
@@ -156,10 +157,10 @@ function AssignmentsContent() {
   const load = async () => {
     setLoading(true)
     const [ar, cr, pr, ur] = await Promise.all([
-      fetch(`${API}/training/assignments`).then(r => r.json()).catch(() => ({ assignments: [] })),
-      fetch(`${API}/training/catalog`).then(r => r.json()).catch(() => ({ catalog: [] })),
-      fetch(`${API}/training/plans`).then(r => r.json()).catch(() => ({ plans: [] })),
-      fetch(`${API}/settings/users`).then(r => r.json()).catch(() => ({ users: [] })),
+      apiFetch(`${API}/training/assignments`).then(r => r.json()).catch(() => ({ assignments: [] })),
+      apiFetch(`${API}/training/catalog`).then(r => r.json()).catch(() => ({ catalog: [] })),
+      apiFetch(`${API}/training/plans`).then(r => r.json()).catch(() => ({ plans: [] })),
+      apiFetch(`${API}/settings/users`).then(r => r.json()).catch(() => ({ users: [] })),
     ])
     setAssignments(ar.assignments || [])
     setCatalog(cr.catalog || [])
@@ -169,14 +170,14 @@ function AssignmentsContent() {
   }
 
   const createAssignment = async (payload: any) => {
-    await fetch(`${API}/training/assignments`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
+    await apiFetch(`${API}/training/assignments`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
     setShowNew(false)
     load()
   }
 
   const cancelAssignment = async (a: any) => {
     if (!confirm(`Cancel this assignment for ${a.user_email}?`)) return
-    await fetch(`${API}/training/assignments/${a.id}`, { method: 'DELETE' })
+    await apiFetch(`${API}/training/assignments/${a.id}`, { method: 'DELETE' })
     load()
   }
 

@@ -1,4 +1,5 @@
 'use client'
+import { apiFetch } from '@/lib/apiClient'
 // components/opportunities/OpportunityModal.tsx
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
@@ -88,7 +89,7 @@ export function OpportunityModal({ opportunity, duplicateFrom, fromLead, initial
     Promise.all([companiesAPI.list({}), contactsAPI.list({}), partnersAPI.list({})]).then(([c, ct, p]) => {
       setCompanies(c); setContacts(ct); setPartners(p)
     }).catch(() => {})
-    fetch('https://api.whubbi.wcomply.com/settings/users').then(r => r.json()).then(d => setUsers(d.users || [])).catch(() => {})
+    apiFetch('https://api.whubbi.wcomply.com/settings/users').then(r => r.json()).then(d => setUsers(d.users || [])).catch(() => {})
     legalAPI.getOrgEntities('operational_team').then(d => setOperationalTeams(d.org_entities || [])).catch(() => {})
     legalAPI.getOrgEntities('sales_entity').then(d => setSalesTeams(d.org_entities || [])).catch(() => {})
   }, [])

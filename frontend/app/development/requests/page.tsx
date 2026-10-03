@@ -1,4 +1,5 @@
 'use client'
+import { apiFetch } from '@/lib/apiClient'
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import DevelopmentLayout, { useDevPerm } from '@/components/DevelopmentLayout'
@@ -28,8 +29,8 @@ function RequestsContent() {
   const loadAll = async () => {
     setLoading(true)
     const [rReq, rPl] = await Promise.all([
-      fetch(`${API}/development/requests`).then(r => r.json()).catch(() => ({ requests: [] })),
-      fetch(`${API}/development/pipelines`).then(r => r.json()).catch(() => ({ pipelines: [] })),
+      apiFetch(`${API}/development/requests`).then(r => r.json()).catch(() => ({ requests: [] })),
+      apiFetch(`${API}/development/pipelines`).then(r => r.json()).catch(() => ({ pipelines: [] })),
     ])
     setRequests(rReq.requests || [])
     setPipelines(rPl.pipelines || [])

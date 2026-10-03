@@ -1,4 +1,5 @@
 'use client'
+import { apiFetch } from '@/lib/apiClient'
 import { useState, useEffect } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import ITLayout, { useITPerm } from '@/components/ITLayout'
@@ -69,7 +70,7 @@ function ApplicationDetailContent() {
   const load = async () => {
     setLoading(true)
     try {
-      const d = await fetch(`${API}/it/applications/${id}`).then(r => r.json())
+      const d = await apiFetch(`${API}/it/applications/${id}`).then(r => r.json())
       setApplication(d)
     } catch {
       router.push('/it/applications')
@@ -80,12 +81,12 @@ function ApplicationDetailContent() {
 
   useEffect(() => {
     load()
-    fetch(`${API}/settings/users`).then(r => r.json()).then(d => setUsers(d.users || [])).catch(() => {})
-    fetch(`${API}/legal/locations`).then(r => r.json()).then(d => setLocations(d.locations || [])).catch(() => {})
+    apiFetch(`${API}/settings/users`).then(r => r.json()).then(d => setUsers(d.users || [])).catch(() => {})
+    apiFetch(`${API}/legal/locations`).then(r => r.json()).then(d => setLocations(d.locations || [])).catch(() => {})
   }, [id])
 
   const patch = async (fields: any) => {
-    await fetch(`${API}/it/applications/${id}`, {
+    await apiFetch(`${API}/it/applications/${id}`, {
       method: 'PUT', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         name: application.name, editor: application.editor, version: application.version, use: application.use,
@@ -100,7 +101,7 @@ function ApplicationDetailContent() {
 
   const deleteApplication = async () => {
     if (!confirm(`Delete "${application.name}"? This cannot be undone.`)) return
-    await fetch(`${API}/it/applications/${id}`, { method: 'DELETE' })
+    await apiFetch(`${API}/it/applications/${id}`, { method: 'DELETE' })
     router.push('/it/applications')
   }
 

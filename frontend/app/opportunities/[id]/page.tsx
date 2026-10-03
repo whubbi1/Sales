@@ -1,4 +1,5 @@
 'use client'
+import { apiFetch } from '@/lib/apiClient'
 import { useState, useEffect } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { opportunitiesAPI, companiesAPI, contactsAPI, taskManagerAPI } from '@/lib/api'
@@ -112,7 +113,7 @@ export default function OpportunityDetailPage() {
         opportunitiesAPI.getChecklist(id as string),
         opportunitiesAPI.getComments(id as string),
         taskManagerAPI.list({ entity_type: 'opportunity', entity_id: id, source: 'sales' }),
-        fetch('https://api.whubbi.wcomply.com/settings/users').then(r => r.json()),
+        apiFetch('https://api.whubbi.wcomply.com/settings/users').then(r => r.json()),
       ])
       setStaffing(staffingRows)
       setChecklist(checklistRows)

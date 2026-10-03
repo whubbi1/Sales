@@ -1,4 +1,5 @@
 'use client'
+import { apiFetch } from '@/lib/apiClient'
 import { useState, useEffect } from 'react'
 import ProfileLayout from '@/components/ProfileLayout'
 import { getStoredUser } from '@/lib/auth'
@@ -14,7 +15,7 @@ export default function MyEquipmentsPage() {
   useEffect(() => {
     const user = getStoredUser()
     if (!user?.email) { setLoading(false); return }
-    fetch(`${API}/it/equipments?assigned_email=${encodeURIComponent(user.email)}`)
+    apiFetch(`${API}/it/equipments?assigned_email=${encodeURIComponent(user.email)}`)
       .then(r => r.json())
       .then(d => setEquipments(d.equipments || []))
       .catch(() => {})

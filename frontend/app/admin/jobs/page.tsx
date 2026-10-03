@@ -1,4 +1,5 @@
 'use client'
+import { apiFetch } from '@/lib/apiClient'
 import { useRouter } from 'next/navigation'
 import { useState, useEffect } from 'react'
 
@@ -25,14 +26,14 @@ export default function JobsPage() {
 
   const load = async () => {
     setLoading(true)
-    const r = await fetch(`${API}/admin/jobs`)
+    const r = await apiFetch(`${API}/admin/jobs`)
     const d = await r.json()
     setJobs(d.jobs||[])
     setLoading(false)
   }
 
   const loadJob = async (jobId: string) => {
-    const r = await fetch(`${API}/admin/jobs/${jobId}`)
+    const r = await apiFetch(`${API}/admin/jobs/${jobId}`)
     const d = await r.json()
     setSelected(d.job)
     setExecutions(d.executions||[])
@@ -42,7 +43,7 @@ export default function JobsPage() {
 
   const toggleStatus = async (job: any) => {
     const newStatus = job.status === 'active' ? 'stopped' : 'active'
-    await fetch(`${API}/admin/jobs/${job.job_id}`, {
+    await apiFetch(`${API}/admin/jobs/${job.job_id}`, {
       method:'PUT', headers:{'Content-Type':'application/json'},
       body: JSON.stringify({status: newStatus})
     })
@@ -53,7 +54,7 @@ export default function JobsPage() {
   const createJob = async () => {
     if (!form.name) return
     setSaving(true)
-    await fetch(`${API}/admin/jobs`, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(form)})
+    await apiFetch(`${API}/admin/jobs`, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(form)})
     setSaving(false); setShowNew(false)
     setForm({name:'',description:'',job_type:'lambda',schedule:'',script_url:'',script_content:'',status:'active'})
     load()

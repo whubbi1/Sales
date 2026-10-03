@@ -1,4 +1,5 @@
 'use client'
+import { apiFetch } from '@/lib/apiClient'
 import { useState, useEffect, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import ProfileLayout from '@/components/ProfileLayout'
@@ -291,7 +292,7 @@ function PayfitSection() {
 
   const load = (email: string) => {
     setLoading(true)
-    fetch(`${API}/payfit/my/${encodeURIComponent(email)}`)
+    apiFetch(`${API}/payfit/my/${encodeURIComponent(email)}`)
       .then(r => r.json())
       .then(setData)
       .catch(() => setData({ linked: false, collaborator: null, absences: [] }))

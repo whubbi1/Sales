@@ -1,4 +1,5 @@
 'use client'
+import { apiFetch } from '@/lib/apiClient'
 // components/rfp/RFPModal.tsx
 import { useState, useEffect } from 'react'
 import { rfpAPI } from '@/lib/api'
@@ -27,7 +28,7 @@ export function RFPModal({ rfp, onClose, onSave }: any) {
   })
 
   useEffect(() => {
-    fetch('https://api.whubbi.wcomply.com/settings/users').then(r => r.json()).then(d => setUsers(d.users || [])).catch(() => {})
+    apiFetch('https://api.whubbi.wcomply.com/settings/users').then(r => r.json()).then(d => setUsers(d.users || [])).catch(() => {})
   }, [])
 
   const approverName = (u: any) => u.display_name || `${u.first_name} ${u.last_name}`

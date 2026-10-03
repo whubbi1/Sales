@@ -1,4 +1,5 @@
 'use client'
+import { apiFetch } from '@/lib/apiClient'
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import TrainingLayout from '@/components/TrainingLayout'
@@ -11,7 +12,7 @@ export default function TrainingDashboardPage() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    fetch(`${API}/training/dashboard-stats`).then(r => r.json()).then(setStats).finally(() => setLoading(false))
+    apiFetch(`${API}/training/dashboard-stats`).then(r => r.json()).then(setStats).finally(() => setLoading(false))
   }, [])
 
   const tiles = [

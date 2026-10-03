@@ -1,4 +1,5 @@
 'use client'
+import { apiFetch } from '@/lib/apiClient'
 import { useState, useEffect } from 'react'
 
 const API = 'https://api.whubbi.wcomply.com'
@@ -16,21 +17,21 @@ export function ApplicationLinksSection({ application, canEdit }: any) {
   const [editing, setEditing] = useState<{ id: string; field: string } | null>(null)
 
   const load = async () => {
-    const d = await fetch(`${API}/it/applications/${application.id}/links`).then(r => r.json()).catch(() => ({ links: [] }))
+    const d = await apiFetch(`${API}/it/applications/${application.id}/links`).then(r => r.json()).catch(() => ({ links: [] }))
     setLinks(d.links || [])
   }
   useEffect(() => { load() }, [application.id])
 
   const add = async () => {
     if (!url.trim()) return
-    await fetch(`${API}/it/applications/${application.id}/links`, {
+    await apiFetch(`${API}/it/applications/${application.id}/links`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url: url.trim(), description }),
     })
     setUrl(''); setDescription('')
     load()
   }
   const patch = async (lid: string, fields: any) => {
-    await fetch(`${API}/it/applications/${application.id}/links/${lid}`, {
+    await apiFetch(`${API}/it/applications/${application.id}/links/${lid}`, {
       method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(fields),
     })
     setEditing(null)
@@ -38,7 +39,7 @@ export function ApplicationLinksSection({ application, canEdit }: any) {
   }
   const remove = async (l: any) => {
     if (!confirm(`Delete this link?`)) return
-    await fetch(`${API}/it/applications/${application.id}/links/${l.id}`, { method: 'DELETE' })
+    await apiFetch(`${API}/it/applications/${application.id}/links/${l.id}`, { method: 'DELETE' })
     load()
   }
 

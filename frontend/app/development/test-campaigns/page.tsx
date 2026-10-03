@@ -1,4 +1,5 @@
 'use client'
+import { apiFetch } from '@/lib/apiClient'
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import DevelopmentLayout, { useDevPerm } from '@/components/DevelopmentLayout'
@@ -130,7 +131,7 @@ function TestCampaignsContent() {
   useEffect(() => {
     load()
     testingAPI.listPlans().then((d: any) => setPlans(d.plans || [])).catch(() => {})
-    fetch(`${API}/settings/users`).then(r => r.json()).then(d => setUsers(d.users || [])).catch(() => {})
+    apiFetch(`${API}/settings/users`).then(r => r.json()).then(d => setUsers(d.users || [])).catch(() => {})
   }, [])
 
   if (level === 'loading') return <div style={{ padding: '48px', textAlign: 'center', color: '#45B6E4' }}>Loading…</div>

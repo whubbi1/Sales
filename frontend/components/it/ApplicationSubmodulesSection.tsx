@@ -1,4 +1,5 @@
 'use client'
+import { apiFetch } from '@/lib/apiClient'
 import { useState, useEffect } from 'react'
 
 const API = 'https://api.whubbi.wcomply.com'
@@ -16,21 +17,21 @@ export function ApplicationSubmodulesSection({ application, canEdit }: any) {
   const [editing, setEditing] = useState<{ id: string; field: string } | null>(null)
 
   const load = async () => {
-    const d = await fetch(`${API}/it/applications/${application.id}/submodules`).then(r => r.json()).catch(() => ({ submodules: [] }))
+    const d = await apiFetch(`${API}/it/applications/${application.id}/submodules`).then(r => r.json()).catch(() => ({ submodules: [] }))
     setSubmodules(d.submodules || [])
   }
   useEffect(() => { load() }, [application.id])
 
   const add = async () => {
     if (!name.trim()) return
-    await fetch(`${API}/it/applications/${application.id}/submodules`, {
+    await apiFetch(`${API}/it/applications/${application.id}/submodules`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: name.trim(), description }),
     })
     setName(''); setDescription('')
     load()
   }
   const patch = async (sid: string, fields: any) => {
-    await fetch(`${API}/it/applications/${application.id}/submodules/${sid}`, {
+    await apiFetch(`${API}/it/applications/${application.id}/submodules/${sid}`, {
       method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(fields),
     })
     setEditing(null)
@@ -38,7 +39,7 @@ export function ApplicationSubmodulesSection({ application, canEdit }: any) {
   }
   const remove = async (s: any) => {
     if (!confirm(`Delete submodule "${s.name}"?`)) return
-    await fetch(`${API}/it/applications/${application.id}/submodules/${s.id}`, { method: 'DELETE' })
+    await apiFetch(`${API}/it/applications/${application.id}/submodules/${s.id}`, { method: 'DELETE' })
     load()
   }
 

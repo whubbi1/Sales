@@ -1,4 +1,5 @@
 'use client'
+import { apiFetch } from '@/lib/apiClient'
 // components/finance/SupplierModal.tsx
 import { useState, useEffect } from 'react'
 import { financeSuppliersAPI } from '@/lib/api'
@@ -30,7 +31,7 @@ export function SupplierModal({ supplier, onClose, onSave }: any) {
   const [error, setError] = useState('')
 
   useEffect(() => {
-    fetch('https://api.whubbi.wcomply.com/settings/users').then(r => r.json()).then(d => setUsers(d.users || [])).catch(() => {})
+    apiFetch('https://api.whubbi.wcomply.com/settings/users').then(r => r.json()).then(d => setUsers(d.users || [])).catch(() => {})
   }, [])
 
   const handleSave = async () => {

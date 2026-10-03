@@ -1,4 +1,5 @@
 'use client'
+import { apiFetch } from '@/lib/apiClient'
 import { useState, useEffect } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import TasksLayout from '@/components/TasksLayout'
@@ -68,7 +69,7 @@ function TaskDetailContent() {
 
   useEffect(() => {
     load()
-    fetch(`${API}/settings/users`).then(r => r.json()).then(d => setUsers(d.users || [])).catch(() => {})
+    apiFetch(`${API}/settings/users`).then(r => r.json()).then(d => setUsers(d.users || [])).catch(() => {})
   }, [id])
 
   if (loading) return <div style={{ padding: '48px', textAlign: 'center', color: '#45B6E4' }}>Loading…</div>

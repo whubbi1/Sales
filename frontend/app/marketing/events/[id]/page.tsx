@@ -1,4 +1,5 @@
 'use client'
+import { apiFetch } from '@/lib/apiClient'
 import { useState, useEffect, useRef } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { MarketingLayout, useMarketingPerm } from '@/components/MarketingLayout'
@@ -217,7 +218,7 @@ function EventDetailContent() {
   useEffect(() => {
     load()
     loadMailings()
-    fetch(`${API}/settings/users`).then(r => r.json()).then(d => setUsers(d.users || [])).catch(() => {})
+    apiFetch(`${API}/settings/users`).then(r => r.json()).then(d => setUsers(d.users || [])).catch(() => {})
     partnersAPI.list({}).then(setPartners).catch(() => {})
     contactsAPI.list({}).then(setContacts).catch(() => {})
     marketingAPI.listEmailTemplates().then(d => setTemplates(d.templates || [])).catch(() => {})

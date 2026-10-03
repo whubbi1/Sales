@@ -1,4 +1,5 @@
 'use client'
+import { apiFetch } from '@/lib/apiClient'
 import { useRouter } from 'next/navigation'
 import { useState, useEffect } from 'react'
 
@@ -28,13 +29,13 @@ export default function AWSCostsPage() {
   const [accountLoading, setAccountLoading] = useState(false)
 
   useEffect(() => {
-    fetch(`${API}/admin/costs/multi`)
+    apiFetch(`${API}/admin/costs/multi`)
       .then(r => r.json()).then(setOverview).finally(() => setLoading(false))
   }, [])
 
   const loadAccount = async (id: string) => {
     setSelected(id); setAccountLoading(true)
-    const d = await fetch(`${API}/admin/costs/account/${id}`).then(r => r.json())
+    const d = await apiFetch(`${API}/admin/costs/account/${id}`).then(r => r.json())
     setAccountData(d); setAccountLoading(false)
   }
 

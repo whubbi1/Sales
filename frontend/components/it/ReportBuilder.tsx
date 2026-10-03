@@ -1,4 +1,5 @@
 'use client'
+import { apiFetch } from '@/lib/apiClient'
 import { useState, useEffect } from 'react'
 
 const API = 'https://api.whubbi.wcomply.com'
@@ -41,7 +42,7 @@ export function useReportBuilder(module: string, columns: ReportColumn[], userEm
 
   const reload = () => {
     if (!userEmail) return
-    fetch(`${API}/it/report-views?module=${encodeURIComponent(module)}&user_email=${encodeURIComponent(userEmail)}`)
+    apiFetch(`${API}/it/report-views?module=${encodeURIComponent(module)}&user_email=${encodeURIComponent(userEmail)}`)
       .then(r => r.json()).then(d => setSavedViews(d.views || [])).catch(() => {})
   }
 
@@ -112,12 +113,12 @@ export function useReportBuilder(module: string, columns: ReportColumn[], userEm
 
   const saveView = async (name: string) => {
     const payload = { user_email: userEmail, module, name, columns: visibleCols, filters, sort_field: sortField, sort_dir: sortDir, column_widths: columnWidths }
-    await fetch(`${API}/it/report-views`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
+    await apiFetch(`${API}/it/report-views`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
     reload()
   }
 
   const deleteView = async (id: string) => {
-    await fetch(`${API}/it/report-views/${id}`, { method: 'DELETE' })
+    await apiFetch(`${API}/it/report-views/${id}`, { method: 'DELETE' })
     if (activeViewId === id) setActiveViewId('')
     reload()
   }

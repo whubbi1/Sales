@@ -1,4 +1,5 @@
 'use client'
+import { apiFetch } from '@/lib/apiClient'
 import { useState, useEffect } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import DevelopmentLayout, { useDevPerm } from '@/components/DevelopmentLayout'
@@ -61,7 +62,7 @@ function TestPlanDetailContent() {
       const p = await testingAPI.getPlan(id as string)
       setPlan(p)
       if (p.application_id) {
-        fetch(`${API}/it/applications/${p.application_id}/submodules`).then(r => r.json()).then(d => setSubmodules(d.submodules || [])).catch(() => {})
+        apiFetch(`${API}/it/applications/${p.application_id}/submodules`).then(r => r.json()).then(d => setSubmodules(d.submodules || [])).catch(() => {})
       }
     } catch (e: any) { setError(e.message) }
     finally { setLoading(false) }
@@ -69,7 +70,7 @@ function TestPlanDetailContent() {
 
   useEffect(() => {
     load()
-    fetch(`${API}/it/applications`).then(r => r.json()).then(d => setApplications(d.applications || [])).catch(() => {})
+    apiFetch(`${API}/it/applications`).then(r => r.json()).then(d => setApplications(d.applications || [])).catch(() => {})
   }, [id])
 
   if (level === 'loading' || loading) return <div style={{ padding: '48px', textAlign: 'center', color: '#45B6E4' }}>Loading…</div>

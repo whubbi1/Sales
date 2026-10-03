@@ -1,4 +1,5 @@
 'use client'
+import { apiFetch } from '@/lib/apiClient'
 // components/finance/InvoiceModal.tsx
 import { useState, useEffect } from 'react'
 import { financeInvoicesAPI, financeSuppliersAPI, financePurchaseOrdersAPI } from '@/lib/api'
@@ -34,7 +35,7 @@ export function InvoiceModal({ invoice, onClose, onSave }: any) {
 
   useEffect(() => {
     financeSuppliersAPI.list({}).then(setSuppliers).catch(() => {})
-    fetch('https://api.whubbi.wcomply.com/settings/users').then(r => r.json()).then(d => setUsers(d.users || [])).catch(() => {})
+    apiFetch('https://api.whubbi.wcomply.com/settings/users').then(r => r.json()).then(d => setUsers(d.users || [])).catch(() => {})
   }, [])
 
   useEffect(() => {

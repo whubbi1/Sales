@@ -1,4 +1,5 @@
 'use client'
+import { apiFetch } from '@/lib/apiClient'
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { GRCLayout, useGRCPerm } from '@/components/GRCLayout'
@@ -58,7 +59,7 @@ function AccessReviewRequirementsContent() {
   const isEditing = (id: string, field: string) => editing?.id === id && editing.field === field
 
   const patchRequirement = async (req: any, fields: any) => {
-    await fetch(`${API}/grc/requirements/${req.id}`, {
+    await apiFetch(`${API}/grc/requirements/${req.id}`, {
       method: 'PUT', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         requirement_text: req.requirement_text, reference_code: req.reference_code,

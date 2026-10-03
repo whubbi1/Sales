@@ -1,4 +1,5 @@
 'use client'
+import { apiFetch } from '@/lib/apiClient'
 import { useState, useEffect } from 'react'
 import { GRCLayout } from '@/components/GRCLayout'
 
@@ -22,7 +23,7 @@ export default function RisksPage() {
   const [saveError, setSaveError] = useState('')
 
   const load = () => {
-    fetch(`${API}/grc/risks`).then(r => r.json()).then(d => setRisks(d.risks || [])).finally(() => setLoading(false))
+    apiFetch(`${API}/grc/risks`).then(r => r.json()).then(d => setRisks(d.risks || [])).finally(() => setLoading(false))
   }
 
   useEffect(() => { load() }, [])
@@ -32,7 +33,7 @@ export default function RisksPage() {
     try {
       const url = editRisk ? `${API}/grc/risks/${editRisk.id}` : `${API}/grc/risks`
       const method = editRisk ? 'PUT' : 'POST'
-      const r = await fetch(url, { method, headers: {'Content-Type':'application/json'}, body: JSON.stringify(data) })
+      const r = await apiFetch(url, { method, headers: {'Content-Type':'application/json'}, body: JSON.stringify(data) })
       if (!r.ok) throw new Error(`Server error ${r.status}`)
       setShowModal(false); setEditRisk(null); load()
     } catch (e: any) {
@@ -44,7 +45,7 @@ export default function RisksPage() {
 
   const del = async (id: string) => {
     if (!confirm('Delete this risk?')) return
-    await fetch(`${API}/grc/risks/${id}`, { method: 'DELETE' })
+    await apiFetch(`${API}/grc/risks/${id}`, { method: 'DELETE' })
     load()
   }
 

@@ -1,4 +1,5 @@
 'use client'
+import { apiFetch } from '@/lib/apiClient'
 import { useState, useEffect } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { GRCLayout, useGRCPerm } from '@/components/GRCLayout'
@@ -71,9 +72,9 @@ function AccessReviewDetailContent() {
 
   useEffect(() => {
     load()
-    fetch(`${API}/settings/users`).then(r => r.json()).then(d => setUsers(d.users || [])).catch(() => {})
-    fetch(`${API}/it/applications`).then(r => r.json()).then(d => setApplications(d.applications || [])).catch(() => {})
-    fetch(`${API}/it/software`).then(r => r.json()).then(d => setSoftwareList(d.software || [])).catch(() => {})
+    apiFetch(`${API}/settings/users`).then(r => r.json()).then(d => setUsers(d.users || [])).catch(() => {})
+    apiFetch(`${API}/it/applications`).then(r => r.json()).then(d => setApplications(d.applications || [])).catch(() => {})
+    apiFetch(`${API}/it/software`).then(r => r.json()).then(d => setSoftwareList(d.software || [])).catch(() => {})
     grcAccessReviewAPI.requirements(true).then(d => setRequirements(d.requirements || [])).catch(() => {})
   }, [id])
 

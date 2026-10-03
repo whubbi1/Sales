@@ -84,7 +84,7 @@ export default function LegalTemplatesPage() {
     setSaving(true)
     const method = editingTmpl ? 'PUT' : 'POST'
     const url = editingTmpl ? `${API}/legal/templates/${editingTmpl.id}` : `${API}/legal/templates`
-    await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...form, created_by: currentUser.email, updated_by: currentUser.email }) })
+    await apiFetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...form, created_by: currentUser.email, updated_by: currentUser.email }) })
     setShowForm(false); setEditingTmpl(null); setSaving(false); reload()
   }
 

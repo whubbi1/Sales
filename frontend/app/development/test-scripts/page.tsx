@@ -1,4 +1,5 @@
 'use client'
+import { apiFetch } from '@/lib/apiClient'
 import { useState, useEffect } from 'react'
 import DevelopmentLayout, { useDevPerm } from '@/components/DevelopmentLayout'
 import { getStoredUser } from '@/lib/auth'
@@ -36,9 +37,9 @@ function TestScriptsContent() {
   const loadAll = async () => {
     setLoading(true)
     const [rs, rp, rr] = await Promise.all([
-      fetch(`${API}/development/test-scripts`).then(r => r.json()).catch(() => ({ scripts: [] })),
-      fetch(`${API}/development/pipelines`).then(r => r.json()).catch(() => ({ pipelines: [] })),
-      fetch(`${API}/development/requests`).then(r => r.json()).catch(() => ({ requests: [] })),
+      apiFetch(`${API}/development/test-scripts`).then(r => r.json()).catch(() => ({ scripts: [] })),
+      apiFetch(`${API}/development/pipelines`).then(r => r.json()).catch(() => ({ pipelines: [] })),
+      apiFetch(`${API}/development/requests`).then(r => r.json()).catch(() => ({ requests: [] })),
     ])
     setScripts(rs.scripts || [])
     setPipelines(rp.pipelines || [])
@@ -66,12 +67,12 @@ function TestScriptsContent() {
     if (!form.title.trim()) return
     setSaving(true)
     if (editing) {
-      await fetch(`${API}/development/test-scripts/${editing.id}`, {
+      await apiFetch(`${API}/development/test-scripts/${editing.id}`, {
         method: 'PUT', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...form, request_id: form.request_id || null, pipeline_id: form.pipeline_id || null }),
       })
     } else {
-      await fetch(`${API}/development/test-scripts`, {
+      await apiFetch(`${API}/development/test-scripts`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...form, request_id: form.request_id || null, pipeline_id: form.pipeline_id || null, created_by: user?.email || '' }),
       })
@@ -83,7 +84,7 @@ function TestScriptsContent() {
 
   const handleDelete = async (id: string) => {
     if (!confirm('Delete this test script? All related executions will also be deleted.')) return
-    await fetch(`${API}/development/test-scripts/${id}`, { method: 'DELETE' })
+    await apiFetch(`${API}/development/test-scripts/${id}`, { method: 'DELETE' })
     loadAll()
   }
 

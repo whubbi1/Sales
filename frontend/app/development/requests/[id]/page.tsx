@@ -1,4 +1,5 @@
 'use client'
+import { apiFetch } from '@/lib/apiClient'
 import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import DevelopmentLayout, { useDevPerm } from '@/components/DevelopmentLayout'
@@ -40,7 +41,7 @@ function RequestDetailContent() {
   useEffect(() => {
     user.current = getStoredUser()
     loadData()
-    fetch(`${API}/development/pipelines`).then(r => r.json()).then(d => setPipelines(d.pipelines || [])).catch(() => {})
+    apiFetch(`${API}/development/pipelines`).then(r => r.json()).then(d => setPipelines(d.pipelines || [])).catch(() => {})
   }, [])
 
   useEffect(() => {
@@ -50,7 +51,7 @@ function RequestDetailContent() {
   const loadData = async () => {
     if (!id) return
     setLoading(true)
-    const d = await fetch(`${API}/development/requests/${id}`).then(r => r.json()).catch(() => null)
+    const d = await apiFetch(`${API}/development/requests/${id}`).then(r => r.json()).catch(() => null)
     if (d?.request) {
       setReq(d.request)
       setForm({
@@ -70,7 +71,7 @@ function RequestDetailContent() {
   const handleSave = async () => {
     if (!id) return
     setSaving(true)
-    await fetch(`${API}/development/requests/${id}`, {
+    await apiFetch(`${API}/development/requests/${id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -88,7 +89,7 @@ function RequestDetailContent() {
   const assignPipeline = async () => {
     if (!id) return
     setAssigningPipeline(true)
-    await fetch(`${API}/development/requests/${id}`, {
+    await apiFetch(`${API}/development/requests/${id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -105,7 +106,7 @@ function RequestDetailContent() {
   const handleAddComment = async () => {
     if (!comment.trim() || !id) return
     setAddingComment(true)
-    await fetch(`${API}/development/requests/${id}/activity`, {
+    await apiFetch(`${API}/development/requests/${id}/activity`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({

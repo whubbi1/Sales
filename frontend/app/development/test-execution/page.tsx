@@ -1,4 +1,5 @@
 'use client'
+import { apiFetch } from '@/lib/apiClient'
 import { useState, useEffect } from 'react'
 import DevelopmentLayout, { useDevPerm } from '@/components/DevelopmentLayout'
 import { getStoredUser } from '@/lib/auth'
@@ -31,9 +32,9 @@ function TestExecutionContent() {
   const loadAll = async () => {
     setLoading(true)
     const [re, rs, rp] = await Promise.all([
-      fetch(`${API}/development/test-executions`).then(r => r.json()).catch(() => ({ executions: [] })),
-      fetch(`${API}/development/test-scripts`).then(r => r.json()).catch(() => ({ scripts: [] })),
-      fetch(`${API}/development/pipelines`).then(r => r.json()).catch(() => ({ pipelines: [] })),
+      apiFetch(`${API}/development/test-executions`).then(r => r.json()).catch(() => ({ executions: [] })),
+      apiFetch(`${API}/development/test-scripts`).then(r => r.json()).catch(() => ({ scripts: [] })),
+      apiFetch(`${API}/development/pipelines`).then(r => r.json()).catch(() => ({ pipelines: [] })),
     ])
     setExecutions(re.executions || [])
     setScripts(rs.scripts || [])
@@ -58,12 +59,12 @@ function TestExecutionContent() {
   const handleSave = async () => {
     setSaving(true)
     if (editExec) {
-      await fetch(`${API}/development/test-executions/${editExec.id}`, {
+      await apiFetch(`${API}/development/test-executions/${editExec.id}`, {
         method: 'PUT', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: form.status, result: form.result, executed_by: form.executed_by, notes: form.notes }),
       })
     } else {
-      await fetch(`${API}/development/test-executions`, {
+      await apiFetch(`${API}/development/test-executions`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...form, script_id: form.script_id || null, pipeline_id: form.pipeline_id || null }),
       })
@@ -75,7 +76,7 @@ function TestExecutionContent() {
 
   const handleDelete = async (id: string) => {
     if (!confirm('Delete this execution record?')) return
-    await fetch(`${API}/development/test-executions/${id}`, { method: 'DELETE' })
+    await apiFetch(`${API}/development/test-executions/${id}`, { method: 'DELETE' })
     loadAll()
   }
 

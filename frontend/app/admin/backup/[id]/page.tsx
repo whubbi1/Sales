@@ -1,4 +1,5 @@
 'use client'
+import { apiFetch } from '@/lib/apiClient'
 import { useRouter, useParams } from 'next/navigation'
 import { useState, useEffect, useRef } from 'react'
 
@@ -106,7 +107,7 @@ export default function BackupDetailPage() {
   const load = async () => {
     setLoading(true)
     try {
-      const r = await fetch(`${API}/admin/backup/app/${slug}`)
+      const r = await apiFetch(`${API}/admin/backup/app/${slug}`)
       setDetail(await r.json())
     } catch(e) { console.error(e) }
     setLoading(false)
@@ -115,7 +116,7 @@ export default function BackupDetailPage() {
   useEffect(() => { if (slug) load() }, [slug])
 
   const saveField = async (field: 'backup_policy' | 'tool_name', value: string) => {
-    await fetch(`${API}/admin/backup/app/${slug}`, {
+    await apiFetch(`${API}/admin/backup/app/${slug}`, {
       method: 'PUT',
       headers: {'Content-Type':'application/json'},
       body: JSON.stringify({ [field]: value, updated_by: CURRENT_USER }),

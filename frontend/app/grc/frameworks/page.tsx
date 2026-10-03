@@ -1,4 +1,5 @@
 'use client'
+import { apiFetch } from '@/lib/apiClient'
 import { useState, useEffect, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { GRCLayout } from '@/components/GRCLayout'
@@ -29,7 +30,7 @@ function FrameworksContent() {
   const [seedMsg, setSeedMsg] = useState('')
 
   useEffect(() => {
-    fetch(`${API}/grc/frameworks`)
+    apiFetch(`${API}/grc/frameworks`)
       .then(r=>r.json())
       .then(d=>{ setFrameworks(d.frameworks||[]); if (!selected && d.frameworks?.length>0) setSelected(d.frameworks[0].id) })
       .finally(()=>setLoading(false))
@@ -38,7 +39,7 @@ function FrameworksContent() {
   useEffect(() => {
     if (!selected) return
     setReqLoading(true)
-    fetch(`${API}/grc/frameworks/${selected}/requirements`)
+    apiFetch(`${API}/grc/frameworks/${selected}/requirements`)
       .then(r=>r.json())
       .then(d=>{ setRequirements(d.requirements||[]); setFw(d.framework) })
       .finally(()=>setReqLoading(false))
@@ -47,11 +48,11 @@ function FrameworksContent() {
   const seedFrameworks = async () => {
     setSeeding(true); setSeedMsg('')
     try {
-      const r = await fetch(`${API}/grc/seed`, { method:'POST' })
+      const r = await apiFetch(`${API}/grc/seed`, { method:'POST' })
       const d = await r.json()
       setSeedMsg(d.status==='already_seeded' ? '✅ Already seeded' : `✅ Seeded: ${d.frameworks} frameworks, ${d.requirements||0} requirements`)
       // Reload
-      const fr = await fetch(`${API}/grc/frameworks`).then(r=>r.json())
+      const fr = await apiFetch(`${API}/grc/frameworks`).then(r=>r.json())
       setFrameworks(fr.frameworks||[])
       if (!selected && fr.frameworks?.length>0) setSelected(fr.frameworks[0].id)
     } catch(e:any) { setSeedMsg(`❌ Error: ${e.message}`) }
@@ -59,7 +60,7 @@ function FrameworksContent() {
   }
 
   const updateRequirement = async (reqId: string, data: any) => {
-    await fetch(`${API}/grc/requirements/${reqId}`, {
+    await apiFetch(`${API}/grc/requirements/${reqId}`, {
       method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(data)
     })
     setRequirements(prev => prev.map(r => r.id===reqId ? {...r,...data} : r))
@@ -68,13 +69,13 @@ function FrameworksContent() {
 
   const deleteRequirement = async (reqId: string) => {
     if (!confirm('Delete this requirement?')) return
-    await fetch(`${API}/grc/requirements/${reqId}`, { method:'DELETE' })
+    await apiFetch(`${API}/grc/requirements/${reqId}`, { method:'DELETE' })
     setRequirements(prev => prev.filter(r => r.id!==reqId))
   }
 
   const addRequirement = async () => {
     if (!newReq.requirement_text.trim()) return
-    const r = await fetch(`${API}/grc/frameworks/${selected}/requirements`, {
+    const r = await apiFetch(`${API}/grc/frameworks/${selected}/requirements`, {
       method:'POST', headers:{'Content-Type':'application/json'},
       body:JSON.stringify({...newReq, document_id: null})
     })

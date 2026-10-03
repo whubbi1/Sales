@@ -1,4 +1,5 @@
 'use client'
+import { apiFetch } from '@/lib/apiClient'
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import ITLayout, { useITPerm } from '@/components/ITLayout'
@@ -219,8 +220,8 @@ function ApplicationsContent() {
 
   useEffect(() => {
     load()
-    fetch(`${API}/settings/users`).then(r => r.json()).then(d => setUsers(d.users || [])).catch(() => {})
-    fetch(`${API}/legal/locations`).then(r => r.json()).then(d => setLocations(d.locations || [])).catch(() => {})
+    apiFetch(`${API}/settings/users`).then(r => r.json()).then(d => setUsers(d.users || [])).catch(() => {})
+    apiFetch(`${API}/legal/locations`).then(r => r.json()).then(d => setLocations(d.locations || [])).catch(() => {})
     const u = getStoredUser()
     if (u?.email) setUserEmail(u.email)
   }, [])
@@ -229,7 +230,7 @@ function ApplicationsContent() {
 
   const load = async () => {
     setLoading(true)
-    const d = await fetch(`${API}/it/applications`).then(r => r.json()).catch(() => ({ applications: [] }))
+    const d = await apiFetch(`${API}/it/applications`).then(r => r.json()).catch(() => ({ applications: [] }))
     setApplications(d.applications || [])
     setLoading(false)
   }
@@ -241,13 +242,13 @@ function ApplicationsContent() {
   const isVisible = (key: string) => rb.visibleCols.includes(key)
 
   const createItem = async (form: any) => {
-    await fetch(`${API}/it/applications`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form) })
+    await apiFetch(`${API}/it/applications`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form) })
     setShowNew(false)
     load()
   }
 
   const patchItem = async (item: any, fields: any) => {
-    await fetch(`${API}/it/applications/${item.id}`, {
+    await apiFetch(`${API}/it/applications/${item.id}`, {
       method: 'PUT', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         name: item.name, editor: item.editor, version: item.version, use: item.use,
@@ -262,7 +263,7 @@ function ApplicationsContent() {
 
   const deleteItem = async (item: any) => {
     if (!confirm(`Delete "${item.name}"? This cannot be undone.`)) return
-    await fetch(`${API}/it/applications/${item.id}`, { method: 'DELETE' })
+    await apiFetch(`${API}/it/applications/${item.id}`, { method: 'DELETE' })
     load()
   }
 

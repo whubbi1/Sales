@@ -1,4 +1,5 @@
 'use client'
+import { apiFetch } from '@/lib/apiClient'
 import { useRouter } from 'next/navigation'
 import { useState, useEffect, useCallback } from 'react'
 import { adminAPI, microsoftAPI } from '@/lib/adminApi'
@@ -100,7 +101,7 @@ export default function AdminCockpitPage() {
     if(!window.confirm(msgs[action])) return
     setEcsAction(action); setEcsMessage(null)
     try {
-      const res=await fetch(`https://api.whubbi.wcomply.com/ecs/${action}`,{method:'POST'})
+      const res=await apiFetch(`https://api.whubbi.wcomply.com/ecs/${action}`,{method:'POST'})
       const d=await res.json()
       setEcsMessage(d.status==='ok'?{text:d.message,type:'success'}:{text:d.message||'Failed',type:'error'})
       if(d.status==='ok') setTimeout(()=>{loadTab('aws-health',true);setEcsMessage(null)},5000)

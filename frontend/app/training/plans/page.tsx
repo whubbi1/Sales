@@ -1,4 +1,5 @@
 'use client'
+import { apiFetch } from '@/lib/apiClient'
 import { useState, useEffect } from 'react'
 import TrainingLayout, { useTrainingPerm } from '@/components/TrainingLayout'
 
@@ -117,8 +118,8 @@ function PlansContent() {
   const load = async () => {
     setLoading(true)
     const [pr, cr] = await Promise.all([
-      fetch(`${API}/training/plans`).then(r => r.json()).catch(() => ({ plans: [] })),
-      fetch(`${API}/training/catalog`).then(r => r.json()).catch(() => ({ catalog: [] })),
+      apiFetch(`${API}/training/plans`).then(r => r.json()).catch(() => ({ plans: [] })),
+      apiFetch(`${API}/training/catalog`).then(r => r.json()).catch(() => ({ catalog: [] })),
     ])
     setPlans(pr.plans || [])
     setCatalog(cr.catalog || [])
@@ -126,13 +127,13 @@ function PlansContent() {
   }
 
   const createPlan = async (form: any) => {
-    await fetch(`${API}/training/plans`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form) })
+    await apiFetch(`${API}/training/plans`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form) })
     setShowNew(false)
     load()
   }
 
   const patchPlan = async (plan: any, fields: any) => {
-    await fetch(`${API}/training/plans/${plan.id}`, {
+    await apiFetch(`${API}/training/plans/${plan.id}`, {
       method: 'PUT', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ training_function: plan.training_function, description: plan.description, ...fields }),
     })
@@ -142,13 +143,13 @@ function PlansContent() {
 
   const deletePlan = async (plan: any) => {
     if (!confirm(`Delete the "${plan.training_function}" plan?`)) return
-    await fetch(`${API}/training/plans/${plan.id}`, { method: 'DELETE' })
+    await apiFetch(`${API}/training/plans/${plan.id}`, { method: 'DELETE' })
     load()
   }
 
   const addTrainingToPlan = async (plan: any) => {
     if (!addingCatalogId) return
-    await fetch(`${API}/training/plans/${plan.id}/items`, {
+    await apiFetch(`${API}/training/plans/${plan.id}/items`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ catalog_id: addingCatalogId, sequence: addingSequence }),
     })
     setAddingCatalogId('')
@@ -157,12 +158,12 @@ function PlansContent() {
   }
 
   const removeTrainingFromPlan = async (plan: any, itemId: string) => {
-    await fetch(`${API}/training/plans/${plan.id}/items/${itemId}`, { method: 'DELETE' })
+    await apiFetch(`${API}/training/plans/${plan.id}/items/${itemId}`, { method: 'DELETE' })
     load()
   }
 
   const updateItemSequence = async (plan: any, itemId: string, sequence: number) => {
-    await fetch(`${API}/training/plans/${plan.id}/items/${itemId}`, {
+    await apiFetch(`${API}/training/plans/${plan.id}/items/${itemId}`, {
       method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sequence }),
     })
     setEditingSeq(null)

@@ -1,4 +1,5 @@
 'use client'
+import { apiFetch } from '@/lib/apiClient'
 import { useState, useEffect } from 'react'
 import TrainingLayout, { useTrainingPerm } from '@/components/TrainingLayout'
 import { useReportBuilder, applyReport, ReportPanel, ReportColumn, ColumnResizeHandle, SortArrow, Pagination } from '@/components/it/ReportBuilder'
@@ -180,7 +181,7 @@ function CatalogueContent() {
 
   const load = async () => {
     setLoading(true)
-    const d = await fetch(`${API}/training/catalog`).then(r => r.json()).catch(() => ({ catalog: [] }))
+    const d = await apiFetch(`${API}/training/catalog`).then(r => r.json()).catch(() => ({ catalog: [] }))
     setCatalog(d.catalog || [])
     setLoading(false)
   }
@@ -192,13 +193,13 @@ function CatalogueContent() {
   const isVisible = (key: string) => rb.visibleCols.includes(key)
 
   const createItem = async (form: any) => {
-    await fetch(`${API}/training/catalog`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form) })
+    await apiFetch(`${API}/training/catalog`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form) })
     setShowNew(false)
     load()
   }
 
   const patchItem = async (item: any, fields: any) => {
-    await fetch(`${API}/training/catalog/${item.id}`, {
+    await apiFetch(`${API}/training/catalog/${item.id}`, {
       method: 'PUT', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ training_type: item.training_type, company: item.company, title: item.title, description: item.description, duration: item.duration, material_link: item.material_link, languages: item.languages || [], expertise_level: item.expertise_level || 'beginner', ...fields }),
     })
@@ -208,7 +209,7 @@ function CatalogueContent() {
 
   const deleteItem = async (item: any) => {
     if (!confirm(`Delete "${item.title}"? This cannot be undone.`)) return
-    await fetch(`${API}/training/catalog/${item.id}`, { method: 'DELETE' })
+    await apiFetch(`${API}/training/catalog/${item.id}`, { method: 'DELETE' })
     load()
   }
 

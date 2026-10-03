@@ -1,4 +1,5 @@
 'use client'
+import { apiFetch } from '@/lib/apiClient'
 import { useState, useEffect } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import ITLayout, { useITPerm } from '@/components/ITLayout'
@@ -69,7 +70,7 @@ function EquipmentDetailContent() {
   const load = async () => {
     setLoading(true)
     try {
-      const d = await fetch(`${API}/it/equipments/${id}`).then(r => r.json())
+      const d = await apiFetch(`${API}/it/equipments/${id}`).then(r => r.json())
       setEquipment(d)
     } catch {
       router.push('/it/equipments')
@@ -80,12 +81,12 @@ function EquipmentDetailContent() {
 
   useEffect(() => {
     load()
-    fetch(`${API}/settings/users`).then(r => r.json()).then(d => setUsers(d.users || [])).catch(() => {})
-    fetch(`${API}/legal/locations`).then(r => r.json()).then(d => setLocations(d.locations || [])).catch(() => {})
+    apiFetch(`${API}/settings/users`).then(r => r.json()).then(d => setUsers(d.users || [])).catch(() => {})
+    apiFetch(`${API}/legal/locations`).then(r => r.json()).then(d => setLocations(d.locations || [])).catch(() => {})
   }, [id])
 
   const patch = async (fields: any) => {
-    await fetch(`${API}/it/equipments/${id}`, {
+    await apiFetch(`${API}/it/equipments/${id}`, {
       method: 'PUT', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         equipment_type: equipment.equipment_type, name: equipment.name, serial_number: equipment.serial_number,
@@ -103,7 +104,7 @@ function EquipmentDetailContent() {
 
   const deleteEquipment = async () => {
     if (!confirm(`Delete "${equipment.name}"? This cannot be undone.`)) return
-    await fetch(`${API}/it/equipments/${id}`, { method: 'DELETE' })
+    await apiFetch(`${API}/it/equipments/${id}`, { method: 'DELETE' })
     router.push('/it/equipments')
   }
 

@@ -1,4 +1,5 @@
 'use client'
+import { apiFetch } from '@/lib/apiClient'
 import { useState, useEffect } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { rfpAPI, companiesAPI, partnersAPI, opportunitiesAPI } from '@/lib/api'
@@ -81,7 +82,7 @@ export default function RFPDetailPage() {
 
   useEffect(() => { load() }, [id])
   useEffect(() => {
-    fetch(`${API}/settings/users`).then(r => r.json()).then(d => setUsers(d.users || [])).catch(() => {})
+    apiFetch(`${API}/settings/users`).then(r => r.json()).then(d => setUsers(d.users || [])).catch(() => {})
     opportunitiesAPI.list({}).then(setAllOpportunities).catch(() => {})
   }, [])
 

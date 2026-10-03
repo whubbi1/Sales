@@ -1,4 +1,5 @@
 'use client'
+import { apiFetch } from '@/lib/apiClient'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { useState, useEffect } from 'react'
@@ -24,7 +25,7 @@ export default function BackupPage() {
   const load = async () => {
     setLoading(true)
     try {
-      const r = await fetch(`${API}/admin/backup/overview`)
+      const r = await apiFetch(`${API}/admin/backup/overview`)
       setData(await r.json())
     } catch(e) { console.error(e) }
     setLoading(false)
@@ -36,14 +37,14 @@ export default function BackupPage() {
 
   const triggerBackup = async () => {
     setTriggering(true)
-    await fetch(`${API}/admin/backup/trigger`, {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({})})
+    await apiFetch(`${API}/admin/backup/trigger`, {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({})})
     setTriggering(false)
     setTimeout(load, 3000)
   }
 
   const updateRecord = async (appName: string) => {
     setUpdating(appName)
-    await fetch(`${API}/admin/backup/record`, {
+    await apiFetch(`${API}/admin/backup/record`, {
       method:'PUT', headers:{'Content-Type':'application/json'},
       body: JSON.stringify({application:appName, ...form, size_mb: form.size_mb ? parseInt(form.size_mb) : null})
     })

@@ -1,4 +1,5 @@
 'use client'
+import { apiFetch } from '@/lib/apiClient'
 import { useState, useEffect } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import DevelopmentLayout, { useDevPerm } from '@/components/DevelopmentLayout'
@@ -63,7 +64,7 @@ function ExecuteWizard({ campaign, onChanged }: any) {
     try {
       const fd = new FormData()
       fd.append('file', file)
-      await fetch(`${API}/development/test-campaigns/${campaign.id}/steps/${step.id}/screenshot`, { method: 'POST', body: fd })
+      await apiFetch(`${API}/development/test-campaigns/${campaign.id}/steps/${step.id}/screenshot`, { method: 'POST', body: fd })
       await onChanged()
     } finally { setUploading(false) }
   }
@@ -199,7 +200,7 @@ function TestCampaignDetailContent() {
 
   useEffect(() => {
     load()
-    fetch(`${API}/settings/users`).then(r => r.json()).then(d => setUsers(d.users || [])).catch(() => {})
+    apiFetch(`${API}/settings/users`).then(r => r.json()).then(d => setUsers(d.users || [])).catch(() => {})
   }, [id])
 
   if (level === 'loading' || loading) return <div style={{ padding: '48px', textAlign: 'center', color: '#45B6E4' }}>Loading…</div>

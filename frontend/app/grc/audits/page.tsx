@@ -1,4 +1,5 @@
 'use client'
+import { apiFetch } from '@/lib/apiClient'
 import { useState, useEffect } from 'react'
 import { GRCLayout } from '@/components/GRCLayout'
 
@@ -24,23 +25,23 @@ export default function AuditsPage() {
   const [showFindingModal, setShowFindingModal] = useState(false)
 
   const load = () => {
-    fetch(`${API}/grc/audits`).then(r => r.json()).then(d => setAudits(d.audits || [])).finally(() => setLoading(false))
+    apiFetch(`${API}/grc/audits`).then(r => r.json()).then(d => setAudits(d.audits || [])).finally(() => setLoading(false))
   }
 
   useEffect(() => { load() }, [])
 
   const loadAudit = (audit: any) => {
     setSelected(audit)
-    fetch(`${API}/grc/audits/${audit.id}`).then(r => r.json()).then(setSelectedData)
+    apiFetch(`${API}/grc/audits/${audit.id}`).then(r => r.json()).then(setSelectedData)
   }
 
   const createAudit = async (data: any) => {
-    await fetch(`${API}/grc/audits`, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(data) })
+    await apiFetch(`${API}/grc/audits`, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(data) })
     setShowModal(false); load()
   }
 
   const addFinding = async (data: any) => {
-    await fetch(`${API}/grc/audits/${selected.id}/findings`, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(data) })
+    await apiFetch(`${API}/grc/audits/${selected.id}/findings`, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(data) })
     setShowFindingModal(false); loadAudit(selected)
   }
 

@@ -1,4 +1,5 @@
 'use client'
+import { apiFetch } from '@/lib/apiClient'
 import { useState, useEffect, Fragment } from 'react'
 import TrainingLayout from '@/components/TrainingLayout'
 import { useReportBuilder, applyReport, ReportPanel, ReportColumn, ColumnResizeHandle, SortArrow, Pagination } from '@/components/it/ReportBuilder'
@@ -34,7 +35,7 @@ function ByEmployee() {
   const [userEmail, setUserEmail] = useState('')
 
   useEffect(() => {
-    fetch(`${API}/training/overview`).then(r => r.json()).then(d => { setOverview(d.users || []); setLoading(false) }).catch(() => setLoading(false))
+    apiFetch(`${API}/training/overview`).then(r => r.json()).then(d => { setOverview(d.users || []); setLoading(false) }).catch(() => setLoading(false))
     const u = getStoredUser()
     if (u?.email) setUserEmail(u.email)
   }, [])
@@ -44,7 +45,7 @@ function ByEmployee() {
   const toggleExpand = async (email: string) => {
     if (expandedEmail === email) { setExpandedEmail(null); return }
     setExpandedEmail(email)
-    const d = await fetch(`${API}/training/trainings/${encodeURIComponent(email)}`).then(r => r.json()).catch(() => ({ trainings: [] }))
+    const d = await apiFetch(`${API}/training/trainings/${encodeURIComponent(email)}`).then(r => r.json()).catch(() => ({ trainings: [] }))
     setExpandedTrainings(d.trainings || [])
   }
 
@@ -168,7 +169,7 @@ function ByTraining() {
   const [userEmail, setUserEmail] = useState('')
 
   useEffect(() => {
-    fetch(`${API}/training/catalog`).then(r => r.json()).then(d => setCatalog(d.catalog || [])).catch(() => {})
+    apiFetch(`${API}/training/catalog`).then(r => r.json()).then(d => setCatalog(d.catalog || [])).catch(() => {})
     const u = getStoredUser()
     if (u?.email) setUserEmail(u.email)
   }, [])
@@ -178,7 +179,7 @@ function ByTraining() {
   useEffect(() => {
     if (!selected) { setAssignments([]); return }
     setLoading(true)
-    fetch(`${API}/training/overview/training/${selected}`).then(r => r.json()).then(d => { setAssignments(d.assignments || []); setLoading(false) }).catch(() => setLoading(false))
+    apiFetch(`${API}/training/overview/training/${selected}`).then(r => r.json()).then(d => { setAssignments(d.assignments || []); setLoading(false) }).catch(() => setLoading(false))
   }, [selected])
 
   const withDisplay = assignments.map((a: any) => ({ ...a, employee_display: (a.first_name || a.last_name) ? `${a.first_name} ${a.last_name}`.trim() : a.user_email, assigned_by_name: a.assigned_by_name || a.assigned_by_email || '' }))

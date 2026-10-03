@@ -1,4 +1,5 @@
 'use client'
+import { apiFetch } from '@/lib/apiClient'
 // components/tasks/TaskModal.tsx
 import { useState, useEffect } from 'react'
 import { taskManagerAPI, companiesAPI, contactsAPI, opportunitiesAPI, leadsAPI } from '@/lib/api'
@@ -72,7 +73,7 @@ export function TaskModal({ task, entityType, entityId, entityLabel, source, par
   })
 
   useEffect(() => {
-    fetch('https://api.whubbi.wcomply.com/settings/users').then(r => r.json()).then(d => setUsers(d.users || [])).catch(() => {})
+    apiFetch('https://api.whubbi.wcomply.com/settings/users').then(r => r.json()).then(d => setUsers(d.users || [])).catch(() => {})
   }, [])
 
   useEffect(() => {

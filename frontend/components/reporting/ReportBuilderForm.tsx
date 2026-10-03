@@ -1,4 +1,5 @@
 'use client'
+import { apiFetch } from '@/lib/apiClient'
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { reportingAPI } from '@/lib/api'
@@ -59,7 +60,7 @@ export function ReportBuilderForm({ report }: { report?: any }) {
 
   useEffect(() => {
     reportingAPI.getSchema().then(d => setEntities(d.entities || [])).catch(() => {})
-    fetch(`${API}/settings/users`).then(r => r.json()).then(d => setUsers(d.users || [])).catch(() => {})
+    apiFetch(`${API}/settings/users`).then(r => r.json()).then(d => setUsers(d.users || [])).catch(() => {})
     const u = getStoredUser()
     if (u?.email) setUserEmail(u.email)
   }, [])

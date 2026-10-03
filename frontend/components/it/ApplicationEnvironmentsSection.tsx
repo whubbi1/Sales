@@ -1,4 +1,5 @@
 'use client'
+import { apiFetch } from '@/lib/apiClient'
 import { useState, useEffect } from 'react'
 
 const API = 'https://api.whubbi.wcomply.com'
@@ -20,21 +21,21 @@ export function ApplicationEnvironmentsSection({ application, canEdit }: any) {
   const [editing, setEditing] = useState<{ id: string; field: string } | null>(null)
 
   const load = async () => {
-    const d = await fetch(`${API}/it/applications/${application.id}/environments`).then(r => r.json()).catch(() => ({ environments: [] }))
+    const d = await apiFetch(`${API}/it/applications/${application.id}/environments`).then(r => r.json()).catch(() => ({ environments: [] }))
     setEnvironments(d.environments || [])
   }
   useEffect(() => { load() }, [application.id])
 
   const add = async () => {
     if (!form.name.trim()) return
-    await fetch(`${API}/it/applications/${application.id}/environments`, {
+    await apiFetch(`${API}/it/applications/${application.id}/environments`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form),
     })
     setForm(EMPTY_FORM)
     load()
   }
   const patch = async (eid: string, fields: any) => {
-    await fetch(`${API}/it/applications/${application.id}/environments/${eid}`, {
+    await apiFetch(`${API}/it/applications/${application.id}/environments/${eid}`, {
       method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(fields),
     })
     setEditing(null)
@@ -42,7 +43,7 @@ export function ApplicationEnvironmentsSection({ application, canEdit }: any) {
   }
   const remove = async (e: any) => {
     if (!confirm(`Delete environment "${e.name}"?`)) return
-    await fetch(`${API}/it/applications/${application.id}/environments/${e.id}`, { method: 'DELETE' })
+    await apiFetch(`${API}/it/applications/${application.id}/environments/${e.id}`, { method: 'DELETE' })
     load()
   }
 

@@ -1,4 +1,5 @@
 'use client'
+import { apiFetch } from '@/lib/apiClient'
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import ITLayout, { useITPerm } from '@/components/ITLayout'
@@ -240,8 +241,8 @@ function EquipmentsContent() {
 
   useEffect(() => {
     loadEquipments()
-    fetch(`${API}/settings/users`).then(r => r.json()).then(d => setUsers(d.users || [])).catch(() => {})
-    fetch(`${API}/legal/locations`).then(r => r.json()).then(d => setLocations(d.locations || [])).catch(() => {})
+    apiFetch(`${API}/settings/users`).then(r => r.json()).then(d => setUsers(d.users || [])).catch(() => {})
+    apiFetch(`${API}/legal/locations`).then(r => r.json()).then(d => setLocations(d.locations || [])).catch(() => {})
     const u = getStoredUser()
     if (u?.email) setUserEmail(u.email)
   }, [])
@@ -250,7 +251,7 @@ function EquipmentsContent() {
 
   const loadEquipments = async () => {
     setLoading(true)
-    const d = await fetch(`${API}/it/equipments`).then(r => r.json()).catch(() => ({ equipments: [] }))
+    const d = await apiFetch(`${API}/it/equipments`).then(r => r.json()).catch(() => ({ equipments: [] }))
     setEquipments(d.equipments || [])
     setLoading(false)
   }
@@ -266,13 +267,13 @@ function EquipmentsContent() {
   const isVisible = (key: string) => rb.visibleCols.includes(key)
 
   const createItem = async (form: any) => {
-    await fetch(`${API}/it/equipments`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form) })
+    await apiFetch(`${API}/it/equipments`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form) })
     setShowNew(false)
     loadEquipments()
   }
 
   const patchItem = async (item: any, fields: any) => {
-    await fetch(`${API}/it/equipments/${item.id}`, {
+    await apiFetch(`${API}/it/equipments/${item.id}`, {
       method: 'PUT', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         equipment_type: item.equipment_type, name: item.name, serial_number: item.serial_number,
@@ -290,7 +291,7 @@ function EquipmentsContent() {
 
   const deleteItem = async (item: any) => {
     if (!confirm(`Delete "${item.name}"? This cannot be undone.`)) return
-    await fetch(`${API}/it/equipments/${item.id}`, { method: 'DELETE' })
+    await apiFetch(`${API}/it/equipments/${item.id}`, { method: 'DELETE' })
     loadEquipments()
   }
 

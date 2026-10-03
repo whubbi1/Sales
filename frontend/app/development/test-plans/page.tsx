@@ -1,4 +1,5 @@
 'use client'
+import { apiFetch } from '@/lib/apiClient'
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import DevelopmentLayout, { useDevPerm } from '@/components/DevelopmentLayout'
@@ -27,7 +28,7 @@ function NewPlanModal({ applications, onClose, onCreated }: any) {
 
   useEffect(() => {
     if (!applicationId) { setSubmodules([]); setSubmoduleId(''); return }
-    fetch(`${API}/it/applications/${applicationId}/submodules`).then(r => r.json()).then(d => setSubmodules(d.submodules || [])).catch(() => {})
+    apiFetch(`${API}/it/applications/${applicationId}/submodules`).then(r => r.json()).then(d => setSubmodules(d.submodules || [])).catch(() => {})
   }, [applicationId])
 
   const submit = async () => {
@@ -111,7 +112,7 @@ function TestPlansContent() {
 
   useEffect(() => {
     load()
-    fetch(`${API}/it/applications`).then(r => r.json()).then(d => setApplications(d.applications || [])).catch(() => {})
+    apiFetch(`${API}/it/applications`).then(r => r.json()).then(d => setApplications(d.applications || [])).catch(() => {})
   }, [])
 
   if (level === 'loading') return <div style={{ padding: '48px', textAlign: 'center', color: '#45B6E4' }}>Loading…</div>

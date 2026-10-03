@@ -1,4 +1,5 @@
 'use client'
+import { apiFetch } from '@/lib/apiClient'
 // Global "Easy Access" search — dropped into every module's sidebar. Click to open a
 // command-palette-style search over every module's functionalities; typing filters by
 // module name or item label, results are filtered to what the user actually has access to
@@ -164,8 +165,8 @@ export function EasyAccessMenu() {
     if (!open) return
     const user = getStoredUser()
     if (user?.email) {
-      fetch(`${API}/settings/permissions/${encodeURIComponent(user.email)}`).then(r => r.json()).then(d => setPerms(d.permissions || {})).catch(() => setPerms({}))
-      fetch(`${API}/helpdesk/users/${encodeURIComponent(user.email)}/role`).then(r => r.json()).then(d => setHelpdeskRole(d.role || null)).catch(() => setHelpdeskRole(null))
+      apiFetch(`${API}/settings/permissions/${encodeURIComponent(user.email)}`).then(r => r.json()).then(d => setPerms(d.permissions || {})).catch(() => setPerms({}))
+      apiFetch(`${API}/helpdesk/users/${encodeURIComponent(user.email)}/role`).then(r => r.json()).then(d => setHelpdeskRole(d.role || null)).catch(() => setHelpdeskRole(null))
     } else {
       setPerms({})
     }

@@ -1,4 +1,5 @@
 'use client'
+import { apiFetch } from '@/lib/apiClient'
 import { useState, useEffect } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import ITLayout, { useITPerm } from '@/components/ITLayout'
@@ -64,7 +65,7 @@ function SoftwareDetailContent() {
   const load = async () => {
     setLoading(true)
     try {
-      const d = await fetch(`${API}/it/software/${id}`).then(r => r.json())
+      const d = await apiFetch(`${API}/it/software/${id}`).then(r => r.json())
       setSoftware(d)
     } catch {
       router.push('/it/software')
@@ -75,12 +76,12 @@ function SoftwareDetailContent() {
 
   useEffect(() => {
     load()
-    fetch(`${API}/settings/users`).then(r => r.json()).then(d => setUsers(d.users || [])).catch(() => {})
-    fetch(`${API}/legal/locations`).then(r => r.json()).then(d => setLocations(d.locations || [])).catch(() => {})
+    apiFetch(`${API}/settings/users`).then(r => r.json()).then(d => setUsers(d.users || [])).catch(() => {})
+    apiFetch(`${API}/legal/locations`).then(r => r.json()).then(d => setLocations(d.locations || [])).catch(() => {})
   }, [id])
 
   const patch = async (fields: any) => {
-    await fetch(`${API}/it/software/${id}`, {
+    await apiFetch(`${API}/it/software/${id}`, {
       method: 'PUT', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         name: software.name, editor: software.editor, version: software.version, install_link: software.install_link,
@@ -95,7 +96,7 @@ function SoftwareDetailContent() {
 
   const deleteSoftware = async () => {
     if (!confirm(`Delete "${software.name}"? This cannot be undone.`)) return
-    await fetch(`${API}/it/software/${id}`, { method: 'DELETE' })
+    await apiFetch(`${API}/it/software/${id}`, { method: 'DELETE' })
     router.push('/it/software')
   }
 

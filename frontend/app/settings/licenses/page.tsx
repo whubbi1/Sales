@@ -1,4 +1,5 @@
 'use client'
+import { apiFetch } from '@/lib/apiClient'
 import { useState, useEffect } from 'react'
 import ProfileLayout from '@/components/ProfileLayout'
 import { getStoredUser } from '@/lib/auth'
@@ -96,7 +97,7 @@ export default function LicensesGroupsPage() {
     if (user?.email) loadProfile(user.email)
     else setLoading(false)
 
-    fetch(`${API}/it/software?search=Microsoft`).then(r => r.json()).then(d => {
+    apiFetch(`${API}/it/software?search=Microsoft`).then(r => r.json()).then(d => {
       const match = (d.software || []).find((s: any) => s.owner_email)
       if (match) setMsOwner({ email: match.owner_email, name: match.owner_name || match.owner_email })
     }).catch(() => {})
@@ -105,7 +106,7 @@ export default function LicensesGroupsPage() {
   const loadProfile = async (email: string) => {
     setLoading(true)
     try {
-      const res = await fetch(`${API}/settings/profile/${email}`)
+      const res = await apiFetch(`${API}/settings/profile/${email}`)
       const data = await res.json()
       setProfile(data)
     } catch (e) { console.error(e) }

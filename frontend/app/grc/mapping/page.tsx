@@ -1,4 +1,5 @@
 'use client'
+import { apiFetch } from '@/lib/apiClient'
 import { useState, useEffect } from 'react'
 import { GRCLayout } from '@/components/GRCLayout'
 
@@ -26,9 +27,9 @@ export default function MappingPage() {
 
   useEffect(() => {
     Promise.all([
-      fetch(`${API}/grc/documents`).then(r=>r.json()),
-      fetch(`${API}/grc/frameworks`).then(r=>r.json()),
-      fetch(`${API}/grc/mapping`).then(r=>r.json()),
+      apiFetch(`${API}/grc/documents`).then(r=>r.json()),
+      apiFetch(`${API}/grc/frameworks`).then(r=>r.json()),
+      apiFetch(`${API}/grc/mapping`).then(r=>r.json()),
     ]).then(([d,f,m]) => {
       setDocuments(d.documents||[])
       setFrameworks(f.frameworks||[])
@@ -38,25 +39,25 @@ export default function MappingPage() {
 
   useEffect(() => {
     if (!selectedDoc) return
-    fetch(`${API}/grc/mapping/document/${selectedDoc}`)
+    apiFetch(`${API}/grc/mapping/document/${selectedDoc}`)
       .then(r=>r.json())
       .then(d=>setDocReqs(d.frameworks||[]))
   }, [selectedDoc])
 
   const addMapping = async () => {
     if (!sourceReq || !targetReq) return
-    await fetch(`${API}/grc/mapping`, {
+    await apiFetch(`${API}/grc/mapping`, {
       method:'POST', headers:{'Content-Type':'application/json'},
       body:JSON.stringify({ source_req_id:sourceReq, target_req_id:targetReq, mapping_type:mappingType, notes:mappingNotes })
     })
-    const m = await fetch(`${API}/grc/mapping`).then(r=>r.json())
+    const m = await apiFetch(`${API}/grc/mapping`).then(r=>r.json())
     setMappings(m.mappings||[])
     setShowAddMapping(false); setSourceReq(''); setTargetReq(''); setMappingNotes('')
   }
 
   const deleteMapping = async (id: string) => {
     if (!confirm('Remove this mapping?')) return
-    await fetch(`${API}/grc/mapping/${id}`, { method:'DELETE' })
+    await apiFetch(`${API}/grc/mapping/${id}`, { method:'DELETE' })
     setMappings(prev=>prev.filter(m=>m.id!==id))
   }
 
@@ -80,13 +81,13 @@ export default function MappingPage() {
 
   useEffect(() => {
     if (sourceFramework) {
-      fetch(`${API}/grc/frameworks/${sourceFramework}/requirements`).then(r=>r.json()).then(d=>setSourceReqs(d.requirements||[]))
+      apiFetch(`${API}/grc/frameworks/${sourceFramework}/requirements`).then(r=>r.json()).then(d=>setSourceReqs(d.requirements||[]))
     }
   }, [sourceFramework])
 
   useEffect(() => {
     if (targetFramework) {
-      fetch(`${API}/grc/frameworks/${targetFramework}/requirements`).then(r=>r.json()).then(d=>setTargetReqs(d.requirements||[]))
+      apiFetch(`${API}/grc/frameworks/${targetFramework}/requirements`).then(r=>r.json()).then(d=>setTargetReqs(d.requirements||[]))
     }
   }, [targetFramework])
 

@@ -1,4 +1,5 @@
 'use client'
+import { apiFetch } from '@/lib/apiClient'
 // components/contacts/ContactModal.tsx
 import { useState, useEffect } from 'react'
 import { contactsAPI, companiesAPI, partnersAPI, marketingAPI, projectsAPI } from '@/lib/api'
@@ -63,7 +64,7 @@ export function ContactModal({ contact, onClose, onSave }: any) {
   useEffect(() => {
     companiesAPI.list({}).then(setCompanies).catch(() => {})
     partnersAPI.list({}).then(setPartners).catch(() => {})
-    fetch('https://api.whubbi.wcomply.com/settings/users').then(r => r.json()).then(d => setUsers(d.users || [])).catch(() => {})
+    apiFetch('https://api.whubbi.wcomply.com/settings/users').then(r => r.json()).then(d => setUsers(d.users || [])).catch(() => {})
   }, [])
 
   useEffect(() => {

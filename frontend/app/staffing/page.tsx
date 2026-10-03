@@ -1,4 +1,5 @@
 'use client'
+import { apiFetch } from '@/lib/apiClient'
 // app/staffing/page.tsx
 import { useState, useEffect, Fragment } from 'react'
 import { useRouter } from 'next/navigation'
@@ -194,7 +195,7 @@ export default function StaffingPage() {
     try {
       const [staffing, usersResp, opps] = await Promise.all([
         opportunitiesAPI.getAllStaffing(),
-        fetch('https://api.whubbi.wcomply.com/settings/users').then(r => r.json()),
+        apiFetch('https://api.whubbi.wcomply.com/settings/users').then(r => r.json()),
         opportunitiesAPI.list({}),
       ])
       setAllStaffing(staffing)

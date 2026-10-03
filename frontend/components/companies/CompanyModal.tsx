@@ -1,4 +1,5 @@
 'use client'
+import { apiFetch } from '@/lib/apiClient'
 // components/companies/CompanyModal.tsx
 import { useState, useEffect } from 'react'
 import { companiesAPI, contactsAPI } from '@/lib/api'
@@ -50,7 +51,7 @@ export function CompanyModal({ company, companies = [], onClose, onSave }: any) 
 
   useEffect(() => {
     contactsAPI.list({}).then(setContacts).catch(() => {})
-    fetch('https://api.whubbi.wcomply.com/settings/users').then(r => r.json()).then(d => setUsers(d.users || [])).catch(() => {})
+    apiFetch('https://api.whubbi.wcomply.com/settings/users').then(r => r.json()).then(d => setUsers(d.users || [])).catch(() => {})
   }, [])
 
   // Fills in only whatever's currently empty — never overwrites something the user

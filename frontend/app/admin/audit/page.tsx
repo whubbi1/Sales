@@ -1,4 +1,5 @@
 'use client'
+import { apiFetch } from '@/lib/apiClient'
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 
@@ -44,7 +45,7 @@ export default function AuditPage() {
       ...(filter.changed_by  && { changed_by:  filter.changed_by }),
     })
     try {
-      const r = await fetch(`${API}/admin/audit/logs?${params}`)
+      const r = await apiFetch(`${API}/admin/audit/logs?${params}`)
       const d = await r.json()
       setLogs(d.logs || [])
       setTotal(d.total || 0)
@@ -54,7 +55,7 @@ export default function AuditPage() {
   const loadRetention = async () => {
     setRetLoading(true)
     try {
-      const r = await fetch(`${API}/admin/audit/retention`)
+      const r = await apiFetch(`${API}/admin/audit/retention`)
       const d = await r.json()
       setRetentionSettings(d.settings || [])
       const ed: Record<string,number> = {}
@@ -68,7 +69,7 @@ export default function AuditPage() {
 
   const saveRetention = async (table_name: string, module: string) => {
     setSaving(table_name)
-    await fetch(`${API}/admin/audit/retention/${encodeURIComponent(table_name)}`, {
+    await apiFetch(`${API}/admin/audit/retention/${encodeURIComponent(table_name)}`, {
       method: 'PUT', headers: {'Content-Type':'application/json'},
       body: JSON.stringify({ retention_days: editing[table_name], module, updated_by: 'william.delcour@wcomply.com' })
     })
@@ -78,7 +79,7 @@ export default function AuditPage() {
   const runCleanup = async () => {
     setRunning(true); setCleanupResult(null)
     try {
-      const r = await fetch(`${API}/admin/audit/cleanup`, { method: 'POST' })
+      const r = await apiFetch(`${API}/admin/audit/cleanup`, { method: 'POST' })
       const d = await r.json()
       setCleanupResult(d)
       await loadLogs()

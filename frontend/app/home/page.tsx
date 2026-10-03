@@ -52,7 +52,7 @@ export default function HomePage() {
   const [permsByModule, setPermsByModule] = useState<Record<string, Record<string, { access_mode?: string }>> | null>(null)
 
   useEffect(() => {
-    fetch(`${API}/health`, { signal: AbortSignal.timeout(5000) })
+    apiFetch(`${API}/health`, { signal: AbortSignal.timeout(5000) })
       .then(r => setBackendStatus(r.ok ? 'up' : 'down'))
       .catch(() => setBackendStatus('down'))
 
@@ -77,10 +77,10 @@ export default function HomePage() {
         .then(d => setPermsByModule(d.permissions || {}))
         .catch(() => setPermsByModule({}))
 
-      fetch(`${API}/settings/main-location/${encodeURIComponent(user.email)}`)
+      apiFetch(`${API}/settings/main-location/${encodeURIComponent(user.email)}`)
         .then(r => r.json())
         .then(loc => {
-          fetch(`${API}/settings/company-links`)
+          apiFetch(`${API}/settings/company-links`)
             .then(r => r.json())
             .then(d => {
               const all: CompanyLink[] = d.links || []

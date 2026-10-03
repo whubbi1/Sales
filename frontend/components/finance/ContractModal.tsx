@@ -1,4 +1,5 @@
 'use client'
+import { apiFetch } from '@/lib/apiClient'
 // components/finance/ContractModal.tsx
 import { useState, useEffect } from 'react'
 import { financeContractsAPI, financeSuppliersAPI } from '@/lib/api'
@@ -33,7 +34,7 @@ export function ContractModal({ contract, onClose, onSave }: any) {
 
   useEffect(() => {
     financeSuppliersAPI.list({}).then(setSuppliers).catch(() => {})
-    fetch('https://api.whubbi.wcomply.com/settings/users').then(r => r.json()).then(d => setUsers(d.users || [])).catch(() => {})
+    apiFetch('https://api.whubbi.wcomply.com/settings/users').then(r => r.json()).then(d => setUsers(d.users || [])).catch(() => {})
   }, [])
 
   const handleSave = async () => {

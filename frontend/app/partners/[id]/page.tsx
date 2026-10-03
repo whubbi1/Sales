@@ -1,4 +1,5 @@
 'use client'
+import { apiFetch } from '@/lib/apiClient'
 import { useState, useEffect, useRef } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { partnersAPI, contactsAPI } from '@/lib/api'
@@ -93,7 +94,7 @@ export default function PartnerDetailPage() {
         partnersAPI.getEvents(id as string),
         partnersAPI.getCustomers(id as string),
         contactsAPI.list({}),
-        fetch('https://api.whubbi.wcomply.com/settings/users').then(r => r.json()).catch(() => ({ users: [] })),
+        apiFetch('https://api.whubbi.wcomply.com/settings/users').then(r => r.json()).catch(() => ({ users: [] })),
         partnersAPI.getActionItems(id as string),
       ])
       setPartner(p)

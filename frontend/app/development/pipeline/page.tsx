@@ -1,4 +1,5 @@
 'use client'
+import { apiFetch } from '@/lib/apiClient'
 import { useState, useEffect } from 'react'
 import DevelopmentLayout, { useDevPerm } from '@/components/DevelopmentLayout'
 import { getStoredUser } from '@/lib/auth'
@@ -35,7 +36,7 @@ function PipelineContent() {
 
   const loadPipelines = async () => {
     setLoading(true)
-    const d = await fetch(`${API}/development/pipelines`).then(r => r.json()).catch(() => ({ pipelines: [] }))
+    const d = await apiFetch(`${API}/development/pipelines`).then(r => r.json()).catch(() => ({ pipelines: [] }))
     setPipelines(d.pipelines || [])
     setLoading(false)
   }
@@ -57,11 +58,11 @@ function PipelineContent() {
     if (!form.name.trim()) return
     setSaving(true)
     if (editing) {
-      await fetch(`${API}/development/pipelines/${editing.id}`, {
+      await apiFetch(`${API}/development/pipelines/${editing.id}`, {
         method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form),
       })
     } else {
-      await fetch(`${API}/development/pipelines`, {
+      await apiFetch(`${API}/development/pipelines`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form),
       })
     }
@@ -72,20 +73,20 @@ function PipelineContent() {
 
   const handleDelete = async (id: string) => {
     if (!confirm('Delete this pipeline? Linked requests will be unassigned.')) return
-    await fetch(`${API}/development/pipelines/${id}`, { method: 'DELETE' })
+    await apiFetch(`${API}/development/pipelines/${id}`, { method: 'DELETE' })
     loadPipelines()
   }
 
   const toggleExpand = async (pl: any) => {
     if (expandedId === pl.id) { setExpanded(null); setExpandedReqs([]); return }
     setExpanded(pl.id)
-    const d = await fetch(`${API}/development/pipelines/${pl.id}`).then(r => r.json()).catch(() => null)
+    const d = await apiFetch(`${API}/development/pipelines/${pl.id}`).then(r => r.json()).catch(() => null)
     setExpandedReqs(d?.requests || [])
   }
 
   const refreshExpanded = async () => {
     if (!expandedId) return
-    const d = await fetch(`${API}/development/pipelines/${expandedId}`).then(r => r.json()).catch(() => null)
+    const d = await apiFetch(`${API}/development/pipelines/${expandedId}`).then(r => r.json()).catch(() => null)
     setExpandedReqs(d?.requests || [])
     loadPipelines()
   }
@@ -93,7 +94,7 @@ function PipelineContent() {
   const putRequestPipeline = async (reqId: string, pipelineId: string | null) => {
     const user = getStoredUser()
     setRowBusy(reqId)
-    await fetch(`${API}/development/requests/${reqId}`, {
+    await apiFetch(`${API}/development/requests/${reqId}`, {
       method: 'PUT', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ pipeline_id: pipelineId, updated_by: user?.email || '', updated_by_name: user?.name || user?.email || 'System' }),
     })
