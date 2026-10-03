@@ -1,9 +1,8 @@
 'use client'
 import { useRouter, usePathname } from 'next/navigation'
-import { createContext, useContext, useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { getStoredUser, clearStoredUser } from '@/lib/auth'
-import { apiFetch } from '@/lib/apiClient'
-import { lookupPerm, ModulePerms, PermLevel } from '@/lib/permissions'
+import { lookupPerm, ModulePerms, PermLevel, useModulePerms } from '@/lib/permissions'
 import { EasyAccessMenu } from '@/components/shared/EasyAccessMenu'
 
 const NAV = [
@@ -15,10 +14,9 @@ const NAV = [
 ]
 
 type FinancePerms = ModulePerms
-const FinancePermContext = createContext<FinancePerms>(null)
 
 export function useFinancePerm(submodule: string): { level: PermLevel; canEdit: boolean } {
-  const perms = useContext(FinancePermContext)
+  const perms = useModulePerms('finance')
   return lookupPerm(perms, submodule)
 }
 
@@ -28,7 +26,7 @@ export function FinanceLayout({ children }: { children: React.ReactNode }) {
   const redirecting = useRef(false)
   const [userEmail, setUserEmail] = useState('')
   const [userName,  setUserName]  = useState('')
-  const [financePerms, setFinancePerms] = useState<FinancePerms>(null)
+  const financePerms = useModulePerms('finance')
 
   useEffect(() => {
     const user = getStoredUser()
@@ -42,10 +40,6 @@ export function FinanceLayout({ children }: { children: React.ReactNode }) {
     setUserEmail(user.email)
     setUserName(user.name)
 
-    apiFetch(`/settings/permissions/${encodeURIComponent(user.email)}`)
-      .then(r => r.json())
-      .then(d => setFinancePerms(d.permissions?.finance || {}))
-      .catch(() => setFinancePerms({}))
   }, [])
 
   const handleSignOut = () => {
@@ -112,9 +106,7 @@ export function FinanceLayout({ children }: { children: React.ReactNode }) {
       </div>
 
       <main style={{ marginLeft: '220px', width: 'calc(100vw - 220px)', background: '#F5F7FA', minHeight: '100vh', overflowX: 'hidden' }}>
-        <FinancePermContext.Provider value={financePerms}>
           <FinanceRouteGate financePerms={financePerms} path={path}>{children}</FinanceRouteGate>
-        </FinancePermContext.Provider>
       </main>
     </div>
   )

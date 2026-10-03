@@ -1,18 +1,16 @@
 'use client'
-import React, { createContext, useContext, useEffect, useRef, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import { getStoredUser, clearStoredUser } from '@/lib/auth'
-import { apiFetch } from '@/lib/apiClient'
-import { lookupPerm, ModulePerms, PermLevel } from '@/lib/permissions'
+import { lookupPerm, ModulePerms, PermLevel, useModulePerms } from '@/lib/permissions'
 import { EasyAccessMenu } from '@/components/shared/EasyAccessMenu'
 
 type DevPerms = ModulePerms
-export const DevPermContext = createContext<DevPerms>(null)
 
 // submodule defaults to 'general' so existing call sites (`const {canEdit} = useDevPerm()`)
 // keep working unchanged — Test Plans/Campaigns/Remediation pages pass their own submodule key.
 export function useDevPerm(submodule: string = 'general'): { level: PermLevel; canEdit: boolean } {
-  const perms = useContext(DevPermContext)
+  const perms = useModulePerms('development')
   return lookupPerm(perms, submodule)
 }
 
@@ -31,7 +29,7 @@ export default function DevelopmentLayout({ children }: { children: React.ReactN
   const router      = useRouter()
   const pathname    = usePathname()
   const redirecting = useRef(false)
-  const [devPerms,  setDevPerms]  = useState<DevPerms>(null)
+  const devPerms = useModulePerms('development')
   const [userName,  setUserName]  = useState('')
   const [userEmail, setUserEmail] = useState('')
 
@@ -47,10 +45,6 @@ export default function DevelopmentLayout({ children }: { children: React.ReactN
     setUserName(user.name || user.email)
     setUserEmail(user.email)
 
-    apiFetch(`/settings/permissions/${encodeURIComponent(user.email)}`)
-      .then(r => r.json())
-      .then(d => setDevPerms(d.permissions?.development || {}))
-      .catch(() => setDevPerms({}))
   }, [])
 
   const handleSignOut = () => { clearStoredUser(); router.push('/auth/login') }
@@ -136,13 +130,11 @@ export default function DevelopmentLayout({ children }: { children: React.ReactN
   )
 
   return (
-    <DevPermContext.Provider value={devPerms}>
       <div style={{ display: 'flex', minHeight: '100vh', fontFamily: 'Montserrat, sans-serif' }}>
         {sidebar}
         <main style={{ marginLeft: '220px', flex: 1, minHeight: '100vh', background: '#F5F7FA' }}>
           {children}
         </main>
       </div>
-    </DevPermContext.Provider>
   )
 }

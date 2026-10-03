@@ -1,20 +1,18 @@
 'use client'
-import React, { createContext, useContext, useEffect, useRef, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import { getStoredUser, clearStoredUser } from '@/lib/auth'
-import { apiFetch } from '@/lib/apiClient'
-import { lookupPerm, ModulePerms, PermLevel } from '@/lib/permissions'
+import { lookupPerm, ModulePerms, PermLevel, useModulePerms } from '@/lib/permissions'
 import { EasyAccessMenu } from '@/components/shared/EasyAccessMenu'
 
 type ITPerms = ModulePerms
-const ITPermContext = createContext<ITPerms>(null)
 
 // Submodule granularity, same shape as every other module (HRLayout, GRCLayout,
 // FinanceLayout). Previously this only exposed a single whole-module `canEdit`
 // keyed off the 'assets' submodule alone — callers now pass which submodule
 // they're checking.
 export function useITPerm(submodule: string): { level: PermLevel; canEdit: boolean } {
-  const perms = useContext(ITPermContext)
+  const perms = useModulePerms('it')
   return lookupPerm(perms, submodule)
 }
 
@@ -31,7 +29,7 @@ export default function ITLayout({ children }: { children: React.ReactNode }) {
   const router      = useRouter()
   const pathname    = usePathname()
   const redirecting = useRef(false)
-  const [itPerms, setItPerms]     = useState<ITPerms>(null)
+  const itPerms = useModulePerms('it')
   const [userName,  setUserName]  = useState('')
   const [userEmail, setUserEmail] = useState('')
 
@@ -47,10 +45,6 @@ export default function ITLayout({ children }: { children: React.ReactNode }) {
     setUserName(user.name || user.email)
     setUserEmail(user.email)
 
-    apiFetch(`/settings/permissions/${encodeURIComponent(user.email)}`)
-      .then(r => r.json())
-      .then(d => setItPerms(d.permissions?.it || {}))
-      .catch(() => setItPerms({}))
   }, [])
 
   const matched = NAV_ITEMS
@@ -132,13 +126,11 @@ export default function ITLayout({ children }: { children: React.ReactNode }) {
   )
 
   return (
-    <ITPermContext.Provider value={itPerms}>
       <div style={{ display: 'flex', minHeight: '100vh', fontFamily: 'Montserrat, sans-serif' }}>
         {sidebar}
         <main style={{ marginLeft: '220px', flex: 1, minHeight: '100vh', background: '#F5F7FA' }}>
           {children}
         </main>
       </div>
-    </ITPermContext.Provider>
   )
 }

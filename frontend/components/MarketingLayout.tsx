@@ -1,9 +1,8 @@
 'use client'
 import { useRouter, usePathname } from 'next/navigation'
-import { createContext, useContext, useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { getStoredUser, clearStoredUser } from '@/lib/auth'
-import { apiFetch } from '@/lib/apiClient'
-import { lookupPerm, ModulePerms, PermLevel } from '@/lib/permissions'
+import { lookupPerm, ModulePerms, PermLevel, useModulePerms } from '@/lib/permissions'
 import { EasyAccessMenu } from '@/components/shared/EasyAccessMenu'
 
 // `submodule: null` means "no matching MODULES['marketing'] entry exists for
@@ -23,10 +22,9 @@ const NAV = [
 ]
 
 type MarketingPerms = ModulePerms
-const MarketingPermContext = createContext<MarketingPerms>(null)
 
 export function useMarketingPerm(submodule: string): { level: PermLevel; canEdit: boolean } {
-  const perms = useContext(MarketingPermContext)
+  const perms = useModulePerms('marketing')
   return lookupPerm(perms, submodule)
 }
 
@@ -36,7 +34,7 @@ export function MarketingLayout({ children }: { children: React.ReactNode }) {
   const redirecting = useRef(false)
   const [userEmail, setUserEmail] = useState('')
   const [userName,  setUserName]  = useState('')
-  const [perms, setPerms]         = useState<MarketingPerms>(null)
+  const perms = useModulePerms('marketing')
 
   useEffect(() => {
     const user = getStoredUser()
@@ -50,10 +48,6 @@ export function MarketingLayout({ children }: { children: React.ReactNode }) {
     setUserEmail(user.email)
     setUserName(user.name)
 
-    apiFetch(`/settings/permissions/${encodeURIComponent(user.email)}`)
-      .then(r => r.json())
-      .then(d => setPerms(d.permissions?.marketing || {}))
-      .catch(() => setPerms({}))
   }, [])
 
   const handleSignOut = () => {
@@ -120,9 +114,7 @@ export function MarketingLayout({ children }: { children: React.ReactNode }) {
       </div>
 
       <main style={{ marginLeft: '220px', width: 'calc(100vw - 220px)', background: '#F5F7FA', minHeight: '100vh', overflowX: 'hidden' }}>
-        <MarketingPermContext.Provider value={perms}>
           <MarketingRouteGate perms={perms} path={path}>{children}</MarketingRouteGate>
-        </MarketingPermContext.Provider>
       </main>
     </div>
   )

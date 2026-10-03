@@ -1,9 +1,8 @@
 'use client'
 import { useRouter, usePathname } from 'next/navigation'
-import { createContext, useContext, useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { getStoredUser, clearStoredUser } from '@/lib/auth'
-import { apiFetch } from '@/lib/apiClient'
-import { lookupPerm, ModulePerms, PermLevel } from '@/lib/permissions'
+import { lookupPerm, ModulePerms, PermLevel, useModulePerms } from '@/lib/permissions'
 import { EasyAccessMenu } from '@/components/shared/EasyAccessMenu'
 
 // Locations has its own "locations" submodule, separate from Legal Entities —
@@ -20,10 +19,9 @@ const NAV = [
 ]
 
 type LegalPerms = ModulePerms
-const LegalPermContext = createContext<LegalPerms>(null)
 
 export function useLegalPerm(submodule: string): { level: PermLevel; canEdit: boolean } {
-  const perms = useContext(LegalPermContext)
+  const perms = useModulePerms('legal')
   return lookupPerm(perms, submodule)
 }
 
@@ -33,7 +31,7 @@ export function LegalLayout({ children }: { children: React.ReactNode }) {
   const redirecting = useRef(false)
   const [userEmail, setUserEmail] = useState('')
   const [userName,  setUserName]  = useState('')
-  const [legalPerms, setLegalPerms] = useState<LegalPerms>(null)
+  const legalPerms = useModulePerms('legal')
 
   useEffect(() => {
     const user = getStoredUser()
@@ -47,10 +45,6 @@ export function LegalLayout({ children }: { children: React.ReactNode }) {
     setUserEmail(user.email)
     setUserName(user.name)
 
-    apiFetch(`/settings/permissions/${encodeURIComponent(user.email)}`)
-      .then(r => r.json())
-      .then(d => setLegalPerms(d.permissions?.legal || {}))
-      .catch(() => setLegalPerms({}))
   }, [])
 
   const handleSignOut = () => {
@@ -118,9 +112,7 @@ export function LegalLayout({ children }: { children: React.ReactNode }) {
       </div>
 
       <main style={{ marginLeft: '220px', width: 'calc(100vw - 220px)', background: '#F5F7FA', minHeight: '100vh', overflowX: 'hidden' }}>
-        <LegalPermContext.Provider value={legalPerms}>
           <LegalRouteGate legalPerms={legalPerms} path={path}>{children}</LegalRouteGate>
-        </LegalPermContext.Provider>
       </main>
     </div>
   )

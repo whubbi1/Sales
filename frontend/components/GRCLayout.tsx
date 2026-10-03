@@ -1,9 +1,8 @@
 'use client'
 import { useRouter, usePathname } from 'next/navigation'
-import { createContext, useContext, useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { getStoredUser, clearStoredUser } from '@/lib/auth'
-import { apiFetch } from '@/lib/apiClient'
-import { lookupPerm, ModulePerms, PermLevel } from '@/lib/permissions'
+import { lookupPerm, ModulePerms, PermLevel, useModulePerms } from '@/lib/permissions'
 import { EasyAccessMenu } from '@/components/shared/EasyAccessMenu'
 
 const NAV = [
@@ -19,10 +18,9 @@ const NAV = [
 ]
 
 type GRCPerms = ModulePerms
-const GRCPermContext = createContext<GRCPerms>(null)
 
 export function useGRCPerm(submodule: string): { level: PermLevel; canEdit: boolean } {
-  const perms = useContext(GRCPermContext)
+  const perms = useModulePerms('grc')
   return lookupPerm(perms, submodule)
 }
 
@@ -32,7 +30,7 @@ export function GRCLayout({ children }: { children: React.ReactNode }) {
   const redirecting = useRef(false)
   const [userEmail, setUserEmail] = useState('')
   const [userName,  setUserName]  = useState('')
-  const [grcPerms, setGrcPerms]   = useState<GRCPerms>(null)
+  const grcPerms = useModulePerms('grc')
 
   useEffect(() => {
     const user = getStoredUser()
@@ -46,10 +44,6 @@ export function GRCLayout({ children }: { children: React.ReactNode }) {
     setUserEmail(user.email)
     setUserName(user.name)
 
-    apiFetch(`/settings/permissions/${encodeURIComponent(user.email)}`)
-      .then(r => r.json())
-      .then(d => setGrcPerms(d.permissions?.grc || {}))
-      .catch(() => setGrcPerms({}))
   }, [])
 
   const handleSignOut = () => {
@@ -116,9 +110,7 @@ export function GRCLayout({ children }: { children: React.ReactNode }) {
       </div>
 
       <main style={{ marginLeft: '220px', width: 'calc(100vw - 220px)', background: '#F5F7FA', minHeight: '100vh', overflowX: 'hidden' }}>
-        <GRCPermContext.Provider value={grcPerms}>
           <GRCRouteGate grcPerms={grcPerms} path={path}>{children}</GRCRouteGate>
-        </GRCPermContext.Provider>
       </main>
     </div>
   )

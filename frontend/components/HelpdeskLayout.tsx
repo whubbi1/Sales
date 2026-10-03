@@ -1,9 +1,9 @@
 'use client'
 import { useRouter, usePathname } from 'next/navigation'
-import { createContext, useContext, useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { getStoredUser, clearStoredUser } from '@/lib/auth'
 import { apiFetch } from '@/lib/apiClient'
-import { lookupPerm, ModulePerms, PermLevel } from '@/lib/permissions'
+import { lookupPerm, ModulePerms, PermLevel, useModulePerms } from '@/lib/permissions'
 import { EasyAccessMenu } from '@/components/shared/EasyAccessMenu'
 
 // Helpdesk has always had its own internal role tiers (end_user/helpdesk_user/
@@ -27,10 +27,9 @@ const NAV_ITEMS: NavItem[] = [
 ]
 
 type HelpdeskPerms = ModulePerms
-const HelpdeskPermContext = createContext<HelpdeskPerms>(null)
 
 export function useHelpdeskPerm(submodule: string): { level: PermLevel; canEdit: boolean } {
-  const perms = useContext(HelpdeskPermContext)
+  const perms = useModulePerms('helpdesk')
   return lookupPerm(perms, submodule)
 }
 
@@ -43,7 +42,7 @@ export default function HelpdeskLayout({ children }: Props) {
   const [role,      setRole]      = useState<string>('end_user')
   const [userEmail, setUserEmail] = useState<string>('')
   const [userName,  setUserName]  = useState<string>('')
-  const [perms,     setPerms]     = useState<HelpdeskPerms>(null)
+  const perms = useModulePerms('helpdesk')
 
   useEffect(() => {
     const user = getStoredUser()
@@ -60,10 +59,6 @@ export default function HelpdeskLayout({ children }: Props) {
       .then(r => r.json())
       .then(d => setRole(d.role || 'end_user'))
       .catch(() => {})
-    apiFetch(`/settings/permissions/${encodeURIComponent(user.email)}`)
-      .then(r => r.json())
-      .then(d => setPerms(d.permissions?.helpdesk || {}))
-      .catch(() => setPerms({}))
   }, [])
 
   const handleSignOut = () => {
@@ -136,9 +131,7 @@ export default function HelpdeskLayout({ children }: Props) {
       </aside>
 
       <main style={{ marginLeft: '220px', flex: 1, minHeight: '100vh', background: '#F5F7FA' }}>
-        <HelpdeskPermContext.Provider value={perms}>
           <HelpdeskRouteGate perms={perms} pathname={pathname}>{children}</HelpdeskRouteGate>
-        </HelpdeskPermContext.Provider>
       </main>
     </div>
   )

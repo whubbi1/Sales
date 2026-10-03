@@ -1,9 +1,8 @@
 'use client'
 import { useRouter, usePathname } from 'next/navigation'
-import { createContext, useContext, useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { getStoredUser, clearStoredUser } from '@/lib/auth'
-import { apiFetch } from '@/lib/apiClient'
-import { lookupPerm, ModulePerms, PermLevel } from '@/lib/permissions'
+import { lookupPerm, ModulePerms, PermLevel, useModulePerms } from '@/lib/permissions'
 import { EasyAccessMenu } from '@/components/shared/EasyAccessMenu'
 
 const NAV = [
@@ -17,10 +16,9 @@ const NAV = [
 ]
 
 type OperationsPerms = ModulePerms
-const OperationsPermContext = createContext<OperationsPerms>(null)
 
 export function useOperationsPerm(submodule: string): { level: PermLevel; canEdit: boolean } {
-  const perms = useContext(OperationsPermContext)
+  const perms = useModulePerms('operations')
   return lookupPerm(perms, submodule)
 }
 
@@ -30,7 +28,7 @@ export function OperationsLayout({ children }: { children: React.ReactNode }) {
   const redirecting = useRef(false)
   const [userEmail, setUserEmail] = useState('')
   const [userName,  setUserName]  = useState('')
-  const [perms, setPerms]         = useState<OperationsPerms>(null)
+  const perms = useModulePerms('operations')
 
   useEffect(() => {
     const user = getStoredUser()
@@ -44,10 +42,6 @@ export function OperationsLayout({ children }: { children: React.ReactNode }) {
     setUserEmail(user.email)
     setUserName(user.name)
 
-    apiFetch(`/settings/permissions/${encodeURIComponent(user.email)}`)
-      .then(r => r.json())
-      .then(d => setPerms(d.permissions?.operations || {}))
-      .catch(() => setPerms({}))
   }, [])
 
   const handleSignOut = () => {
@@ -114,9 +108,7 @@ export function OperationsLayout({ children }: { children: React.ReactNode }) {
       </div>
 
       <main style={{ marginLeft: '220px', width: 'calc(100vw - 220px)', background: '#F5F7FA', minHeight: '100vh', overflowX: 'hidden' }}>
-        <OperationsPermContext.Provider value={perms}>
           <OperationsRouteGate perms={perms} path={path}>{children}</OperationsRouteGate>
-        </OperationsPermContext.Provider>
       </main>
     </div>
   )

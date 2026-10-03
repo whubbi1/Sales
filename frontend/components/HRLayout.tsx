@@ -1,9 +1,8 @@
 'use client'
 import { useRouter, usePathname } from 'next/navigation'
-import { createContext, useContext, useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { getStoredUser, clearStoredUser } from '@/lib/auth'
-import { apiFetch } from '@/lib/apiClient'
-import { lookupPerm, ModulePerms, PermLevel } from '@/lib/permissions'
+import { lookupPerm, ModulePerms, PermLevel, useModulePerms } from '@/lib/permissions'
 import { EasyAccessMenu } from '@/components/shared/EasyAccessMenu'
 
 // Every entry here is gated by its own submodule permission (see NAV filtering
@@ -27,10 +26,9 @@ const HR_MANAGER_NAV = [
 ]
 
 type HRPerms = ModulePerms
-const HRPermContext = createContext<HRPerms>(null)
 
 export function useHRPerm(submodule: string): { level: PermLevel; canEdit: boolean } {
-  const perms = useContext(HRPermContext)
+  const perms = useModulePerms('hr')
   return lookupPerm(perms, submodule)
 }
 
@@ -40,7 +38,7 @@ export function HRLayout({ children }: { children: React.ReactNode }) {
   const redirecting = useRef(false)
   const [userEmail, setUserEmail] = useState('')
   const [userName,  setUserName]  = useState('')
-  const [hrPerms, setHrPerms]     = useState<HRPerms>(null)
+  const hrPerms = useModulePerms('hr')
 
   useEffect(() => {
     const user = getStoredUser()
@@ -54,10 +52,6 @@ export function HRLayout({ children }: { children: React.ReactNode }) {
     setUserEmail(user.email)
     setUserName(user.name)
 
-    apiFetch(`/settings/permissions/${encodeURIComponent(user.email)}`)
-      .then(r => r.json())
-      .then(d => setHrPerms(d.permissions?.hr || {}))
-      .catch(() => setHrPerms({}))
   }, [])
 
   const handleSignOut = () => {
@@ -131,9 +125,7 @@ export function HRLayout({ children }: { children: React.ReactNode }) {
       </div>
 
       <main style={{ marginLeft: '220px', width: 'calc(100vw - 220px)', background: '#F5F7FA', minHeight: '100vh', overflowX: 'hidden' }}>
-        <HRPermContext.Provider value={hrPerms}>
           <RouteGate hrPerms={hrPerms} path={path}>{children}</RouteGate>
-        </HRPermContext.Provider>
       </main>
     </div>
   )
