@@ -224,7 +224,7 @@ async def sync_user_from_ms(email: str, db: AsyncSession) -> dict:
 @router.get("/profile/{email}")
 async def get_profile(email: str, sync: bool = False, db: AsyncSession = Depends(get_db)):
     if not sync:
-        result = await db.execute(text("SELECT * FROM user_profiles WHERE email = :email"), {"email": email})
+        result = await db.execute(text("SELECT * FROM user_profiles WHERE lower(email) = lower(:email)"), {"email": email})
         row = result.fetchone()
         if row:
             return dict(row._mapping)
@@ -256,10 +256,10 @@ async def update_profile_preferences(
     if not fields:
         raise HTTPException(status_code=400, detail=f"No recognized fields — expected one of {_PROFILE_PREF_FIELDS}")
     set_clause = ", ".join(f"{k} = :{k}" for k in fields)
-    await db.execute(text(f"UPDATE user_profiles SET {set_clause}, updated_at = NOW() WHERE email = :email"),
+    await db.execute(text(f"UPDATE user_profiles SET {set_clause}, updated_at = NOW() WHERE lower(email) = lower(:email)"),
                       {**fields, "email": email})
     await db.commit()
-    result = await db.execute(text("SELECT * FROM user_profiles WHERE email = :email"), {"email": email})
+    result = await db.execute(text("SELECT * FROM user_profiles WHERE lower(email) = lower(:email)"), {"email": email})
     row = result.fetchone()
     return dict(row._mapping) if row else {"error": "Profile not found"}
 
@@ -273,7 +273,7 @@ async def get_permissions(
 ):
     await require_self_or_permissions_admin(email, caller, db)
     result = await db.execute(
-        text("SELECT * FROM whubbi_permissions WHERE user_email = :email ORDER BY module, submodule"),
+        text("SELECT * FROM whubbi_permissions WHERE lower(user_email) = lower(:email) ORDER BY module, submodule"),
         {"email": email}
     )
     rows = result.fetchall()
@@ -307,6 +307,7 @@ async def update_permissions(
     _admin: str = Depends(require_permissions_admin),
 ):
     """Update permissions for a user. Admin only."""
+    email = email.strip().lower()  # rows are keyed by the lowercased identity authz checks against
     import json as _json
     granted_by = data.get("granted_by", "admin")
     permissions = data.get("permissions", {})
@@ -360,7 +361,7 @@ async def create_mcp_token(data: dict, db: AsyncSession = Depends(get_db)):
 async def list_mcp_tokens(email: str, db: AsyncSession = Depends(get_db)):
     result = await db.execute(text("""
         SELECT id, label, token_prefix, created_at, last_used_at, revoked_at
-        FROM mcp_tokens WHERE user_email = :email ORDER BY created_at DESC
+        FROM mcp_tokens WHERE lower(user_email) = lower(:email) ORDER BY created_at DESC
     """), {"email": email})
     return {"tokens": [{
         "id": str(r.id), "label": r.label, "token_prefix": r.token_prefix,
@@ -457,7 +458,7 @@ async def check_whubbi_access(email: str, db: AsyncSession = Depends(get_db)):
     unreachable, permission not granted, group not found), that half fails open so a
     transient issue or an incomplete Azure AD setup doesn't lock out the whole
     company — is_excluded is still enforced either way."""
-    r = await db.execute(text("SELECT is_excluded FROM user_profiles WHERE email = :email"), {"email": email})
+    r = await db.execute(text("SELECT is_excluded FROM user_profiles WHERE lower(email) = lower(:email)"), {"email": email})
     row = r.fetchone()
     is_excluded = bool(row.is_excluded) if row else False
 
@@ -560,7 +561,7 @@ async def get_org_assignments(
     caller: str = Depends(get_current_user_email),
 ):
     await require_self_or_permissions_admin(email, caller, db)
-    r = await db.execute(text("SELECT * FROM whubbi_org_assignments WHERE user_email = :email"), {"email": email})
+    r = await db.execute(text("SELECT * FROM whubbi_org_assignments WHERE lower(user_email) = lower(:email)"), {"email": email})
     row = r.fetchone()
     if not row:
         return {cat: [] for cat in ORG_ASSIGNMENT_CATEGORIES}
@@ -582,6 +583,7 @@ async def set_org_assignments(
     db: AsyncSession = Depends(get_db),
     _admin: str = Depends(require_permissions_admin),
 ):
+    email = email.strip().lower()
     values = {cat: json.dumps(data.get(cat) or []) for cat in ORG_ASSIGNMENT_CATEGORIES}
     await db.execute(text("""
         INSERT INTO whubbi_org_assignments
@@ -610,7 +612,7 @@ async def get_main_location(
     caller: str = Depends(get_current_user_email),
 ):
     await require_self_or_permissions_admin(email, caller, db)
-    r = await db.execute(text("SELECT main_location_id, main_location_name, is_excluded FROM user_profiles WHERE email = :email"), {"email": email})
+    r = await db.execute(text("SELECT main_location_id, main_location_name, is_excluded FROM user_profiles WHERE lower(email) = lower(:email)"), {"email": email})
     row = r.fetchone()
     if not row:
         return {"main_location_id": None, "main_location_name": "All", "is_excluded": False}

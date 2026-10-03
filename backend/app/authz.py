@@ -25,7 +25,7 @@ async def get_current_user_email(
 
 async def is_excluded(email: str, db: AsyncSession) -> bool:
     r = await db.execute(
-        text("SELECT is_excluded FROM user_profiles WHERE email = :email"),
+        text("SELECT is_excluded FROM user_profiles WHERE lower(email) = lower(:email)"),
         {"email": email},
     )
     row = r.fetchone()
@@ -36,7 +36,7 @@ async def access_mode(email: str, module: str, submodule: str, db: AsyncSession)
     r = await db.execute(
         text("""
             SELECT access_mode FROM whubbi_permissions
-            WHERE user_email = :email AND module = :module AND submodule = :submodule
+            WHERE lower(user_email) = lower(:email) AND module = :module AND submodule = :submodule
         """),
         {"email": email, "module": module, "submodule": submodule},
     )

@@ -17,7 +17,8 @@ export function getStoredUser(): StoredUser | null {
       localStorage.removeItem('whubbi_user')
       return null
     }
-    return u
+    // Identity is case-insensitive; permission rows are keyed by the lowercased email.
+    return { ...u, email: u.email.toLowerCase() }
   } catch {
     return null
   }
