@@ -498,7 +498,8 @@ export default function CandidateDetail() {
       }
     } catch {}
     const fd2 = new FormData(); fd2.append('file', file)
-    await apiFetch(`/hr/cv/upload/${id}`, { method:'POST', body:fd2 })
+    const up = await apiFetch(`/hr/cv/upload/${id}`, { method:'POST', body:fd2 })
+    if (!up.ok) alert(`The CV could not be saved (error ${up.status}).`)
     setExtracting(false); load()
   }
 

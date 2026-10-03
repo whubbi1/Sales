@@ -132,7 +132,8 @@ export default function RecruitmentPage() {
       const d = await r.json()
       if (cvFile && d.id) {
         const fd = new FormData(); fd.append('file', cvFile)
-        await apiFetch(`/hr/cv/upload/${d.id}`, { method:'POST', body:fd })
+        const up = await apiFetch(`/hr/cv/upload/${d.id}`, { method:'POST', body:fd })
+        if (!up.ok) alert(`Candidate created, but the CV could not be saved (error ${up.status}). Open the profile to upload it again.`)
       }
       closeModal(); load()
     } catch (e: any) { setSaveError(e.message || 'Failed to save candidate') }

@@ -221,6 +221,17 @@ async def s3_ref_to_presigned(ref: str, expires: int = 3600) -> str:
         print(f"S3 presigned URL error: {e}")
         return ref
 
+async def delete_s3_ref(ref: str | None):
+    """Best-effort delete of an s3://bucket/key object; non-S3 refs are ignored."""
+    if not ref or not ref.startswith("s3://"):
+        return
+    bucket, _, key = ref[5:].partition("/")
+    loop = asyncio.get_running_loop()
+    try:
+        await loop.run_in_executor(None, lambda: boto3.client("s3", region_name=AWS_REGION).delete_object(Bucket=bucket, Key=key))
+    except Exception as e:
+        print(f"S3 delete error: {e}")
+
 @router.get("/test-s3")
 async def test_s3():
     """Diagnostic: verify S3 bucket access and credentials."""
@@ -383,13 +394,21 @@ async def upload_cv(profile_id: str, file: UploadFile = File(...), db: AsyncSess
             key = f"hr/freelancers/{profile_id}/cv/{safe_fn}"
             url = await upload_to_s3(key, content, file.content_type or "application/octet-stream")
         else:
-            token = await get_ms_token()
-            name_folder = f"{profile.first_name} {profile.last_name}".strip() or profile_id
-            country = (profile.country or "unknown").replace(" ", "_")
-            subfolder = f"{country}/{name_folder}"
-            url = await upload_to_sharepoint_folder(token, SHAREPOINT_RECRUITMENT_URL, subfolder, file.filename, content)
-            if not url:
-                url = await upload_to_sharepoint(token, f"{profile_id}_{file.filename}", content, "HR/CVs")
+            # The CV is stored in WHUBBI (S3) and attached to the profile; the recruitment
+            # SharePoint folder still gets a copy, but a SharePoint failure no longer loses it.
+            safe_fn = file.filename.replace(" ", "_")
+            previous = (await db.execute(text("SELECT cv_sharepoint_url FROM hr_profiles WHERE id=CAST(:id AS UUID)"), {"id": profile_id})).scalar()
+            url = await upload_to_s3(f"hr/recruitment/{profile_id}/cv/{safe_fn}", content, file.content_type or "application/octet-stream")
+            if previous and previous != url:
+                await delete_s3_ref(previous)
+            try:
+                token = await get_ms_token()
+                name_folder = f"{profile.first_name} {profile.last_name}".strip() or profile_id
+                country = (profile.country or "unknown").replace(" ", "_")
+                if not await upload_to_sharepoint_folder(token, SHAREPOINT_RECRUITMENT_URL, f"{country}/{name_folder}", file.filename, content):
+                    await upload_to_sharepoint(token, f"{profile_id}_{file.filename}", content, "HR/CVs")
+            except Exception as e:
+                print(f"SharePoint CV copy skipped: {e}")
 
     await db.execute(text("""
         UPDATE hr_profiles SET cv_sharepoint_url=:url, cv_filename=:fn, updated_at=NOW()
@@ -626,14 +645,8 @@ async def delete_freelancer_document(profile_id: str, doc_id: str, db: AsyncSess
         "SELECT sharepoint_url FROM hr_profile_documents WHERE id=CAST(:id AS UUID) AND profile_id=CAST(:pid AS UUID)"
     ), {"id": doc_id, "pid": profile_id})
     doc = row.fetchone()
-    if doc and doc.sharepoint_url and doc.sharepoint_url.startswith("s3://"):
-        path = doc.sharepoint_url[5:]
-        bucket, _, key = path.partition("/")
-        loop = asyncio.get_running_loop()
-        try:
-            await loop.run_in_executor(None, lambda: boto3.client("s3", region_name=AWS_REGION).delete_object(Bucket=bucket, Key=key))
-        except Exception as e:
-            print(f"S3 delete error: {e}")
+    if doc:
+        await delete_s3_ref(doc.sharepoint_url)
     await db.execute(text("DELETE FROM hr_profile_documents WHERE id=CAST(:id AS UUID)"), {"id": doc_id})
     await db.commit()
     return {"status": "ok"}
@@ -687,6 +700,8 @@ async def get_candidate(profile_id: str, db: AsyncSession = Depends(get_db), _: 
     for pr in profile.get("projects",[]): pr["id"] = str(pr["id"]); pr["profile_id"] = str(pr["profile_id"])
     for c in profile.get("comments",[]): c["id"] = str(c["id"]); c["profile_id"] = str(c["profile_id"])
     for pr in profile.get("proposals",[]): pr["id"] = str(pr["id"]); pr["profile_id"] = str(pr["profile_id"])
+    if (profile.get("cv_sharepoint_url") or "").startswith("s3://"):
+        profile["cv_sharepoint_url"] = await s3_ref_to_presigned(profile["cv_sharepoint_url"])
     return profile
 
 @router.post("/recruitment")
@@ -781,8 +796,9 @@ async def update_candidate(profile_id: str, data: dict, db: AsyncSession = Depen
 
 @router.delete("/recruitment/{profile_id}")
 async def delete_candidate(profile_id: str, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("hr", "recrutement", "edit"))):
-    row = await db.execute(text("SELECT id FROM hr_profiles WHERE id=CAST(:id AS UUID) AND profile_type='internal'"), {"id": profile_id})
-    if not row.fetchone(): raise HTTPException(404, "Not found")
+    row = await db.execute(text("SELECT cv_sharepoint_url FROM hr_profiles WHERE id=CAST(:id AS UUID) AND profile_type='internal'"), {"id": profile_id})
+    candidate = row.fetchone()
+    if not candidate: raise HTTPException(404, "Not found")
     # Children first (some have FKs without ON DELETE CASCADE). SharePoint files are
     # left in place: the folder is named after the candidate, so another candidate
     # with the same name and country may share it.
@@ -794,6 +810,7 @@ async def delete_candidate(profile_id: str, db: AsyncSession = Depends(get_db), 
     await db.execute(text("DELETE FROM linked_emails WHERE entity_type='candidate' AND entity_id=CAST(:id AS UUID)"), params)
     await db.execute(text("DELETE FROM hr_profiles WHERE id=CAST(:id AS UUID)"), params)
     await db.commit()
+    await delete_s3_ref(candidate.cv_sharepoint_url)
     return {"status": "ok"}
 
 @router.post("/recruitment/{profile_id}/comments")
