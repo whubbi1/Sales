@@ -59,16 +59,37 @@ async def create_checklist_task(data: dict, db: AsyncSession = Depends(get_db), 
         INSERT INTO hr_checklist_tasks (id, kind, location_id, location_name, title, description, url, sharepoint_url,
                                           responsible_email, responsible_name, sort_order, created_by_email, created_at, updated_at)
         VALUES (CAST(:id AS UUID), :kind, CAST(:location_id AS UUID), :location_name, :title, :description, :url, :sharepoint_url,
-                :responsible_email, :responsible_name, :sort_order, :created_by_email, NOW(), NOW())
+                :responsible_email, :responsible_name,
+                COALESCE(:sort_order, (SELECT COALESCE(MAX(sort_order), -1) + 1 FROM hr_checklist_tasks
+                                       WHERE kind = :kind AND location_id = CAST(:location_id AS UUID))),
+                :created_by_email, NOW(), NOW())
     """), {
         "id": task_id, "kind": kind, "location_id": data["location_id"], "location_name": data.get("location_name", ""),
         "title": data["title"], "description": data.get("description", ""), "url": data.get("url", ""),
         "sharepoint_url": data.get("sharepoint_url", ""), "responsible_email": data.get("responsible_email", ""),
-        "responsible_name": data.get("responsible_name", ""), "sort_order": data.get("sort_order", 0),
+        "responsible_name": data.get("responsible_name", ""), "sort_order": data.get("sort_order"),
         "created_by_email": data.get("created_by_email", ""),
     })
     await db.commit()
     return {"status": "ok", "id": task_id}
+
+
+# Declared before /checklist-tasks/{task_id} so "reorder" is not taken as a task id.
+@router.put("/checklist-tasks/reorder")
+async def reorder_checklist_tasks(data: dict, db: AsyncSession = Depends(get_db), _: str = Depends(require_any_permission(_ONBOARDING_OR_OFFBOARDING, "edit"))):
+    """Set the order of one location's checklist: task_ids lists the tasks top to bottom."""
+    kind = data.get("kind", "")
+    _validate_kind(kind)
+    task_ids = data.get("task_ids") or []
+    if not data.get("location_id") or not isinstance(task_ids, list):
+        raise HTTPException(status_code=400, detail="location_id and task_ids are required")
+    for position, task_id in enumerate(task_ids):
+        await db.execute(text("""
+            UPDATE hr_checklist_tasks SET sort_order = :pos, updated_at = NOW()
+            WHERE id = CAST(:id AS UUID) AND kind = :kind AND location_id = CAST(:location_id AS UUID)
+        """), {"pos": position, "id": task_id, "kind": kind, "location_id": data["location_id"]})
+    await db.commit()
+    return {"status": "ok"}
 
 
 @router.put("/checklist-tasks/{task_id}")

@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { HRLayout, useHRPerm } from '@/components/HRLayout'
 import { useReportBuilder, applyReport, ReportPanel, ReportColumn } from '@/components/it/ReportBuilder'
@@ -197,6 +197,33 @@ function ChecklistContent({ kind }: { kind: 'onboarding' | 'offboarding' }) {
 
   const isEditing = (id: string, field: string) => editing?.id === id && editing.field === field
 
+  // Drag-and-drop reordering: the list reorders live while dragging, and the new
+  // order is saved once on drop (only if it actually changed).
+  const [dragId, setDragId] = useState<string | null>(null)
+  const dragStartOrder = useRef('')
+  const moveTaskOver = (overId: string) => {
+    if (!dragId || dragId === overId) return
+    setTemplateTasks(prev => {
+      const from = prev.findIndex(t => t.id === dragId), to = prev.findIndex(t => t.id === overId)
+      if (from < 0 || to < 0) return prev
+      const next = [...prev]
+      next.splice(to, 0, next.splice(from, 1)[0])
+      return next
+    })
+  }
+  const saveTaskOrder = async () => {
+    setDragId(null)
+    const ids = templateTasks.map(t => t.id)
+    if (ids.join(',') === dragStartOrder.current) return
+    try {
+      await hrChecklistAPI.reorderTasks({ kind, location_id: locationId, task_ids: ids })
+    } catch (e) {
+      console.error(e)
+      alert('Could not save the new task order.')
+      loadTemplateTasks(locationId)
+    }
+  }
+
   // ─── Start case ───────────────────────────────────────────────────────────
   const pickStartUser = async (email: string) => {
     setStartUserEmail(email)
@@ -298,6 +325,7 @@ function ChecklistContent({ kind }: { kind: 'onboarding' | 'offboarding' }) {
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
                 <thead style={{ background: '#FAFBFC' }}>
                   <tr>
+                    {canEdit && <th style={{ width: '24px', borderBottom: '1px solid #EDF2F7' }} />}
                     {['Title', 'Description', 'URL', 'SharePoint Doc', 'Responsible', canEdit ? '' : null].filter(x => x !== null).map(h => (
                       <th key={h as string} style={{ padding: '10px 12px', textAlign: 'left', fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#45B6E4', borderBottom: '1px solid #EDF2F7', whiteSpace: 'nowrap' }}>{h}</th>
                     ))}
@@ -305,11 +333,17 @@ function ChecklistContent({ kind }: { kind: 'onboarding' | 'offboarding' }) {
                 </thead>
                 <tbody>
                   {loadingTasks ? (
-                    <tr><td colSpan={6} style={{ textAlign: 'center', padding: '32px', color: '#45B6E4' }}>Loading…</td></tr>
+                    <tr><td colSpan={7} style={{ textAlign: 'center', padding: '32px', color: '#45B6E4' }}>Loading…</td></tr>
                   ) : templateTasks.length === 0 ? (
-                    <tr><td colSpan={6} style={{ textAlign: 'center', padding: '32px', color: '#94A3B8' }}>No {kind} tasks configured for this location yet.</td></tr>
+                    <tr><td colSpan={7} style={{ textAlign: 'center', padding: '32px', color: '#94A3B8' }}>No {kind} tasks configured for this location yet.</td></tr>
                   ) : templateTasks.map(t => (
-                    <tr key={t.id} style={{ borderBottom: '1px solid #F1F5F9' }}>
+                    <tr key={t.id} style={{ borderBottom: '1px solid #F1F5F9', opacity: dragId === t.id ? 0.4 : 1, background: dragId === t.id ? '#F8FAFC' : undefined }}
+                      draggable={canEdit && !editing}
+                      onDragStart={e => { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', t.id); dragStartOrder.current = templateTasks.map(x => x.id).join(','); setDragId(t.id) }}
+                      onDragOver={e => { if (!dragId) return; e.preventDefault(); moveTaskOver(t.id) }}
+                      onDrop={e => e.preventDefault()}
+                      onDragEnd={saveTaskOrder}>
+                      {canEdit && <td title="Drag to reorder" style={{ padding: '10px 0 10px 12px', color: '#CBD5E1', cursor: 'grab', userSelect: 'none', fontSize: '14px' }}>⋮⋮</td>}
                       <td style={{ padding: '10px 12px', minWidth: '160px', fontWeight: '700', color: '#156082' }}>
                         <EditableCell display={t.title} editing={isEditing(t.id, 'title')} canEdit={canEdit} onStartEdit={() => setEditing({ id: t.id, field: 'title' })}>
                           <input autoFocus style={inp} defaultValue={t.title} onBlur={e => patchTemplateTask(t, { title: e.target.value })} onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }} />

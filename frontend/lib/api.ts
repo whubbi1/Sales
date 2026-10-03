@@ -582,6 +582,7 @@ export const hrChecklistAPI = {
   createTask:  (d: any) => fetchAPI('/hr/checklist-tasks', { method: 'POST', body: JSON.stringify(d) }),
   updateTask:  (id: string, d: any) => fetchAPI(`/hr/checklist-tasks/${id}`, { method: 'PUT', body: JSON.stringify(d) }),
   deleteTask:  (id: string) => fetchAPI(`/hr/checklist-tasks/${id}`, { method: 'DELETE' }),
+  reorderTasks: (d: { kind: string; location_id: string; task_ids: string[] }) => fetchAPI('/hr/checklist-tasks/reorder', { method: 'PUT', body: JSON.stringify(d) }),
 
   listCases:  (p?: any) => fetchAPI(`/hr/checklist-cases${qs(p)}`),
   getCase:    (id: string) => fetchAPI(`/hr/checklist-cases/${id}`),
