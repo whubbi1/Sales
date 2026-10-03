@@ -349,9 +349,15 @@ function CandidateForm({ extracted, cvFile, extracting, saving, saveError, onCvU
   const [form, setForm] = useState({
     first_name:'', last_name:'', email:'', phone:'', linkedin_url:'',
     country:'france', current_title:'', skills:[] as string[],
-    years_experience:0, recruitment_status:'new', projects:[] as any[]
+    years_experience:0, recruitment_status:'new', projects:[] as any[], job_position_id:''
   })
   const [skillInput, setSkillInput] = useState('')
+  const [openPositions, setOpenPositions] = useState<any[]>([])
+  useEffect(() => {
+    apiFetch('/hr/positions').then(r => r.json())
+      .then(d => setOpenPositions((d.positions || []).filter((p: any) => p.status === 'open')))
+      .catch(() => {})
+  }, [])
 
   useEffect(() => {
     if (!extracted) return
@@ -414,6 +420,15 @@ function CandidateForm({ extracted, cvFile, extracting, saving, saveError, onCvU
               {STATUSES.map(s=><option key={s} value={s}>{STATUS_LABEL[s]}</option>)}
             </select>
           </div>
+        </div>
+
+        <div>
+          <label style={{ display:'block', fontSize:'10px', fontWeight:'700', textTransform:'uppercase', letterSpacing:'0.07em', color:'#45B6E4', marginBottom:'5px' }}>Job Position</label>
+          <select value={form.job_position_id} onChange={e=>{ const p = openPositions.find((x:any)=>x.id===e.target.value); setForm((f:any)=>({...f, job_position_id:e.target.value, ...(p?.country ? { country:p.country } : {})})) }}
+            style={{ width:'100%', padding:'8px 10px', border:'1.5px solid #EDF2F7', borderRadius:'7px', fontFamily:'Montserrat, sans-serif', fontSize:'12px', outline:'none' }}>
+            <option value="">— Not linked to a position —</option>
+            {openPositions.map((p:any)=><option key={p.id} value={p.id}>{FLAG[p.country]||'🌍'} {p.title}</option>)}
+          </select>
         </div>
 
         <div>
