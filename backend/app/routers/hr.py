@@ -779,6 +779,22 @@ async def update_candidate(profile_id: str, data: dict, db: AsyncSession = Depen
     await db.commit()
     return {"status": "ok"}
 
+@router.delete("/recruitment/{profile_id}")
+async def delete_candidate(profile_id: str, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("hr", "recrutement", "edit"))):
+    row = await db.execute(text("SELECT id FROM hr_profiles WHERE id=CAST(:id AS UUID) AND profile_type='internal'"), {"id": profile_id})
+    if not row.fetchone(): raise HTTPException(404, "Not found")
+    # Children first (some have FKs without ON DELETE CASCADE). SharePoint files are
+    # left in place: the folder is named after the candidate, so another candidate
+    # with the same name and country may share it.
+    params = {"id": profile_id}
+    await db.execute(text("DELETE FROM hr_onboarding_documents WHERE proposal_id IN (SELECT id FROM hr_proposals WHERE profile_id=CAST(:id AS UUID))"), params)
+    for table in ["hr_proposals", "hr_interview_results", "hr_interview_requests", "hr_interview_assignments",
+                  "hr_profile_documents", "hr_comments", "hr_projects"]:
+        await db.execute(text(f"DELETE FROM {table} WHERE profile_id=CAST(:id AS UUID)"), params)
+    await db.execute(text("DELETE FROM hr_profiles WHERE id=CAST(:id AS UUID)"), params)
+    await db.commit()
+    return {"status": "ok"}
+
 @router.post("/recruitment/{profile_id}/comments")
 async def add_comment(profile_id: str, data: dict, db: AsyncSession = Depends(get_db), _: str = Depends(require_permission("hr", "recrutement", "edit"))):
     await db.execute(text("""

@@ -532,6 +532,14 @@ export default function CandidateDetail() {
     load()
   }
 
+  const deleteCandidate = async () => {
+    const name = [profile?.first_name, profile?.last_name].filter(Boolean).join(" ") || "this candidate"
+    if (!confirm(`Delete ${name}? Their comments, interviews, proposals and documents in WHUBBI will be removed. This cannot be undone.`)) return
+    const r = await apiFetch(`/hr/recruitment/${id}`, { method:"DELETE" })
+    if (!r.ok) { alert(`Delete failed (${r.status})`); return }
+    router.push("/rh/recrutement")
+  }
+
   const addComment = async () => {
     if (!comment.content.trim()) return
     await apiFetch(`/hr/recruitment/${id}/comments`, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(comment) })
@@ -611,6 +619,7 @@ export default function CandidateDetail() {
               <div style={{ display:'flex', gap:'8px', flexShrink:0 }}>
                 <button onClick={() => setShowRequestInterview(true)} style={{ padding:'7px 14px', background:'#7C3AED', color:'white', border:'none', borderRadius:'8px', fontSize:'12px', fontWeight:'700', cursor:'pointer', fontFamily:'Montserrat, sans-serif' }}>🗓 Request Interview</button>
                 <button onClick={() => setShowProposal(true)} style={{ padding:'7px 14px', background:'#059669', color:'white', border:'none', borderRadius:'8px', fontSize:'12px', fontWeight:'700', cursor:'pointer', fontFamily:'Montserrat, sans-serif' }}>📄 Send Proposal</button>
+                <button onClick={deleteCandidate} style={{ padding:'7px 14px', background:'#FEF2F2', color:'#DC2626', border:'none', borderRadius:'8px', fontSize:'12px', fontWeight:'700', cursor:'pointer', fontFamily:'Montserrat, sans-serif' }}>🗑 Delete</button>
               </div>
             )}
           </div>
