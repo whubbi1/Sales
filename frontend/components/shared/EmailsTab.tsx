@@ -1,5 +1,5 @@
 'use client'
-// Reusable "Emails" tab for Lead/Opportunity/Contact detail pages — link emails found in the
+// Reusable "Emails" tab for Lead/Opportunity/Contact/Candidate detail pages — link emails found in the
 // user's connected mailbox, or send-and-track a new email (optionally from a Template Email).
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
@@ -206,7 +206,7 @@ function SendEmailModal({ email, entityType, entityId, defaultContact, onClose, 
   )
 }
 
-export function EmailsTab({ entityType, entityId, defaultContact }: { entityType: 'lead' | 'opportunity' | 'contact'; entityId: string; defaultContact?: any }) {
+export function EmailsTab({ entityType, entityId, defaultContact }: { entityType: 'lead' | 'opportunity' | 'contact' | 'candidate'; entityId: string; defaultContact?: any }) {
   const [email, setEmail] = useState('')
   const [connected, setConnected] = useState<boolean | null>(null)
   const [emails, setEmails] = useState<any[]>([])

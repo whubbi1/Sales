@@ -4,6 +4,7 @@ import { useRouter, useParams } from 'next/navigation'
 import { getStoredUser } from '@/lib/auth'
 import { HRLayout, useHRPerm } from '@/components/HRLayout'
 import { apiFetch } from '@/lib/apiClient'
+import { EmailsTab } from '@/components/shared/EmailsTab'
 
 const FLAG: Record<string,string> = { france:'🇫🇷', portugal:'🇵🇹', czech_republic:'🇨🇿', romania:'🇷🇴', spain:'🇪🇸' }
 const STATUSES = ['new','screening','interview_1','technical_test','offer','hired','rejected','on_hold']
@@ -534,7 +535,7 @@ export default function CandidateDetail() {
 
   const deleteCandidate = async () => {
     const name = [profile?.first_name, profile?.last_name].filter(Boolean).join(" ") || "this candidate"
-    if (!confirm(`Delete ${name}? Their comments, interviews, proposals and documents in WHUBBI will be removed. This cannot be undone.`)) return
+    if (!confirm(`Delete ${name}? Their comments, linked emails, interviews, proposals and documents in WHUBBI will be removed. This cannot be undone.`)) return
     const r = await apiFetch(`/hr/recruitment/${id}`, { method:"DELETE" })
     if (!r.ok) { alert(`Delete failed (${r.status})`); return }
     router.push("/rh/recrutement")
@@ -812,6 +813,9 @@ export default function CandidateDetail() {
               </div>
             ))}
             {(profile.comments||[]).length===0&&<div style={{ textAlign:'center', padding:'32px', color:'#45B6E4', fontSize:'13px' }}>No follow-up entries yet.</div>}
+            <div style={{ marginTop:'24px' }}>
+              <EmailsTab entityType="candidate" entityId={id as string} defaultContact={profile.email ? { email: profile.email } : undefined} />
+            </div>
           </div>
         )}
 

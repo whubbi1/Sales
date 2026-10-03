@@ -791,6 +791,7 @@ async def delete_candidate(profile_id: str, db: AsyncSession = Depends(get_db), 
     for table in ["hr_proposals", "hr_interview_results", "hr_interview_requests", "hr_interview_assignments",
                   "hr_profile_documents", "hr_comments", "hr_projects"]:
         await db.execute(text(f"DELETE FROM {table} WHERE profile_id=CAST(:id AS UUID)"), params)
+    await db.execute(text("DELETE FROM linked_emails WHERE entity_type='candidate' AND entity_id=CAST(:id AS UUID)"), params)
     await db.execute(text("DELETE FROM hr_profiles WHERE id=CAST(:id AS UUID)"), params)
     await db.commit()
     return {"status": "ok"}

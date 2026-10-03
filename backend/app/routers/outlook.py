@@ -16,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
 
 from app.database import get_db
+from app.authz import get_current_user_email, has_any_permission
 from app.services.outlook import get_access_token, DELEGATED_SCOPES, MS_TENANT_ID, MS_CLIENT_ID, MS_CLIENT_SECRET
 from app.services.token_crypto import encrypt, decrypt, encrypt_state, decrypt_state
 
@@ -27,7 +28,14 @@ TOKEN_URL = f"https://login.microsoftonline.com/{MS_TENANT_ID}/oauth2/v2.0/token
 REDIRECT_URI = os.getenv("OUTLOOK_REDIRECT_URI", "https://api.whubbi.wcomply.com/outlook/callback")
 FRONTEND_BASE_URL = os.getenv("FRONTEND_BASE_URL", "https://master.da3cm8ewfvjqw.amplifyapp.com")
 
-ENTITY_TYPES = {"lead", "opportunity", "contact"}
+# Linked emails inherit the permission of the record they are attached to.
+ENTITY_PERMISSIONS = {
+    "lead": ("sales", "leads"),
+    "opportunity": ("sales", "opportunities"),
+    "contact": ("sales", "contacts"),
+    "candidate": ("hr", "recrutement"),
+}
+ENTITY_TYPES = set(ENTITY_PERMISSIONS)
 
 
 def _row(d: dict) -> dict:
@@ -40,6 +48,17 @@ def _row(d: dict) -> dict:
 def _require_entity_type(entity_type: str):
     if entity_type not in ENTITY_TYPES:
         raise HTTPException(status_code=400, detail=f"entity_type must be one of {sorted(ENTITY_TYPES)}")
+
+
+async def _require_entity_access(db: AsyncSession, caller: str, entity_type: str, min_mode: str):
+    _require_entity_type(entity_type)
+    if not await has_any_permission(caller, [ENTITY_PERMISSIONS[entity_type]], db, min_mode):
+        raise HTTPException(status_code=403, detail=f"No {min_mode} access to {entity_type} emails")
+
+
+def _require_own_mailbox(email: str | None, caller: str):
+    if (email or "").strip().lower() != caller:
+        raise HTTPException(status_code=403, detail="You can only use your own mailbox")
 
 
 def _parse_dt(value: str | None):
@@ -57,13 +76,16 @@ def _parse_dt(value: str | None):
 
 
 async def _get_connection(db: AsyncSession, user_email: str) -> dict | None:
-    r = await db.execute(text("SELECT * FROM outlook_connections WHERE user_email = :e"), {"e": user_email})
+    r = await db.execute(text("SELECT * FROM outlook_connections WHERE lower(user_email) = lower(:e)"), {"e": user_email})
     row = r.fetchone()
     return _row(dict(row._mapping)) if row else None
 
 
 async def _store_tokens(db: AsyncSession, user_email: str, mailbox_email: str, access_token: str, refresh_token: str, expires_in: int):
     expires_at = datetime.utcnow() + timedelta(seconds=expires_in)
+    # Keyed by the lowercased email; drop any row stored under another casing first.
+    user_email = user_email.strip().lower()
+    await db.execute(text("DELETE FROM outlook_connections WHERE lower(user_email) = :email AND user_email <> :email"), {"email": user_email})
     await db.execute(text("""
         INSERT INTO outlook_connections (user_email, mailbox_email, access_token_encrypted, refresh_token_encrypted, token_expires_at, connected_at)
         VALUES (:email, :mailbox, :at, :rt, :exp, NOW())
@@ -90,7 +112,8 @@ async def _get_valid_access_token(db: AsyncSession, user_email: str) -> str:
 
 # ─── Connection lifecycle ────────────────────────────────────────────────────────
 @router.get("/status")
-async def outlook_status(email: str, db: AsyncSession = Depends(get_db)):
+async def outlook_status(email: str, db: AsyncSession = Depends(get_db), caller: str = Depends(get_current_user_email)):
+    _require_own_mailbox(email, caller)
     conn = await _get_connection(db, email)
     return {"connected": bool(conn), "mailbox_email": conn["mailbox_email"] if conn else None}
 
@@ -143,15 +166,17 @@ async def outlook_callback(code: str = None, state: str = None, error: str = Non
 
 
 @router.delete("/connection")
-async def outlook_disconnect(email: str, db: AsyncSession = Depends(get_db)):
-    await db.execute(text("DELETE FROM outlook_connections WHERE user_email = :e"), {"e": email})
+async def outlook_disconnect(email: str, db: AsyncSession = Depends(get_db), caller: str = Depends(get_current_user_email)):
+    _require_own_mailbox(email, caller)
+    await db.execute(text("DELETE FROM outlook_connections WHERE lower(user_email) = lower(:e)"), {"e": email})
     await db.commit()
     return {"status": "ok"}
 
 
 # ─── Search the connected mailbox (for linking an existing email) ───────────────
 @router.get("/emails/search")
-async def search_emails(email: str, q: str, db: AsyncSession = Depends(get_db)):
+async def search_emails(email: str, q: str, db: AsyncSession = Depends(get_db), caller: str = Depends(get_current_user_email)):
+    _require_own_mailbox(email, caller)
     access_token = await _get_valid_access_token(db, email)
     async with httpx.AsyncClient() as client:
         resp = await client.get(
@@ -171,10 +196,10 @@ async def search_emails(email: str, q: str, db: AsyncSession = Depends(get_db)):
     ]}
 
 
-# ─── Linked emails (per Lead/Opportunity/Contact) ────────────────────────────────
+# ─── Linked emails (per Lead/Opportunity/Contact/Candidate) ────────────────────────────────
 @router.get("/emails/linked")
-async def list_linked_emails(entity_type: str, entity_id: str, db: AsyncSession = Depends(get_db)):
-    _require_entity_type(entity_type)
+async def list_linked_emails(entity_type: str, entity_id: str, db: AsyncSession = Depends(get_db), caller: str = Depends(get_current_user_email)):
+    await _require_entity_access(db, caller, entity_type, "view")
     r = await db.execute(text("""
         SELECT le.*, t.short_title AS template_short_title FROM linked_emails le
         LEFT JOIN marketing_email_templates t ON t.id = le.template_id
@@ -184,8 +209,8 @@ async def list_linked_emails(entity_type: str, entity_id: str, db: AsyncSession 
 
 
 @router.post("/emails/link")
-async def link_email(data: dict, db: AsyncSession = Depends(get_db)):
-    _require_entity_type(data.get("entity_type"))
+async def link_email(data: dict, db: AsyncSession = Depends(get_db), caller: str = Depends(get_current_user_email)):
+    await _require_entity_access(db, caller, data.get("entity_type"), "edit")
     if not data.get("entity_id"):
         raise HTTPException(status_code=400, detail="entity_id is required")
     email_id = str(uuid.uuid4())
@@ -203,7 +228,12 @@ async def link_email(data: dict, db: AsyncSession = Depends(get_db)):
 
 
 @router.delete("/emails/linked/{email_id}")
-async def unlink_email(email_id: str, db: AsyncSession = Depends(get_db)):
+async def unlink_email(email_id: str, db: AsyncSession = Depends(get_db), caller: str = Depends(get_current_user_email)):
+    r = await db.execute(text("SELECT entity_type FROM linked_emails WHERE id = CAST(:id AS UUID)"), {"id": email_id})
+    row = r.fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Not found")
+    await _require_entity_access(db, caller, row.entity_type, "edit")
     await db.execute(text("DELETE FROM linked_emails WHERE id = CAST(:id AS UUID)"), {"id": email_id})
     await db.commit()
     return {"status": "ok"}
@@ -211,11 +241,12 @@ async def unlink_email(email_id: str, db: AsyncSession = Depends(get_db)):
 
 # ─── Send + log an email (optionally from a Template Email) ─────────────────────
 @router.post("/emails/send")
-async def send_and_log_email(data: dict, db: AsyncSession = Depends(get_db)):
+async def send_and_log_email(data: dict, db: AsyncSession = Depends(get_db), caller: str = Depends(get_current_user_email)):
     email = data.get("email")
     if not email:
         raise HTTPException(status_code=400, detail="email (the sender's WHUBBI account) is required")
-    _require_entity_type(data.get("entity_type"))
+    _require_own_mailbox(email, caller)
+    await _require_entity_access(db, caller, data.get("entity_type"), "edit")
     to_address = data.get("to_address")
     if not to_address:
         raise HTTPException(status_code=400, detail="to_address is required")
