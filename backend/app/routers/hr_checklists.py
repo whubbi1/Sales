@@ -55,19 +55,21 @@ async def create_checklist_task(data: dict, db: AsyncSession = Depends(get_db), 
     if not data.get("title") or not data.get("location_id"):
         raise HTTPException(status_code=400, detail="title and location_id are required")
     task_id = str(uuid.uuid4())
+    sort_order = data.get("sort_order")
+    if sort_order is None:  # new tasks go to the end of their checklist
+        sort_order = (await db.execute(text(
+            "SELECT COALESCE(MAX(sort_order), -1) + 1 FROM hr_checklist_tasks WHERE kind = :kind AND location_id = CAST(:location_id AS UUID)"
+        ), {"kind": kind, "location_id": data["location_id"]})).scalar()
     await db.execute(text("""
         INSERT INTO hr_checklist_tasks (id, kind, location_id, location_name, title, description, url, sharepoint_url,
                                           responsible_email, responsible_name, sort_order, created_by_email, created_at, updated_at)
         VALUES (CAST(:id AS UUID), :kind, CAST(:location_id AS UUID), :location_name, :title, :description, :url, :sharepoint_url,
-                :responsible_email, :responsible_name,
-                COALESCE(:sort_order, (SELECT COALESCE(MAX(sort_order), -1) + 1 FROM hr_checklist_tasks
-                                       WHERE kind = :kind AND location_id = CAST(:location_id AS UUID))),
-                :created_by_email, NOW(), NOW())
+                :responsible_email, :responsible_name, :sort_order, :created_by_email, NOW(), NOW())
     """), {
         "id": task_id, "kind": kind, "location_id": data["location_id"], "location_name": data.get("location_name", ""),
         "title": data["title"], "description": data.get("description", ""), "url": data.get("url", ""),
         "sharepoint_url": data.get("sharepoint_url", ""), "responsible_email": data.get("responsible_email", ""),
-        "responsible_name": data.get("responsible_name", ""), "sort_order": data.get("sort_order"),
+        "responsible_name": data.get("responsible_name", ""), "sort_order": sort_order,
         "created_by_email": data.get("created_by_email", ""),
     })
     await db.commit()
@@ -83,6 +85,10 @@ async def reorder_checklist_tasks(data: dict, db: AsyncSession = Depends(get_db)
     task_ids = data.get("task_ids") or []
     if not data.get("location_id") or not isinstance(task_ids, list):
         raise HTTPException(status_code=400, detail="location_id and task_ids are required")
+    try:
+        task_ids = [str(uuid.UUID(str(t))) for t in task_ids]
+    except ValueError:
+        raise HTTPException(status_code=400, detail="task_ids must be task UUIDs")
     for position, task_id in enumerate(task_ids):
         await db.execute(text("""
             UPDATE hr_checklist_tasks SET sort_order = :pos, updated_at = NOW()
